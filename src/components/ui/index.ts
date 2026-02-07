@@ -1,4 +1,7 @@
 export { Button } from './Button'
 export { ConfirmDialog } from './ConfirmDialog'
+export { DropdownMenu } from './DropdownMenu'
+export type { DropdownMenuItem, DropdownMenuProps } from './DropdownMenu'
 export { Modal } from './Modal'
+export { ToastContainer, useToast } from './Toast'
 export { Tooltip } from './Tooltip'

@@ -1,6 +1,10 @@
+import { useState } from 'react'
 import { YearView, MonthView } from './components/calendar'
 import { ActivityList, QuickLog } from './components/activities'
 import { StatsPanel } from './components/stats'
+import { ExportModal, ImportModal } from './components/data'
+import { DropdownMenu, ToastContainer } from './components/ui'
+import type { DropdownMenuItem } from './components/ui'
 import { useCalendarStore } from './store'
 
 function ViewToggle() {
@@ -40,6 +44,29 @@ function ViewToggle() {
 
 function App() {
   const { selectedDate, currentView } = useCalendarStore()
+  const [isExportOpen, setIsExportOpen] = useState(false)
+  const [isImportOpen, setIsImportOpen] = useState(false)
+
+  const menuItems: DropdownMenuItem[] = [
+    {
+      label: 'Export Data',
+      icon: (
+        <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
+        </svg>
+      ),
+      onClick: () => setIsExportOpen(true),
+    },
+    {
+      label: 'Import Data',
+      icon: (
+        <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+        </svg>
+      ),
+      onClick: () => setIsImportOpen(true),
+    },
+  ]
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -60,7 +87,22 @@ function App() {
               </div>
               <h1 className="text-xl font-semibold text-gray-900">Activity Tracker</h1>
             </div>
-            <ViewToggle />
+            <div className="flex items-center gap-3">
+              <ViewToggle />
+              <DropdownMenu
+                trigger={
+                  <button
+                    className="p-2 rounded-lg text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition-colors"
+                    aria-label="More options"
+                  >
+                    <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 5v.01M12 12v.01M12 19v.01M12 6a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2z" />
+                    </svg>
+                  </button>
+                }
+                items={menuItems}
+              />
+            </div>
           </div>
         </div>
       </header>
@@ -83,6 +125,13 @@ function App() {
 
       {/* Quick Log Modal */}
       {selectedDate && <QuickLog />}
+
+      {/* Export/Import Modals */}
+      <ExportModal isOpen={isExportOpen} onClose={() => setIsExportOpen(false)} />
+      <ImportModal isOpen={isImportOpen} onClose={() => setIsImportOpen(false)} />
+
+      {/* Toast Notifications */}
+      <ToastContainer />
     </div>
   )
 }
