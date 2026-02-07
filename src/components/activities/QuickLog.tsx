@@ -4,6 +4,47 @@ import { formatDisplayDate, parseDateString } from '../../lib/dates'
 import { ACTIVITY_COLORS } from '../../lib/colors'
 import { Button } from '../ui'
 
+// Focus trap hook for modal accessibility
+function useFocusTrap(isActive: boolean) {
+  const containerRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    if (!isActive || !containerRef.current) return
+
+    const container = containerRef.current
+    const focusableElements = container.querySelectorAll<HTMLElement>(
+      'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])'
+    )
+    const firstElement = focusableElements[0]
+    const lastElement = focusableElements[focusableElements.length - 1]
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key !== 'Tab') return
+
+      if (e.shiftKey) {
+        if (document.activeElement === firstElement) {
+          e.preventDefault()
+          lastElement?.focus()
+        }
+      } else {
+        if (document.activeElement === lastElement) {
+          e.preventDefault()
+          firstElement?.focus()
+        }
+      }
+    }
+
+    container.addEventListener('keydown', handleKeyDown)
+    firstElement?.focus()
+
+    return () => {
+      container.removeEventListener('keydown', handleKeyDown)
+    }
+  }, [isActive])
+
+  return containerRef
+}
+
 export function QuickLog() {
   const { selectedDate, setSelectedDate, activities, logs, toggleLog, addActivity } =
     useCalendarStore()
@@ -12,6 +53,30 @@ export function QuickLog() {
   const [newName, setNewName] = useState('')
   const [newColor, setNewColor] = useState<string>(ACTIVITY_COLORS[0].value)
   const nameInputRef = useRef<HTMLInputElement>(null)
+  const previousActiveElement = useRef<HTMLElement | null>(null)
+
+  // Store the previously focused element and set up escape handler
+  useEffect(() => {
+    if (selectedDate) {
+      previousActiveElement.current = document.activeElement as HTMLElement
+      document.body.style.overflow = 'hidden'
+
+      const handleEscape = (e: KeyboardEvent) => {
+        if (e.key === 'Escape') {
+          setSelectedDate(null)
+        }
+      }
+      document.addEventListener('keydown', handleEscape)
+
+      return () => {
+        document.removeEventListener('keydown', handleEscape)
+        document.body.style.overflow = 'unset'
+        previousActiveElement.current?.focus()
+      }
+    }
+  }, [selectedDate, setSelectedDate])
+
+  const modalRef = useFocusTrap(!!selectedDate)
 
   useEffect(() => {
     if (isCreating && nameInputRef.current) {
@@ -68,13 +133,13 @@ export function QuickLog() {
   }
 
   const renderActivityList = () => (
-    <div className="space-y-3">
+    <div className="space-y-2 sm:space-y-3">
       {activities.map((activity) => {
         const isCompleted = isActivityCompleted(activity.id)
         return (
           <label
             key={activity.id}
-            className={`flex items-center gap-3 p-3 rounded-lg cursor-pointer transition-colors ${
+            className={`flex items-center gap-3 p-3 sm:p-3 rounded-lg cursor-pointer transition-colors focus-within:ring-2 focus-within:ring-emerald-500 min-h-[48px] ${
               isCompleted ? 'bg-emerald-50' : 'hover:bg-gray-50'
             }`}
           >
@@ -82,24 +147,27 @@ export function QuickLog() {
               type="checkbox"
               checked={isCompleted}
               onChange={() => toggleLog(activity.id, selectedDate)}
-              className="w-5 h-5 rounded border-gray-300 text-emerald-500 focus:ring-emerald-500"
+              className="w-5 h-5 sm:w-5 sm:h-5 rounded border-gray-300 text-emerald-500 focus:ring-emerald-500 focus:ring-offset-0"
+              aria-label={`Mark ${activity.name} as ${isCompleted ? 'incomplete' : 'complete'}`}
               data-testid="quicklog-activity-checkbox"
             />
             <div
               className="w-3 h-3 rounded-full flex-shrink-0"
               style={{ backgroundColor: activity.color }}
+              aria-hidden="true"
             />
             <span
-              className={`font-medium ${isCompleted ? 'text-emerald-700' : 'text-gray-900'}`}
+              className={`font-medium text-sm sm:text-base ${isCompleted ? 'text-emerald-700' : 'text-gray-900'}`}
             >
               {activity.name}
             </span>
             {isCompleted && (
               <svg
-                className="w-5 h-5 text-emerald-500 ml-auto"
+                className="w-5 h-5 text-emerald-500 ml-auto flex-shrink-0"
                 fill="none"
                 viewBox="0 0 24 24"
                 stroke="currentColor"
+                aria-hidden="true"
               >
                 <path
                   strokeLinecap="round"
@@ -115,33 +183,42 @@ export function QuickLog() {
 
       {isCreating ? (
         <div className="p-3 border-2 border-dashed border-gray-200 rounded-lg space-y-3">
-          <input
-            ref={nameInputRef}
-            type="text"
-            value={newName}
-            onChange={(e) => setNewName(e.target.value)}
-            onKeyDown={handleKeyDown}
-            placeholder="Activity name"
-            className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
-            data-testid="quicklog-new-activity-input"
-          />
-          <div className="flex flex-wrap gap-2">
-            {ACTIVITY_COLORS.map((color) => (
-              <button
-                key={color.value}
-                type="button"
-                onClick={() => setNewColor(color.value)}
-                className={`w-6 h-6 rounded-full transition-all ${
-                  newColor === color.value
-                    ? 'ring-2 ring-offset-2 ring-gray-400 scale-110'
-                    : 'hover:scale-110'
-                }`}
-                style={{ backgroundColor: color.value }}
-                aria-label={`Select ${color.name} color`}
-                data-testid={`quicklog-color-${color.name.toLowerCase()}`}
-              />
-            ))}
+          <div>
+            <label htmlFor="quicklog-activity-name" className="sr-only">Activity name</label>
+            <input
+              id="quicklog-activity-name"
+              ref={nameInputRef}
+              type="text"
+              value={newName}
+              onChange={(e) => setNewName(e.target.value)}
+              onKeyDown={handleKeyDown}
+              placeholder="Activity name"
+              aria-label="New activity name"
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
+              data-testid="quicklog-new-activity-input"
+            />
           </div>
+          <fieldset>
+            <legend className="sr-only">Select activity color</legend>
+            <div className="flex flex-wrap gap-2" role="radiogroup" aria-label="Activity color">
+              {ACTIVITY_COLORS.map((color) => (
+                <button
+                  key={color.value}
+                  type="button"
+                  onClick={() => setNewColor(color.value)}
+                  className={`w-6 h-6 rounded-full transition-all focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-emerald-500 ${
+                    newColor === color.value
+                      ? 'ring-2 ring-offset-2 ring-gray-400 scale-110'
+                      : 'hover:scale-110'
+                  }`}
+                  style={{ backgroundColor: color.value }}
+                  aria-label={`${color.name} color`}
+                  aria-pressed={newColor === color.value}
+                  data-testid={`quicklog-color-${color.name.toLowerCase()}`}
+                />
+              ))}
+            </div>
+          </fieldset>
           <div className="flex gap-2 justify-end">
             <Button
               variant="ghost"
@@ -164,10 +241,10 @@ export function QuickLog() {
       ) : (
         <button
           onClick={handleStartCreating}
-          className="flex items-center gap-2 w-full p-3 border-2 border-dashed border-gray-200 rounded-lg text-gray-500 hover:bg-gray-50 hover:border-gray-300 transition-colors"
+          className="flex items-center gap-2 w-full p-3 border-2 border-dashed border-gray-200 rounded-lg text-gray-500 hover:bg-gray-50 hover:border-gray-300 transition-colors focus:outline-none focus:ring-2 focus:ring-emerald-500"
           data-testid="quicklog-new-activity-button"
         >
-          <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
             <path
               strokeLinecap="round"
               strokeLinejoin="round"
@@ -185,33 +262,42 @@ export function QuickLog() {
     <div className="text-center py-8">
       {isCreating ? (
         <div className="p-3 border-2 border-dashed border-gray-200 rounded-lg space-y-3">
-          <input
-            ref={nameInputRef}
-            type="text"
-            value={newName}
-            onChange={(e) => setNewName(e.target.value)}
-            onKeyDown={handleKeyDown}
-            placeholder="Activity name"
-            className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
-            data-testid="quicklog-new-activity-input"
-          />
-          <div className="flex flex-wrap gap-2 justify-center">
-            {ACTIVITY_COLORS.map((color) => (
-              <button
-                key={color.value}
-                type="button"
-                onClick={() => setNewColor(color.value)}
-                className={`w-6 h-6 rounded-full transition-all ${
-                  newColor === color.value
-                    ? 'ring-2 ring-offset-2 ring-gray-400 scale-110'
-                    : 'hover:scale-110'
-                }`}
-                style={{ backgroundColor: color.value }}
-                aria-label={`Select ${color.name} color`}
-                data-testid={`quicklog-color-${color.name.toLowerCase()}`}
-              />
-            ))}
+          <div>
+            <label htmlFor="quicklog-empty-activity-name" className="sr-only">Activity name</label>
+            <input
+              id="quicklog-empty-activity-name"
+              ref={nameInputRef}
+              type="text"
+              value={newName}
+              onChange={(e) => setNewName(e.target.value)}
+              onKeyDown={handleKeyDown}
+              placeholder="Activity name"
+              aria-label="New activity name"
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
+              data-testid="quicklog-new-activity-input"
+            />
           </div>
+          <fieldset>
+            <legend className="sr-only">Select activity color</legend>
+            <div className="flex flex-wrap gap-2 justify-center" role="radiogroup" aria-label="Activity color">
+              {ACTIVITY_COLORS.map((color) => (
+                <button
+                  key={color.value}
+                  type="button"
+                  onClick={() => setNewColor(color.value)}
+                  className={`w-6 h-6 rounded-full transition-all focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-emerald-500 ${
+                    newColor === color.value
+                      ? 'ring-2 ring-offset-2 ring-gray-400 scale-110'
+                      : 'hover:scale-110'
+                  }`}
+                  style={{ backgroundColor: color.value }}
+                  aria-label={`${color.name} color`}
+                  aria-pressed={newColor === color.value}
+                  data-testid={`quicklog-color-${color.name.toLowerCase()}`}
+                />
+              ))}
+            </div>
+          </fieldset>
           <div className="flex gap-2 justify-center">
             <Button
               variant="ghost"
@@ -243,19 +329,31 @@ export function QuickLog() {
   )
 
   return (
-    <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/50">
+    <div
+      className="fixed inset-0 z-40 flex items-end sm:items-center justify-center"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="quicklog-title"
+    >
+      {/* Backdrop */}
       <div
-        className="bg-white rounded-xl shadow-xl max-w-md w-full mx-4 p-6"
+        className="absolute inset-0 bg-black/50"
+        onClick={() => setSelectedDate(null)}
+        aria-hidden="true"
+      />
+      <div
+        ref={modalRef}
+        className="relative bg-white rounded-t-xl sm:rounded-xl shadow-xl max-w-md w-full mx-0 sm:mx-4 p-4 sm:p-6 max-h-[85vh] overflow-y-auto"
         data-testid="quicklog-modal"
       >
         <div className="flex items-center justify-between mb-4">
-          <h2 className="text-lg font-semibold text-gray-900">{formatDisplayDate(date)}</h2>
+          <h2 id="quicklog-title" className="text-base sm:text-lg font-semibold text-gray-900">{formatDisplayDate(date)}</h2>
           <button
             onClick={() => setSelectedDate(null)}
-            className="p-1 rounded-lg text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition-colors"
-            aria-label="Close"
+            className="p-2.5 sm:p-1 rounded-lg text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition-colors focus:outline-none focus:ring-2 focus:ring-emerald-500 min-h-[44px] min-w-[44px] sm:min-h-0 sm:min-w-0 flex items-center justify-center"
+            aria-label="Close quick log"
           >
-            <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
               <path
                 strokeLinecap="round"
                 strokeLinejoin="round"
@@ -268,8 +366,8 @@ export function QuickLog() {
 
         {activities.length === 0 ? renderEmptyState() : renderActivityList()}
 
-        <div className="mt-6 flex justify-end">
-          <Button onClick={() => setSelectedDate(null)} data-testid="quicklog-done-button">
+        <div className="mt-4 sm:mt-6 flex justify-end">
+          <Button onClick={() => setSelectedDate(null)} data-testid="quicklog-done-button" className="min-h-[44px] sm:min-h-0 w-full sm:w-auto">
             Done
           </Button>
         </div>

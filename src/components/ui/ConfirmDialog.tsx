@@ -25,22 +25,65 @@ export function ConfirmDialog({
   'data-testid': testId,
 }: ConfirmDialogProps) {
   const confirmButtonRef = useRef<HTMLButtonElement>(null)
+  const dialogRef = useRef<HTMLDivElement>(null)
+  const previousActiveElement = useRef<HTMLElement | null>(null)
 
   useEffect(() => {
     const handleEscape = (e: KeyboardEvent) => {
       if (e.key === 'Escape') onClose()
     }
     if (isOpen) {
+      previousActiveElement.current = document.activeElement as HTMLElement
       document.addEventListener('keydown', handleEscape)
       document.body.style.overflow = 'hidden'
-      // Focus the confirm button when dialog opens
-      setTimeout(() => confirmButtonRef.current?.focus(), 0)
+      // Focus the cancel button when dialog opens (safer default)
+      setTimeout(() => {
+        const cancelButton = dialogRef.current?.querySelector<HTMLElement>('[data-testid="confirm-dialog-cancel"]')
+        cancelButton?.focus()
+      }, 0)
     }
     return () => {
       document.removeEventListener('keydown', handleEscape)
       document.body.style.overflow = 'unset'
+      if (!isOpen && previousActiveElement.current) {
+        previousActiveElement.current.focus()
+      }
     }
   }, [isOpen, onClose])
+
+  // Focus trap
+  useEffect(() => {
+    if (!isOpen || !dialogRef.current) return
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key !== 'Tab' || !dialogRef.current) return
+
+      const focusableElements = dialogRef.current.querySelectorAll<HTMLElement>(
+        'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])'
+      )
+      const firstElement = focusableElements[0]
+      const lastElement = focusableElements[focusableElements.length - 1]
+
+      if (e.shiftKey) {
+        if (document.activeElement === firstElement) {
+          e.preventDefault()
+          lastElement?.focus()
+        }
+      } else {
+        if (document.activeElement === lastElement) {
+          e.preventDefault()
+          firstElement?.focus()
+        }
+      }
+    }
+
+    dialogRef.current.addEventListener('keydown', handleKeyDown)
+    const currentRef = dialogRef.current
+
+    return () => {
+      currentRef?.removeEventListener('keydown', handleKeyDown)
+    }
+  }, [isOpen])
 
   if (!isOpen) return null
 
@@ -96,14 +139,15 @@ export function ConfirmDialog({
         : ''
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center">
+    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center">
       <div
         className="absolute inset-0 bg-black/50 transition-opacity"
         onClick={onClose}
         aria-hidden="true"
       />
       <div
-        className="relative bg-white rounded-xl shadow-xl max-w-sm w-full mx-4 p-6 animate-in fade-in zoom-in-95 duration-200"
+        ref={dialogRef}
+        className="relative bg-white rounded-t-xl sm:rounded-xl shadow-xl max-w-sm w-full mx-0 sm:mx-4 p-4 sm:p-6 animate-in fade-in zoom-in-95 duration-200"
         role="alertdialog"
         aria-modal="true"
         aria-labelledby="confirm-dialog-title"
@@ -112,18 +156,18 @@ export function ConfirmDialog({
       >
         <div className="text-center">
           {iconByVariant[variant]}
-          <h2 id="confirm-dialog-title" className="text-lg font-semibold text-gray-900 mb-2">
+          <h2 id="confirm-dialog-title" className="text-base sm:text-lg font-semibold text-gray-900 mb-2">
             {title}
           </h2>
-          <p id="confirm-dialog-message" className="text-sm text-gray-500 mb-6">
+          <p id="confirm-dialog-message" className="text-sm text-gray-500 mb-4 sm:mb-6">
             {message}
           </p>
         </div>
 
-        <div className="flex gap-3">
+        <div className="flex flex-col sm:flex-row gap-2 sm:gap-3">
           <Button
             variant="ghost"
-            className="flex-1"
+            className="flex-1 min-h-[44px] sm:min-h-0 order-2 sm:order-1"
             onClick={onClose}
             data-testid="confirm-dialog-cancel"
           >
@@ -132,7 +176,7 @@ export function ConfirmDialog({
           <button
             ref={confirmButtonRef}
             onClick={handleConfirm}
-            className={`flex-1 px-4 py-2 rounded-lg font-medium transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2 ${
+            className={`flex-1 px-4 py-2 rounded-lg font-medium transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2 min-h-[44px] sm:min-h-0 order-1 sm:order-2 ${
               confirmButtonClass ||
               'bg-emerald-500 hover:bg-emerald-600 focus:ring-emerald-500 text-white'
             }`}

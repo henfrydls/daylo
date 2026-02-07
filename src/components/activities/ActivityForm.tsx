@@ -91,26 +91,27 @@ export function ActivityForm({ isOpen, onClose, activity }: ActivityFormProps) {
           />
         </div>
 
-        <div className="mb-4">
-          <label className="block text-sm font-medium text-gray-700 mb-2">Color</label>
-          <div className="flex flex-wrap gap-2">
+        <fieldset className="mb-4">
+          <legend className="block text-sm font-medium text-gray-700 mb-2">Color</legend>
+          <div className="flex flex-wrap gap-2" role="radiogroup" aria-label="Select activity color">
             {ACTIVITY_COLORS.map((c) => (
               <button
                 key={c.value}
                 type="button"
                 onClick={() => setColor(c.value)}
-                className={`w-8 h-8 rounded-full transition-all ${
+                className={`w-8 h-8 rounded-full transition-all focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-emerald-500 ${
                   color === c.value
                     ? 'ring-2 ring-offset-2 ring-gray-400 scale-110'
                     : 'hover:scale-105'
                 }`}
                 style={{ backgroundColor: c.value }}
-                aria-label={`Select ${c.name} color`}
+                aria-label={`${c.name} color`}
+                aria-pressed={color === c.value}
                 data-testid="color-option"
               />
             ))}
           </div>
-        </div>
+        </fieldset>
 
         {/* Date logging section - only show when creating new activity */}
         {!isEditing && (

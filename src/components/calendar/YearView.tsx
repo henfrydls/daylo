@@ -95,25 +95,26 @@ export function YearView() {
           <div className="flex items-center gap-1">
             <button
               onClick={handlePrevYear}
-              className="p-2 rounded-lg text-gray-500 hover:bg-gray-100 hover:text-gray-700 transition-colors"
+              className="p-2 rounded-lg text-gray-500 hover:bg-gray-100 hover:text-gray-700 transition-colors focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:ring-offset-1"
               aria-label="Previous year"
             >
-              <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
               </svg>
             </button>
             <button
               onClick={handleNextYear}
-              className="p-2 rounded-lg text-gray-500 hover:bg-gray-100 hover:text-gray-700 transition-colors"
+              className="p-2 rounded-lg text-gray-500 hover:bg-gray-100 hover:text-gray-700 transition-colors focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:ring-offset-1"
               aria-label="Next year"
             >
-              <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
               </svg>
             </button>
             <button
               onClick={handleCurrentYear}
-              className="ml-2 px-4 py-1.5 text-sm font-medium text-gray-600 hover:bg-gray-100 hover:text-gray-800 rounded-lg transition-colors border border-gray-200"
+              className="ml-2 px-4 py-1.5 text-sm font-medium text-gray-600 hover:bg-gray-100 hover:text-gray-800 rounded-lg transition-colors border border-gray-200 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:ring-offset-1"
+              aria-label="Go to current year"
             >
               Today
             </button>
@@ -121,16 +122,16 @@ export function YearView() {
         </div>
 
         {/* Legend */}
-        <div className="flex items-center gap-3 text-sm text-gray-500">
-          <span className="font-medium">Less</span>
-          <div className="flex gap-1">
-            <div className="w-[14px] h-[14px] rounded-sm bg-gray-100 border border-gray-200" title="No activity" />
-            <div className="w-[14px] h-[14px] rounded-sm bg-emerald-100" title="Low activity" />
-            <div className="w-[14px] h-[14px] rounded-sm bg-emerald-300" title="Medium activity" />
-            <div className="w-[14px] h-[14px] rounded-sm bg-emerald-400" title="High activity" />
-            <div className="w-[14px] h-[14px] rounded-sm bg-emerald-500" title="Very high activity" />
+        <div className="flex items-center gap-3 text-sm text-gray-500" role="group" aria-label="Activity level legend">
+          <span className="font-medium" id="legend-less">Less</span>
+          <div className="flex gap-1" role="list" aria-labelledby="legend-less legend-more">
+            <div className="w-[14px] h-[14px] rounded-sm bg-gray-100 border border-gray-200" role="listitem" aria-label="No activity: 0%" />
+            <div className="w-[14px] h-[14px] rounded-sm bg-emerald-100" role="listitem" aria-label="Low activity: 1-25%" />
+            <div className="w-[14px] h-[14px] rounded-sm bg-emerald-300" role="listitem" aria-label="Medium activity: 26-50%" />
+            <div className="w-[14px] h-[14px] rounded-sm bg-emerald-400" role="listitem" aria-label="High activity: 51-75%" />
+            <div className="w-[14px] h-[14px] rounded-sm bg-emerald-500" role="listitem" aria-label="Very high activity: 76-100%" />
           </div>
-          <span className="font-medium">More</span>
+          <span className="font-medium" id="legend-more">More</span>
         </div>
       </div>
 

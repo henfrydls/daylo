@@ -88,9 +88,9 @@ export function StatsPanel() {
   }
 
   return (
-    <div className="bg-white rounded-xl border border-gray-200 p-4">
-      <h2 className="text-lg font-semibold text-gray-900 mb-4">Statistics</h2>
-      <div className="grid grid-cols-2 gap-4">
+    <div className="bg-white rounded-xl border border-gray-200 p-3 sm:p-4">
+      <h2 className="text-base sm:text-lg font-semibold text-gray-900 mb-3 sm:mb-4">Statistics</h2>
+      <div className="grid grid-cols-2 gap-2 sm:gap-4">
         <StatCard label="Active Days" value={stats.activeDays} subtitle={`of ${stats.totalDays}`} />
         <StatCard label="Current Streak" value={stats.currentStreak} subtitle="days" />
         <StatCard label="Longest Streak" value={stats.longestStreak} subtitle="days" />
@@ -110,9 +110,9 @@ function StatCard({
   subtitle: string
 }) {
   return (
-    <div className="p-3 rounded-lg bg-gray-50">
-      <div className="text-2xl font-bold text-gray-900">{value}</div>
-      <div className="text-sm text-gray-600">{label}</div>
+    <div className="p-2 sm:p-3 rounded-lg bg-gray-50">
+      <div className="text-xl sm:text-2xl font-bold text-gray-900">{value}</div>
+      <div className="text-xs sm:text-sm text-gray-600">{label}</div>
       <div className="text-xs text-gray-400">{subtitle}</div>
     </div>
   )

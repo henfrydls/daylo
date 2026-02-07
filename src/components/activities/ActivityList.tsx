@@ -39,10 +39,10 @@ export function ActivityList() {
   }
 
   return (
-    <div className="bg-white rounded-xl border border-gray-200 p-4">
+    <div className="bg-white rounded-xl border border-gray-200 p-3 sm:p-4">
       <div className="flex items-center justify-between mb-4">
-        <h2 className="text-lg font-semibold text-gray-900">Activities</h2>
-        <Button size="sm" onClick={() => setIsFormOpen(true)} data-testid="add-activity-button">
+        <h2 className="text-base sm:text-lg font-semibold text-gray-900">Activities</h2>
+        <Button size="sm" onClick={() => setIsFormOpen(true)} data-testid="add-activity-button" className="min-h-[44px] sm:min-h-0">
           + Add
         </Button>
       </div>
@@ -52,27 +52,29 @@ export function ActivityList() {
           No activities yet. Create one to start tracking!
         </p>
       ) : (
-        <ul className="space-y-2">
+        <ul className="space-y-2" role="list" aria-label="Activities list">
           {activities.map((activity) => (
             <li
               key={activity.id}
-              className="flex items-center justify-between p-3 rounded-lg hover:bg-gray-50 transition-colors group"
+              className="flex items-center justify-between p-2 sm:p-3 rounded-lg hover:bg-gray-50 focus-within:bg-gray-50 transition-colors group"
               data-testid="activity-item"
             >
-              <div className="flex items-center gap-3">
+              <div className="flex items-center gap-2 sm:gap-3 min-w-0 flex-1">
                 <div
                   className="w-4 h-4 rounded-full flex-shrink-0"
                   style={{ backgroundColor: activity.color }}
+                  aria-hidden="true"
                 />
-                <span className="text-gray-900 font-medium">{activity.name}</span>
+                <span className="text-gray-900 font-medium text-sm sm:text-base truncate">{activity.name}</span>
               </div>
-              <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+              {/* Always visible on mobile (touch devices), hover-only on desktop */}
+              <div className="flex items-center gap-1 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 sm:group-focus-within:opacity-100 transition-opacity flex-shrink-0">
                 <button
                   onClick={() => handleEdit(activity)}
-                  className="p-1.5 rounded-lg text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition-colors"
+                  className="p-2.5 sm:p-1.5 rounded-lg text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition-colors focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:opacity-100 min-h-[44px] min-w-[44px] sm:min-h-0 sm:min-w-0 flex items-center justify-center"
                   aria-label={`Edit ${activity.name}`}
                 >
-                  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
                     <path
                       strokeLinecap="round"
                       strokeLinejoin="round"
@@ -83,10 +85,10 @@ export function ActivityList() {
                 </button>
                 <button
                   onClick={() => handleDeleteClick(activity.id)}
-                  className="p-1.5 rounded-lg text-gray-400 hover:text-red-600 hover:bg-red-50 transition-colors"
+                  className="p-2.5 sm:p-1.5 rounded-lg text-gray-400 hover:text-red-600 hover:bg-red-50 transition-colors focus:outline-none focus:ring-2 focus:ring-red-500 focus:opacity-100 min-h-[44px] min-w-[44px] sm:min-h-0 sm:min-w-0 flex items-center justify-center"
                   aria-label={`Delete ${activity.name}`}
                 >
-                  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
                     <path
                       strokeLinecap="round"
                       strokeLinejoin="round"
