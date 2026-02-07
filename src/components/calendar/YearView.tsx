@@ -163,7 +163,7 @@ export function YearView() {
                   {DAYS.map((day, i) => (
                     <div
                       key={day}
-                      className="min-h-[12px] flex items-center justify-end text-[10px] text-gray-400 font-medium"
+                      className="min-h-[10px] flex items-center justify-end text-[10px] text-gray-400 font-medium"
                     >
                       {i % 2 === 1 ? day.charAt(0) : ''}
                     </div>
@@ -179,7 +179,7 @@ export function YearView() {
                           return (
                             <div
                               key={`empty-${weekIndex}-${dayIndex}`}
-                              className="min-w-[12px] min-h-[12px] aspect-square"
+                              className="min-w-[10px] min-h-[10px] aspect-square"
                             />
                           )
                         }
