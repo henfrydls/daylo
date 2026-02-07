@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Button } from '../ui'
+import { Button, ConfirmDialog } from '../ui'
 import { ActivityForm } from './ActivityForm'
 import { useCalendarStore } from '../../store'
 import type { Activity } from '../../types'
@@ -7,6 +7,10 @@ import type { Activity } from '../../types'
 export function ActivityList() {
   const [isFormOpen, setIsFormOpen] = useState(false)
   const [editingActivity, setEditingActivity] = useState<Activity | undefined>()
+  const [deleteConfirm, setDeleteConfirm] = useState<{ isOpen: boolean; activityId: string | null }>({
+    isOpen: false,
+    activityId: null,
+  })
 
   const { activities, deleteActivity } = useCalendarStore()
 
@@ -20,10 +24,18 @@ export function ActivityList() {
     setEditingActivity(undefined)
   }
 
-  const handleDelete = (id: string) => {
-    if (window.confirm('Are you sure you want to delete this activity? All related logs will be lost.')) {
-      deleteActivity(id)
+  const handleDeleteClick = (id: string) => {
+    setDeleteConfirm({ isOpen: true, activityId: id })
+  }
+
+  const handleConfirmDelete = () => {
+    if (deleteConfirm.activityId) {
+      deleteActivity(deleteConfirm.activityId)
     }
+  }
+
+  const handleCloseDeleteConfirm = () => {
+    setDeleteConfirm({ isOpen: false, activityId: null })
   }
 
   return (
@@ -70,7 +82,7 @@ export function ActivityList() {
                   </svg>
                 </button>
                 <button
-                  onClick={() => handleDelete(activity.id)}
+                  onClick={() => handleDeleteClick(activity.id)}
                   className="p-1.5 rounded-lg text-gray-400 hover:text-red-600 hover:bg-red-50 transition-colors"
                   aria-label={`Delete ${activity.name}`}
                 >
@@ -90,6 +102,18 @@ export function ActivityList() {
       )}
 
       <ActivityForm isOpen={isFormOpen} onClose={handleCloseForm} activity={editingActivity} />
+
+      <ConfirmDialog
+        isOpen={deleteConfirm.isOpen}
+        onClose={handleCloseDeleteConfirm}
+        onConfirm={handleConfirmDelete}
+        title="Delete Activity"
+        message="Are you sure you want to delete this activity? All related logs will be lost."
+        confirmText="Delete"
+        cancelText="Cancel"
+        variant="danger"
+        data-testid="delete-activity-confirm"
+      />
     </div>
   )
 }
