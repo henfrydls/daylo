@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { Button, Modal } from '../ui'
 import { ACTIVITY_COLORS } from '../../lib/colors'
 import { useCalendarStore } from '../../store'
@@ -12,10 +12,20 @@ interface ActivityFormProps {
 }
 
 export function ActivityForm({ isOpen, onClose, activity }: ActivityFormProps) {
-  const [name, setName] = useState(activity?.name || '')
-  const [color, setColor] = useState(activity?.color || ACTIVITY_COLORS[0].value)
+  const [name, setName] = useState('')
+  const [color, setColor] = useState<string>(ACTIVITY_COLORS[0].value)
   const [logForDate, setLogForDate] = useState(false)
   const [selectedDate, setSelectedDate] = useState(formatDate(new Date()))
+
+  // Sync form state with activity prop when modal opens or activity changes
+  useEffect(() => {
+    if (isOpen) {
+      setName(activity?.name || '')
+      setColor(activity?.color || ACTIVITY_COLORS[0].value)
+      setLogForDate(false)
+      setSelectedDate(formatDate(new Date()))
+    }
+  }, [isOpen, activity])
 
   const { addActivity, updateActivity, toggleLog } = useCalendarStore()
 
