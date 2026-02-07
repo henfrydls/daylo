@@ -1,17 +1,24 @@
 import { useMemo } from 'react'
 import { DayCell } from './DayCell'
 import { useCalendarStore } from '../../store'
-import { getYearDays, formatDate, getFirstDayOffset } from '../../lib/dates'
+import { getYearDays, formatDate } from '../../lib/dates'
 import { calculateHeatmapLevel } from '../../lib/colors'
 
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
 const DAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
 
+// Fixed number of weeks per month for consistent layout
+const WEEKS_PER_MONTH = 6
+
+interface MonthData {
+  month: number
+  weeks: (Date | null)[][]
+}
+
 export function YearView() {
   const { selectedYear, activities, logs, setSelectedDate, setSelectedYear, navigateToMonth } = useCalendarStore()
 
   const yearDays = useMemo(() => getYearDays(selectedYear), [selectedYear])
-  const firstDayOffset = useMemo(() => getFirstDayOffset(selectedYear), [selectedYear])
 
   const dayDataMap = useMemo(() => {
     const map = new Map<
@@ -35,44 +42,60 @@ export function YearView() {
   const handleNextYear = () => setSelectedYear(selectedYear + 1)
   const handleCurrentYear = () => setSelectedYear(new Date().getFullYear())
 
-  const weeks = useMemo(() => {
-    const result: (Date | null)[][] = []
-    let currentWeek: (Date | null)[] = []
+  // Group days by month with exactly 6 weeks (42 cells) per month for consistent layout
+  const monthsData = useMemo(() => {
+    const months: MonthData[] = []
 
-    // Add empty cells for the first week offset
-    for (let i = 0; i < firstDayOffset; i++) {
-      currentWeek.push(null)
+    for (let month = 0; month < 12; month++) {
+      // Get all days for this month
+      const monthDays = yearDays.filter((date) => date.getMonth() === month)
+
+      if (monthDays.length === 0) continue
+
+      // Get the day of week for the first day of the month (0 = Sunday, 6 = Saturday)
+      const firstDayOfMonth = monthDays[0].getDay()
+
+      // Create array of 42 cells (6 weeks x 7 days)
+      const cells: (Date | null)[] = []
+
+      // Add empty cells at the beginning for offset
+      for (let i = 0; i < firstDayOfMonth; i++) {
+        cells.push(null)
+      }
+
+      // Add all days of the month
+      monthDays.forEach((date) => {
+        cells.push(date)
+      })
+
+      // Fill remaining cells to complete 42 (6 weeks)
+      const totalCells = WEEKS_PER_MONTH * 7 // 42 cells
+      while (cells.length < totalCells) {
+        cells.push(null)
+      }
+
+      // Convert flat array to weeks (7 days each)
+      const weeks: (Date | null)[][] = []
+      for (let i = 0; i < WEEKS_PER_MONTH; i++) {
+        weeks.push(cells.slice(i * 7, (i + 1) * 7))
+      }
+
+      months.push({ month, weeks })
     }
 
-    yearDays.forEach((date) => {
-      currentWeek.push(date)
-      if (currentWeek.length === 7) {
-        result.push(currentWeek)
-        currentWeek = []
-      }
-    })
-
-    // Fill the last week with nulls if needed
-    if (currentWeek.length > 0) {
-      while (currentWeek.length < 7) {
-        currentWeek.push(null)
-      }
-      result.push(currentWeek)
-    }
-
-    return result
-  }, [yearDays, firstDayOffset])
+    return months
+  }, [yearDays])
 
   return (
-    <div className="p-6">
+    <div className="p-4 sm:p-6 lg:p-8 w-full">
       {/* Year Navigation */}
-      <div className="flex items-center justify-between mb-6">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-8">
         <div className="flex items-center gap-4">
-          <h1 className="text-2xl font-bold text-gray-900">{selectedYear}</h1>
+          <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">{selectedYear}</h1>
           <div className="flex items-center gap-1">
             <button
               onClick={handlePrevYear}
-              className="p-1.5 rounded-lg text-gray-500 hover:bg-gray-100 transition-colors"
+              className="p-2 rounded-lg text-gray-500 hover:bg-gray-100 hover:text-gray-700 transition-colors"
               aria-label="Previous year"
             >
               <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -81,7 +104,7 @@ export function YearView() {
             </button>
             <button
               onClick={handleNextYear}
-              className="p-1.5 rounded-lg text-gray-500 hover:bg-gray-100 transition-colors"
+              className="p-2 rounded-lg text-gray-500 hover:bg-gray-100 hover:text-gray-700 transition-colors"
               aria-label="Next year"
             >
               <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -90,7 +113,7 @@ export function YearView() {
             </button>
             <button
               onClick={handleCurrentYear}
-              className="ml-2 px-3 py-1 text-sm font-medium text-gray-600 hover:bg-gray-100 rounded-lg transition-colors"
+              className="ml-2 px-4 py-1.5 text-sm font-medium text-gray-600 hover:bg-gray-100 hover:text-gray-800 rounded-lg transition-colors border border-gray-200"
             >
               Today
             </button>
@@ -98,71 +121,97 @@ export function YearView() {
         </div>
 
         {/* Legend */}
-        <div className="flex items-center gap-2 text-sm text-gray-500">
-          <span>Less</span>
+        <div className="flex items-center gap-3 text-sm text-gray-500">
+          <span className="font-medium">Less</span>
           <div className="flex gap-1">
-            <div className="w-3 h-3 rounded-sm bg-gray-100" />
-            <div className="w-3 h-3 rounded-sm bg-emerald-100" />
-            <div className="w-3 h-3 rounded-sm bg-emerald-300" />
-            <div className="w-3 h-3 rounded-sm bg-emerald-400" />
-            <div className="w-3 h-3 rounded-sm bg-emerald-500" />
+            <div className="w-[14px] h-[14px] rounded-sm bg-gray-100 border border-gray-200" title="No activity" />
+            <div className="w-[14px] h-[14px] rounded-sm bg-emerald-100" title="Low activity" />
+            <div className="w-[14px] h-[14px] rounded-sm bg-emerald-300" title="Medium activity" />
+            <div className="w-[14px] h-[14px] rounded-sm bg-emerald-400" title="High activity" />
+            <div className="w-[14px] h-[14px] rounded-sm bg-emerald-500" title="Very high activity" />
           </div>
-          <span>More</span>
+          <span className="font-medium">More</span>
         </div>
       </div>
 
-      {/* Calendar Grid */}
-      <div className="overflow-x-auto">
-        <div className="inline-block">
-          {/* Month Labels */}
-          <div className="flex mb-2 text-xs text-gray-500">
-            <div className="w-8" /> {/* Spacer for day labels */}
-            {MONTHS.map((month, index) => (
-              <button
-                key={month}
-                onClick={() => navigateToMonth(selectedYear, index)}
-                className="flex-1 min-w-[52px] text-center hover:text-emerald-600 hover:font-medium transition-colors cursor-pointer rounded py-0.5"
-                aria-label={`View ${month} ${selectedYear}`}
-              >
-                {month}
-              </button>
-            ))}
+      {/* Calendar Grid - Organized by Months */}
+      <div className="w-full">
+        {/* Day Labels Column Header */}
+        <div className="flex mb-4">
+          <div className="text-xs font-medium text-gray-400 uppercase tracking-wider">
+            Activity Calendar
           </div>
+        </div>
 
-          {/* Grid with Day Labels */}
-          <div className="flex">
-            {/* Day Labels */}
-            <div className="flex flex-col gap-1 mr-2 text-xs text-gray-500">
-              {DAYS.map((day, i) => (
-                <div key={day} className="h-3 flex items-center">
-                  {i % 2 === 1 ? day : ''}
+        {/* Months Grid - Responsive with auto-fit */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 lg:gap-6">
+          {monthsData.map(({ month, weeks }) => (
+            <div key={month} className="flex flex-col min-h-0">
+              {/* Month Label */}
+              <button
+                onClick={() => navigateToMonth(selectedYear, month)}
+                className="mb-2 text-sm font-semibold text-gray-700 hover:text-emerald-600 transition-colors text-left"
+                aria-label={`View ${MONTHS[month]} ${selectedYear}`}
+              >
+                {MONTHS[month]}
+              </button>
+
+              {/* Month Grid Container - Flexible to fill available space */}
+              <div className="flex flex-1 bg-white rounded-lg border border-gray-100 p-3 shadow-sm min-h-0">
+                {/* Day Labels for this month */}
+                <div className="grid grid-rows-7 gap-1 mr-2 pr-2 border-r border-gray-100">
+                  {DAYS.map((day, i) => (
+                    <div
+                      key={day}
+                      className="min-h-[12px] flex items-center justify-end text-[10px] text-gray-400 font-medium"
+                    >
+                      {i % 2 === 1 ? day.charAt(0) : ''}
+                    </div>
+                  ))}
                 </div>
-              ))}
+
+                {/* Weeks Grid - 6 columns (weeks) x 7 rows (days) with flexible cells */}
+                <div className="grid grid-cols-6 gap-x-2 gap-y-1 flex-1">
+                  {weeks.map((week, weekIndex) => (
+                    <div key={weekIndex} className="grid grid-rows-7 gap-1">
+                      {week.map((date, dayIndex) => {
+                        if (!date) {
+                          return (
+                            <div
+                              key={`empty-${weekIndex}-${dayIndex}`}
+                              className="min-w-[12px] min-h-[12px] aspect-square"
+                            />
+                          )
+                        }
+                        const dateStr = formatDate(date)
+                        const dayData = dayDataMap.get(dateStr) || { completedCount: 0, level: 0 as const }
+                        return (
+                          <DayCell
+                            key={dateStr}
+                            date={date}
+                            level={dayData.level}
+                            completedCount={dayData.completedCount}
+                            totalActivities={activities.length}
+                            onClick={() => setSelectedDate(dateStr)}
+                          />
+                        )
+                      })}
+                    </div>
+                  ))}
+                </div>
+              </div>
             </div>
+          ))}
+        </div>
 
-            {/* Weeks Grid */}
-            <div className="flex gap-1">
-              {weeks.map((week, weekIndex) => (
-                <div key={weekIndex} className="flex flex-col gap-1">
-                  {week.map((date, dayIndex) => {
-                    if (!date) {
-                      return <div key={`empty-${dayIndex}`} className="w-3 h-3" />
-                    }
-                    const dateStr = formatDate(date)
-                    const dayData = dayDataMap.get(dateStr) || { completedCount: 0, level: 0 as const }
-                    return (
-                      <DayCell
-                        key={dateStr}
-                        date={date}
-                        level={dayData.level}
-                        completedCount={dayData.completedCount}
-                        totalActivities={activities.length}
-                        onClick={() => setSelectedDate(dateStr)}
-                      />
-                    )
-                  })}
-                </div>
-              ))}
+        {/* Bottom Summary */}
+        <div className="mt-8 pt-6 border-t border-gray-100">
+          <div className="flex flex-wrap gap-6 text-sm text-gray-500">
+            <div>
+              <span className="font-medium text-gray-700">{activities.length}</span> activities tracked
+            </div>
+            <div>
+              <span className="font-medium text-gray-700">{logs.filter(l => l.completed).length}</span> completions this year
             </div>
           </div>
         </div>
