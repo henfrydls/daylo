@@ -3,11 +3,15 @@ import { persist } from 'zustand/middleware'
 import type { Activity, ActivityLog } from '../types'
 import { generateId } from '../lib/dates'
 
+type ViewType = 'year' | 'month'
+
 interface CalendarState {
   activities: Activity[]
   logs: ActivityLog[]
   selectedYear: number
   selectedDate: string | null
+  currentView: ViewType
+  selectedMonth: number
 
   // Activity actions
   addActivity: (name: string, color: string) => void
@@ -21,6 +25,9 @@ interface CalendarState {
   // Navigation
   setSelectedYear: (year: number) => void
   setSelectedDate: (date: string | null) => void
+  setCurrentView: (view: ViewType) => void
+  setSelectedMonth: (month: number) => void
+  navigateToMonth: (year: number, month: number) => void
 
   // Helpers
   getLogsForDate: (date: string) => ActivityLog[]
@@ -34,6 +41,8 @@ export const useCalendarStore = create<CalendarState>()(
       logs: [],
       selectedYear: new Date().getFullYear(),
       selectedDate: null,
+      currentView: 'year' as ViewType,
+      selectedMonth: new Date().getMonth(),
 
       addActivity: (name, color) => {
         const now = new Date().toISOString()
@@ -99,6 +108,10 @@ export const useCalendarStore = create<CalendarState>()(
 
       setSelectedYear: (year) => set({ selectedYear: year }),
       setSelectedDate: (date) => set({ selectedDate: date }),
+      setCurrentView: (view) => set({ currentView: view }),
+      setSelectedMonth: (month) => set({ selectedMonth: month }),
+      navigateToMonth: (year, month) =>
+        set({ selectedYear: year, selectedMonth: month, currentView: 'month' }),
 
       getLogsForDate: (date) => {
         return get().logs.filter((l) => l.date === date && l.completed)

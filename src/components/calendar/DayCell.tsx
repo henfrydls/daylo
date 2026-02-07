@@ -45,6 +45,7 @@ export const DayCell = memo(function DayCell({
           ${isCurrentDay ? 'ring-2 ring-offset-1 ring-emerald-500' : ''}
         `}
         aria-label={`${formatDisplayDate(date)}: ${completedCount} of ${totalActivities} activities completed`}
+        data-testid="day-cell"
       />
     </Tooltip>
   )

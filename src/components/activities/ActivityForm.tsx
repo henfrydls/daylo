@@ -38,7 +38,7 @@ export function ActivityForm({ isOpen, onClose, activity }: ActivityFormProps) {
   }
 
   return (
-    <Modal isOpen={isOpen} onClose={handleClose} title={activity ? 'Edit Activity' : 'New Activity'}>
+    <Modal isOpen={isOpen} onClose={handleClose} title={activity ? 'Edit Activity' : 'New Activity'} data-testid="activity-form-modal">
       <form onSubmit={handleSubmit}>
         <div className="mb-4">
           <label htmlFor="activity-name" className="block text-sm font-medium text-gray-700 mb-1">
@@ -52,6 +52,7 @@ export function ActivityForm({ isOpen, onClose, activity }: ActivityFormProps) {
             placeholder="e.g., Exercise, Read, Meditate"
             className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
             autoFocus
+            data-testid="activity-name-input"
           />
         </div>
 
@@ -68,6 +69,7 @@ export function ActivityForm({ isOpen, onClose, activity }: ActivityFormProps) {
                 }`}
                 style={{ backgroundColor: c.value }}
                 aria-label={`Select ${c.name} color`}
+                data-testid="color-option"
               />
             ))}
           </div>
@@ -77,7 +79,7 @@ export function ActivityForm({ isOpen, onClose, activity }: ActivityFormProps) {
           <Button type="button" variant="ghost" onClick={handleClose}>
             Cancel
           </Button>
-          <Button type="submit" disabled={!name.trim()}>
+          <Button type="submit" disabled={!name.trim()} data-testid="activity-form-submit">
             {activity ? 'Save Changes' : 'Create Activity'}
           </Button>
         </div>

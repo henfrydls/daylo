@@ -16,7 +16,7 @@ export function QuickLog() {
 
   return (
     <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/50">
-      <div className="bg-white rounded-xl shadow-xl max-w-md w-full mx-4 p-6">
+      <div className="bg-white rounded-xl shadow-xl max-w-md w-full mx-4 p-6" data-testid="quicklog-modal">
         <div className="flex items-center justify-between mb-4">
           <h2 className="text-lg font-semibold text-gray-900">{formatDisplayDate(date)}</h2>
           <button
@@ -55,6 +55,7 @@ export function QuickLog() {
                     checked={isCompleted}
                     onChange={() => toggleLog(activity.id, selectedDate)}
                     className="w-5 h-5 rounded border-gray-300 text-emerald-500 focus:ring-emerald-500"
+                    data-testid="quicklog-activity-checkbox"
                   />
                   <div
                     className="w-3 h-3 rounded-full flex-shrink-0"
@@ -87,7 +88,7 @@ export function QuickLog() {
         )}
 
         <div className="mt-6 flex justify-end">
-          <Button onClick={() => setSelectedDate(null)}>Done</Button>
+          <Button onClick={() => setSelectedDate(null)} data-testid="quicklog-done-button">Done</Button>
         </div>
       </div>
     </div>

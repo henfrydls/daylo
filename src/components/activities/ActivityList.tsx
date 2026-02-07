@@ -30,7 +30,7 @@ export function ActivityList() {
     <div className="bg-white rounded-xl border border-gray-200 p-4">
       <div className="flex items-center justify-between mb-4">
         <h2 className="text-lg font-semibold text-gray-900">Activities</h2>
-        <Button size="sm" onClick={() => setIsFormOpen(true)}>
+        <Button size="sm" onClick={() => setIsFormOpen(true)} data-testid="add-activity-button">
           + Add
         </Button>
       </div>
@@ -45,6 +45,7 @@ export function ActivityList() {
             <li
               key={activity.id}
               className="flex items-center justify-between p-3 rounded-lg hover:bg-gray-50 transition-colors group"
+              data-testid="activity-item"
             >
               <div className="flex items-center gap-3">
                 <div

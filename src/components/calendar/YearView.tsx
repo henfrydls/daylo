@@ -8,7 +8,7 @@ const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', '
 const DAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
 
 export function YearView() {
-  const { selectedYear, activities, logs, setSelectedDate, setSelectedYear } = useCalendarStore()
+  const { selectedYear, activities, logs, setSelectedDate, setSelectedYear, navigateToMonth } = useCalendarStore()
 
   const yearDays = useMemo(() => getYearDays(selectedYear), [selectedYear])
   const firstDayOffset = useMemo(() => getFirstDayOffset(selectedYear), [selectedYear])
@@ -117,10 +117,15 @@ export function YearView() {
           {/* Month Labels */}
           <div className="flex mb-2 text-xs text-gray-500">
             <div className="w-8" /> {/* Spacer for day labels */}
-            {MONTHS.map((month) => (
-              <div key={month} className="flex-1 min-w-[52px] text-center">
+            {MONTHS.map((month, index) => (
+              <button
+                key={month}
+                onClick={() => navigateToMonth(selectedYear, index)}
+                className="flex-1 min-w-[52px] text-center hover:text-emerald-600 hover:font-medium transition-colors cursor-pointer rounded py-0.5"
+                aria-label={`View ${month} ${selectedYear}`}
+              >
                 {month}
-              </div>
+              </button>
             ))}
           </div>
 

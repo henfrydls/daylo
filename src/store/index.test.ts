@@ -4,7 +4,6 @@ import { useCalendarStore } from './index'
 describe('useCalendarStore', () => {
   beforeEach(() => {
     // Reset store state before each test
-    const store = useCalendarStore.getState()
     useCalendarStore.setState({
       activities: [],
       logs: [],
@@ -25,7 +24,7 @@ describe('useCalendarStore', () => {
     })
 
     it('should update activity', () => {
-      const { addActivity, updateActivity, activities } = useCalendarStore.getState()
+      const { addActivity, updateActivity } = useCalendarStore.getState()
       addActivity('Exercise', '#10B981')
 
       const activity = useCalendarStore.getState().activities[0]
@@ -119,7 +118,7 @@ describe('useCalendarStore', () => {
 
   describe('helpers', () => {
     it('should get logs for date', () => {
-      const { addActivity, toggleLog, getLogsForDate } = useCalendarStore.getState()
+      const { addActivity, toggleLog } = useCalendarStore.getState()
       addActivity('Exercise', '#10B981')
       addActivity('Reading', '#3B82F6')
 
@@ -133,7 +132,7 @@ describe('useCalendarStore', () => {
     })
 
     it('should get logs for activity', () => {
-      const { addActivity, toggleLog, getLogsForActivity } = useCalendarStore.getState()
+      const { addActivity, toggleLog } = useCalendarStore.getState()
       addActivity('Exercise', '#10B981')
 
       const activity = useCalendarStore.getState().activities[0]
