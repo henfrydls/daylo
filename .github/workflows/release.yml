@@ -67,14 +67,13 @@ jobs:
           workspaces: './src-tauri -> target'
           shared-key: ${{ matrix.target }}
 
-      # Linux dependencies
+      # Linux dependencies for Tauri 2.x
       - name: Install Linux dependencies
         if: matrix.platform == 'ubuntu-22.04'
         run: |
           sudo apt-get update
           sudo apt-get install -y \
             libwebkit2gtk-4.1-dev \
-            libappindicator3-dev \
             librsvg2-dev \
             patchelf \
             libgtk-3-dev \
