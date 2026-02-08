@@ -29,7 +29,8 @@ describe('ActivityForm', () => {
 
     // Setup default store mock
     const mockStore = vi.mocked(useCalendarStore)
-    mockStore.mockImplementation((selector?: (state: unknown) => unknown) => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    mockStore.mockImplementation((selector?: (state: any) => any) => {
       const state = {
         addActivity: mockAddActivity,
         updateActivity: mockUpdateActivity,

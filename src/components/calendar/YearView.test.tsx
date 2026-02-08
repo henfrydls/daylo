@@ -9,7 +9,6 @@ const initialStoreState = useCalendarStore.getState()
 
 // Mock the current date
 const MOCK_DATE = new Date(2024, 5, 15) // June 15, 2024
-const RealDate = global.Date
 
 describe('YearView', () => {
   beforeEach(() => {
@@ -22,25 +21,13 @@ describe('YearView', () => {
     })
     vi.clearAllMocks()
 
-    // Mock Date constructor for consistent testing
-    global.Date = class extends RealDate {
-      constructor(...args: unknown[]) {
-        if (args.length === 0) {
-          super(MOCK_DATE.getTime())
-        } else {
-          // @ts-expect-error - spread works here
-          super(...args)
-        }
-      }
-
-      static now() {
-        return MOCK_DATE.getTime()
-      }
-    } as unknown as DateConstructor
+    // Mock Date using Vitest's fake timers
+    vi.useFakeTimers()
+    vi.setSystemTime(MOCK_DATE)
   })
 
   afterEach(() => {
-    global.Date = RealDate
+    vi.useRealTimers()
   })
 
   describe('Rendering', () => {
