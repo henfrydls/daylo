@@ -5,6 +5,7 @@ import { StatsPanel } from './components/stats'
 import { DropdownMenu, ErrorBoundary, ToastContainer } from './components/ui'
 import type { DropdownMenuItem } from './components/ui'
 import { useCalendarStore } from './store'
+import { useAppVersion } from './hooks'
 
 // Lazy load modals - they are rarely used
 const ExportModal = lazy(() =>
@@ -67,6 +68,7 @@ function App() {
   const { selectedDate, currentView } = useCalendarStore()
   const [isExportOpen, setIsExportOpen] = useState(false)
   const [isImportOpen, setIsImportOpen] = useState(false)
+  const appVersion = useAppVersion()
 
   const menuItems: DropdownMenuItem[] = [
     {
@@ -108,6 +110,11 @@ function App() {
         </svg>
       ),
       onClick: () => setIsImportOpen(true),
+    },
+    { type: 'divider' },
+    {
+      type: 'info',
+      label: `v${appVersion}`,
     },
   ]
 

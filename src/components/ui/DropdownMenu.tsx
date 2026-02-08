@@ -1,12 +1,25 @@
-import { useState, useRef, useEffect, useCallback } from 'react'
+import { useState, useRef, useEffect, useCallback, useMemo } from 'react'
 import type { ReactNode } from 'react'
 
-export interface DropdownMenuItem {
+export interface DropdownMenuActionItem {
+  type?: 'action'
   label: string
   icon?: ReactNode
   onClick: () => void
   disabled?: boolean
 }
+
+export interface DropdownMenuDivider {
+  type: 'divider'
+}
+
+export interface DropdownMenuInfoItem {
+  type: 'info'
+  label: string
+  icon?: ReactNode
+}
+
+export type DropdownMenuItem = DropdownMenuActionItem | DropdownMenuDivider | DropdownMenuInfoItem
 
 export interface DropdownMenuProps {
   trigger: ReactNode
@@ -38,14 +51,22 @@ export function DropdownMenu({ trigger, items, 'data-testid': testId }: Dropdown
     }
   }, [isOpen])
 
+  // Helper to check if item is an action item
+  const isActionItem = (item: DropdownMenuItem): item is DropdownMenuActionItem => {
+    return item.type === undefined || item.type === 'action'
+  }
+
+  // Get only action items for keyboard navigation (memoized for stable reference)
+  const actionItems = useMemo(() => items.filter(isActionItem), [items])
+
   // Define handleItemClick before useEffect that uses it
-  const handleItemClick = useCallback((item: DropdownMenuItem) => {
+  const handleItemClick = useCallback((item: DropdownMenuActionItem) => {
     if (item.disabled) return
     item.onClick()
     setIsOpen(false)
   }, [])
 
-  // Handle keyboard navigation
+  // Handle keyboard navigation (only for action items)
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
       if (!isOpen) return
@@ -59,32 +80,36 @@ export function DropdownMenu({ trigger, items, 'data-testid': testId }: Dropdown
         case 'ArrowDown':
           event.preventDefault()
           setFocusedIndex((prev) => {
-            const enabledItems = items.filter((item) => !item.disabled)
+            const enabledItems = actionItems.filter((item) => !item.disabled)
             const currentEnabledIndex = enabledItems.findIndex(
-              (_, i) => items.indexOf(enabledItems[i]) === prev
+              (_, i) => actionItems.indexOf(enabledItems[i]) === prev
             )
             const nextIndex = currentEnabledIndex + 1
-            if (nextIndex >= enabledItems.length) return items.indexOf(enabledItems[0])
-            return items.indexOf(enabledItems[nextIndex])
+            if (nextIndex >= enabledItems.length) return actionItems.indexOf(enabledItems[0])
+            return actionItems.indexOf(enabledItems[nextIndex])
           })
           break
         case 'ArrowUp':
           event.preventDefault()
           setFocusedIndex((prev) => {
-            const enabledItems = items.filter((item) => !item.disabled)
+            const enabledItems = actionItems.filter((item) => !item.disabled)
             const currentEnabledIndex = enabledItems.findIndex(
-              (_, i) => items.indexOf(enabledItems[i]) === prev
+              (_, i) => actionItems.indexOf(enabledItems[i]) === prev
             )
             const nextIndex = currentEnabledIndex - 1
-            if (nextIndex < 0) return items.indexOf(enabledItems[enabledItems.length - 1])
-            return items.indexOf(enabledItems[nextIndex])
+            if (nextIndex < 0) return actionItems.indexOf(enabledItems[enabledItems.length - 1])
+            return actionItems.indexOf(enabledItems[nextIndex])
           })
           break
         case 'Enter':
         case ' ':
           event.preventDefault()
-          if (focusedIndex >= 0 && !items[focusedIndex].disabled) {
-            handleItemClick(items[focusedIndex])
+          if (
+            focusedIndex >= 0 &&
+            actionItems[focusedIndex] &&
+            !actionItems[focusedIndex].disabled
+          ) {
+            handleItemClick(actionItems[focusedIndex])
           }
           break
         case 'Tab':
@@ -100,19 +125,19 @@ export function DropdownMenu({ trigger, items, 'data-testid': testId }: Dropdown
     return () => {
       document.removeEventListener('keydown', handleKeyDown)
     }
-  }, [isOpen, focusedIndex, items, handleItemClick])
+  }, [isOpen, focusedIndex, actionItems, handleItemClick])
 
-  // Reset focus when menu opens
+  // Reset focus when menu opens (only consider action items)
   useEffect(() => {
     /* eslint-disable react-hooks/set-state-in-effect */
     if (isOpen) {
-      const firstEnabledIndex = items.findIndex((item) => !item.disabled)
+      const firstEnabledIndex = actionItems.findIndex((item) => !item.disabled)
       setFocusedIndex(firstEnabledIndex)
     } else {
       setFocusedIndex(-1)
     }
     /* eslint-enable react-hooks/set-state-in-effect */
-  }, [isOpen, items])
+  }, [isOpen, actionItems])
 
   const handleTriggerClick = () => {
     setIsOpen((prev) => !prev)
@@ -154,35 +179,69 @@ export function DropdownMenu({ trigger, items, 'data-testid': testId }: Dropdown
           aria-orientation="vertical"
           aria-label="Options menu"
         >
-          {items.map((item, index) => (
-            <button
-              key={index}
-              onClick={() => handleItemClick(item)}
-              disabled={item.disabled}
-              className={`
-                w-full px-4 py-2 text-sm text-left
-                flex items-center gap-2
-                transition-colors duration-150
-                focus:outline-none focus:ring-2 focus:ring-inset focus:ring-emerald-500
-                ${
-                  item.disabled
-                    ? 'text-gray-400 cursor-not-allowed'
-                    : 'text-gray-700 hover:bg-gray-100'
-                }
-                ${focusedIndex === index && !item.disabled ? 'bg-gray-100' : ''}
-              `}
-              role="menuitem"
-              tabIndex={-1}
-              aria-disabled={item.disabled}
-            >
-              {item.icon && (
-                <span className="w-4 h-4 flex-shrink-0" aria-hidden="true">
-                  {item.icon}
-                </span>
-              )}
-              <span>{item.label}</span>
-            </button>
-          ))}
+          {items.map((item, index) => {
+            // Render divider
+            if (item.type === 'divider') {
+              return (
+                <div
+                  key={index}
+                  className="my-1 border-t border-gray-100"
+                  role="separator"
+                  aria-hidden="true"
+                />
+              )
+            }
+
+            // Render info item (non-interactive)
+            if (item.type === 'info') {
+              return (
+                <div
+                  key={index}
+                  className="px-4 py-2 text-xs text-gray-400 flex items-center gap-2"
+                  role="presentation"
+                >
+                  {item.icon && (
+                    <span className="w-3.5 h-3.5 flex-shrink-0" aria-hidden="true">
+                      {item.icon}
+                    </span>
+                  )}
+                  <span>{item.label}</span>
+                </div>
+              )
+            }
+
+            // Render action item (default)
+            const actionIndex = actionItems.indexOf(item)
+            return (
+              <button
+                key={index}
+                onClick={() => handleItemClick(item)}
+                disabled={item.disabled}
+                className={`
+                  w-full px-4 py-2 text-sm text-left
+                  flex items-center gap-2
+                  transition-colors duration-150
+                  focus:outline-none focus:ring-2 focus:ring-inset focus:ring-emerald-500
+                  ${
+                    item.disabled
+                      ? 'text-gray-400 cursor-not-allowed'
+                      : 'text-gray-700 hover:bg-gray-100'
+                  }
+                  ${focusedIndex === actionIndex && !item.disabled ? 'bg-gray-100' : ''}
+                `}
+                role="menuitem"
+                tabIndex={-1}
+                aria-disabled={item.disabled}
+              >
+                {item.icon && (
+                  <span className="w-4 h-4 flex-shrink-0" aria-hidden="true">
+                    {item.icon}
+                  </span>
+                )}
+                <span>{item.label}</span>
+              </button>
+            )
+          })}
         </div>
       )}
     </div>
