@@ -1,0 +1,121 @@
+name: Release
+
+on:
+  release:
+    types: [published]
+
+env:
+  TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+  TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+
+jobs:
+  build:
+    permissions:
+      contents: write
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # Windows x64
+          - platform: windows-latest
+            args: --target x86_64-pc-windows-msvc
+            target: x86_64-pc-windows-msvc
+            name: windows-x64
+          # Windows ARM64
+          - platform: windows-latest
+            args: --target aarch64-pc-windows-msvc
+            target: aarch64-pc-windows-msvc
+            name: windows-arm64
+          # Linux x64
+          - platform: ubuntu-22.04
+            args: --target x86_64-unknown-linux-gnu
+            target: x86_64-unknown-linux-gnu
+            name: linux-x64
+          # macOS x64 (Intel)
+          - platform: macos-latest
+            args: --target x86_64-apple-darwin
+            target: x86_64-apple-darwin
+            name: macos-x64
+          # macOS ARM64 (Apple Silicon)
+          - platform: macos-latest
+            args: --target aarch64-apple-darwin
+            target: aarch64-apple-darwin
+            name: macos-arm64
+
+    runs-on: ${{ matrix.platform }}
+    name: Build (${{ matrix.name }})
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install Rust stable
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+
+      # Rust cache
+      - name: Cache Rust dependencies
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: './src-tauri -> target'
+          shared-key: ${{ matrix.target }}
+
+      # Linux dependencies
+      - name: Install Linux dependencies
+        if: matrix.platform == 'ubuntu-22.04'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libwebkit2gtk-4.1-dev \
+            libappindicator3-dev \
+            librsvg2-dev \
+            patchelf \
+            libgtk-3-dev \
+            libayatana-appindicator3-dev
+
+      # Install Node.js dependencies
+      - name: Install Node.js dependencies
+        run: npm ci
+
+      # Build the Tauri app
+      - name: Build Tauri app
+        uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # macOS signing (optional - requires certificates)
+          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        with:
+          tagName: ${{ github.ref_name }}
+          releaseName: 'Daylo v${{ github.ref_name }}'
+          releaseBody: 'See the assets below to download the installer for your platform.'
+          releaseDraft: false
+          prerelease: false
+          args: ${{ matrix.args }}
+
+  # Create a summary job that runs after all builds complete
+  release-summary:
+    needs: build
+    runs-on: ubuntu-latest
+    if: always()
+    steps:
+      - name: Check build results
+        run: |
+          if [ "${{ needs.build.result }}" == "success" ]; then
+            echo "All builds completed successfully!"
+            echo "Release artifacts have been uploaded to: ${{ github.server_url }}/${{ github.repository }}/releases/tag/${{ github.ref_name }}"
+          else
+            echo "Some builds failed. Check the individual build logs for details."
+            exit 1
+          fi
