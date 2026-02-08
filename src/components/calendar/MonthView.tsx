@@ -1,7 +1,8 @@
-import { useMemo, useCallback } from 'react'
+import { useMemo, useCallback, memo } from 'react'
 import { useCalendarStore } from '../../store'
 import { formatDate, formatMonthYear, checkIsToday } from '../../lib/dates'
 import type { Activity, ActivityLog } from '../../types'
+import { useShallow } from 'zustand/react/shallow'
 
 const DAYS_OF_WEEK = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
 const DAYS_OF_WEEK_SHORT = ['S', 'M', 'T', 'W', 'T', 'F', 'S']
@@ -63,16 +64,15 @@ function getMonthDays(year: number, month: number): DayInfo[] {
   return days
 }
 
-export function MonthView() {
-  const {
-    selectedYear,
-    selectedMonth,
-    setSelectedMonth,
-    setSelectedYear,
-    setSelectedDate,
-    activities,
-    logs,
-  } = useCalendarStore()
+export const MonthView = memo(function MonthView() {
+  // Use individual selectors to prevent over-subscription
+  const selectedYear = useCalendarStore((state) => state.selectedYear)
+  const selectedMonth = useCalendarStore((state) => state.selectedMonth)
+  const setSelectedMonth = useCalendarStore((state) => state.setSelectedMonth)
+  const setSelectedYear = useCalendarStore((state) => state.setSelectedYear)
+  const setSelectedDate = useCalendarStore((state) => state.setSelectedDate)
+  const activities = useCalendarStore(useShallow((state) => state.activities))
+  const logs = useCalendarStore(useShallow((state) => state.logs))
 
   const monthDays = useMemo(
     () => getMonthDays(selectedYear, selectedMonth),
@@ -262,4 +262,4 @@ export function MonthView() {
       </div>
     </div>
   )
-}
+})

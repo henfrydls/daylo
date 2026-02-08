@@ -1,82 +1,31 @@
-import { useState, useRef, useEffect } from 'react'
+import { useState, useRef, useEffect, useCallback, useMemo, memo } from 'react'
 import { useCalendarStore } from '../../store'
 import { formatDisplayDate, parseDateString } from '../../lib/dates'
 import { ACTIVITY_COLORS } from '../../lib/colors'
-import { Button } from '../ui'
+import { Button, CheckIcon, ColorPicker, PlusIcon, XIcon } from '../ui'
+import { useFocusTrap } from '../../hooks'
+import { useShallow } from 'zustand/react/shallow'
 
-// Focus trap hook for modal accessibility
-function useFocusTrap(isActive: boolean) {
-  const containerRef = useRef<HTMLDivElement>(null)
-
-  useEffect(() => {
-    if (!isActive || !containerRef.current) return
-
-    const container = containerRef.current
-    const focusableElements = container.querySelectorAll<HTMLElement>(
-      'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])'
-    )
-    const firstElement = focusableElements[0]
-    const lastElement = focusableElements[focusableElements.length - 1]
-
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key !== 'Tab') return
-
-      if (e.shiftKey) {
-        if (document.activeElement === firstElement) {
-          e.preventDefault()
-          lastElement?.focus()
-        }
-      } else {
-        if (document.activeElement === lastElement) {
-          e.preventDefault()
-          firstElement?.focus()
-        }
-      }
-    }
-
-    container.addEventListener('keydown', handleKeyDown)
-    firstElement?.focus()
-
-    return () => {
-      container.removeEventListener('keydown', handleKeyDown)
-    }
-  }, [isActive])
-
-  return containerRef
-}
-
-export function QuickLog() {
-  const { selectedDate, setSelectedDate, activities, logs, toggleLog, addActivity } =
-    useCalendarStore()
+export const QuickLog = memo(function QuickLog() {
+  // Use individual selectors to prevent over-subscription
+  const selectedDate = useCalendarStore((state) => state.selectedDate)
+  const setSelectedDate = useCalendarStore((state) => state.setSelectedDate)
+  const activities = useCalendarStore(useShallow((state) => state.activities))
+  const logs = useCalendarStore(useShallow((state) => state.logs))
+  const toggleLog = useCalendarStore((state) => state.toggleLog)
+  const addActivity = useCalendarStore((state) => state.addActivity)
 
   const [isCreating, setIsCreating] = useState(false)
   const [newName, setNewName] = useState('')
   const [newColor, setNewColor] = useState<string>(ACTIVITY_COLORS[0].value)
   const nameInputRef = useRef<HTMLInputElement>(null)
-  const previousActiveElement = useRef<HTMLElement | null>(null)
+  const modalRef = useRef<HTMLDivElement>(null)
 
-  // Store the previously focused element and set up escape handler
-  useEffect(() => {
-    if (selectedDate) {
-      previousActiveElement.current = document.activeElement as HTMLElement
-      document.body.style.overflow = 'hidden'
+  const handleClose = useCallback(() => {
+    setSelectedDate(null)
+  }, [setSelectedDate])
 
-      const handleEscape = (e: KeyboardEvent) => {
-        if (e.key === 'Escape') {
-          setSelectedDate(null)
-        }
-      }
-      document.addEventListener('keydown', handleEscape)
-
-      return () => {
-        document.removeEventListener('keydown', handleEscape)
-        document.body.style.overflow = 'unset'
-        previousActiveElement.current?.focus()
-      }
-    }
-  }, [selectedDate, setSelectedDate])
-
-  const modalRef = useFocusTrap(!!selectedDate)
+  useFocusTrap(modalRef, !!selectedDate, { onEscape: handleClose })
 
   useEffect(() => {
     if (isCreating && nameInputRef.current) {
@@ -84,29 +33,48 @@ export function QuickLog() {
     }
   }, [isCreating])
 
+  // Memoize day logs to prevent recalculation on every render
+  const dayLogs = useMemo(() => {
+    if (!selectedDate) return []
+    return logs.filter((l) => l.date === selectedDate)
+  }, [logs, selectedDate])
+
+  // Memoize completed activity IDs set for O(1) lookups
+  const completedActivityIds = useMemo(() => {
+    const ids = new Set<string>()
+    dayLogs.forEach((l) => {
+      if (l.completed) ids.add(l.activityId)
+    })
+    return ids
+  }, [dayLogs])
+
+  const isActivityCompleted = useCallback((activityId: string): boolean => {
+    return completedActivityIds.has(activityId)
+  }, [completedActivityIds])
+
+  const handleToggleLog = useCallback((activityId: string): void => {
+    if (!selectedDate) return
+    toggleLog(activityId, selectedDate)
+  }, [selectedDate, toggleLog])
+
   if (!selectedDate) return null
 
   const date = parseDateString(selectedDate)
-  const dayLogs = logs.filter((l) => l.date === selectedDate)
 
-  const isActivityCompleted = (activityId: string): boolean => {
-    return dayLogs.some((l) => l.activityId === activityId && l.completed)
-  }
-
-  const handleStartCreating = (): void => {
+  const handleStartCreating = useCallback((): void => {
     setIsCreating(true)
     setNewName('')
     setNewColor(ACTIVITY_COLORS[0].value)
-  }
+  }, [])
 
-  const handleCancelCreating = (): void => {
+  const handleCancelCreating = useCallback((): void => {
     setIsCreating(false)
     setNewName('')
     setNewColor(ACTIVITY_COLORS[0].value)
-  }
+  }, [])
 
-  const handleCreateActivity = (): void => {
-    if (!newName.trim()) return
+  const handleCreateActivity = useCallback((): void => {
+    if (!newName.trim() || !selectedDate) return
 
     addActivity(newName.trim(), newColor)
 
@@ -121,16 +89,16 @@ export function QuickLog() {
     setIsCreating(false)
     setNewName('')
     setNewColor(ACTIVITY_COLORS[0].value)
-  }
+  }, [newName, newColor, selectedDate, addActivity, toggleLog])
 
-  const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>): void => {
+  const handleKeyDown = useCallback((e: React.KeyboardEvent<HTMLInputElement>): void => {
     if (e.key === 'Enter') {
       e.preventDefault()
       handleCreateActivity()
     } else if (e.key === 'Escape') {
       handleCancelCreating()
     }
-  }
+  }, [handleCreateActivity, handleCancelCreating])
 
   const renderActivityList = () => (
     <div className="space-y-2 sm:space-y-3">
@@ -146,7 +114,7 @@ export function QuickLog() {
             <input
               type="checkbox"
               checked={isCompleted}
-              onChange={() => toggleLog(activity.id, selectedDate)}
+              onChange={() => handleToggleLog(activity.id)}
               className="w-5 h-5 sm:w-5 sm:h-5 rounded border-gray-300 text-emerald-500 focus:ring-emerald-500 focus:ring-offset-0"
               aria-label={`Mark ${activity.name} as ${isCompleted ? 'incomplete' : 'complete'}`}
               data-testid="quicklog-activity-checkbox"
@@ -162,20 +130,7 @@ export function QuickLog() {
               {activity.name}
             </span>
             {isCompleted && (
-              <svg
-                className="w-5 h-5 text-emerald-500 ml-auto flex-shrink-0"
-                fill="none"
-                viewBox="0 0 24 24"
-                stroke="currentColor"
-                aria-hidden="true"
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2}
-                  d="M5 13l4 4L19 7"
-                />
-              </svg>
+              <CheckIcon className="w-5 h-5 text-emerald-500 ml-auto flex-shrink-0" />
             )}
           </label>
         )
@@ -198,27 +153,13 @@ export function QuickLog() {
               data-testid="quicklog-new-activity-input"
             />
           </div>
-          <fieldset>
-            <legend className="sr-only">Select activity color</legend>
-            <div className="flex flex-wrap gap-2" role="radiogroup" aria-label="Activity color">
-              {ACTIVITY_COLORS.map((color) => (
-                <button
-                  key={color.value}
-                  type="button"
-                  onClick={() => setNewColor(color.value)}
-                  className={`w-6 h-6 rounded-full transition-all focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-emerald-500 ${
-                    newColor === color.value
-                      ? 'ring-2 ring-offset-2 ring-gray-400 scale-110'
-                      : 'hover:scale-110'
-                  }`}
-                  style={{ backgroundColor: color.value }}
-                  aria-label={`${color.name} color`}
-                  aria-pressed={newColor === color.value}
-                  data-testid={`quicklog-color-${color.name.toLowerCase()}`}
-                />
-              ))}
-            </div>
-          </fieldset>
+          <ColorPicker
+            value={newColor}
+            onChange={setNewColor}
+            colors={ACTIVITY_COLORS}
+            size="sm"
+            testIdPrefix="quicklog-color"
+          />
           <div className="flex gap-2 justify-end">
             <Button
               variant="ghost"
@@ -244,14 +185,7 @@ export function QuickLog() {
           className="flex items-center gap-2 w-full p-3 border-2 border-dashed border-gray-200 rounded-lg text-gray-500 hover:bg-gray-50 hover:border-gray-300 transition-colors focus:outline-none focus:ring-2 focus:ring-emerald-500"
           data-testid="quicklog-new-activity-button"
         >
-          <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
-            <path
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              strokeWidth={2}
-              d="M12 4v16m8-8H4"
-            />
-          </svg>
+          <PlusIcon className="w-5 h-5" />
           <span className="font-medium">New activity</span>
         </button>
       )}
@@ -277,27 +211,14 @@ export function QuickLog() {
               data-testid="quicklog-new-activity-input"
             />
           </div>
-          <fieldset>
-            <legend className="sr-only">Select activity color</legend>
-            <div className="flex flex-wrap gap-2 justify-center" role="radiogroup" aria-label="Activity color">
-              {ACTIVITY_COLORS.map((color) => (
-                <button
-                  key={color.value}
-                  type="button"
-                  onClick={() => setNewColor(color.value)}
-                  className={`w-6 h-6 rounded-full transition-all focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-emerald-500 ${
-                    newColor === color.value
-                      ? 'ring-2 ring-offset-2 ring-gray-400 scale-110'
-                      : 'hover:scale-110'
-                  }`}
-                  style={{ backgroundColor: color.value }}
-                  aria-label={`${color.name} color`}
-                  aria-pressed={newColor === color.value}
-                  data-testid={`quicklog-color-${color.name.toLowerCase()}`}
-                />
-              ))}
-            </div>
-          </fieldset>
+          <ColorPicker
+            value={newColor}
+            onChange={setNewColor}
+            colors={ACTIVITY_COLORS}
+            size="sm"
+            testIdPrefix="quicklog-color"
+            centered
+          />
           <div className="flex gap-2 justify-center">
             <Button
               variant="ghost"
@@ -353,14 +274,7 @@ export function QuickLog() {
             className="p-2.5 sm:p-1 rounded-lg text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition-colors focus:outline-none focus:ring-2 focus:ring-emerald-500 min-h-[44px] min-w-[44px] sm:min-h-0 sm:min-w-0 flex items-center justify-center"
             aria-label="Close quick log"
           >
-            <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={2}
-                d="M6 18L18 6M6 6l12 12"
-              />
-            </svg>
+            <XIcon className="w-5 h-5" />
           </button>
         </div>
 
@@ -374,4 +288,4 @@ export function QuickLog() {
       </div>
     </div>
   )
-}
+})

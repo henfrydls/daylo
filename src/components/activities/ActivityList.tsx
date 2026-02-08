@@ -1,10 +1,11 @@
-import { useState } from 'react'
-import { Button, ConfirmDialog } from '../ui'
+import { useState, useCallback, memo } from 'react'
+import { Button, ConfirmDialog, PencilIcon, TrashIcon, useToast } from '../ui'
 import { ActivityForm } from './ActivityForm'
 import { useCalendarStore } from '../../store'
 import type { Activity } from '../../types'
+import { useShallow } from 'zustand/react/shallow'
 
-export function ActivityList() {
+export const ActivityList = memo(function ActivityList() {
   const [isFormOpen, setIsFormOpen] = useState(false)
   const [editingActivity, setEditingActivity] = useState<Activity | undefined>()
   const [deleteConfirm, setDeleteConfirm] = useState<{ isOpen: boolean; activityId: string | null }>({
@@ -12,31 +13,35 @@ export function ActivityList() {
     activityId: null,
   })
 
-  const { activities, deleteActivity } = useCalendarStore()
+  // Use individual selectors to prevent over-subscription
+  const activities = useCalendarStore(useShallow((state) => state.activities))
+  const deleteActivity = useCalendarStore((state) => state.deleteActivity)
+  const { showToast } = useToast()
 
-  const handleEdit = (activity: Activity) => {
+  const handleEdit = useCallback((activity: Activity) => {
     setEditingActivity(activity)
     setIsFormOpen(true)
-  }
+  }, [])
 
-  const handleCloseForm = () => {
+  const handleCloseForm = useCallback(() => {
     setIsFormOpen(false)
     setEditingActivity(undefined)
-  }
+  }, [])
 
-  const handleDeleteClick = (id: string) => {
+  const handleDeleteClick = useCallback((id: string) => {
     setDeleteConfirm({ isOpen: true, activityId: id })
-  }
+  }, [])
 
-  const handleConfirmDelete = () => {
+  const handleConfirmDelete = useCallback(() => {
     if (deleteConfirm.activityId) {
       deleteActivity(deleteConfirm.activityId)
+      showToast('Activity deleted', 'success')
     }
-  }
+  }, [deleteConfirm.activityId, deleteActivity, showToast])
 
-  const handleCloseDeleteConfirm = () => {
+  const handleCloseDeleteConfirm = useCallback(() => {
     setDeleteConfirm({ isOpen: false, activityId: null })
-  }
+  }, [])
 
   return (
     <div className="bg-white rounded-xl border border-gray-200 p-3 sm:p-4">
@@ -74,28 +79,14 @@ export function ActivityList() {
                   className="p-2.5 sm:p-1.5 rounded-lg text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition-colors focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:opacity-100 min-h-[44px] min-w-[44px] sm:min-h-0 sm:min-w-0 flex items-center justify-center"
                   aria-label={`Edit ${activity.name}`}
                 >
-                  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      strokeWidth={2}
-                      d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"
-                    />
-                  </svg>
+                  <PencilIcon className="w-4 h-4" />
                 </button>
                 <button
                   onClick={() => handleDeleteClick(activity.id)}
                   className="p-2.5 sm:p-1.5 rounded-lg text-gray-400 hover:text-red-600 hover:bg-red-50 transition-colors focus:outline-none focus:ring-2 focus:ring-red-500 focus:opacity-100 min-h-[44px] min-w-[44px] sm:min-h-0 sm:min-w-0 flex items-center justify-center"
                   aria-label={`Delete ${activity.name}`}
                 >
-                  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      strokeWidth={2}
-                      d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
-                    />
-                  </svg>
+                  <TrashIcon className="w-4 h-4" />
                 </button>
               </div>
             </li>
@@ -118,4 +109,4 @@ export function ActivityList() {
       />
     </div>
   )
-}
+})

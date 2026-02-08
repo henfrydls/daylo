@@ -1,4 +1,5 @@
 import { create } from 'zustand'
+import { useCallback, useMemo } from 'react'
 
 export interface Toast {
   id: string
@@ -41,9 +42,12 @@ export const useToastStore = create<ToastState>((set) => ({
 export function useToast() {
   const addToast = useToastStore((state) => state.addToast)
 
-  return {
-    showToast: (message: string, variant: Toast['variant'] = 'info') => {
-      addToast(message, variant)
-    },
-  }
+  const showToast = useCallback((message: string, variant: Toast['variant'] = 'info') => {
+    addToast(message, variant)
+  }, [addToast])
+
+  // Return a stable object reference
+  return useMemo(() => ({
+    showToast,
+  }), [showToast])
 }

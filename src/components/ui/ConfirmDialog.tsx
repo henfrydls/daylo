@@ -1,5 +1,6 @@
-import { useEffect, useRef } from 'react'
+import { useRef, useEffect } from 'react'
 import { Button } from './Button'
+import { useFocusTrap } from '../../hooks'
 
 interface ConfirmDialogProps {
   isOpen: boolean
@@ -26,62 +27,17 @@ export function ConfirmDialog({
 }: ConfirmDialogProps) {
   const confirmButtonRef = useRef<HTMLButtonElement>(null)
   const dialogRef = useRef<HTMLDivElement>(null)
-  const previousActiveElement = useRef<HTMLElement | null>(null)
 
+  // Use focus trap with autoFocus disabled so we can focus the cancel button instead
+  useFocusTrap(dialogRef, isOpen, { onEscape: onClose, autoFocus: false })
+
+  // Focus the cancel button when dialog opens (safer default)
   useEffect(() => {
-    const handleEscape = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose()
-    }
-    if (isOpen) {
-      previousActiveElement.current = document.activeElement as HTMLElement
-      document.addEventListener('keydown', handleEscape)
-      document.body.style.overflow = 'hidden'
-      // Focus the cancel button when dialog opens (safer default)
+    if (isOpen && dialogRef.current) {
       setTimeout(() => {
         const cancelButton = dialogRef.current?.querySelector<HTMLElement>('[data-testid="confirm-dialog-cancel"]')
         cancelButton?.focus()
       }, 0)
-    }
-    return () => {
-      document.removeEventListener('keydown', handleEscape)
-      document.body.style.overflow = 'unset'
-      if (!isOpen && previousActiveElement.current) {
-        previousActiveElement.current.focus()
-      }
-    }
-  }, [isOpen, onClose])
-
-  // Focus trap
-  useEffect(() => {
-    if (!isOpen || !dialogRef.current) return
-
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key !== 'Tab' || !dialogRef.current) return
-
-      const focusableElements = dialogRef.current.querySelectorAll<HTMLElement>(
-        'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])'
-      )
-      const firstElement = focusableElements[0]
-      const lastElement = focusableElements[focusableElements.length - 1]
-
-      if (e.shiftKey) {
-        if (document.activeElement === firstElement) {
-          e.preventDefault()
-          lastElement?.focus()
-        }
-      } else {
-        if (document.activeElement === lastElement) {
-          e.preventDefault()
-          firstElement?.focus()
-        }
-      }
-    }
-
-    dialogRef.current.addEventListener('keydown', handleKeyDown)
-    const currentRef = dialogRef.current
-
-    return () => {
-      currentRef?.removeEventListener('keydown', handleKeyDown)
     }
   }, [isOpen])
 

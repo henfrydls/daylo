@@ -1,9 +1,74 @@
 import { create } from 'zustand'
-import { persist } from 'zustand/middleware'
+import { persist, createJSONStorage, type StateStorage } from 'zustand/middleware'
 import type { Activity, ActivityLog } from '../types'
 import { generateId } from '../lib/dates'
 
 type ViewType = 'year' | 'month'
+
+// Deferred localStorage adapter for optimistic UI
+// UI updates immediately, persistence happens during idle time
+const createDeferredStorage = (): StateStorage => {
+  let pendingWrite: string | null = null
+  let scheduledWrite: ReturnType<typeof setTimeout> | number | null = null
+  let useIdleCallback = false
+
+  // Check if requestIdleCallback is available (browser environment)
+  if (typeof window !== 'undefined' && typeof window.requestIdleCallback === 'function') {
+    useIdleCallback = true
+  }
+
+  const cancelScheduledWrite = () => {
+    if (scheduledWrite !== null) {
+      if (useIdleCallback) {
+        window.cancelIdleCallback(scheduledWrite as number)
+      } else {
+        clearTimeout(scheduledWrite as ReturnType<typeof setTimeout>)
+      }
+      scheduledWrite = null
+    }
+  }
+
+  const flushWrite = (key: string) => {
+    if (pendingWrite !== null) {
+      try {
+        localStorage.setItem(key, pendingWrite)
+      } catch {
+        // Ignore storage errors
+      }
+      pendingWrite = null
+    }
+    scheduledWrite = null
+  }
+
+  return {
+    getItem: (name: string): string | null => {
+      // If we have a pending write, return that value for consistency
+      if (pendingWrite !== null) {
+        return pendingWrite
+      }
+      return localStorage.getItem(name)
+    },
+    setItem: (name: string, value: string): void => {
+      pendingWrite = value
+
+      // Cancel any existing scheduled write
+      cancelScheduledWrite()
+
+      // Schedule write during idle time for instant UI response
+      if (useIdleCallback) {
+        scheduledWrite = window.requestIdleCallback(() => flushWrite(name), { timeout: 1000 })
+      } else {
+        // Fallback for browsers without requestIdleCallback or Node.js
+        scheduledWrite = setTimeout(() => flushWrite(name), 0)
+      }
+    },
+    removeItem: (name: string): void => {
+      pendingWrite = null
+      cancelScheduledWrite()
+      localStorage.removeItem(name)
+    },
+  }
+}
 
 interface CalendarState {
   activities: Activity[]
@@ -123,6 +188,7 @@ export const useCalendarStore = create<CalendarState>()(
     }),
     {
       name: 'simple-calendar-storage',
+      storage: createJSONStorage(() => createDeferredStorage()),
     }
   )
 )

@@ -1,5 +1,5 @@
-import { useState, useEffect } from 'react'
-import { Button, Modal } from '../ui'
+import { useState, useEffect, useCallback, memo } from 'react'
+import { Button, Modal, ColorPicker } from '../ui'
 import { ACTIVITY_COLORS } from '../../lib/colors'
 import { useCalendarStore } from '../../store'
 import { formatDate } from '../../lib/dates'
@@ -11,7 +11,7 @@ interface ActivityFormProps {
   activity?: Activity
 }
 
-export function ActivityForm({ isOpen, onClose, activity }: ActivityFormProps) {
+export const ActivityForm = memo(function ActivityForm({ isOpen, onClose, activity }: ActivityFormProps) {
   const [name, setName] = useState('')
   const [color, setColor] = useState<string>(ACTIVITY_COLORS[0].value)
   const [logForDate, setLogForDate] = useState(false)
@@ -27,11 +27,14 @@ export function ActivityForm({ isOpen, onClose, activity }: ActivityFormProps) {
     }
   }, [isOpen, activity])
 
-  const { addActivity, updateActivity, toggleLog } = useCalendarStore()
+  // Use individual selectors to prevent over-subscription
+  const addActivity = useCalendarStore((state) => state.addActivity)
+  const updateActivity = useCalendarStore((state) => state.updateActivity)
+  const toggleLog = useCalendarStore((state) => state.toggleLog)
 
   const isEditing = Boolean(activity)
 
-  const handleSubmit = (e: React.FormEvent): void => {
+  const handleSubmit = useCallback((e: React.FormEvent): void => {
     e.preventDefault()
     if (!name.trim()) return
 
@@ -57,15 +60,15 @@ export function ActivityForm({ isOpen, onClose, activity }: ActivityFormProps) {
     setLogForDate(false)
     setSelectedDate(formatDate(new Date()))
     onClose()
-  }
+  }, [name, color, isEditing, activity, logForDate, selectedDate, addActivity, updateActivity, toggleLog, onClose])
 
-  const handleClose = (): void => {
+  const handleClose = useCallback((): void => {
     setName(activity?.name || '')
     setColor(activity?.color || ACTIVITY_COLORS[0].value)
     setLogForDate(false)
     setSelectedDate(formatDate(new Date()))
     onClose()
-  }
+  }, [activity, onClose])
 
   return (
     <Modal
@@ -91,27 +94,14 @@ export function ActivityForm({ isOpen, onClose, activity }: ActivityFormProps) {
           />
         </div>
 
-        <fieldset className="mb-4">
-          <legend className="block text-sm font-medium text-gray-700 mb-2">Color</legend>
-          <div className="flex flex-wrap gap-2" role="radiogroup" aria-label="Select activity color">
-            {ACTIVITY_COLORS.map((c) => (
-              <button
-                key={c.value}
-                type="button"
-                onClick={() => setColor(c.value)}
-                className={`w-8 h-8 rounded-full transition-all focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-emerald-500 ${
-                  color === c.value
-                    ? 'ring-2 ring-offset-2 ring-gray-400 scale-110'
-                    : 'hover:scale-105'
-                }`}
-                style={{ backgroundColor: c.value }}
-                aria-label={`${c.name} color`}
-                aria-pressed={color === c.value}
-                data-testid="color-option"
-              />
-            ))}
-          </div>
-        </fieldset>
+        <ColorPicker
+          value={color}
+          onChange={setColor}
+          colors={ACTIVITY_COLORS}
+          label="Color"
+          size="md"
+          className="mb-4"
+        />
 
         {/* Date logging section - only show when creating new activity */}
         {!isEditing && (
@@ -165,4 +155,4 @@ export function ActivityForm({ isOpen, onClose, activity }: ActivityFormProps) {
       </form>
     </Modal>
   )
-}
+})

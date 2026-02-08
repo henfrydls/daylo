@@ -1,8 +1,9 @@
-import { useMemo } from 'react'
+import { useMemo, useCallback, memo } from 'react'
 import { DayCell } from './DayCell'
 import { useCalendarStore } from '../../store'
 import { getYearDays, formatDate } from '../../lib/dates'
 import { calculateHeatmapLevel } from '../../lib/colors'
+import { useShallow } from 'zustand/react/shallow'
 
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
 const DAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
@@ -15,11 +16,33 @@ interface MonthData {
   weeks: (Date | null)[][]
 }
 
-export function YearView() {
-  const { selectedYear, activities, logs, setSelectedDate, setSelectedYear, navigateToMonth } = useCalendarStore()
+export const YearView = memo(function YearView() {
+  // Use individual selectors to prevent over-subscription
+  const selectedYear = useCalendarStore((state) => state.selectedYear)
+  const activities = useCalendarStore(useShallow((state) => state.activities))
+  const logs = useCalendarStore(useShallow((state) => state.logs))
+  const setSelectedDate = useCalendarStore((state) => state.setSelectedDate)
+  const setSelectedYear = useCalendarStore((state) => state.setSelectedYear)
+  const navigateToMonth = useCalendarStore((state) => state.navigateToMonth)
 
   const yearDays = useMemo(() => getYearDays(selectedYear), [selectedYear])
 
+  // Create an index of completed logs by date - O(n) single pass
+  // This avoids O(365 * n) filtering by pre-indexing logs
+  const logsByDate = useMemo(() => {
+    const index = new Map<string, number>()
+
+    logs.forEach((log) => {
+      if (log.completed) {
+        const currentCount = index.get(log.date) || 0
+        index.set(log.date, currentCount + 1)
+      }
+    })
+
+    return index
+  }, [logs])
+
+  // Build day data map using the pre-computed index - O(365) with O(1) lookups
   const dayDataMap = useMemo(() => {
     const map = new Map<
       string,
@@ -29,18 +52,22 @@ export function YearView() {
 
     yearDays.forEach((date) => {
       const dateStr = formatDate(date)
-      const dayLogs = logs.filter((l) => l.date === dateStr && l.completed)
-      const completedCount = dayLogs.length
+      const completedCount = logsByDate.get(dateStr) || 0
       const level = calculateHeatmapLevel(completedCount, totalActivities)
       map.set(dateStr, { completedCount, level })
     })
 
     return map
-  }, [yearDays, activities.length, logs])
+  }, [yearDays, activities.length, logsByDate])
 
-  const handlePrevYear = () => setSelectedYear(selectedYear - 1)
-  const handleNextYear = () => setSelectedYear(selectedYear + 1)
-  const handleCurrentYear = () => setSelectedYear(new Date().getFullYear())
+  // Memoize completed logs count to avoid filtering in render
+  const completedLogsCount = useMemo(() => {
+    return logs.filter(l => l.completed).length
+  }, [logs])
+
+  const handlePrevYear = useCallback(() => setSelectedYear(selectedYear - 1), [setSelectedYear, selectedYear])
+  const handleNextYear = useCallback(() => setSelectedYear(selectedYear + 1), [setSelectedYear, selectedYear])
+  const handleCurrentYear = useCallback(() => setSelectedYear(new Date().getFullYear()), [setSelectedYear])
 
   // Group days by month with exactly 6 weeks (42 cells) per month for consistent layout
   const monthsData = useMemo(() => {
@@ -212,11 +239,11 @@ export function YearView() {
               <span className="font-medium text-gray-700">{activities.length}</span> activities tracked
             </div>
             <div>
-              <span className="font-medium text-gray-700">{logs.filter(l => l.completed).length}</span> completions this year
+              <span className="font-medium text-gray-700">{completedLogsCount}</span> completions this year
             </div>
           </div>
         </div>
       </div>
     </div>
   )
-}
+})

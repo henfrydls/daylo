@@ -91,7 +91,7 @@ export function StatsPanel() {
     <div className="bg-white rounded-xl border border-gray-200 p-3 sm:p-4">
       <h2 className="text-base sm:text-lg font-semibold text-gray-900 mb-3 sm:mb-4">Statistics</h2>
       <div className="grid grid-cols-2 gap-2 sm:gap-4">
-        <StatCard label="Active Days" value={stats.activeDays} subtitle={`of ${stats.totalDays}`} />
+        <StatCard label="Active Days" value={stats.activeDays} subtitle="this year" />
         <StatCard label="Current Streak" value={stats.currentStreak} subtitle="days" />
         <StatCard label="Longest Streak" value={stats.longestStreak} subtitle="days" />
         <StatCard label="This Month" value={`${stats.completionRate}%`} subtitle="completion" />

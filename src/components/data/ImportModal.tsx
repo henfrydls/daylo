@@ -1,8 +1,9 @@
 import { useState, useCallback, useRef } from 'react'
 import { Modal, Button, ConfirmDialog } from '../ui'
 import { useCalendarStore } from '../../store'
-import { parseImportFile, mergeData } from '../../lib/dataExport'
+import { parseImportFileWithValidation, mergeData } from '../../lib/dataExport'
 import type { Activity, ActivityLog } from '../../types'
+import type { ValidationError } from '../../lib/dataExport'
 
 interface ImportModalProps {
   isOpen: boolean
@@ -21,6 +22,7 @@ export function ImportModal({ isOpen, onClose }: ImportModalProps) {
   const [isDragging, setIsDragging] = useState(false)
   const [parsedData, setParsedData] = useState<ParsedData | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const [validationErrors, setValidationErrors] = useState<ValidationError[]>([])
   const [showConfirm, setShowConfirm] = useState(false)
   const [isImporting, setIsImporting] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
@@ -30,6 +32,7 @@ export function ImportModal({ isOpen, onClose }: ImportModalProps) {
   const resetState = useCallback(() => {
     setParsedData(null)
     setError(null)
+    setValidationErrors([])
     setImportMode('merge')
     setShowConfirm(false)
     setIsImporting(false)
@@ -45,6 +48,7 @@ export function ImportModal({ isOpen, onClose }: ImportModalProps) {
 
   const processFile = useCallback((file: File) => {
     setError(null)
+    setValidationErrors([])
     setParsedData(null)
 
     // Validate file type
@@ -53,17 +57,31 @@ export function ImportModal({ isOpen, onClose }: ImportModalProps) {
       return
     }
 
+    // Validate file size (max 10MB)
+    const MAX_FILE_SIZE = 10 * 1024 * 1024
+    if (file.size > MAX_FILE_SIZE) {
+      setError('File is too large. Maximum file size is 10MB.')
+      return
+    }
+
     const reader = new FileReader()
     reader.onload = (e) => {
       const content = e.target?.result as string
-      const data = parseImportFile(content)
+      const result = parseImportFileWithValidation(content)
 
-      if (!data) {
-        setError('Invalid file format. Please ensure the file was exported from Activity Tracker.')
+      if (!result.valid || !result.sanitizedData) {
+        if (result.errors.length > 0) {
+          // Show the first error as the main error message
+          setError(result.errors[0].message)
+          // Store all errors for detailed display
+          setValidationErrors(result.errors)
+        } else {
+          setError('Invalid file format. Please ensure the file was exported from Activity Tracker.')
+        }
         return
       }
 
-      setParsedData(data)
+      setParsedData(result.sanitizedData)
     }
     reader.onerror = () => {
       setError('Failed to read file. Please try again.')
@@ -234,21 +252,44 @@ export function ImportModal({ isOpen, onClose }: ImportModalProps) {
 
           {/* Error message */}
           {error && (
-            <div className="flex items-start gap-2 p-3 bg-red-50 rounded-lg">
-              <svg
-                className="w-5 h-5 text-red-500 flex-shrink-0"
-                fill="none"
-                viewBox="0 0 24 24"
-                stroke="currentColor"
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2}
-                  d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
-                />
-              </svg>
-              <p className="text-sm text-red-700">{error}</p>
+            <div className="space-y-2">
+              <div className="flex items-start gap-2 p-3 bg-red-50 rounded-lg">
+                <svg
+                  className="w-5 h-5 text-red-500 flex-shrink-0"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  stroke="currentColor"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
+                  />
+                </svg>
+                <p className="text-sm text-red-700">{error}</p>
+              </div>
+              {/* Show additional validation errors if there are more than one */}
+              {validationErrors.length > 1 && (
+                <div className="p-3 bg-red-50 rounded-lg">
+                  <p className="text-xs font-medium text-red-700 mb-2">
+                    Additional validation errors ({validationErrors.length - 1}):
+                  </p>
+                  <ul className="text-xs text-red-600 space-y-1 max-h-32 overflow-y-auto">
+                    {validationErrors.slice(1, 6).map((err, idx) => (
+                      <li key={idx} className="flex items-start gap-1">
+                        <span className="text-red-400">-</span>
+                        <span>{err.message}</span>
+                      </li>
+                    ))}
+                    {validationErrors.length > 6 && (
+                      <li className="text-red-400 italic">
+                        ...and {validationErrors.length - 6} more errors
+                      </li>
+                    )}
+                  </ul>
+                </div>
+              )}
             </div>
           )}
 

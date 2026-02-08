@@ -43,15 +43,16 @@ export const DayCell = memo(function DayCell({
       <button
         onClick={onClick}
         className={`
+          relative
           w-full h-full min-w-[10px] min-h-[10px] aspect-square
           rounded-sm
           transition-all duration-150 ease-in-out
-          hover:ring-2 hover:ring-offset-1 hover:ring-gray-400 hover:scale-110 hover:z-[5] hover:relative
-          focus:outline-none focus:ring-2 focus:ring-offset-1 focus:ring-blue-500
+          hover:ring-2 hover:ring-offset-1 hover:ring-gray-400 hover:scale-110 hover:z-20
+          focus:outline-none focus:ring-2 focus:ring-offset-1 focus:ring-blue-500 focus:z-20
           active:scale-95
           ${heatmapClass}
           ${isCurrentDay
-            ? 'ring-2 ring-offset-1 ring-blue-500 shadow-md shadow-blue-500/30 z-10 relative'
+            ? 'ring-2 ring-offset-1 ring-blue-500 shadow-md shadow-blue-500/30 z-10'
             : 'border border-transparent hover:border-gray-300'
           }
           ${level === 0 ? 'border border-gray-200' : ''}

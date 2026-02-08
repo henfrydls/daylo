@@ -1,5 +1,7 @@
-import { useEffect, useRef } from 'react'
+import { useRef } from 'react'
 import type { ReactNode } from 'react'
+import { useFocusTrap } from '../../hooks'
+import { XIcon } from './Icons'
 
 interface ModalProps {
   isOpen: boolean
@@ -11,71 +13,8 @@ interface ModalProps {
 
 export function Modal({ isOpen, onClose, title, children, 'data-testid': testId }: ModalProps) {
   const modalRef = useRef<HTMLDivElement>(null)
-  const previousActiveElement = useRef<HTMLElement | null>(null)
 
-  useEffect(() => {
-    const handleEscape = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose()
-    }
-
-    if (isOpen) {
-      // Store the previously focused element
-      previousActiveElement.current = document.activeElement as HTMLElement
-      document.addEventListener('keydown', handleEscape)
-      document.body.style.overflow = 'hidden'
-
-      // Focus the modal
-      setTimeout(() => {
-        const firstFocusable = modalRef.current?.querySelector<HTMLElement>(
-          'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])'
-        )
-        firstFocusable?.focus()
-      }, 0)
-    }
-
-    return () => {
-      document.removeEventListener('keydown', handleEscape)
-      document.body.style.overflow = 'unset'
-      // Return focus to the previously focused element
-      if (!isOpen && previousActiveElement.current) {
-        previousActiveElement.current.focus()
-      }
-    }
-  }, [isOpen, onClose])
-
-  // Focus trap
-  useEffect(() => {
-    if (!isOpen || !modalRef.current) return
-
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key !== 'Tab' || !modalRef.current) return
-
-      const focusableElements = modalRef.current.querySelectorAll<HTMLElement>(
-        'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])'
-      )
-      const firstElement = focusableElements[0]
-      const lastElement = focusableElements[focusableElements.length - 1]
-
-      if (e.shiftKey) {
-        if (document.activeElement === firstElement) {
-          e.preventDefault()
-          lastElement?.focus()
-        }
-      } else {
-        if (document.activeElement === lastElement) {
-          e.preventDefault()
-          firstElement?.focus()
-        }
-      }
-    }
-
-    modalRef.current.addEventListener('keydown', handleKeyDown)
-    const currentRef = modalRef.current
-
-    return () => {
-      currentRef?.removeEventListener('keydown', handleKeyDown)
-    }
-  }, [isOpen])
+  useFocusTrap(modalRef, isOpen, { onEscape: onClose })
 
   if (!isOpen) return null
 
@@ -103,14 +42,7 @@ export function Modal({ isOpen, onClose, title, children, 'data-testid': testId 
             className="p-2.5 sm:p-1 rounded-lg text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition-colors focus:outline-none focus:ring-2 focus:ring-emerald-500 min-h-[44px] min-w-[44px] sm:min-h-0 sm:min-w-0 flex items-center justify-center"
             aria-label="Close modal"
           >
-            <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={2}
-                d="M6 18L18 6M6 6l12 12"
-              />
-            </svg>
+            <XIcon className="w-5 h-5" />
           </button>
         </div>
         {children}
