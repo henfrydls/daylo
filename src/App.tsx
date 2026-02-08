@@ -33,9 +33,10 @@ function ViewToggle() {
           px-3 py-2 sm:py-1.5 text-sm font-medium rounded-md transition-all duration-150
           focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:ring-offset-1
           min-h-[44px] sm:min-h-0 min-w-[44px]
-          ${currentView === 'year'
-            ? 'bg-white text-gray-900 shadow-sm'
-            : 'text-gray-500 hover:text-gray-700'
+          ${
+            currentView === 'year'
+              ? 'bg-white text-gray-900 shadow-sm'
+              : 'text-gray-500 hover:text-gray-700'
           }
         `}
         aria-pressed={currentView === 'year'}
@@ -48,9 +49,10 @@ function ViewToggle() {
           px-3 py-2 sm:py-1.5 text-sm font-medium rounded-md transition-all duration-150
           focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:ring-offset-1
           min-h-[44px] sm:min-h-0 min-w-[44px]
-          ${currentView === 'month'
-            ? 'bg-white text-gray-900 shadow-sm'
-            : 'text-gray-500 hover:text-gray-700'
+          ${
+            currentView === 'month'
+              ? 'bg-white text-gray-900 shadow-sm'
+              : 'text-gray-500 hover:text-gray-700'
           }
         `}
         aria-pressed={currentView === 'month'}
@@ -70,8 +72,19 @@ function App() {
     {
       label: 'Export Data',
       icon: (
-        <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
+        <svg
+          className="w-4 h-4"
+          fill="none"
+          viewBox="0 0 24 24"
+          stroke="currentColor"
+          aria-hidden="true"
+        >
+          <path
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            strokeWidth={2}
+            d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"
+          />
         </svg>
       ),
       onClick: () => setIsExportOpen(true),
@@ -79,8 +92,19 @@ function App() {
     {
       label: 'Import Data',
       icon: (
-        <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+        <svg
+          className="w-4 h-4"
+          fill="none"
+          viewBox="0 0 24 24"
+          stroke="currentColor"
+          aria-hidden="true"
+        >
+          <path
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            strokeWidth={2}
+            d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"
+          />
         </svg>
       ),
       onClick: () => setIsImportOpen(true),
@@ -102,16 +126,17 @@ function App() {
         <header className="bg-white border-b border-gray-200">
           <div className="max-w-7xl mx-auto px-3 sm:px-4 py-3 sm:py-4">
             <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-              <div className="flex items-center justify-between sm:justify-start gap-3" data-testid="app-header">
+              <div
+                className="flex items-center justify-between sm:justify-start gap-3"
+                data-testid="app-header"
+              >
                 <div className="flex items-center gap-3">
-                  <img
-                    src="/favicon.svg"
-                    alt="Daylo logo"
-                    className="w-8 h-8 rounded-lg"
-                  />
+                  <img src="/favicon.svg" alt="Daylo logo" className="w-8 h-8 rounded-lg" />
                   <h1 className="text-lg sm:text-xl font-semibold text-gray-900">
                     Daylo
-                    <span className="hidden md:inline text-sm font-normal text-gray-400 ml-2">· Simple Activity Tracking</span>
+                    <span className="hidden md:inline text-sm font-normal text-gray-400 ml-2">
+                      · Simple Activity Tracking
+                    </span>
                   </h1>
                 </div>
                 {/* Menu button visible on mobile next to title */}
@@ -122,8 +147,19 @@ function App() {
                         className="p-2.5 rounded-lg text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition-colors min-h-[44px] min-w-[44px] flex items-center justify-center"
                         aria-label="More options"
                       >
-                        <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 5v.01M12 12v.01M12 19v.01M12 6a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2z" />
+                        <svg
+                          className="w-5 h-5"
+                          fill="none"
+                          viewBox="0 0 24 24"
+                          stroke="currentColor"
+                          aria-hidden="true"
+                        >
+                          <path
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                            strokeWidth={2}
+                            d="M12 5v.01M12 12v.01M12 19v.01M12 6a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2z"
+                          />
                         </svg>
                       </span>
                     }
@@ -141,8 +177,19 @@ function App() {
                         className="p-2 rounded-lg text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition-colors min-h-[44px] min-w-[44px] flex items-center justify-center"
                         aria-label="More options"
                       >
-                        <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 5v.01M12 12v.01M12 19v.01M12 6a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2z" />
+                        <svg
+                          className="w-5 h-5"
+                          fill="none"
+                          viewBox="0 0 24 24"
+                          stroke="currentColor"
+                          aria-hidden="true"
+                        >
+                          <path
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                            strokeWidth={2}
+                            d="M12 5v.01M12 12v.01M12 19v.01M12 6a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2z"
+                          />
                         </svg>
                       </span>
                     }
@@ -155,7 +202,11 @@ function App() {
         </header>
 
         {/* Main Content */}
-        <main id="main-content" className="max-w-7xl mx-auto px-3 sm:px-4 py-4 sm:py-6" tabIndex={-1}>
+        <main
+          id="main-content"
+          className="max-w-7xl mx-auto px-3 sm:px-4 py-4 sm:py-6"
+          tabIndex={-1}
+        >
           <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
             {/* Calendar Section */}
             <div className="lg:col-span-3 bg-white rounded-xl border border-gray-200">
