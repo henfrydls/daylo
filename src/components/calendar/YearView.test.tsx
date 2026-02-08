@@ -77,8 +77,20 @@ describe('YearView', () => {
 
     it('should show activities tracked count', () => {
       const activities: Activity[] = [
-        { id: '1', name: 'Exercise', color: '#22c55e', createdAt: '2024-01-01', updatedAt: '2024-01-01' },
-        { id: '2', name: 'Reading', color: '#3b82f6', createdAt: '2024-01-01', updatedAt: '2024-01-01' },
+        {
+          id: '1',
+          name: 'Exercise',
+          color: '#22c55e',
+          createdAt: '2024-01-01',
+          updatedAt: '2024-01-01',
+        },
+        {
+          id: '2',
+          name: 'Reading',
+          color: '#3b82f6',
+          createdAt: '2024-01-01',
+          updatedAt: '2024-01-01',
+        },
       ]
       useCalendarStore.setState({ activities })
       render(<YearView />)
@@ -164,7 +176,13 @@ describe('YearView', () => {
 
     it('should have proper aria-label on day cells', () => {
       const activities: Activity[] = [
-        { id: '1', name: 'Exercise', color: '#22c55e', createdAt: '2024-01-01', updatedAt: '2024-01-01' },
+        {
+          id: '1',
+          name: 'Exercise',
+          color: '#22c55e',
+          createdAt: '2024-01-01',
+          updatedAt: '2024-01-01',
+        },
       ]
       useCalendarStore.setState({ activities, selectedYear: 2024 })
       render(<YearView />)
@@ -207,7 +225,9 @@ describe('YearView', () => {
       expect(screen.getByRole('listitem', { name: 'Low activity: 1-25%' })).toBeInTheDocument()
       expect(screen.getByRole('listitem', { name: 'Medium activity: 26-50%' })).toBeInTheDocument()
       expect(screen.getByRole('listitem', { name: 'High activity: 51-75%' })).toBeInTheDocument()
-      expect(screen.getByRole('listitem', { name: 'Very high activity: 76-100%' })).toBeInTheDocument()
+      expect(
+        screen.getByRole('listitem', { name: 'Very high activity: 76-100%' })
+      ).toBeInTheDocument()
     })
   })
 
@@ -219,7 +239,7 @@ describe('YearView', () => {
 
       // Find day cells for day 15 (current day)
       const dayCells = screen.getAllByTestId('day-cell')
-      const todayCell = dayCells.find(cell => {
+      const todayCell = dayCells.find((cell) => {
         const ariaLabel = cell.getAttribute('aria-label') || ''
         return ariaLabel.includes('Jun 15, 2024')
       })
@@ -243,7 +263,20 @@ describe('YearView', () => {
       useCalendarStore.setState({ selectedYear: 2024 })
       render(<YearView />)
 
-      const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
+      const months = [
+        'Jan',
+        'Feb',
+        'Mar',
+        'Apr',
+        'May',
+        'Jun',
+        'Jul',
+        'Aug',
+        'Sep',
+        'Oct',
+        'Nov',
+        'Dec',
+      ]
       months.forEach((month) => {
         expect(screen.getByLabelText(`View ${month} 2024`)).toBeInTheDocument()
       })
@@ -283,8 +316,20 @@ describe('YearView', () => {
   describe('With activities and logs', () => {
     it('should display heatmap colors based on activity completion', () => {
       const activities: Activity[] = [
-        { id: '1', name: 'Exercise', color: '#22c55e', createdAt: '2024-01-01', updatedAt: '2024-01-01' },
-        { id: '2', name: 'Reading', color: '#3b82f6', createdAt: '2024-01-01', updatedAt: '2024-01-01' },
+        {
+          id: '1',
+          name: 'Exercise',
+          color: '#22c55e',
+          createdAt: '2024-01-01',
+          updatedAt: '2024-01-01',
+        },
+        {
+          id: '2',
+          name: 'Reading',
+          color: '#3b82f6',
+          createdAt: '2024-01-01',
+          updatedAt: '2024-01-01',
+        },
       ]
       const logs: ActivityLog[] = [
         { id: '1', activityId: '1', date: '2024-01-01', completed: true, createdAt: '2024-01-01' },
@@ -295,7 +340,7 @@ describe('YearView', () => {
 
       const dayCells = screen.getAllByTestId('day-cell')
       // The first day with 2/2 completions should have emerald color
-      const jan1Cell = dayCells.find(cell => {
+      const jan1Cell = dayCells.find((cell) => {
         const ariaLabel = cell.getAttribute('aria-label') || ''
         return ariaLabel.includes('Jan 1, 2024') && ariaLabel.includes('2 of 2')
       })
@@ -306,14 +351,20 @@ describe('YearView', () => {
 
     it('should show gray color for days with no activity', () => {
       const activities: Activity[] = [
-        { id: '1', name: 'Exercise', color: '#22c55e', createdAt: '2024-01-01', updatedAt: '2024-01-01' },
+        {
+          id: '1',
+          name: 'Exercise',
+          color: '#22c55e',
+          createdAt: '2024-01-01',
+          updatedAt: '2024-01-01',
+        },
       ]
       useCalendarStore.setState({ activities, logs: [], selectedYear: 2024 })
       render(<YearView />)
 
       const dayCells = screen.getAllByTestId('day-cell')
       // Days without completion should have gray background
-      const noneCompletedCell = dayCells.find(cell => {
+      const noneCompletedCell = dayCells.find((cell) => {
         const ariaLabel = cell.getAttribute('aria-label') || ''
         return ariaLabel.includes('0 of 1')
       })
@@ -345,7 +396,7 @@ describe('YearView', () => {
 
       // February 29 should exist in 2024
       const dayCells = screen.getAllByTestId('day-cell')
-      const feb29Cell = dayCells.find(cell => {
+      const feb29Cell = dayCells.find((cell) => {
         const ariaLabel = cell.getAttribute('aria-label') || ''
         return ariaLabel.includes('Feb 29, 2024')
       })
@@ -359,7 +410,7 @@ describe('YearView', () => {
 
       // February 29 should NOT exist in 2023
       const dayCells = screen.getAllByTestId('day-cell')
-      const feb29Cell = dayCells.find(cell => {
+      const feb29Cell = dayCells.find((cell) => {
         const ariaLabel = cell.getAttribute('aria-label') || ''
         return ariaLabel.includes('Feb 29, 2023')
       })

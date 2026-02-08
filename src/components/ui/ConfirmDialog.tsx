@@ -35,7 +35,9 @@ export function ConfirmDialog({
   useEffect(() => {
     if (isOpen && dialogRef.current) {
       setTimeout(() => {
-        const cancelButton = dialogRef.current?.querySelector<HTMLElement>('[data-testid="confirm-dialog-cancel"]')
+        const cancelButton = dialogRef.current?.querySelector<HTMLElement>(
+          '[data-testid="confirm-dialog-cancel"]'
+        )
         cancelButton?.focus()
       }, 0)
     }
@@ -63,7 +65,12 @@ export function ConfirmDialog({
     ),
     warning: (
       <div className="w-12 h-12 rounded-full bg-amber-100 flex items-center justify-center mb-4">
-        <svg className="w-6 h-6 text-amber-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+        <svg
+          className="w-6 h-6 text-amber-600"
+          fill="none"
+          viewBox="0 0 24 24"
+          stroke="currentColor"
+        >
           <path
             strokeLinecap="round"
             strokeLinejoin="round"
@@ -75,7 +82,12 @@ export function ConfirmDialog({
     ),
     default: (
       <div className="w-12 h-12 rounded-full bg-gray-100 flex items-center justify-center mb-4">
-        <svg className="w-6 h-6 text-gray-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+        <svg
+          className="w-6 h-6 text-gray-600"
+          fill="none"
+          viewBox="0 0 24 24"
+          stroke="currentColor"
+        >
           <path
             strokeLinecap="round"
             strokeLinejoin="round"
@@ -112,7 +124,10 @@ export function ConfirmDialog({
       >
         <div className="text-center">
           {iconByVariant[variant]}
-          <h2 id="confirm-dialog-title" className="text-base sm:text-lg font-semibold text-gray-900 mb-2">
+          <h2
+            id="confirm-dialog-title"
+            className="text-base sm:text-lg font-semibold text-gray-900 mb-2"
+          >
             {title}
           </h2>
           <p id="confirm-dialog-message" className="text-sm text-gray-500 mb-4 sm:mb-6">

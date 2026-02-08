@@ -31,9 +31,7 @@ export const DayCell = memo(function DayCell({
           {completedCount}/{totalActivities} completed
         </div>
       ) : (
-        <div className="text-gray-300 text-xs mt-1">
-          No activities tracked
-        </div>
+        <div className="text-gray-300 text-xs mt-1">No activities tracked</div>
       )}
     </div>
   )
@@ -51,9 +49,10 @@ export const DayCell = memo(function DayCell({
           focus:outline-none focus:ring-2 focus:ring-offset-1 focus:ring-blue-500 focus:z-20
           active:scale-95
           ${heatmapClass}
-          ${isCurrentDay
-            ? 'ring-2 ring-offset-1 ring-blue-500 shadow-md shadow-blue-500/30 z-10'
-            : 'border border-transparent hover:border-gray-300'
+          ${
+            isCurrentDay
+              ? 'ring-2 ring-offset-1 ring-blue-500 shadow-md shadow-blue-500/30 z-10'
+              : 'border border-transparent hover:border-gray-300'
           }
           ${level === 0 ? 'border border-gray-200' : ''}
         `}

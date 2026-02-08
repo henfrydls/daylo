@@ -23,9 +23,27 @@ const setupStoreWithActivities = () => {
   act(() => {
     useCalendarStore.setState({
       activities: [
-        { id: 'activity-1', name: 'Exercise', color: '#10B981', createdAt: '2024-01-01', updatedAt: '2024-01-01' },
-        { id: 'activity-2', name: 'Reading', color: '#3B82F6', createdAt: '2024-01-01', updatedAt: '2024-01-01' },
-        { id: 'activity-3', name: 'Meditation', color: '#8B5CF6', createdAt: '2024-01-01', updatedAt: '2024-01-01' },
+        {
+          id: 'activity-1',
+          name: 'Exercise',
+          color: '#10B981',
+          createdAt: '2024-01-01',
+          updatedAt: '2024-01-01',
+        },
+        {
+          id: 'activity-2',
+          name: 'Reading',
+          color: '#3B82F6',
+          createdAt: '2024-01-01',
+          updatedAt: '2024-01-01',
+        },
+        {
+          id: 'activity-3',
+          name: 'Meditation',
+          color: '#8B5CF6',
+          createdAt: '2024-01-01',
+          updatedAt: '2024-01-01',
+        },
       ],
       logs: [],
       selectedYear: 2024,
@@ -41,11 +59,29 @@ const setupStoreWithLogs = () => {
   act(() => {
     useCalendarStore.setState({
       activities: [
-        { id: 'activity-1', name: 'Exercise', color: '#10B981', createdAt: '2024-01-01', updatedAt: '2024-01-01' },
-        { id: 'activity-2', name: 'Reading', color: '#3B82F6', createdAt: '2024-01-01', updatedAt: '2024-01-01' },
+        {
+          id: 'activity-1',
+          name: 'Exercise',
+          color: '#10B981',
+          createdAt: '2024-01-01',
+          updatedAt: '2024-01-01',
+        },
+        {
+          id: 'activity-2',
+          name: 'Reading',
+          color: '#3B82F6',
+          createdAt: '2024-01-01',
+          updatedAt: '2024-01-01',
+        },
       ],
       logs: [
-        { id: 'log-1', activityId: 'activity-1', date: '2024-01-15', completed: true, createdAt: '2024-01-15' },
+        {
+          id: 'log-1',
+          activityId: 'activity-1',
+          date: '2024-01-15',
+          completed: true,
+          createdAt: '2024-01-15',
+        },
       ],
       selectedYear: 2024,
       selectedDate: '2024-01-15',
@@ -195,7 +231,7 @@ describe('QuickLog', () => {
       await user.click(checkboxes[0])
 
       const state = useCalendarStore.getState()
-      const log = state.logs.find(l => l.activityId === 'activity-1' && l.date === '2024-01-15')
+      const log = state.logs.find((l) => l.activityId === 'activity-1' && l.date === '2024-01-15')
       expect(log).toBeDefined()
       expect(log?.completed).toBe(true)
     })
@@ -245,11 +281,13 @@ describe('QuickLog', () => {
       await user.click(screen.getByTestId('quicklog-add-activity'))
 
       const state = useCalendarStore.getState()
-      const newActivity = state.activities.find(a => a.name === 'New Activity')
+      const newActivity = state.activities.find((a) => a.name === 'New Activity')
       expect(newActivity).toBeDefined()
 
       // Should also be logged as complete for the selected date
-      const log = state.logs.find(l => l.activityId === newActivity?.id && l.date === '2024-01-15')
+      const log = state.logs.find(
+        (l) => l.activityId === newActivity?.id && l.date === '2024-01-15'
+      )
       expect(log).toBeDefined()
       expect(log?.completed).toBe(true)
     })
@@ -264,7 +302,7 @@ describe('QuickLog', () => {
       await user.keyboard('{Enter}')
 
       const state = useCalendarStore.getState()
-      const newActivity = state.activities.find(a => a.name === 'Enter Activity')
+      const newActivity = state.activities.find((a) => a.name === 'Enter Activity')
       expect(newActivity).toBeDefined()
     })
 
@@ -289,12 +327,11 @@ describe('QuickLog', () => {
       setupStoreWithActivities()
 
       // Override setSelectedDate to prevent modal close but still track calls
-      const originalSetSelectedDate = useCalendarStore.getState().setSelectedDate
       useCalendarStore.setState({
         setSelectedDate: (date: string | null) => {
           setSelectedDateSpy(date)
           // Don't call original to prevent state change that causes hooks error
-        }
+        },
       })
 
       render(<QuickLog />)
@@ -341,7 +378,7 @@ describe('QuickLog', () => {
       await user.click(screen.getByTestId('quicklog-add-activity'))
 
       const state = useCalendarStore.getState()
-      const newActivity = state.activities.find(a => a.name === 'Trimmed Activity')
+      const newActivity = state.activities.find((a) => a.name === 'Trimmed Activity')
       expect(newActivity).toBeDefined()
     })
   })
@@ -358,7 +395,7 @@ describe('QuickLog', () => {
         setSelectedDate: (date: string | null) => {
           setSelectedDateSpy(date)
           originalSetSelectedDate(date)
-        }
+        },
       })
 
       render(<QuickLog />)
@@ -380,7 +417,7 @@ describe('QuickLog', () => {
         setSelectedDate: (date: string | null) => {
           setSelectedDateSpy(date)
           originalSetSelectedDate(date)
-        }
+        },
       })
 
       render(<QuickLog />)
@@ -403,7 +440,7 @@ describe('QuickLog', () => {
         setSelectedDate: (date: string | null) => {
           setSelectedDateSpy(date)
           originalSetSelectedDate(date)
-        }
+        },
       })
 
       render(<QuickLog />)
@@ -426,7 +463,7 @@ describe('QuickLog', () => {
         setSelectedDate: (date: string | null) => {
           setSelectedDateSpy(date)
           originalSetSelectedDate(date)
-        }
+        },
       })
 
       render(<QuickLog />)
@@ -545,7 +582,7 @@ describe('QuickLog', () => {
       await user.click(screen.getByTestId('quicklog-add-activity'))
 
       const state = useCalendarStore.getState()
-      const newActivity = state.activities.find(a => a.name === 'Blue Activity')
+      const newActivity = state.activities.find((a) => a.name === 'Blue Activity')
       expect(newActivity?.color).toBe('#3B82F6')
     })
   })

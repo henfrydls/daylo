@@ -14,17 +14,13 @@ describe('DropdownMenu', () => {
   describe('Rendering', () => {
     it('should render the trigger element', () => {
       const items = createItems()
-      render(
-        <DropdownMenu trigger={<span>Open Menu</span>} items={items} />
-      )
+      render(<DropdownMenu trigger={<span>Open Menu</span>} items={items} />)
       expect(screen.getByText('Open Menu')).toBeInTheDocument()
     })
 
     it('should not render menu items initially', () => {
       const items = createItems()
-      render(
-        <DropdownMenu trigger={<span>Open Menu</span>} items={items} />
-      )
+      render(<DropdownMenu trigger={<span>Open Menu</span>} items={items} />)
       expect(screen.queryByRole('menu')).not.toBeInTheDocument()
       expect(screen.queryByText('Edit')).not.toBeInTheDocument()
     })
@@ -46,9 +42,7 @@ describe('DropdownMenu', () => {
       const items: DropdownMenuItem[] = [
         { label: 'Edit', onClick: vi.fn(), icon: <span data-testid="edit-icon">E</span> },
       ]
-      render(
-        <DropdownMenu trigger={<span>Open Menu</span>} items={items} />
-      )
+      render(<DropdownMenu trigger={<span>Open Menu</span>} items={items} />)
 
       await user.click(screen.getByText('Open Menu'))
       expect(screen.getByTestId('edit-icon')).toBeInTheDocument()
@@ -59,9 +53,7 @@ describe('DropdownMenu', () => {
     it('should open menu when trigger is clicked', async () => {
       const user = userEvent.setup()
       const items = createItems()
-      render(
-        <DropdownMenu trigger={<span>Open Menu</span>} items={items} />
-      )
+      render(<DropdownMenu trigger={<span>Open Menu</span>} items={items} />)
 
       await user.click(screen.getByText('Open Menu'))
       expect(screen.getByRole('menu')).toBeInTheDocument()
@@ -73,9 +65,7 @@ describe('DropdownMenu', () => {
     it('should close menu when trigger is clicked again', async () => {
       const user = userEvent.setup()
       const items = createItems()
-      render(
-        <DropdownMenu trigger={<span>Open Menu</span>} items={items} />
-      )
+      render(<DropdownMenu trigger={<span>Open Menu</span>} items={items} />)
 
       await user.click(screen.getByText('Open Menu'))
       expect(screen.getByRole('menu')).toBeInTheDocument()
@@ -105,9 +95,7 @@ describe('DropdownMenu', () => {
     it('should close menu when Escape key is pressed', async () => {
       const user = userEvent.setup()
       const items = createItems()
-      render(
-        <DropdownMenu trigger={<span>Open Menu</span>} items={items} />
-      )
+      render(<DropdownMenu trigger={<span>Open Menu</span>} items={items} />)
 
       await user.click(screen.getByText('Open Menu'))
       expect(screen.getByRole('menu')).toBeInTheDocument()
@@ -119,9 +107,7 @@ describe('DropdownMenu', () => {
     it('should return focus to trigger after Escape closes menu', async () => {
       const user = userEvent.setup()
       const items = createItems()
-      render(
-        <DropdownMenu trigger={<span>Open Menu</span>} items={items} />
-      )
+      render(<DropdownMenu trigger={<span>Open Menu</span>} items={items} />)
 
       const triggerButton = screen.getByRole('button', { name: 'Open Menu' })
       await user.click(triggerButton)
@@ -134,9 +120,7 @@ describe('DropdownMenu', () => {
     it('should close menu when Tab key is pressed', async () => {
       const user = userEvent.setup()
       const items = createItems()
-      render(
-        <DropdownMenu trigger={<span>Open Menu</span>} items={items} />
-      )
+      render(<DropdownMenu trigger={<span>Open Menu</span>} items={items} />)
 
       await user.click(screen.getByText('Open Menu'))
       expect(screen.getByRole('menu')).toBeInTheDocument()
@@ -154,9 +138,7 @@ describe('DropdownMenu', () => {
         { label: 'Edit', onClick: handleEdit },
         { label: 'Delete', onClick: vi.fn() },
       ]
-      render(
-        <DropdownMenu trigger={<span>Open Menu</span>} items={items} />
-      )
+      render(<DropdownMenu trigger={<span>Open Menu</span>} items={items} />)
 
       await user.click(screen.getByText('Open Menu'))
       await user.click(screen.getByText('Edit'))
@@ -172,9 +154,7 @@ describe('DropdownMenu', () => {
         { label: 'Edit', onClick: handleEdit, disabled: true },
         { label: 'Delete', onClick: vi.fn() },
       ]
-      render(
-        <DropdownMenu trigger={<span>Open Menu</span>} items={items} />
-      )
+      render(<DropdownMenu trigger={<span>Open Menu</span>} items={items} />)
 
       await user.click(screen.getByText('Open Menu'))
       await user.click(screen.getByText('Edit'))
@@ -188,9 +168,7 @@ describe('DropdownMenu', () => {
         { label: 'Edit', onClick: vi.fn(), disabled: true },
         { label: 'Delete', onClick: vi.fn() },
       ]
-      render(
-        <DropdownMenu trigger={<span>Open Menu</span>} items={items} />
-      )
+      render(<DropdownMenu trigger={<span>Open Menu</span>} items={items} />)
 
       await user.click(screen.getByText('Open Menu'))
       await user.click(screen.getByText('Edit'))
@@ -203,9 +181,7 @@ describe('DropdownMenu', () => {
     it('should open menu with Enter key on trigger', async () => {
       const user = userEvent.setup()
       const items = createItems()
-      render(
-        <DropdownMenu trigger={<span>Open Menu</span>} items={items} />
-      )
+      render(<DropdownMenu trigger={<span>Open Menu</span>} items={items} />)
 
       screen.getByRole('button', { name: 'Open Menu' }).focus()
       await user.keyboard('{Enter}')
@@ -216,9 +192,7 @@ describe('DropdownMenu', () => {
     it('should open menu with Space key on trigger', async () => {
       const user = userEvent.setup()
       const items = createItems()
-      render(
-        <DropdownMenu trigger={<span>Open Menu</span>} items={items} />
-      )
+      render(<DropdownMenu trigger={<span>Open Menu</span>} items={items} />)
 
       screen.getByRole('button', { name: 'Open Menu' }).focus()
       await user.keyboard(' ')
@@ -229,9 +203,7 @@ describe('DropdownMenu', () => {
     it('should open menu with ArrowDown key on trigger', async () => {
       const user = userEvent.setup()
       const items = createItems()
-      render(
-        <DropdownMenu trigger={<span>Open Menu</span>} items={items} />
-      )
+      render(<DropdownMenu trigger={<span>Open Menu</span>} items={items} />)
 
       screen.getByRole('button', { name: 'Open Menu' }).focus()
       await user.keyboard('{ArrowDown}')
@@ -242,9 +214,7 @@ describe('DropdownMenu', () => {
     it('should focus first enabled item when menu opens', async () => {
       const user = userEvent.setup()
       const items = createItems()
-      render(
-        <DropdownMenu trigger={<span>Open Menu</span>} items={items} />
-      )
+      render(<DropdownMenu trigger={<span>Open Menu</span>} items={items} />)
 
       await user.click(screen.getByText('Open Menu'))
 
@@ -260,9 +230,7 @@ describe('DropdownMenu', () => {
         { label: 'Delete', onClick: vi.fn() },
         { label: 'Share', onClick: vi.fn() },
       ]
-      render(
-        <DropdownMenu trigger={<span>Open Menu</span>} items={items} />
-      )
+      render(<DropdownMenu trigger={<span>Open Menu</span>} items={items} />)
 
       await user.click(screen.getByText('Open Menu'))
 
@@ -274,9 +242,7 @@ describe('DropdownMenu', () => {
     it('should move focus down with ArrowDown key', async () => {
       const user = userEvent.setup()
       const items = createItems()
-      render(
-        <DropdownMenu trigger={<span>Open Menu</span>} items={items} />
-      )
+      render(<DropdownMenu trigger={<span>Open Menu</span>} items={items} />)
 
       await user.click(screen.getByText('Open Menu'))
 
@@ -293,9 +259,7 @@ describe('DropdownMenu', () => {
     it('should move focus up with ArrowUp key', async () => {
       const user = userEvent.setup()
       const items = createItems()
-      render(
-        <DropdownMenu trigger={<span>Open Menu</span>} items={items} />
-      )
+      render(<DropdownMenu trigger={<span>Open Menu</span>} items={items} />)
 
       await user.click(screen.getByText('Open Menu'))
       await user.keyboard('{ArrowDown}')
@@ -312,9 +276,7 @@ describe('DropdownMenu', () => {
     it('should wrap focus from last to first item with ArrowDown', async () => {
       const user = userEvent.setup()
       const items = createItems()
-      render(
-        <DropdownMenu trigger={<span>Open Menu</span>} items={items} />
-      )
+      render(<DropdownMenu trigger={<span>Open Menu</span>} items={items} />)
 
       await user.click(screen.getByText('Open Menu'))
 
@@ -331,9 +293,7 @@ describe('DropdownMenu', () => {
     it('should wrap focus from first to last item with ArrowUp', async () => {
       const user = userEvent.setup()
       const items = createItems()
-      render(
-        <DropdownMenu trigger={<span>Open Menu</span>} items={items} />
-      )
+      render(<DropdownMenu trigger={<span>Open Menu</span>} items={items} />)
 
       await user.click(screen.getByText('Open Menu'))
 
@@ -352,9 +312,7 @@ describe('DropdownMenu', () => {
         { label: 'Delete', onClick: vi.fn(), disabled: true },
         { label: 'Share', onClick: vi.fn() },
       ]
-      render(
-        <DropdownMenu trigger={<span>Open Menu</span>} items={items} />
-      )
+      render(<DropdownMenu trigger={<span>Open Menu</span>} items={items} />)
 
       await user.click(screen.getByText('Open Menu'))
       expect(screen.getByText('Edit').closest('button')).toHaveClass('bg-gray-100')
@@ -371,9 +329,7 @@ describe('DropdownMenu', () => {
         { label: 'Edit', onClick: vi.fn() },
         { label: 'Delete', onClick: handleDelete },
       ]
-      render(
-        <DropdownMenu trigger={<span>Open Menu</span>} items={items} />
-      )
+      render(<DropdownMenu trigger={<span>Open Menu</span>} items={items} />)
 
       await user.click(screen.getByText('Open Menu'))
       await user.keyboard('{ArrowDown}')
@@ -390,9 +346,7 @@ describe('DropdownMenu', () => {
         { label: 'Edit', onClick: handleEdit },
         { label: 'Delete', onClick: vi.fn() },
       ]
-      render(
-        <DropdownMenu trigger={<span>Open Menu</span>} items={items} />
-      )
+      render(<DropdownMenu trigger={<span>Open Menu</span>} items={items} />)
 
       await user.click(screen.getByText('Open Menu'))
       await user.keyboard(' ')
@@ -408,9 +362,7 @@ describe('DropdownMenu', () => {
         { label: 'Edit', onClick: handleEdit, disabled: true },
         { label: 'Delete', onClick: vi.fn() },
       ]
-      render(
-        <DropdownMenu trigger={<span>Open Menu</span>} items={items} />
-      )
+      render(<DropdownMenu trigger={<span>Open Menu</span>} items={items} />)
 
       await user.click(screen.getByText('Open Menu'))
 
@@ -425,9 +377,7 @@ describe('DropdownMenu', () => {
   describe('Accessibility', () => {
     it('should have aria-haspopup on trigger button', () => {
       const items = createItems()
-      render(
-        <DropdownMenu trigger={<span>Open Menu</span>} items={items} />
-      )
+      render(<DropdownMenu trigger={<span>Open Menu</span>} items={items} />)
 
       const trigger = screen.getByRole('button', { name: 'Open Menu' })
       expect(trigger).toHaveAttribute('aria-haspopup', 'menu')
@@ -435,9 +385,7 @@ describe('DropdownMenu', () => {
 
     it('should have aria-expanded=false when menu is closed', () => {
       const items = createItems()
-      render(
-        <DropdownMenu trigger={<span>Open Menu</span>} items={items} />
-      )
+      render(<DropdownMenu trigger={<span>Open Menu</span>} items={items} />)
 
       const trigger = screen.getByRole('button', { name: 'Open Menu' })
       expect(trigger).toHaveAttribute('aria-expanded', 'false')
@@ -446,9 +394,7 @@ describe('DropdownMenu', () => {
     it('should have aria-expanded=true when menu is open', async () => {
       const user = userEvent.setup()
       const items = createItems()
-      render(
-        <DropdownMenu trigger={<span>Open Menu</span>} items={items} />
-      )
+      render(<DropdownMenu trigger={<span>Open Menu</span>} items={items} />)
 
       const trigger = screen.getByRole('button', { name: 'Open Menu' })
       await user.click(trigger)
@@ -459,9 +405,7 @@ describe('DropdownMenu', () => {
     it('should have aria-controls pointing to menu when open', async () => {
       const user = userEvent.setup()
       const items = createItems()
-      render(
-        <DropdownMenu trigger={<span>Open Menu</span>} items={items} />
-      )
+      render(<DropdownMenu trigger={<span>Open Menu</span>} items={items} />)
 
       const trigger = screen.getByRole('button', { name: 'Open Menu' })
       await user.click(trigger)
@@ -471,9 +415,7 @@ describe('DropdownMenu', () => {
 
     it('should not have aria-controls when menu is closed', () => {
       const items = createItems()
-      render(
-        <DropdownMenu trigger={<span>Open Menu</span>} items={items} />
-      )
+      render(<DropdownMenu trigger={<span>Open Menu</span>} items={items} />)
 
       const trigger = screen.getByRole('button', { name: 'Open Menu' })
       expect(trigger).not.toHaveAttribute('aria-controls')
@@ -482,9 +424,7 @@ describe('DropdownMenu', () => {
     it('should have role="menu" on the dropdown container', async () => {
       const user = userEvent.setup()
       const items = createItems()
-      render(
-        <DropdownMenu trigger={<span>Open Menu</span>} items={items} />
-      )
+      render(<DropdownMenu trigger={<span>Open Menu</span>} items={items} />)
 
       await user.click(screen.getByText('Open Menu'))
       expect(screen.getByRole('menu')).toBeInTheDocument()
@@ -493,9 +433,7 @@ describe('DropdownMenu', () => {
     it('should have role="menuitem" on each item', async () => {
       const user = userEvent.setup()
       const items = createItems()
-      render(
-        <DropdownMenu trigger={<span>Open Menu</span>} items={items} />
-      )
+      render(<DropdownMenu trigger={<span>Open Menu</span>} items={items} />)
 
       await user.click(screen.getByText('Open Menu'))
 
@@ -509,9 +447,7 @@ describe('DropdownMenu', () => {
         { label: 'Edit', onClick: vi.fn(), disabled: true },
         { label: 'Delete', onClick: vi.fn() },
       ]
-      render(
-        <DropdownMenu trigger={<span>Open Menu</span>} items={items} />
-      )
+      render(<DropdownMenu trigger={<span>Open Menu</span>} items={items} />)
 
       await user.click(screen.getByText('Open Menu'))
 
@@ -526,9 +462,7 @@ describe('DropdownMenu', () => {
     it('should have aria-orientation on menu', async () => {
       const user = userEvent.setup()
       const items = createItems()
-      render(
-        <DropdownMenu trigger={<span>Open Menu</span>} items={items} />
-      )
+      render(<DropdownMenu trigger={<span>Open Menu</span>} items={items} />)
 
       await user.click(screen.getByText('Open Menu'))
 
@@ -539,9 +473,7 @@ describe('DropdownMenu', () => {
     it('should have aria-label on menu', async () => {
       const user = userEvent.setup()
       const items = createItems()
-      render(
-        <DropdownMenu trigger={<span>Open Menu</span>} items={items} />
-      )
+      render(<DropdownMenu trigger={<span>Open Menu</span>} items={items} />)
 
       await user.click(screen.getByText('Open Menu'))
 
@@ -552,9 +484,7 @@ describe('DropdownMenu', () => {
     it('should have tabIndex=-1 on menu items', async () => {
       const user = userEvent.setup()
       const items = createItems()
-      render(
-        <DropdownMenu trigger={<span>Open Menu</span>} items={items} />
-      )
+      render(<DropdownMenu trigger={<span>Open Menu</span>} items={items} />)
 
       await user.click(screen.getByText('Open Menu'))
 
@@ -566,9 +496,7 @@ describe('DropdownMenu', () => {
 
     it('should have type="button" on trigger', () => {
       const items = createItems()
-      render(
-        <DropdownMenu trigger={<span>Open Menu</span>} items={items} />
-      )
+      render(<DropdownMenu trigger={<span>Open Menu</span>} items={items} />)
 
       const trigger = screen.getByRole('button', { name: 'Open Menu' })
       expect(trigger).toHaveAttribute('type', 'button')
@@ -578,9 +506,7 @@ describe('DropdownMenu', () => {
   describe('Edge Cases', () => {
     it('should handle empty items array', async () => {
       const user = userEvent.setup()
-      render(
-        <DropdownMenu trigger={<span>Open Menu</span>} items={[]} />
-      )
+      render(<DropdownMenu trigger={<span>Open Menu</span>} items={[]} />)
 
       await user.click(screen.getByText('Open Menu'))
 
@@ -594,9 +520,7 @@ describe('DropdownMenu', () => {
         { label: 'Edit', onClick: vi.fn(), disabled: true },
         { label: 'Delete', onClick: vi.fn(), disabled: true },
       ]
-      render(
-        <DropdownMenu trigger={<span>Open Menu</span>} items={items} />
-      )
+      render(<DropdownMenu trigger={<span>Open Menu</span>} items={items} />)
 
       await user.click(screen.getByText('Open Menu'))
 
@@ -611,9 +535,7 @@ describe('DropdownMenu', () => {
       const user = userEvent.setup()
       const handleClick = vi.fn()
       const items: DropdownMenuItem[] = [{ label: 'Edit', onClick: handleClick }]
-      render(
-        <DropdownMenu trigger={<span>Open Menu</span>} items={items} />
-      )
+      render(<DropdownMenu trigger={<span>Open Menu</span>} items={items} />)
 
       await user.click(screen.getByText('Open Menu'))
       await user.click(screen.getByText('Edit'))
@@ -624,9 +546,7 @@ describe('DropdownMenu', () => {
     it('should reset focus index when menu closes and reopens', async () => {
       const user = userEvent.setup()
       const items = createItems()
-      render(
-        <DropdownMenu trigger={<span>Open Menu</span>} items={items} />
-      )
+      render(<DropdownMenu trigger={<span>Open Menu</span>} items={items} />)
 
       // Open and navigate
       await user.click(screen.getByText('Open Menu'))

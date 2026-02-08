@@ -21,9 +21,7 @@ describe('ToastContainer', () => {
 
   it('should render ToastContainer with a toast', () => {
     useToastStore.setState({
-      toasts: [
-        { id: 'toast-1', message: 'Test message', variant: 'success' },
-      ],
+      toasts: [{ id: 'toast-1', message: 'Test message', variant: 'success' }],
     })
 
     render(<ToastContainer />)
@@ -32,9 +30,7 @@ describe('ToastContainer', () => {
 
   it('should render toast with message', () => {
     useToastStore.setState({
-      toasts: [
-        { id: 'toast-1', message: 'Hello World', variant: 'info' },
-      ],
+      toasts: [{ id: 'toast-1', message: 'Hello World', variant: 'info' }],
     })
 
     render(<ToastContainer />)
@@ -44,9 +40,7 @@ describe('ToastContainer', () => {
   describe('variants', () => {
     it('should render success variant with correct styles', () => {
       useToastStore.setState({
-        toasts: [
-          { id: 'toast-1', message: 'Success message', variant: 'success' },
-        ],
+        toasts: [{ id: 'toast-1', message: 'Success message', variant: 'success' }],
       })
 
       render(<ToastContainer />)
@@ -57,9 +51,7 @@ describe('ToastContainer', () => {
 
     it('should render error variant with correct styles', () => {
       useToastStore.setState({
-        toasts: [
-          { id: 'toast-1', message: 'Error message', variant: 'error' },
-        ],
+        toasts: [{ id: 'toast-1', message: 'Error message', variant: 'error' }],
       })
 
       render(<ToastContainer />)
@@ -70,9 +62,7 @@ describe('ToastContainer', () => {
 
     it('should render info variant with correct styles', () => {
       useToastStore.setState({
-        toasts: [
-          { id: 'toast-1', message: 'Info message', variant: 'info' },
-        ],
+        toasts: [{ id: 'toast-1', message: 'Info message', variant: 'info' }],
       })
 
       render(<ToastContainer />)
@@ -85,9 +75,7 @@ describe('ToastContainer', () => {
   describe('icons', () => {
     it('should render CheckCircleIcon for success variant', () => {
       useToastStore.setState({
-        toasts: [
-          { id: 'toast-1', message: 'Success message', variant: 'success' },
-        ],
+        toasts: [{ id: 'toast-1', message: 'Success message', variant: 'success' }],
       })
 
       render(<ToastContainer />)
@@ -99,9 +87,7 @@ describe('ToastContainer', () => {
 
     it('should render ExclamationCircleIcon for error variant', () => {
       useToastStore.setState({
-        toasts: [
-          { id: 'toast-1', message: 'Error message', variant: 'error' },
-        ],
+        toasts: [{ id: 'toast-1', message: 'Error message', variant: 'error' }],
       })
 
       render(<ToastContainer />)
@@ -113,9 +99,7 @@ describe('ToastContainer', () => {
 
     it('should render InfoCircleIcon for info variant', () => {
       useToastStore.setState({
-        toasts: [
-          { id: 'toast-1', message: 'Info message', variant: 'info' },
-        ],
+        toasts: [{ id: 'toast-1', message: 'Info message', variant: 'info' }],
       })
 
       render(<ToastContainer />)
@@ -158,9 +142,7 @@ describe('ToastContainer', () => {
   describe('manual dismiss', () => {
     it('should dismiss toast when X button is clicked', () => {
       useToastStore.setState({
-        toasts: [
-          { id: 'toast-1', message: 'Test message', variant: 'success' },
-        ],
+        toasts: [{ id: 'toast-1', message: 'Test message', variant: 'success' }],
       })
 
       render(<ToastContainer />)
@@ -175,9 +157,7 @@ describe('ToastContainer', () => {
     it('should call removeToast with correct id when dismissed', () => {
       const removeToastSpy = vi.fn()
       useToastStore.setState({
-        toasts: [
-          { id: 'toast-123', message: 'Test message', variant: 'success' },
-        ],
+        toasts: [{ id: 'toast-123', message: 'Test message', variant: 'success' }],
         removeToast: removeToastSpy,
       })
 
@@ -251,9 +231,7 @@ describe('ToastContainer', () => {
   describe('accessibility', () => {
     it('should have role="alert" on toast items', () => {
       useToastStore.setState({
-        toasts: [
-          { id: 'toast-1', message: 'Test message', variant: 'success' },
-        ],
+        toasts: [{ id: 'toast-1', message: 'Test message', variant: 'success' }],
       })
 
       render(<ToastContainer />)
@@ -263,9 +241,7 @@ describe('ToastContainer', () => {
 
     it('should have aria-live="polite" on toast items', () => {
       useToastStore.setState({
-        toasts: [
-          { id: 'toast-1', message: 'Test message', variant: 'success' },
-        ],
+        toasts: [{ id: 'toast-1', message: 'Test message', variant: 'success' }],
       })
 
       render(<ToastContainer />)
@@ -275,9 +251,7 @@ describe('ToastContainer', () => {
 
     it('should have aria-label on dismiss button', () => {
       useToastStore.setState({
-        toasts: [
-          { id: 'toast-1', message: 'Test message', variant: 'success' },
-        ],
+        toasts: [{ id: 'toast-1', message: 'Test message', variant: 'success' }],
       })
 
       render(<ToastContainer />)
@@ -287,9 +261,7 @@ describe('ToastContainer', () => {
 
     it('should have aria-label="Notifications" on container', () => {
       useToastStore.setState({
-        toasts: [
-          { id: 'toast-1', message: 'Test message', variant: 'success' },
-        ],
+        toasts: [{ id: 'toast-1', message: 'Test message', variant: 'success' }],
       })
 
       render(<ToastContainer />)

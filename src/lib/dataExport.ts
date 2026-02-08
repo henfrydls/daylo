@@ -124,7 +124,7 @@ export function parseImportFileWithValidation(content: string): ValidationResult
   let data: unknown
   try {
     data = JSON.parse(content)
-  } catch (e) {
+  } catch {
     return {
       valid: false,
       errors: [{ field: 'file', message: 'Invalid JSON format. The file could not be parsed.' }],
@@ -228,7 +228,11 @@ function validateActivity(obj: unknown, index: number): ValidationError[] {
   const prefix = `activities[${index}]`
 
   if (!obj || typeof obj !== 'object') {
-    errors.push({ field: prefix, message: `Activity at index ${index} must be a valid object.`, index })
+    errors.push({
+      field: prefix,
+      message: `Activity at index ${index} must be a valid object.`,
+      index,
+    })
     return errors
   }
 
@@ -236,7 +240,11 @@ function validateActivity(obj: unknown, index: number): ValidationError[] {
 
   // Validate ID
   if (typeof activity.id !== 'string') {
-    errors.push({ field: `${prefix}.id`, message: `Activity at index ${index} must have a valid string ID.`, index })
+    errors.push({
+      field: `${prefix}.id`,
+      message: `Activity at index ${index} must have a valid string ID.`,
+      index,
+    })
   } else {
     const idErrors = validateId(activity.id, `${prefix}.id`, index)
     errors.push(...idErrors)
@@ -244,10 +252,18 @@ function validateActivity(obj: unknown, index: number): ValidationError[] {
 
   // Validate name
   if (typeof activity.name !== 'string') {
-    errors.push({ field: `${prefix}.name`, message: `Activity at index ${index} must have a valid string name.`, index })
+    errors.push({
+      field: `${prefix}.name`,
+      message: `Activity at index ${index} must have a valid string name.`,
+      index,
+    })
   } else {
     if (activity.name.length === 0) {
-      errors.push({ field: `${prefix}.name`, message: `Activity at index ${index} name cannot be empty.`, index })
+      errors.push({
+        field: `${prefix}.name`,
+        message: `Activity at index ${index} name cannot be empty.`,
+        index,
+      })
     }
     if (activity.name.length > VALIDATION_LIMITS.MAX_NAME_LENGTH) {
       errors.push({
@@ -260,7 +276,11 @@ function validateActivity(obj: unknown, index: number): ValidationError[] {
 
   // Validate color
   if (typeof activity.color !== 'string') {
-    errors.push({ field: `${prefix}.color`, message: `Activity at index ${index} must have a valid string color.`, index })
+    errors.push({
+      field: `${prefix}.color`,
+      message: `Activity at index ${index} must have a valid string color.`,
+      index,
+    })
   } else {
     if (!isValidHexColor(activity.color)) {
       errors.push({
@@ -280,7 +300,11 @@ function validateActivity(obj: unknown, index: number): ValidationError[] {
 
   // Validate createdAt
   if (typeof activity.createdAt !== 'string') {
-    errors.push({ field: `${prefix}.createdAt`, message: `Activity at index ${index} must have a valid createdAt timestamp.`, index })
+    errors.push({
+      field: `${prefix}.createdAt`,
+      message: `Activity at index ${index} must have a valid createdAt timestamp.`,
+      index,
+    })
   } else if (!isValidISODate(activity.createdAt)) {
     errors.push({
       field: `${prefix}.createdAt`,
@@ -292,7 +316,11 @@ function validateActivity(obj: unknown, index: number): ValidationError[] {
   // Validate updatedAt (optional but if present must be valid)
   if (activity.updatedAt !== undefined) {
     if (typeof activity.updatedAt !== 'string') {
-      errors.push({ field: `${prefix}.updatedAt`, message: `Activity at index ${index} updatedAt must be a valid string if provided.`, index })
+      errors.push({
+        field: `${prefix}.updatedAt`,
+        message: `Activity at index ${index} updatedAt must be a valid string if provided.`,
+        index,
+      })
     } else if (!isValidISODate(activity.updatedAt)) {
       errors.push({
         field: `${prefix}.updatedAt`,
@@ -321,7 +349,11 @@ function validateActivityLog(obj: unknown, index: number): ValidationError[] {
 
   // Validate ID
   if (typeof log.id !== 'string') {
-    errors.push({ field: `${prefix}.id`, message: `Log at index ${index} must have a valid string ID.`, index })
+    errors.push({
+      field: `${prefix}.id`,
+      message: `Log at index ${index} must have a valid string ID.`,
+      index,
+    })
   } else {
     const idErrors = validateId(log.id, `${prefix}.id`, index)
     errors.push(...idErrors)
@@ -329,7 +361,11 @@ function validateActivityLog(obj: unknown, index: number): ValidationError[] {
 
   // Validate activityId
   if (typeof log.activityId !== 'string') {
-    errors.push({ field: `${prefix}.activityId`, message: `Log at index ${index} must have a valid string activityId.`, index })
+    errors.push({
+      field: `${prefix}.activityId`,
+      message: `Log at index ${index} must have a valid string activityId.`,
+      index,
+    })
   } else {
     const activityIdErrors = validateId(log.activityId, `${prefix}.activityId`, index)
     errors.push(...activityIdErrors)
@@ -337,7 +373,11 @@ function validateActivityLog(obj: unknown, index: number): ValidationError[] {
 
   // Validate date (YYYY-MM-DD format)
   if (typeof log.date !== 'string') {
-    errors.push({ field: `${prefix}.date`, message: `Log at index ${index} must have a valid string date.`, index })
+    errors.push({
+      field: `${prefix}.date`,
+      message: `Log at index ${index} must have a valid string date.`,
+      index,
+    })
   } else if (!isValidDateFormat(log.date)) {
     errors.push({
       field: `${prefix}.date`,
@@ -348,13 +388,21 @@ function validateActivityLog(obj: unknown, index: number): ValidationError[] {
 
   // Validate completed
   if (typeof log.completed !== 'boolean') {
-    errors.push({ field: `${prefix}.completed`, message: `Log at index ${index} must have a boolean completed field.`, index })
+    errors.push({
+      field: `${prefix}.completed`,
+      message: `Log at index ${index} must have a boolean completed field.`,
+      index,
+    })
   }
 
   // Validate notes (optional)
   if (log.notes !== undefined && log.notes !== null) {
     if (typeof log.notes !== 'string') {
-      errors.push({ field: `${prefix}.notes`, message: `Log at index ${index} notes must be a string if provided.`, index })
+      errors.push({
+        field: `${prefix}.notes`,
+        message: `Log at index ${index} notes must be a string if provided.`,
+        index,
+      })
     } else if (log.notes.length > VALIDATION_LIMITS.MAX_NOTES_LENGTH) {
       errors.push({
         field: `${prefix}.notes`,
@@ -366,7 +414,11 @@ function validateActivityLog(obj: unknown, index: number): ValidationError[] {
 
   // Validate createdAt
   if (typeof log.createdAt !== 'string') {
-    errors.push({ field: `${prefix}.createdAt`, message: `Log at index ${index} must have a valid createdAt timestamp.`, index })
+    errors.push({
+      field: `${prefix}.createdAt`,
+      message: `Log at index ${index} must have a valid createdAt timestamp.`,
+      index,
+    })
   } else if (!isValidISODate(log.createdAt)) {
     errors.push({
       field: `${prefix}.createdAt`,
@@ -398,7 +450,11 @@ function validateId(id: string, field: string, index?: number): ValidationError[
 
   // Check for potentially malicious characters (HTML/script tags)
   if (containsHTML(id)) {
-    errors.push({ field, message: `ID contains invalid characters (HTML tags are not allowed).`, index })
+    errors.push({
+      field,
+      message: `ID contains invalid characters (HTML tags are not allowed).`,
+      index,
+    })
   }
 
   // IDs should only contain alphanumeric characters, hyphens, underscores
@@ -436,9 +492,7 @@ function isValidDateFormat(date: string): boolean {
   const dateObj = new Date(year, month - 1, day)
 
   return (
-    dateObj.getFullYear() === year &&
-    dateObj.getMonth() === month - 1 &&
-    dateObj.getDate() === day
+    dateObj.getFullYear() === year && dateObj.getMonth() === month - 1 && dateObj.getDate() === day
   )
 }
 
@@ -464,12 +518,12 @@ function containsHTML(str: string): boolean {
 function sanitizeString(str: string): string {
   return str
     .replace(/<[^>]*>/g, '') // Remove HTML tags
-    .replace(/&lt;/g, '<')   // Decode common entities for re-encoding
+    .replace(/&lt;/g, '<') // Decode common entities for re-encoding
     .replace(/&gt;/g, '>')
     .replace(/&amp;/g, '&')
     .replace(/&quot;/g, '"')
     .replace(/&#x27;/g, "'")
-    .replace(/</g, '&lt;')   // Re-encode dangerous characters
+    .replace(/</g, '&lt;') // Re-encode dangerous characters
     .replace(/>/g, '&gt;')
     .trim()
 }
@@ -498,7 +552,9 @@ function sanitizeActivityLog(log: ActivityLog): ActivityLog {
     activityId: log.activityId.trim(),
     date: log.date.trim(),
     completed: log.completed,
-    notes: log.notes ? sanitizeString(log.notes).slice(0, VALIDATION_LIMITS.MAX_NOTES_LENGTH) : undefined,
+    notes: log.notes
+      ? sanitizeString(log.notes).slice(0, VALIDATION_LIMITS.MAX_NOTES_LENGTH)
+      : undefined,
     createdAt: log.createdAt,
   }
 }

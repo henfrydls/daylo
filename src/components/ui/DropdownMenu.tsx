@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from 'react'
+import { useState, useRef, useEffect, useCallback } from 'react'
 import type { ReactNode } from 'react'
 
 export interface DropdownMenuItem {
@@ -37,6 +37,13 @@ export function DropdownMenu({ trigger, items, 'data-testid': testId }: Dropdown
       document.removeEventListener('mousedown', handleClickOutside)
     }
   }, [isOpen])
+
+  // Define handleItemClick before useEffect that uses it
+  const handleItemClick = useCallback((item: DropdownMenuItem) => {
+    if (item.disabled) return
+    item.onClick()
+    setIsOpen(false)
+  }, [])
 
   // Handle keyboard navigation
   useEffect(() => {
@@ -93,23 +100,19 @@ export function DropdownMenu({ trigger, items, 'data-testid': testId }: Dropdown
     return () => {
       document.removeEventListener('keydown', handleKeyDown)
     }
-  }, [isOpen, focusedIndex, items])
+  }, [isOpen, focusedIndex, items, handleItemClick])
 
   // Reset focus when menu opens
   useEffect(() => {
+    /* eslint-disable react-hooks/set-state-in-effect */
     if (isOpen) {
       const firstEnabledIndex = items.findIndex((item) => !item.disabled)
       setFocusedIndex(firstEnabledIndex)
     } else {
       setFocusedIndex(-1)
     }
+    /* eslint-enable react-hooks/set-state-in-effect */
   }, [isOpen, items])
-
-  const handleItemClick = (item: DropdownMenuItem) => {
-    if (item.disabled) return
-    item.onClick()
-    setIsOpen(false)
-  }
 
   const handleTriggerClick = () => {
     setIsOpen((prev) => !prev)
@@ -172,7 +175,11 @@ export function DropdownMenu({ trigger, items, 'data-testid': testId }: Dropdown
               tabIndex={-1}
               aria-disabled={item.disabled}
             >
-              {item.icon && <span className="w-4 h-4 flex-shrink-0" aria-hidden="true">{item.icon}</span>}
+              {item.icon && (
+                <span className="w-4 h-4 flex-shrink-0" aria-hidden="true">
+                  {item.icon}
+                </span>
+              )}
               <span>{item.label}</span>
             </button>
           ))}

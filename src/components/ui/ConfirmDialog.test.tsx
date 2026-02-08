@@ -68,13 +68,7 @@ describe('ConfirmDialog', () => {
     })
 
     it('should display both custom button texts', () => {
-      render(
-        <ConfirmDialog
-          {...defaultProps}
-          confirmText="Yes, Delete"
-          cancelText="No, Keep"
-        />
-      )
+      render(<ConfirmDialog {...defaultProps} confirmText="Yes, Delete" cancelText="No, Keep" />)
       expect(screen.getByTestId('confirm-dialog-confirm')).toHaveTextContent('Yes, Delete')
       expect(screen.getByTestId('confirm-dialog-cancel')).toHaveTextContent('No, Keep')
     })

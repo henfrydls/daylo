@@ -11,19 +11,26 @@ interface ActivityFormProps {
   activity?: Activity
 }
 
-export const ActivityForm = memo(function ActivityForm({ isOpen, onClose, activity }: ActivityFormProps) {
+export const ActivityForm = memo(function ActivityForm({
+  isOpen,
+  onClose,
+  activity,
+}: ActivityFormProps) {
   const [name, setName] = useState('')
   const [color, setColor] = useState<string>(ACTIVITY_COLORS[0].value)
   const [logForDate, setLogForDate] = useState(false)
   const [selectedDate, setSelectedDate] = useState(formatDate(new Date()))
 
   // Sync form state with activity prop when modal opens or activity changes
+  // This is a valid pattern for controlled form initialization
   useEffect(() => {
     if (isOpen) {
+      /* eslint-disable react-hooks/set-state-in-effect */
       setName(activity?.name || '')
       setColor(activity?.color || ACTIVITY_COLORS[0].value)
       setLogForDate(false)
       setSelectedDate(formatDate(new Date()))
+      /* eslint-enable react-hooks/set-state-in-effect */
     }
   }, [isOpen, activity])
 
@@ -34,33 +41,47 @@ export const ActivityForm = memo(function ActivityForm({ isOpen, onClose, activi
 
   const isEditing = Boolean(activity)
 
-  const handleSubmit = useCallback((e: React.FormEvent): void => {
-    e.preventDefault()
-    if (!name.trim()) return
+  const handleSubmit = useCallback(
+    (e: React.FormEvent): void => {
+      e.preventDefault()
+      if (!name.trim()) return
 
-    if (isEditing && activity) {
-      updateActivity(activity.id, { name: name.trim(), color })
-    } else {
-      // Create the activity
-      addActivity(name.trim(), color)
+      if (isEditing && activity) {
+        updateActivity(activity.id, { name: name.trim(), color })
+      } else {
+        // Create the activity
+        addActivity(name.trim(), color)
 
-      // If logForDate is enabled, log for the selected date
-      if (logForDate) {
-        // Get the newly created activity (it's the last one in the array after addActivity)
-        const newActivity = useCalendarStore.getState().activities.at(-1)
-        if (newActivity) {
-          toggleLog(newActivity.id, selectedDate)
+        // If logForDate is enabled, log for the selected date
+        if (logForDate) {
+          // Get the newly created activity (it's the last one in the array after addActivity)
+          const newActivity = useCalendarStore.getState().activities.at(-1)
+          if (newActivity) {
+            toggleLog(newActivity.id, selectedDate)
+          }
         }
       }
-    }
 
-    // Reset form state
-    setName('')
-    setColor(ACTIVITY_COLORS[0].value)
-    setLogForDate(false)
-    setSelectedDate(formatDate(new Date()))
-    onClose()
-  }, [name, color, isEditing, activity, logForDate, selectedDate, addActivity, updateActivity, toggleLog, onClose])
+      // Reset form state
+      setName('')
+      setColor(ACTIVITY_COLORS[0].value)
+      setLogForDate(false)
+      setSelectedDate(formatDate(new Date()))
+      onClose()
+    },
+    [
+      name,
+      color,
+      isEditing,
+      activity,
+      logForDate,
+      selectedDate,
+      addActivity,
+      updateActivity,
+      toggleLog,
+      onClose,
+    ]
+  )
 
   const handleClose = useCallback((): void => {
     setName(activity?.name || '')

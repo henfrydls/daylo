@@ -66,9 +66,12 @@ export const ToastContainer = memo(function ToastContainer() {
   const toasts = useToastStore(useShallow((state) => state.toasts))
   const removeToast = useToastStore((state) => state.removeToast)
 
-  const handleClose = useCallback((id: string) => {
-    removeToast(id)
-  }, [removeToast])
+  const handleClose = useCallback(
+    (id: string) => {
+      removeToast(id)
+    },
+    [removeToast]
+  )
 
   if (toasts.length === 0) return null
 
@@ -85,4 +88,5 @@ export const ToastContainer = memo(function ToastContainer() {
 })
 
 // Re-export the hook for convenience
+// eslint-disable-next-line react-refresh/only-export-components
 export { useToast } from '../../store/toast'

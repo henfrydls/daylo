@@ -44,10 +44,7 @@ export const YearView = memo(function YearView() {
 
   // Build day data map using the pre-computed index - O(365) with O(1) lookups
   const dayDataMap = useMemo(() => {
-    const map = new Map<
-      string,
-      { completedCount: number; level: 0 | 1 | 2 | 3 | 4 }
-    >()
+    const map = new Map<string, { completedCount: number; level: 0 | 1 | 2 | 3 | 4 }>()
     const totalActivities = activities.length
 
     yearDays.forEach((date) => {
@@ -62,12 +59,21 @@ export const YearView = memo(function YearView() {
 
   // Memoize completed logs count to avoid filtering in render
   const completedLogsCount = useMemo(() => {
-    return logs.filter(l => l.completed).length
+    return logs.filter((l) => l.completed).length
   }, [logs])
 
-  const handlePrevYear = useCallback(() => setSelectedYear(selectedYear - 1), [setSelectedYear, selectedYear])
-  const handleNextYear = useCallback(() => setSelectedYear(selectedYear + 1), [setSelectedYear, selectedYear])
-  const handleCurrentYear = useCallback(() => setSelectedYear(new Date().getFullYear()), [setSelectedYear])
+  const handlePrevYear = useCallback(
+    () => setSelectedYear(selectedYear - 1),
+    [setSelectedYear, selectedYear]
+  )
+  const handleNextYear = useCallback(
+    () => setSelectedYear(selectedYear + 1),
+    [setSelectedYear, selectedYear]
+  )
+  const handleCurrentYear = useCallback(
+    () => setSelectedYear(new Date().getFullYear()),
+    [setSelectedYear]
+  )
 
   // Group days by month with exactly 6 weeks (42 cells) per month for consistent layout
   const monthsData = useMemo(() => {
@@ -125,8 +131,19 @@ export const YearView = memo(function YearView() {
               className="p-2 rounded-lg text-gray-500 hover:bg-gray-100 hover:text-gray-700 transition-colors focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:ring-offset-1"
               aria-label="Previous year"
             >
-              <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+              <svg
+                className="w-5 h-5"
+                fill="none"
+                viewBox="0 0 24 24"
+                stroke="currentColor"
+                aria-hidden="true"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M15 19l-7-7 7-7"
+                />
               </svg>
             </button>
             <button
@@ -134,8 +151,19 @@ export const YearView = memo(function YearView() {
               className="p-2 rounded-lg text-gray-500 hover:bg-gray-100 hover:text-gray-700 transition-colors focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:ring-offset-1"
               aria-label="Next year"
             >
-              <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+              <svg
+                className="w-5 h-5"
+                fill="none"
+                viewBox="0 0 24 24"
+                stroke="currentColor"
+                aria-hidden="true"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M9 5l7 7-7 7"
+                />
               </svg>
             </button>
             <button
@@ -149,16 +177,44 @@ export const YearView = memo(function YearView() {
         </div>
 
         {/* Legend */}
-        <div className="flex items-center gap-3 text-sm text-gray-500" role="group" aria-label="Activity level legend">
-          <span className="font-medium" id="legend-less">Less</span>
+        <div
+          className="flex items-center gap-3 text-sm text-gray-500"
+          role="group"
+          aria-label="Activity level legend"
+        >
+          <span className="font-medium" id="legend-less">
+            Less
+          </span>
           <div className="flex gap-1" role="list" aria-labelledby="legend-less legend-more">
-            <div className="w-[14px] h-[14px] rounded-sm bg-gray-100 border border-gray-200" role="listitem" aria-label="No activity: 0%" />
-            <div className="w-[14px] h-[14px] rounded-sm bg-emerald-100" role="listitem" aria-label="Low activity: 1-25%" />
-            <div className="w-[14px] h-[14px] rounded-sm bg-emerald-300" role="listitem" aria-label="Medium activity: 26-50%" />
-            <div className="w-[14px] h-[14px] rounded-sm bg-emerald-400" role="listitem" aria-label="High activity: 51-75%" />
-            <div className="w-[14px] h-[14px] rounded-sm bg-emerald-500" role="listitem" aria-label="Very high activity: 76-100%" />
+            <div
+              className="w-[14px] h-[14px] rounded-sm bg-gray-100 border border-gray-200"
+              role="listitem"
+              aria-label="No activity: 0%"
+            />
+            <div
+              className="w-[14px] h-[14px] rounded-sm bg-emerald-100"
+              role="listitem"
+              aria-label="Low activity: 1-25%"
+            />
+            <div
+              className="w-[14px] h-[14px] rounded-sm bg-emerald-300"
+              role="listitem"
+              aria-label="Medium activity: 26-50%"
+            />
+            <div
+              className="w-[14px] h-[14px] rounded-sm bg-emerald-400"
+              role="listitem"
+              aria-label="High activity: 51-75%"
+            />
+            <div
+              className="w-[14px] h-[14px] rounded-sm bg-emerald-500"
+              role="listitem"
+              aria-label="Very high activity: 76-100%"
+            />
           </div>
-          <span className="font-medium" id="legend-more">More</span>
+          <span className="font-medium" id="legend-more">
+            More
+          </span>
         </div>
       </div>
 
@@ -212,7 +268,10 @@ export const YearView = memo(function YearView() {
                           )
                         }
                         const dateStr = formatDate(date)
-                        const dayData = dayDataMap.get(dateStr) || { completedCount: 0, level: 0 as const }
+                        const dayData = dayDataMap.get(dateStr) || {
+                          completedCount: 0,
+                          level: 0 as const,
+                        }
                         return (
                           <DayCell
                             key={dateStr}
@@ -236,10 +295,12 @@ export const YearView = memo(function YearView() {
         <div className="mt-8 pt-6 border-t border-gray-100">
           <div className="flex flex-wrap gap-6 text-sm text-gray-500">
             <div>
-              <span className="font-medium text-gray-700">{activities.length}</span> activities tracked
+              <span className="font-medium text-gray-700">{activities.length}</span> activities
+              tracked
             </div>
             <div>
-              <span className="font-medium text-gray-700">{completedLogsCount}</span> completions this year
+              <span className="font-medium text-gray-700">{completedLogsCount}</span> completions
+              this year
             </div>
           </div>
         </div>

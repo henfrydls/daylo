@@ -9,7 +9,6 @@ import {
   generateExportFilename,
   mergeData,
   type ExportData,
-  type ValidationResult,
 } from './dataExport'
 import type { Activity, ActivityLog } from '../types'
 
@@ -458,7 +457,10 @@ describe('dataExport utility functions', () => {
       })
 
       it('should return error for activity with HTML in id', () => {
-        const data = { activities: [createValidActivity({ id: '<script>test</script>' })], logs: [] }
+        const data = {
+          activities: [createValidActivity({ id: '<script>test</script>' })],
+          logs: [],
+        }
 
         const result = validateImportDataWithErrors(data)
 
@@ -815,9 +817,7 @@ describe('dataExport utility functions', () => {
     })
 
     it('should remove standalone angle brackets', () => {
-      const exportData = createValidExportData([
-        createValidActivity({ name: 'Test < > value' }),
-      ])
+      const exportData = createValidExportData([createValidActivity({ name: 'Test < > value' })])
       const content = JSON.stringify(exportData)
 
       const result = parseImportFileWithValidation(content)
@@ -951,10 +951,7 @@ describe('dataExport utility functions', () => {
     })
 
     it('should add all imported data when no duplicates', () => {
-      const imported = [
-        createValidActivity({ id: 'act-1' }),
-        createValidActivity({ id: 'act-2' }),
-      ]
+      const imported = [createValidActivity({ id: 'act-1' }), createValidActivity({ id: 'act-2' })]
       const importedLogs = [createValidLog({ id: 'log-1' }), createValidLog({ id: 'log-2' })]
 
       const result = mergeData([], [], imported, importedLogs)
@@ -974,14 +971,8 @@ describe('dataExport utility functions', () => {
     })
 
     it('should handle all duplicates', () => {
-      const existing = [
-        createValidActivity({ id: 'act-1' }),
-        createValidActivity({ id: 'act-2' }),
-      ]
-      const imported = [
-        createValidActivity({ id: 'act-1' }),
-        createValidActivity({ id: 'act-2' }),
-      ]
+      const existing = [createValidActivity({ id: 'act-1' }), createValidActivity({ id: 'act-2' })]
+      const imported = [createValidActivity({ id: 'act-1' }), createValidActivity({ id: 'act-2' })]
 
       const result = mergeData(existing, [], imported, [])
 

@@ -141,9 +141,7 @@ export const useCalendarStore = create<CalendarState>()(
       },
 
       toggleLog: (activityId, date) => {
-        const existingLog = get().logs.find(
-          (l) => l.activityId === activityId && l.date === date
-        )
+        const existingLog = get().logs.find((l) => l.activityId === activityId && l.date === date)
 
         if (existingLog) {
           set((state) => ({

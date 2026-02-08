@@ -32,12 +32,7 @@ function createIconProps(props: IconProps): SVGProps<SVGSVGElement> {
 export function XIcon(props: IconProps) {
   return (
     <svg {...createIconProps(props)}>
-      <path
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        strokeWidth={2}
-        d="M6 18L18 6M6 6l12 12"
-      />
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
     </svg>
   )
 }
@@ -46,12 +41,7 @@ export function XIcon(props: IconProps) {
 export function CheckIcon(props: IconProps) {
   return (
     <svg {...createIconProps(props)}>
-      <path
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        strokeWidth={2}
-        d="M5 13l4 4L19 7"
-      />
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
     </svg>
   )
 }
@@ -116,12 +106,7 @@ export function QuestionCircleIcon(props: IconProps) {
 export function ChevronLeftIcon(props: IconProps) {
   return (
     <svg {...createIconProps(props)}>
-      <path
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        strokeWidth={2}
-        d="M15 19l-7-7 7-7"
-      />
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
     </svg>
   )
 }
@@ -130,12 +115,7 @@ export function ChevronLeftIcon(props: IconProps) {
 export function ChevronRightIcon(props: IconProps) {
   return (
     <svg {...createIconProps(props)}>
-      <path
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        strokeWidth={2}
-        d="M9 5l7 7-7 7"
-      />
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
     </svg>
   )
 }
@@ -144,12 +124,7 @@ export function ChevronRightIcon(props: IconProps) {
 export function PlusIcon(props: IconProps) {
   return (
     <svg {...createIconProps(props)}>
-      <path
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        strokeWidth={2}
-        d="M12 4v16m8-8H4"
-      />
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
     </svg>
   )
 }

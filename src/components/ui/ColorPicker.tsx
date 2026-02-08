@@ -48,9 +48,7 @@ export const ColorPicker = memo(function ColorPicker({
 
   return (
     <fieldset className={className}>
-      <legend
-        className={label ? 'block text-sm font-medium text-gray-700 mb-2' : 'sr-only'}
-      >
+      <legend className={label ? 'block text-sm font-medium text-gray-700 mb-2' : 'sr-only'}>
         {label || 'Select color'}
       </legend>
       <div
@@ -78,9 +76,7 @@ export const ColorPicker = memo(function ColorPicker({
             aria-label={`${color.name} color`}
             aria-pressed={isSelected(color.value)}
             data-testid={
-              testIdPrefix
-                ? `${testIdPrefix}-${color.name.toLowerCase()}`
-                : 'color-option'
+              testIdPrefix ? `${testIdPrefix}-${color.name.toLowerCase()}` : 'color-option'
             }
           />
         ))}

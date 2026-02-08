@@ -48,18 +48,20 @@ export const QuickLog = memo(function QuickLog() {
     return ids
   }, [dayLogs])
 
-  const isActivityCompleted = useCallback((activityId: string): boolean => {
-    return completedActivityIds.has(activityId)
-  }, [completedActivityIds])
+  const isActivityCompleted = useCallback(
+    (activityId: string): boolean => {
+      return completedActivityIds.has(activityId)
+    },
+    [completedActivityIds]
+  )
 
-  const handleToggleLog = useCallback((activityId: string): void => {
-    if (!selectedDate) return
-    toggleLog(activityId, selectedDate)
-  }, [selectedDate, toggleLog])
-
-  if (!selectedDate) return null
-
-  const date = parseDateString(selectedDate)
+  const handleToggleLog = useCallback(
+    (activityId: string): void => {
+      if (!selectedDate) return
+      toggleLog(activityId, selectedDate)
+    },
+    [selectedDate, toggleLog]
+  )
 
   const handleStartCreating = useCallback((): void => {
     setIsCreating(true)
@@ -91,14 +93,22 @@ export const QuickLog = memo(function QuickLog() {
     setNewColor(ACTIVITY_COLORS[0].value)
   }, [newName, newColor, selectedDate, addActivity, toggleLog])
 
-  const handleKeyDown = useCallback((e: React.KeyboardEvent<HTMLInputElement>): void => {
-    if (e.key === 'Enter') {
-      e.preventDefault()
-      handleCreateActivity()
-    } else if (e.key === 'Escape') {
-      handleCancelCreating()
-    }
-  }, [handleCreateActivity, handleCancelCreating])
+  const handleKeyDown = useCallback(
+    (e: React.KeyboardEvent<HTMLInputElement>): void => {
+      if (e.key === 'Enter') {
+        e.preventDefault()
+        handleCreateActivity()
+      } else if (e.key === 'Escape') {
+        handleCancelCreating()
+      }
+    },
+    [handleCreateActivity, handleCancelCreating]
+  )
+
+  // Early return after all hooks
+  if (!selectedDate) return null
+
+  const date = parseDateString(selectedDate)
 
   const renderActivityList = () => (
     <div className="space-y-2 sm:space-y-3">
@@ -139,7 +149,9 @@ export const QuickLog = memo(function QuickLog() {
       {isCreating ? (
         <div className="p-3 border-2 border-dashed border-gray-200 rounded-lg space-y-3">
           <div>
-            <label htmlFor="quicklog-activity-name" className="sr-only">Activity name</label>
+            <label htmlFor="quicklog-activity-name" className="sr-only">
+              Activity name
+            </label>
             <input
               id="quicklog-activity-name"
               ref={nameInputRef}
@@ -197,7 +209,9 @@ export const QuickLog = memo(function QuickLog() {
       {isCreating ? (
         <div className="p-3 border-2 border-dashed border-gray-200 rounded-lg space-y-3">
           <div>
-            <label htmlFor="quicklog-empty-activity-name" className="sr-only">Activity name</label>
+            <label htmlFor="quicklog-empty-activity-name" className="sr-only">
+              Activity name
+            </label>
             <input
               id="quicklog-empty-activity-name"
               ref={nameInputRef}
@@ -268,7 +282,9 @@ export const QuickLog = memo(function QuickLog() {
         data-testid="quicklog-modal"
       >
         <div className="flex items-center justify-between mb-4">
-          <h2 id="quicklog-title" className="text-base sm:text-lg font-semibold text-gray-900">{formatDisplayDate(date)}</h2>
+          <h2 id="quicklog-title" className="text-base sm:text-lg font-semibold text-gray-900">
+            {formatDisplayDate(date)}
+          </h2>
           <button
             onClick={() => setSelectedDate(null)}
             className="p-2.5 sm:p-1 rounded-lg text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition-colors focus:outline-none focus:ring-2 focus:ring-emerald-500 min-h-[44px] min-w-[44px] sm:min-h-0 sm:min-w-0 flex items-center justify-center"
@@ -281,7 +297,11 @@ export const QuickLog = memo(function QuickLog() {
         {activities.length === 0 ? renderEmptyState() : renderActivityList()}
 
         <div className="mt-4 sm:mt-6 flex justify-end">
-          <Button onClick={() => setSelectedDate(null)} data-testid="quicklog-done-button" className="min-h-[44px] sm:min-h-0 w-full sm:w-auto">
+          <Button
+            onClick={() => setSelectedDate(null)}
+            data-testid="quicklog-done-button"
+            className="min-h-[44px] sm:min-h-0 w-full sm:w-auto"
+          >
             Done
           </Button>
         </div>

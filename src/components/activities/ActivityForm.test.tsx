@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { render, screen, fireEvent, waitFor } from '@testing-library/react'
+import { render, screen, fireEvent } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { ActivityForm } from './ActivityForm'
 import { useCalendarStore } from '../../store'
@@ -43,9 +43,10 @@ describe('ActivityForm', () => {
     })
 
     // Mock getState for the toggleLog functionality
-    ;(useCalendarStore as unknown as { getState: () => { activities: Activity[] } }).getState = () => ({
-      activities: [{ ...mockActivity, id: 'new-activity-id' }],
-    })
+    ;(useCalendarStore as unknown as { getState: () => { activities: Activity[] } }).getState =
+      () => ({
+        activities: [{ ...mockActivity, id: 'new-activity-id' }],
+      })
   })
 
   describe('Rendering', () => {
@@ -243,7 +244,6 @@ describe('ActivityForm', () => {
     })
 
     it('should not submit form when name is empty', async () => {
-      const user = userEvent.setup()
       const onClose = vi.fn()
       render(<ActivityForm isOpen={true} onClose={onClose} />)
 

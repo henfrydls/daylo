@@ -42,12 +42,18 @@ export const useToastStore = create<ToastState>((set) => ({
 export function useToast() {
   const addToast = useToastStore((state) => state.addToast)
 
-  const showToast = useCallback((message: string, variant: Toast['variant'] = 'info') => {
-    addToast(message, variant)
-  }, [addToast])
+  const showToast = useCallback(
+    (message: string, variant: Toast['variant'] = 'info') => {
+      addToast(message, variant)
+    },
+    [addToast]
+  )
 
   // Return a stable object reference
-  return useMemo(() => ({
-    showToast,
-  }), [showToast])
+  return useMemo(
+    () => ({
+      showToast,
+    }),
+    [showToast]
+  )
 }

@@ -76,7 +76,9 @@ export function ImportModal({ isOpen, onClose }: ImportModalProps) {
           // Store all errors for detailed display
           setValidationErrors(result.errors)
         } else {
-          setError('Invalid file format. Please ensure the file was exported from Activity Tracker.')
+          setError(
+            'Invalid file format. Please ensure the file was exported from Activity Tracker.'
+          )
         }
         return
       }
