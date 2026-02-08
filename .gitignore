@@ -38,3 +38,4 @@ src-tauri/target/
 # Local storage backup
 *.sqlite
 *.db
+nul
