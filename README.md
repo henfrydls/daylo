@@ -7,6 +7,25 @@
   Track daily habits, visualize progress with a heatmap, and stay on top of your goals — all locally, no account required.
 </p>
 
+<p align="center">
+  <a href="#installation">Install</a> &nbsp;&middot;&nbsp;
+  <a href="#features">Features</a> &nbsp;&middot;&nbsp;
+  <a href="#screenshots">Screenshots</a> &nbsp;&middot;&nbsp;
+  <a href="#tech-stack">Tech Stack</a>
+</p>
+
+<p align="center">
+  <img src="docs/daylo-year-view.png" alt="Daylo — Year View" width="100%" />
+</p>
+
+## Installation
+
+Daylo runs entirely on your device — no account, no cloud, no tracking.
+
+- **[Desktop app](#desktop-app)** (Windows, macOS, Linux) — Download from GitHub Releases
+- **[Docker](#docker)** — Self-hosted via `docker compose`
+- **[From source](#from-source)** — Clone and build
+
 ## Features
 
 - **Annual heatmap view** — See your entire year at a glance with a 5-level color heatmap
@@ -15,14 +34,22 @@
 - **Activity management** — Create, edit, and delete activities with custom colors
 - **Statistics** — Current streak, longest streak, monthly completion rate
 - **Export/Import** — Back up your data as JSON or CSV, restore from backup
-- **Offline-first** — All data stays on your device (localStorage), works 100% offline
+- **Offline-first** — All data stays on your device, works 100% offline
 - **Cross-platform** — Runs as a desktop app (Windows, macOS, Linux) or in the browser
 
 ## Screenshots
 
-| Year View | Month View |
-|:---------:|:----------:|
-| ![Year View](docs/daylo-year-view.png) | ![Month View](docs/daylo-month-view.png) |
+<p align="center">
+  <img src="docs/daylo-year-view.png" alt="Year View — Annual heatmap calendar" width="100%" />
+</p>
+<p align="center"><sub>Year View — See your entire year at a glance</sub></p>
+
+<br/>
+
+<p align="center">
+  <img src="docs/daylo-month-view.png" alt="Month View — Detailed monthly calendar" width="100%" />
+</p>
+<p align="center"><sub>Month View — Drill down into any month</sub></p>
 
 ## Tech Stack
 
@@ -35,11 +62,9 @@
 | Testing | Vitest + Testing Library (unit), Playwright (E2E) |
 | CI/CD | GitHub Actions |
 
-## Installation
+---
 
-There are several ways to run Daylo depending on your needs.
-
-### Option 1: Desktop App (Recommended)
+### Desktop App
 
 Download the latest release for your platform from the [Releases](../../releases) page:
 
@@ -53,7 +78,7 @@ Download the latest release for your platform from the [Releases](../../releases
 
 Just install and open — no setup, no accounts, no internet required.
 
-### Option 2: Docker
+### Docker
 
 Run Daylo as a local web service with a single command. Requires [Docker](https://docs.docker.com/get-docker/).
 
@@ -63,7 +88,7 @@ docker compose up -d
 
 Open `http://localhost:3000` in your browser.
 
-### Option 3: From Source
+### From Source
 
 Requires [Node.js](https://nodejs.org/) 20+.
 
@@ -84,7 +109,10 @@ npm run tauri:build
 
 The installer will be generated in `src-tauri/target/release/bundle/`.
 
-## Development
+<details>
+<summary><strong>Development & Testing</strong></summary>
+
+#### Development
 
 ```bash
 npm run dev          # Start dev server (browser)
@@ -95,7 +123,7 @@ npm run lint         # Run ESLint
 npm run preview      # Preview production build locally
 ```
 
-### Testing
+#### Testing
 
 ```bash
 npm test              # Unit tests (watch mode)
@@ -104,6 +132,8 @@ npm run test:coverage # Unit tests with coverage report
 npm run test:e2e      # E2E tests (Playwright)
 npm run test:e2e:ui   # E2E tests with interactive UI
 ```
+
+</details>
 
 ## Project Structure
 
