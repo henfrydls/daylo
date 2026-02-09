@@ -14,7 +14,7 @@ interface ModalProps {
 export function Modal({ isOpen, onClose, title, children, 'data-testid': testId }: ModalProps) {
   const modalRef = useRef<HTMLDivElement>(null)
 
-  useFocusTrap(modalRef, isOpen, { onEscape: onClose })
+  useFocusTrap(modalRef, isOpen, { onEscape: onClose, autoFocus: false })
 
   if (!isOpen) return null
 

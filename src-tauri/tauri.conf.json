@@ -37,6 +37,7 @@
       "icons/icon.ico"
     ],
     "resources": [],
+    "publisher": "DLSLabs",
     "windows": {
       "certificateThumbprint": null,
       "digestAlgorithm": "sha256",
