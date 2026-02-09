@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="docs/daylo-banner.png" alt="Daylo" width="600" />
+  <img src="docs/daylo-banner.png" alt="Daylo" width="450" />
 </p>
 
 <p align="center">
