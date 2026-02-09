@@ -1,0 +1,9 @@
+node_modules
+dist
+src-tauri/target
+coverage
+playwright-report
+test-results
+.git
+.claude
+*.md
