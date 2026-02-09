@@ -37,13 +37,16 @@ export function useFocusTrap(
       previousActiveElement.current = document.activeElement as HTMLElement
     }
 
+    // Capture container node for cleanup (React hooks/exhaustive-deps rule)
+    const container = containerRef.current
+
     // Lock body scroll
     document.body.style.overflow = 'hidden'
 
     // Auto-focus the first focusable element
-    if (autoFocus && containerRef.current) {
+    if (autoFocus && container) {
       setTimeout(() => {
-        const firstFocusable = containerRef.current?.querySelector<HTMLElement>(FOCUSABLE_SELECTOR)
+        const firstFocusable = container?.querySelector<HTMLElement>(FOCUSABLE_SELECTOR)
         firstFocusable?.focus()
       }, 0)
     }
@@ -54,7 +57,11 @@ export function useFocusTrap(
 
       // Restore focus only on keyboard-driven close (focus still inside container)
       // Mouse clicks on backdrop/Done move focus outside, so skip restoration
-      if (restoreFocus && previousActiveElement.current && containerRef.current?.contains(document.activeElement)) {
+      if (
+        restoreFocus &&
+        previousActiveElement.current &&
+        container?.contains(document.activeElement)
+      ) {
         previousActiveElement.current.focus()
       }
     }
