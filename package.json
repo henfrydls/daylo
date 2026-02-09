@@ -1,9 +1,28 @@
 {
-  "name": "simple-calendar",
+  "name": "daylo",
   "private": true,
   "version": "1.0.0",
   "type": "module",
-  "description": "Activity Tracker with GitHub-style contribution calendar",
+  "description": "A personal activity tracker with a GitHub-style contribution calendar",
+  "author": "Henfry De Los Santos",
+  "license": "PolyForm-Noncommercial-1.0.0",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/henfrydls/daylo.git"
+  },
+  "homepage": "https://github.com/henfrydls/daylo#readme",
+  "bugs": {
+    "url": "https://github.com/henfrydls/daylo/issues"
+  },
+  "keywords": [
+    "activity-tracker",
+    "habit-tracker",
+    "calendar",
+    "heatmap",
+    "tauri",
+    "react",
+    "offline-first"
+  ],
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
@@ -15,7 +34,8 @@
     "test:e2e": "playwright test",
     "test:e2e:ui": "playwright test --ui",
     "tauri:dev": "tauri dev",
-    "tauri:build": "tauri build"
+    "tauri:build": "tauri build",
+    "version": "node scripts/sync-version.js && git add src-tauri/Cargo.toml"
   },
   "dependencies": {
     "date-fns": "^4.1.0",
