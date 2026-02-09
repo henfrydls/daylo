@@ -21,6 +21,7 @@ export const YearView = memo(function YearView() {
   const selectedYear = useCalendarStore((state) => state.selectedYear)
   const activities = useCalendarStore(useShallow((state) => state.activities))
   const logs = useCalendarStore(useShallow((state) => state.logs))
+  const selectedDate = useCalendarStore((state) => state.selectedDate)
   const setSelectedDate = useCalendarStore((state) => state.setSelectedDate)
   const setSelectedYear = useCalendarStore((state) => state.setSelectedYear)
   const navigateToMonth = useCalendarStore((state) => state.navigateToMonth)
@@ -279,6 +280,7 @@ export const YearView = memo(function YearView() {
                             level={dayData.level}
                             completedCount={dayData.completedCount}
                             totalActivities={activities.length}
+                            isSelected={dateStr === selectedDate}
                             onClick={() => setSelectedDate(dateStr)}
                           />
                         )

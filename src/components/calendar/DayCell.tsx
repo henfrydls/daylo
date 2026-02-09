@@ -9,6 +9,7 @@ interface DayCellProps {
   level: HeatmapLevel
   completedCount: number
   totalActivities: number
+  isSelected?: boolean
   onClick: () => void
 }
 
@@ -17,6 +18,7 @@ export const DayCell = memo(function DayCell({
   level,
   completedCount,
   totalActivities,
+  isSelected,
   onClick,
 }: DayCellProps) {
   const isCurrentDay = checkIsToday(date)
@@ -46,13 +48,15 @@ export const DayCell = memo(function DayCell({
           rounded-sm
           transition-all duration-150 ease-in-out
           hover:ring-2 hover:ring-offset-1 hover:ring-gray-400 hover:scale-110 hover:z-20
-          focus:outline-none focus:ring-2 focus:ring-offset-1 focus:ring-blue-500 focus:z-20
+          focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-1 focus-visible:ring-emerald-500 focus-visible:z-20
           active:scale-95
           ${heatmapClass}
           ${
-            isCurrentDay
-              ? 'ring-2 ring-offset-1 ring-blue-500 shadow-md shadow-blue-500/30 z-10'
-              : 'border border-transparent hover:border-gray-300'
+            isSelected
+              ? 'ring-2 ring-offset-1 ring-emerald-500 z-20'
+              : isCurrentDay
+                ? 'ring-2 ring-offset-1 ring-blue-500 shadow-md shadow-blue-500/30 z-10'
+                : 'border border-transparent hover:border-gray-300'
           }
           ${level === 0 ? 'border border-gray-200' : ''}
         `}

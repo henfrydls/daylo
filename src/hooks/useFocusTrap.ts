@@ -52,8 +52,9 @@ export function useFocusTrap(
       // Restore body scroll
       document.body.style.overflow = 'unset'
 
-      // Restore focus to the previously focused element
-      if (restoreFocus && previousActiveElement.current) {
+      // Restore focus only on keyboard-driven close (focus still inside container)
+      // Mouse clicks on backdrop/Done move focus outside, so skip restoration
+      if (restoreFocus && previousActiveElement.current && containerRef.current?.contains(document.activeElement)) {
         previousActiveElement.current.focus()
       }
     }

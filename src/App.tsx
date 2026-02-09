@@ -138,7 +138,6 @@ function App() {
                 data-testid="app-header"
               >
                 <div className="flex items-center gap-3">
-                  <img src="/favicon.svg" alt="Daylo logo" className="w-8 h-8 rounded-lg" />
                   <h1 className="text-lg sm:text-xl font-semibold text-gray-900">
                     Daylo
                     <span className="hidden md:inline text-sm font-normal text-gray-400 ml-2">

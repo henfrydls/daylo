@@ -70,6 +70,7 @@ export const MonthView = memo(function MonthView() {
   const selectedMonth = useCalendarStore((state) => state.selectedMonth)
   const setSelectedMonth = useCalendarStore((state) => state.setSelectedMonth)
   const setSelectedYear = useCalendarStore((state) => state.setSelectedYear)
+  const selectedDate = useCalendarStore((state) => state.selectedDate)
   const setSelectedDate = useCalendarStore((state) => state.setSelectedDate)
   const activities = useCalendarStore(useShallow((state) => state.activities))
   const logs = useCalendarStore(useShallow((state) => state.logs))
@@ -217,16 +218,18 @@ export const MonthView = memo(function MonthView() {
             const isLastRow = index >= 35
             const isLastColumn = (index + 1) % 7 === 0
 
+            const isSelected = day.dateStr === selectedDate
+
             return (
               <button
                 key={day.dateStr}
                 onClick={() => handleDayClick(day.dateStr)}
                 className={`
                   relative min-h-[60px] sm:min-h-[80px] p-1.5 sm:p-2 text-left transition-colors
-                  hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-inset focus:ring-emerald-500
+                  hover:bg-gray-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-emerald-500
                   ${!isLastRow ? 'border-b border-gray-200' : ''}
                   ${!isLastColumn ? 'border-r border-gray-200' : ''}
-                  ${day.isCurrentMonth ? 'bg-white' : 'bg-gray-50'}
+                  ${isSelected ? 'bg-emerald-50 ring-2 ring-inset ring-emerald-500' : day.isCurrentMonth ? 'bg-white' : 'bg-gray-50'}
                 `}
                 aria-label={`${day.dateStr}, ${day.logs.length} activities completed`}
               >
