@@ -1,6 +1,9 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { renderHook, waitFor } from '@testing-library/react'
 import { useAppVersion } from './useAppVersion'
+import pkg from '../../package.json'
+
+const PACKAGE_VERSION = pkg.version
 
 describe('useAppVersion', () => {
   beforeEach(() => {
@@ -16,7 +19,7 @@ describe('useAppVersion', () => {
 
     // The __APP_VERSION__ is defined in vite.config.ts and injected at build time
     // In tests, it should be the version from package.json (1.0.0)
-    expect(result.current).toBe('1.0.0')
+    expect(result.current).toBe(PACKAGE_VERSION)
   })
 
   it('should use Tauri version when available', async () => {
@@ -46,12 +49,12 @@ describe('useAppVersion', () => {
     const { result } = renderHook(() => useAppVersionMocked())
 
     // The version should remain the package.json version
-    expect(result.current).toBe('1.0.0')
+    expect(result.current).toBe(PACKAGE_VERSION)
 
     // Wait a bit to ensure async operation completes
     await new Promise((resolve) => setTimeout(resolve, 100))
 
     // Should still be the fallback version
-    expect(result.current).toBe('1.0.0')
+    expect(result.current).toBe(PACKAGE_VERSION)
   })
 })
