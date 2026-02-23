@@ -4,6 +4,7 @@ import { ActivityList, QuickLog } from './components/activities'
 import { StatsPanel } from './components/stats'
 import { DropdownMenu, ErrorBoundary, ToastContainer } from './components/ui'
 import type { DropdownMenuItem } from './components/ui'
+import { AppSkeleton } from './components/skeletons'
 import { useCalendarStore } from './store'
 import { useAppVersion } from './hooks'
 
@@ -65,10 +66,15 @@ function ViewToggle() {
 }
 
 function App() {
+  const hasHydrated = useCalendarStore((state) => state._hasHydrated)
   const { selectedDate, currentView } = useCalendarStore()
   const [isExportOpen, setIsExportOpen] = useState(false)
   const [isImportOpen, setIsImportOpen] = useState(false)
   const appVersion = useAppVersion()
+
+  if (!hasHydrated) {
+    return <AppSkeleton />
+  }
 
   const menuItems: DropdownMenuItem[] = [
     {

@@ -77,6 +77,7 @@ interface CalendarState {
   selectedDate: string | null
   currentView: ViewType
   selectedMonth: number
+  _hasHydrated: boolean
 
   // Activity actions
   addActivity: (name: string, color: string) => void
@@ -94,6 +95,9 @@ interface CalendarState {
   setSelectedMonth: (month: number) => void
   navigateToMonth: (year: number, month: number) => void
 
+  // Hydration
+  setHasHydrated: (value: boolean) => void
+
   // Helpers
   getLogsForDate: (date: string) => ActivityLog[]
   getLogsForActivity: (activityId: string) => ActivityLog[]
@@ -108,6 +112,9 @@ export const useCalendarStore = create<CalendarState>()(
       selectedDate: null,
       currentView: 'year' as ViewType,
       selectedMonth: new Date().getMonth(),
+      _hasHydrated: false,
+
+      setHasHydrated: (value: boolean) => set({ _hasHydrated: value }),
 
       addActivity: (name, color) => {
         const now = new Date().toISOString()
@@ -187,6 +194,17 @@ export const useCalendarStore = create<CalendarState>()(
     {
       name: 'simple-calendar-storage',
       storage: createJSONStorage(() => createDeferredStorage()),
+      partialize: (state) => ({
+        activities: state.activities,
+        logs: state.logs,
+        selectedYear: state.selectedYear,
+        selectedDate: state.selectedDate,
+        currentView: state.currentView,
+        selectedMonth: state.selectedMonth,
+      }),
+      onRehydrateStorage: () => (state) => {
+        state?.setHasHydrated(true)
+      },
     }
   )
 )

@@ -116,6 +116,29 @@ describe('useCalendarStore', () => {
     })
   })
 
+  describe('hydration', () => {
+    it('should initialize _hasHydrated as false', () => {
+      useCalendarStore.setState({ _hasHydrated: false })
+      expect(useCalendarStore.getState()._hasHydrated).toBe(false)
+    })
+
+    it('should set _hasHydrated to true via setHasHydrated', () => {
+      useCalendarStore.setState({ _hasHydrated: false })
+      const { setHasHydrated } = useCalendarStore.getState()
+      setHasHydrated(true)
+
+      expect(useCalendarStore.getState()._hasHydrated).toBe(true)
+    })
+
+    it('should toggle _hasHydrated back to false', () => {
+      const { setHasHydrated } = useCalendarStore.getState()
+      setHasHydrated(true)
+      setHasHydrated(false)
+
+      expect(useCalendarStore.getState()._hasHydrated).toBe(false)
+    })
+  })
+
   describe('helpers', () => {
     it('should get logs for date', () => {
       const { addActivity, toggleLog } = useCalendarStore.getState()
