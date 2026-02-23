@@ -24,6 +24,22 @@ describe('YearView', () => {
     // Mock Date using Vitest's fake timers
     vi.useFakeTimers()
     vi.setSystemTime(MOCK_DATE)
+
+    // Mock matchMedia to simulate desktop viewport (>= 640px) so existing tests see the desktop layout
+    Object.defineProperty(window, 'matchMedia', {
+      writable: true,
+      configurable: true,
+      value: vi.fn().mockImplementation((query: string) => ({
+        matches: true, // >= 640px → desktop
+        media: query,
+        onchange: null,
+        addListener: vi.fn(),
+        removeListener: vi.fn(),
+        addEventListener: vi.fn(),
+        removeEventListener: vi.fn(),
+        dispatchEvent: vi.fn(),
+      })),
+    })
   })
 
   afterEach(() => {

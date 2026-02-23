@@ -1,8 +1,11 @@
-import { useMemo, useCallback, memo } from 'react'
+import { useMemo, useCallback, useState, memo } from 'react'
 import { DayCell } from './DayCell'
+import { MiniHeatmap } from './MiniHeatmap'
+import { MonthHeatmapDetail } from './MonthHeatmapDetail'
 import { useCalendarStore } from '../../store'
 import { getYearDays, formatDate } from '../../lib/dates'
 import { calculateHeatmapLevel } from '../../lib/colors'
+import { useMediaQuery } from '../../hooks/useMediaQuery'
 import { useShallow } from 'zustand/react/shallow'
 
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
@@ -25,6 +28,9 @@ export const YearView = memo(function YearView() {
   const setSelectedDate = useCalendarStore((state) => state.setSelectedDate)
   const setSelectedYear = useCalendarStore((state) => state.setSelectedYear)
   const navigateToMonth = useCalendarStore((state) => state.navigateToMonth)
+
+  const { isMobile } = useMediaQuery()
+  const [detailMonth, setDetailMonth] = useState(new Date().getMonth())
 
   const yearDays = useMemo(() => getYearDays(selectedYear), [selectedYear])
 
@@ -120,6 +126,103 @@ export const YearView = memo(function YearView() {
     return months
   }, [yearDays])
 
+  // --- Mobile Layout: MiniHeatmap + MonthHeatmapDetail ---
+  if (isMobile) {
+    return (
+      <div className="p-4 w-full">
+        {/* Year Navigation */}
+        <div className="flex items-center justify-between mb-6">
+          <div className="flex items-center gap-3">
+            <h1 className="text-2xl font-bold text-gray-900">{selectedYear}</h1>
+            <div className="flex items-center gap-1">
+              <button
+                onClick={handlePrevYear}
+                className="min-h-[44px] min-w-[44px] flex items-center justify-center rounded-lg text-gray-500 hover:bg-gray-100 hover:text-gray-700 transition-colors focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:ring-offset-1"
+                aria-label="Previous year"
+              >
+                <svg
+                  className="w-5 h-5"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  stroke="currentColor"
+                  aria-hidden="true"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M15 19l-7-7 7-7"
+                  />
+                </svg>
+              </button>
+              <button
+                onClick={handleNextYear}
+                className="min-h-[44px] min-w-[44px] flex items-center justify-center rounded-lg text-gray-500 hover:bg-gray-100 hover:text-gray-700 transition-colors focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:ring-offset-1"
+                aria-label="Next year"
+              >
+                <svg
+                  className="w-5 h-5"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  stroke="currentColor"
+                  aria-hidden="true"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M9 5l7 7-7 7"
+                  />
+                </svg>
+              </button>
+            </div>
+          </div>
+          <button
+            onClick={handleCurrentYear}
+            className="min-h-[44px] px-4 text-sm font-medium text-gray-600 hover:bg-gray-100 hover:text-gray-800 rounded-lg transition-colors border border-gray-200 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:ring-offset-1"
+            aria-label="Go to current year"
+          >
+            Today
+          </button>
+        </div>
+
+        {/* Mini Heatmap */}
+        <MiniHeatmap
+          year={selectedYear}
+          activities={activities}
+          logsByDate={logsByDate}
+          selectedMonth={detailMonth}
+          onMonthSelect={setDetailMonth}
+        />
+
+        {/* Month Detail */}
+        <MonthHeatmapDetail
+          year={selectedYear}
+          month={detailMonth}
+          activities={activities}
+          logsByDate={logsByDate}
+          onDateSelect={(dateStr) => setSelectedDate(dateStr)}
+          onMonthChange={setDetailMonth}
+        />
+
+        {/* Bottom Summary */}
+        <div className="mt-6 pt-4 border-t border-gray-100">
+          <div className="flex flex-wrap gap-4 text-sm text-gray-500">
+            <div>
+              <span className="font-medium text-gray-700">{activities.length}</span> activities
+              tracked
+            </div>
+            <div>
+              <span className="font-medium text-gray-700">{completedLogsCount}</span> completions
+              this year
+            </div>
+          </div>
+        </div>
+      </div>
+    )
+  }
+
+  // --- Desktop Layout (unchanged) ---
   return (
     <div className="p-4 sm:p-6 lg:p-8 w-full">
       {/* Year Navigation */}
