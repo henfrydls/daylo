@@ -25,8 +25,8 @@ export interface ColorPickerProps {
 }
 
 const sizeClasses = {
-  sm: 'w-6 h-6',
-  md: 'w-8 h-8',
+  sm: 'w-11 h-11 sm:w-6 sm:h-6',
+  md: 'w-11 h-11 sm:w-8 sm:h-8',
 }
 
 const hoverScales = {

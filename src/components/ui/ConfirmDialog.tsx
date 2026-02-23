@@ -138,7 +138,7 @@ export function ConfirmDialog({
         <div className="flex flex-col sm:flex-row gap-2 sm:gap-3">
           <Button
             variant="ghost"
-            className="flex-1 min-h-[44px] sm:min-h-0 order-2 sm:order-1"
+            className="flex-1 order-2 sm:order-1"
             onClick={onClose}
             data-testid="confirm-dialog-cancel"
           >

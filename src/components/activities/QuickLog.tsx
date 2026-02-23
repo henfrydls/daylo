@@ -161,7 +161,7 @@ export const QuickLog = memo(function QuickLog() {
               onKeyDown={handleKeyDown}
               placeholder="Activity name"
               aria-label="New activity name"
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent min-h-[44px] sm:min-h-0"
               data-testid="quicklog-new-activity-input"
             />
           </div>
@@ -194,7 +194,7 @@ export const QuickLog = memo(function QuickLog() {
       ) : (
         <button
           onClick={handleStartCreating}
-          className="flex items-center gap-2 w-full p-3 border-2 border-dashed border-gray-200 rounded-lg text-gray-500 hover:bg-gray-50 hover:border-gray-300 transition-colors focus:outline-none focus:ring-2 focus:ring-emerald-500"
+          className="flex items-center gap-2 w-full p-3 border-2 border-dashed border-gray-200 rounded-lg text-gray-500 hover:bg-gray-50 hover:border-gray-300 transition-colors focus:outline-none focus:ring-2 focus:ring-emerald-500 min-h-[48px] sm:min-h-0"
           data-testid="quicklog-new-activity-button"
         >
           <PlusIcon className="w-5 h-5" />
@@ -221,7 +221,7 @@ export const QuickLog = memo(function QuickLog() {
               onKeyDown={handleKeyDown}
               placeholder="Activity name"
               aria-label="New activity name"
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent min-h-[44px] sm:min-h-0"
               data-testid="quicklog-new-activity-input"
             />
           </div>
@@ -300,7 +300,7 @@ export const QuickLog = memo(function QuickLog() {
           <Button
             onClick={() => setSelectedDate(null)}
             data-testid="quicklog-done-button"
-            className="min-h-[44px] sm:min-h-0 w-full sm:w-auto"
+            className="w-full sm:w-auto"
           >
             Done
           </Button>

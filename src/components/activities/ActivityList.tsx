@@ -54,7 +54,6 @@ export const ActivityList = memo(function ActivityList() {
           size="sm"
           onClick={() => setIsFormOpen(true)}
           data-testid="add-activity-button"
-          className="min-h-[44px] sm:min-h-0"
         >
           + Add
         </Button>

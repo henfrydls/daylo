@@ -222,6 +222,7 @@ export function DropdownMenu({ trigger, items, 'data-testid': testId }: Dropdown
                   flex items-center gap-2
                   transition-colors duration-150
                   focus:outline-none focus:ring-2 focus:ring-inset focus:ring-emerald-500
+                  min-h-[44px] sm:min-h-0
                   ${
                     item.disabled
                       ? 'text-gray-400 cursor-not-allowed'
