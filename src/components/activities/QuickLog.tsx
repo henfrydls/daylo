@@ -3,7 +3,7 @@ import { useCalendarStore } from '../../store'
 import { formatDisplayDate, parseDateString } from '../../lib/dates'
 import { ACTIVITY_COLORS } from '../../lib/colors'
 import { Button, CheckIcon, ColorPicker, PlusIcon, XIcon } from '../ui'
-import { useFocusTrap } from '../../hooks'
+import { useFocusTrap, useAnimatedPresence } from '../../hooks'
 import { useShallow } from 'zustand/react/shallow'
 
 export const QuickLog = memo(function QuickLog() {
@@ -105,8 +105,11 @@ export const QuickLog = memo(function QuickLog() {
     [handleCreateActivity, handleCancelCreating]
   )
 
+  const isOpen = !!selectedDate
+  const { shouldRender, isVisible } = useAnimatedPresence(isOpen, 250)
+
   // Early return after all hooks
-  if (!selectedDate) return null
+  if (!shouldRender || !selectedDate) return null
 
   const date = parseDateString(selectedDate)
 
@@ -272,13 +275,17 @@ export const QuickLog = memo(function QuickLog() {
     >
       {/* Backdrop */}
       <div
-        className="absolute inset-0 bg-black/50"
+        className={`absolute inset-0 bg-black/50 transition-opacity duration-250 ${isVisible ? 'opacity-100' : 'opacity-0'}`}
         onClick={() => setSelectedDate(null)}
         aria-hidden="true"
       />
       <div
         ref={modalRef}
-        className="relative bg-white rounded-t-xl sm:rounded-xl shadow-xl max-w-md w-full mx-0 sm:mx-4 p-4 sm:p-6 max-h-[85vh] overflow-y-auto"
+        className={`relative bg-white rounded-t-xl sm:rounded-xl shadow-xl max-w-md w-full mx-0 sm:mx-4 p-4 sm:p-6 max-h-[85vh] overflow-y-auto transition-all duration-[250ms] ease-[cubic-bezier(0.32,0.72,0,1)] ${
+          isVisible
+            ? 'translate-y-0 opacity-100 sm:scale-100'
+            : 'translate-y-full opacity-0 sm:translate-y-0 sm:scale-95'
+        }`}
         data-testid="quicklog-modal"
       >
         <div className="flex items-center justify-between mb-4">
