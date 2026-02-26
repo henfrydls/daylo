@@ -1,6 +1,7 @@
 import { useMemo, useCallback, memo } from 'react'
 import { useCalendarStore } from '../../store'
 import { formatDate, formatMonthYear, checkIsToday } from '../../lib/dates'
+import { useMediaQuery } from '../../hooks/useMediaQuery'
 import type { Activity, ActivityLog } from '../../types'
 import { useShallow } from 'zustand/react/shallow'
 
@@ -72,8 +73,11 @@ export const MonthView = memo(function MonthView() {
   const setSelectedYear = useCalendarStore((state) => state.setSelectedYear)
   const selectedDate = useCalendarStore((state) => state.selectedDate)
   const setSelectedDate = useCalendarStore((state) => state.setSelectedDate)
+  const setCurrentView = useCalendarStore((state) => state.setCurrentView)
   const activities = useCalendarStore(useShallow((state) => state.activities))
   const logs = useCalendarStore(useShallow((state) => state.logs))
+
+  const { isMobile } = useMediaQuery()
 
   const monthDays = useMemo(
     () => getMonthDays(selectedYear, selectedMonth),
@@ -143,13 +147,24 @@ export const MonthView = memo(function MonthView() {
 
   const displayDate = new Date(selectedYear, selectedMonth, 1)
 
+  // Log Today bar data
+  const today = new Date()
+  const todayStr = formatDate(today)
+  const isCurrentMonth = selectedYear === today.getFullYear() && selectedMonth === today.getMonth()
+  const todayCompletedCount = logsMap.get(todayStr)?.length ?? 0
+
   return (
     <div className="p-3 sm:p-4 md:p-6">
       {/* Month Navigation */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 sm:gap-4 mb-4 sm:mb-6">
-        <h1 className="text-xl sm:text-2xl font-bold text-gray-900">
+        <button
+          onClick={() => setCurrentView('year')}
+          className="text-xl sm:text-2xl font-bold text-gray-900 hover:text-emerald-600 transition-colors focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:ring-offset-1 rounded-lg px-1 -mx-1"
+          aria-label={`Switch to year view for ${selectedYear}`}
+          data-testid="month-title-button"
+        >
           {formatMonthYear(displayDate)}
-        </h1>
+        </button>
         <div className="flex items-center gap-1">
           <button
             onClick={handlePrevMonth}
@@ -195,6 +210,37 @@ export const MonthView = memo(function MonthView() {
           </button>
         </div>
       </div>
+
+      {/* Log Today Bar - Mobile only, current month only */}
+      {isMobile && isCurrentMonth && activities.length > 0 && (
+        <button
+          onClick={() => handleDayClick(todayStr)}
+          className="w-full flex items-center justify-between p-3 mb-4 bg-emerald-50 border border-emerald-200 rounded-xl min-h-[44px] transition-colors hover:bg-emerald-100 active:bg-emerald-100"
+          data-testid="log-today-bar"
+          aria-label={`Log today: ${todayCompletedCount} of ${activities.length} activities completed`}
+        >
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 bg-emerald-500 text-white rounded-lg flex items-center justify-center font-bold text-sm">
+              {today.getDate()}
+            </div>
+            <div className="text-left">
+              <div className="text-sm font-semibold text-gray-900">Today</div>
+              <div className="text-xs text-gray-500">
+                {todayCompletedCount}/{activities.length} activities
+              </div>
+            </div>
+          </div>
+          <svg
+            className="w-5 h-5 text-gray-400"
+            fill="none"
+            viewBox="0 0 24 24"
+            stroke="currentColor"
+            aria-hidden="true"
+          >
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+          </svg>
+        </button>
+      )}
 
       {/* Calendar Grid */}
       <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
@@ -272,6 +318,15 @@ export const MonthView = memo(function MonthView() {
           })}
         </div>
       </div>
+
+      {/* Empty state */}
+      {activities.length === 0 && (
+        <div className="text-center py-6 px-4" data-testid="month-empty-state">
+          <p className="text-gray-500 text-sm">
+            No activities yet. Tap any day to create your first activity and start tracking.
+          </p>
+        </div>
+      )}
     </div>
   )
 })

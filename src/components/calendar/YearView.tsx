@@ -1,7 +1,8 @@
-import { useMemo, useCallback, useState, memo } from 'react'
+import { useMemo, useCallback, memo } from 'react'
 import { DayCell } from './DayCell'
-import { MiniHeatmap } from './MiniHeatmap'
-import { MonthHeatmapDetail } from './MonthHeatmapDetail'
+import { MonthCard } from './MonthCard'
+import { YearProgressBar } from './YearProgressBar'
+import { HeatmapLegend } from './HeatmapLegend'
 import { useCalendarStore } from '../../store'
 import { getYearDays, formatDate } from '../../lib/dates'
 import { calculateHeatmapLevel } from '../../lib/colors'
@@ -30,7 +31,6 @@ export const YearView = memo(function YearView() {
   const navigateToMonth = useCalendarStore((state) => state.navigateToMonth)
 
   const { isMobile } = useMediaQuery()
-  const [detailMonth, setDetailMonth] = useState(new Date().getMonth())
 
   const yearDays = useMemo(() => getYearDays(selectedYear), [selectedYear])
 
@@ -126,12 +126,12 @@ export const YearView = memo(function YearView() {
     return months
   }, [yearDays])
 
-  // --- Mobile Layout: MiniHeatmap + MonthHeatmapDetail ---
+  // --- Mobile Layout: Year Summary Cards ---
   if (isMobile) {
     return (
       <div className="p-4 w-full">
         {/* Year Navigation */}
-        <div className="flex items-center justify-between mb-6">
+        <div className="flex items-center justify-between mb-4">
           <div className="flex items-center gap-3">
             <h1 className="text-2xl font-bold text-gray-900">{selectedYear}</h1>
             <div className="flex items-center gap-1">
@@ -186,37 +186,32 @@ export const YearView = memo(function YearView() {
           </button>
         </div>
 
-        {/* Mini Heatmap */}
-        <MiniHeatmap
-          year={selectedYear}
-          activities={activities}
-          logsByDate={logsByDate}
-          selectedMonth={detailMonth}
-          onMonthSelect={setDetailMonth}
-        />
+        {/* Year Progress Bar */}
+        <div className="mb-5">
+          <YearProgressBar
+            year={selectedYear}
+            logsByDate={logsByDate}
+            totalActivities={activities.length}
+          />
+        </div>
 
-        {/* Month Detail */}
-        <MonthHeatmapDetail
-          year={selectedYear}
-          month={detailMonth}
-          activities={activities}
-          logsByDate={logsByDate}
-          onDateSelect={(dateStr) => setSelectedDate(dateStr)}
-          onMonthChange={setDetailMonth}
-        />
+        {/* Month Cards Grid (3 columns x 4 rows) */}
+        <div className="grid grid-cols-3 gap-2" data-testid="month-cards-grid">
+          {Array.from({ length: 12 }, (_, month) => (
+            <MonthCard
+              key={month}
+              year={selectedYear}
+              month={month}
+              totalActivities={activities.length}
+              logsByDate={logsByDate}
+              onSelect={(m) => navigateToMonth(selectedYear, m)}
+            />
+          ))}
+        </div>
 
-        {/* Bottom Summary */}
-        <div className="mt-6 pt-4 border-t border-gray-100">
-          <div className="flex flex-wrap gap-4 text-sm text-gray-500">
-            <div>
-              <span className="font-medium text-gray-700">{activities.length}</span> activities
-              tracked
-            </div>
-            <div>
-              <span className="font-medium text-gray-700">{completedLogsCount}</span> completions
-              this year
-            </div>
-          </div>
+        {/* Heatmap Legend */}
+        <div className="mt-4 flex justify-center">
+          <HeatmapLegend />
         </div>
       </div>
     )
@@ -281,45 +276,7 @@ export const YearView = memo(function YearView() {
         </div>
 
         {/* Legend */}
-        <div
-          className="flex items-center gap-3 text-sm text-gray-500"
-          role="group"
-          aria-label="Activity level legend"
-        >
-          <span className="font-medium" id="legend-less">
-            Less
-          </span>
-          <div className="flex gap-1" role="list" aria-labelledby="legend-less legend-more">
-            <div
-              className="w-[14px] h-[14px] rounded-sm bg-gray-100 border border-gray-200"
-              role="listitem"
-              aria-label="No activity: 0%"
-            />
-            <div
-              className="w-[14px] h-[14px] rounded-sm bg-emerald-100"
-              role="listitem"
-              aria-label="Low activity: 1-25%"
-            />
-            <div
-              className="w-[14px] h-[14px] rounded-sm bg-emerald-300"
-              role="listitem"
-              aria-label="Medium activity: 26-50%"
-            />
-            <div
-              className="w-[14px] h-[14px] rounded-sm bg-emerald-400"
-              role="listitem"
-              aria-label="High activity: 51-75%"
-            />
-            <div
-              className="w-[14px] h-[14px] rounded-sm bg-emerald-500"
-              role="listitem"
-              aria-label="Very high activity: 76-100%"
-            />
-          </div>
-          <span className="font-medium" id="legend-more">
-            More
-          </span>
-        </div>
+        <HeatmapLegend />
       </div>
 
       {/* Calendar Grid - Organized by Months */}

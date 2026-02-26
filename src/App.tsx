@@ -2,7 +2,7 @@ import { useState, lazy, Suspense } from 'react'
 import { YearView, MonthView } from './components/calendar'
 import { ActivityList, QuickLog } from './components/activities'
 import { StatsPanel } from './components/stats'
-import { DropdownMenu, ErrorBoundary, ToastContainer } from './components/ui'
+import { BottomSheet, DropdownMenu, ErrorBoundary, ToastContainer } from './components/ui'
 import type { DropdownMenuItem } from './components/ui'
 import { AppSkeleton } from './components/skeletons'
 import { useCalendarStore } from './store'
@@ -70,6 +70,7 @@ function App() {
   const { selectedDate, currentView } = useCalendarStore()
   const [isExportOpen, setIsExportOpen] = useState(false)
   const [isImportOpen, setIsImportOpen] = useState(false)
+  const [isBottomSheetOpen, setIsBottomSheetOpen] = useState(false)
   const appVersion = useAppVersion()
 
   if (!hasHydrated) {
@@ -225,13 +226,48 @@ function App() {
               {currentView === 'year' ? <YearView /> : <MonthView />}
             </div>
 
-            {/* Sidebar */}
-            <div className="space-y-6">
+            {/* Sidebar - Hidden on mobile, visible on large screens */}
+            <div className="hidden lg:block space-y-6">
               <ActivityList />
               <StatsPanel />
             </div>
           </div>
         </main>
+
+        {/* FAB Button - Visible only on mobile (< lg) */}
+        <button
+          onClick={() => setIsBottomSheetOpen(true)}
+          className="fixed bottom-6 right-6 z-20 lg:hidden w-14 h-14 bg-emerald-500 hover:bg-emerald-600 active:bg-emerald-700 text-white rounded-full shadow-lg flex items-center justify-center transition-colors focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:ring-offset-2"
+          aria-label="Open activities panel"
+          data-testid="fab-button"
+        >
+          <svg
+            className="w-6 h-6"
+            fill="none"
+            viewBox="0 0 24 24"
+            stroke="currentColor"
+            aria-hidden="true"
+          >
+            <path
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              strokeWidth={2}
+              d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4"
+            />
+          </svg>
+        </button>
+
+        {/* Bottom Sheet - Activities + Stats for mobile */}
+        <BottomSheet
+          isOpen={isBottomSheetOpen}
+          onClose={() => setIsBottomSheetOpen(false)}
+          aria-label="Activities and statistics"
+        >
+          <div className="space-y-6">
+            <ActivityList />
+            <StatsPanel />
+          </div>
+        </BottomSheet>
 
         {/* Quick Log Modal */}
         {selectedDate && <QuickLog />}

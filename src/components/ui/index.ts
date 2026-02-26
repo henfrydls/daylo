@@ -1,3 +1,4 @@
+export { BottomSheet } from './BottomSheet'
 export { Button } from './Button'
 export { ColorPicker } from './ColorPicker'
 export type { ColorOption, ColorPickerProps } from './ColorPicker'

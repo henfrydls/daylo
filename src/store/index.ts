@@ -110,7 +110,9 @@ export const useCalendarStore = create<CalendarState>()(
       logs: [],
       selectedYear: new Date().getFullYear(),
       selectedDate: null,
-      currentView: 'year' as ViewType,
+      currentView: (typeof window !== 'undefined' && window.innerWidth < 640
+        ? 'month'
+        : 'year') as ViewType,
       selectedMonth: new Date().getMonth(),
       _hasHydrated: false,
 

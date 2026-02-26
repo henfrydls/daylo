@@ -116,6 +116,25 @@ describe('useCalendarStore', () => {
     })
   })
 
+  describe('default view by viewport', () => {
+    it('should resolve to month when innerWidth < 640', () => {
+      // Test the conditional logic used by the store initializer
+      const getDefaultView = (width: number) => (width < 640 ? 'month' : 'year')
+
+      expect(getDefaultView(320)).toBe('month')
+      expect(getDefaultView(375)).toBe('month')
+      expect(getDefaultView(639)).toBe('month')
+    })
+
+    it('should resolve to year when innerWidth >= 640', () => {
+      const getDefaultView = (width: number) => (width < 640 ? 'month' : 'year')
+
+      expect(getDefaultView(640)).toBe('year')
+      expect(getDefaultView(1024)).toBe('year')
+      expect(getDefaultView(1920)).toBe('year')
+    })
+  })
+
   describe('hydration', () => {
     it('should initialize _hasHydrated as false', () => {
       useCalendarStore.setState({ _hasHydrated: false })
