@@ -223,7 +223,9 @@ function App() {
           <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
             {/* Calendar Section */}
             <div className="lg:col-span-3 bg-white rounded-xl border border-gray-200">
-              {currentView === 'year' ? <YearView /> : <MonthView />}
+              <div key={currentView} className="animate-in fade-in duration-200">
+                {currentView === 'year' ? <YearView /> : <MonthView />}
+              </div>
             </div>
 
             {/* Sidebar - Hidden on mobile, visible on large screens */}

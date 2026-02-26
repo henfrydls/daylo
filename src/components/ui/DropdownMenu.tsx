@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect, useCallback, useMemo } from 'react'
 import type { ReactNode } from 'react'
+import { useAnimatedPresence } from '../../hooks'
 
 export interface DropdownMenuActionItem {
   type?: 'action'
@@ -29,6 +30,10 @@ export interface DropdownMenuProps {
 
 export function DropdownMenu({ trigger, items, 'data-testid': testId }: DropdownMenuProps) {
   const [isOpen, setIsOpen] = useState(false)
+  const { shouldRender: shouldRenderMenu, isVisible: isMenuVisible } = useAnimatedPresence(
+    isOpen,
+    100
+  )
   const dropdownRef = useRef<HTMLDivElement>(null)
   const triggerRef = useRef<HTMLButtonElement>(null)
   const menuRef = useRef<HTMLDivElement>(null)
@@ -165,7 +170,7 @@ export function DropdownMenu({ trigger, items, 'data-testid': testId }: Dropdown
         {trigger}
       </button>
 
-      {isOpen && (
+      {shouldRenderMenu && (
         <div
           ref={menuRef}
           id="dropdown-menu"
@@ -173,7 +178,11 @@ export function DropdownMenu({ trigger, items, 'data-testid': testId }: Dropdown
             absolute right-0 mt-2 min-w-[160px] z-50
             bg-white border border-gray-200 rounded-lg shadow-lg
             py-1 origin-top-right
-            animate-in fade-in slide-in-from-top-2 duration-150
+            ${
+              isMenuVisible
+                ? 'animate-in fade-in slide-in-from-top-2 duration-150'
+                : 'animate-out fade-out slide-out-to-top-2 duration-100'
+            }
           `}
           role="menu"
           aria-orientation="vertical"

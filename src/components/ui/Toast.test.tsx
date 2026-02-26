@@ -151,6 +151,11 @@ describe('ToastContainer', () => {
       const dismissButton = screen.getByLabelText('Dismiss notification')
       fireEvent.click(dismissButton)
 
+      // Advance past the 200ms exit animation delay
+      act(() => {
+        vi.advanceTimersByTime(200)
+      })
+
       expect(screen.queryByText('Test message')).not.toBeInTheDocument()
     })
 
@@ -165,6 +170,11 @@ describe('ToastContainer', () => {
 
       const dismissButton = screen.getByLabelText('Dismiss notification')
       fireEvent.click(dismissButton)
+
+      // Advance past the 200ms exit animation delay
+      act(() => {
+        vi.advanceTimersByTime(200)
+      })
 
       expect(removeToastSpy).toHaveBeenCalledWith('toast-123')
     })
@@ -221,6 +231,11 @@ describe('ToastContainer', () => {
       // Click the first dismiss button (associated with toast-1)
       const dismissButtons = screen.getAllByLabelText('Dismiss notification')
       fireEvent.click(dismissButtons[0])
+
+      // Advance past the 200ms exit animation delay
+      act(() => {
+        vi.advanceTimersByTime(200)
+      })
 
       // Verify removeToast was called with the first toast's ID
       expect(removeToastSpy).toHaveBeenCalledTimes(1)

@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest'
-import { render, screen, fireEvent } from '@testing-library/react'
+import { render, screen, fireEvent, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { DropdownMenu } from './DropdownMenu'
 import type { DropdownMenuItem } from './DropdownMenu'
@@ -71,7 +71,7 @@ describe('DropdownMenu', () => {
       expect(screen.getByRole('menu')).toBeInTheDocument()
 
       await user.click(screen.getByText('Open Menu'))
-      expect(screen.queryByRole('menu')).not.toBeInTheDocument()
+      await waitFor(() => expect(screen.queryByRole('menu')).not.toBeInTheDocument())
     })
 
     it('should close menu when clicking outside', async () => {
@@ -89,7 +89,7 @@ describe('DropdownMenu', () => {
 
       // Click outside the dropdown
       fireEvent.mouseDown(screen.getByText('Outside Button'))
-      expect(screen.queryByRole('menu')).not.toBeInTheDocument()
+      await waitFor(() => expect(screen.queryByRole('menu')).not.toBeInTheDocument())
     })
 
     it('should close menu when Escape key is pressed', async () => {
@@ -101,7 +101,7 @@ describe('DropdownMenu', () => {
       expect(screen.getByRole('menu')).toBeInTheDocument()
 
       await user.keyboard('{Escape}')
-      expect(screen.queryByRole('menu')).not.toBeInTheDocument()
+      await waitFor(() => expect(screen.queryByRole('menu')).not.toBeInTheDocument())
     })
 
     it('should return focus to trigger after Escape closes menu', async () => {
@@ -126,7 +126,7 @@ describe('DropdownMenu', () => {
       expect(screen.getByRole('menu')).toBeInTheDocument()
 
       await user.keyboard('{Tab}')
-      expect(screen.queryByRole('menu')).not.toBeInTheDocument()
+      await waitFor(() => expect(screen.queryByRole('menu')).not.toBeInTheDocument())
     })
   })
 
@@ -144,7 +144,7 @@ describe('DropdownMenu', () => {
       await user.click(screen.getByText('Edit'))
 
       expect(handleEdit).toHaveBeenCalledTimes(1)
-      expect(screen.queryByRole('menu')).not.toBeInTheDocument()
+      await waitFor(() => expect(screen.queryByRole('menu')).not.toBeInTheDocument())
     })
 
     it('should not execute onClick for disabled items', async () => {
@@ -336,7 +336,7 @@ describe('DropdownMenu', () => {
       await user.keyboard('{Enter}')
 
       expect(handleDelete).toHaveBeenCalledTimes(1)
-      expect(screen.queryByRole('menu')).not.toBeInTheDocument()
+      await waitFor(() => expect(screen.queryByRole('menu')).not.toBeInTheDocument())
     })
 
     it('should execute onClick with Space key on focused item', async () => {
@@ -352,7 +352,7 @@ describe('DropdownMenu', () => {
       await user.keyboard(' ')
 
       expect(handleEdit).toHaveBeenCalledTimes(1)
-      expect(screen.queryByRole('menu')).not.toBeInTheDocument()
+      await waitFor(() => expect(screen.queryByRole('menu')).not.toBeInTheDocument())
     })
 
     it('should not execute onClick with Enter on disabled focused item', async () => {

@@ -1,4 +1,4 @@
-import { memo, useCallback } from 'react'
+import { memo, useCallback, useState } from 'react'
 import { useToastStore } from '../../store/toast'
 import type { Toast as ToastType } from '../../store/toast'
 import { CheckCircleIcon, ExclamationCircleIcon, InfoCircleIcon, XIcon } from './Icons'
@@ -29,13 +29,23 @@ interface ToastItemProps {
 
 const ToastItem = memo(function ToastItem({ toast, onClose }: ToastItemProps) {
   const styles = variantStyles[toast.variant]
+  const [isExiting, setIsExiting] = useState(false)
+
+  const handleClose = useCallback(() => {
+    setIsExiting(true)
+    setTimeout(onClose, 200)
+  }, [onClose])
 
   return (
     <div
       className={`
         flex items-center gap-3 px-4 py-3
         border rounded-lg shadow-sm
-        animate-in slide-in-from-right-full fade-in duration-300
+        ${
+          isExiting
+            ? 'animate-out slide-out-to-right-full fade-out duration-200'
+            : 'animate-in slide-in-from-right-full fade-in duration-300'
+        }
         ${styles.bg}
       `}
       role="alert"
@@ -44,7 +54,7 @@ const ToastItem = memo(function ToastItem({ toast, onClose }: ToastItemProps) {
       <span className="flex-shrink-0">{styles.icon}</span>
       <p className={`text-sm font-medium ${styles.text}`}>{toast.message}</p>
       <button
-        onClick={onClose}
+        onClick={handleClose}
         className={`
           relative ml-auto -mr-2 -my-1
           min-w-[44px] min-h-[44px]
