@@ -71,7 +71,6 @@ export const MiniHeatmap = memo(function MiniHeatmap({
     >
       {miniMonths.map(({ month, cells }) => {
         const isSelected = month === selectedMonth
-        const weeksCount = cells.length / 7
 
         return (
           <button

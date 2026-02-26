@@ -36,7 +36,6 @@ describe('YearViewSkeleton', () => {
   it('should render legend placeholder with 5 level boxes', () => {
     const { container } = render(<YearViewSkeleton />)
     // Legend has 5 level indicator boxes (w-[14px] h-[14px])
-    const legendBoxes = container.querySelectorAll('[style*=""], .w-\\[14px\\].h-\\[14px\\]')
     // There are exactly 5 heatmap level placeholder boxes
     const levelBoxes = container.querySelectorAll('.w-\\[14px\\]')
     expect(levelBoxes.length).toBe(5)
