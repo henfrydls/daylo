@@ -1,6 +1,6 @@
 import { useRef } from 'react'
 import type { ReactNode } from 'react'
-import { useFocusTrap } from '../../hooks'
+import { useFocusTrap, useAnimatedPresence } from '../../hooks'
 import { XIcon } from './Icons'
 
 interface ModalProps {
@@ -13,21 +13,26 @@ interface ModalProps {
 
 export function Modal({ isOpen, onClose, title, children, 'data-testid': testId }: ModalProps) {
   const modalRef = useRef<HTMLDivElement>(null)
+  const { shouldRender, isVisible } = useAnimatedPresence(isOpen, 150)
 
   useFocusTrap(modalRef, isOpen, { onEscape: onClose, autoFocus: false })
 
-  if (!isOpen) return null
+  if (!shouldRender) return null
 
   return (
     <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center">
       <div
-        className="absolute inset-0 bg-black/50 transition-opacity"
+        className={`absolute inset-0 bg-black/50 transition-opacity duration-150 ${isVisible ? 'opacity-100' : 'opacity-0'}`}
         onClick={onClose}
         aria-hidden="true"
       />
       <div
         ref={modalRef}
-        className="relative bg-white rounded-t-xl sm:rounded-xl shadow-xl max-w-md w-full mx-0 sm:mx-4 p-4 sm:p-6 animate-in fade-in zoom-in-95 duration-200 max-h-[90vh] overflow-y-auto"
+        className={`relative bg-white rounded-t-xl sm:rounded-xl shadow-xl max-w-md w-full mx-0 sm:mx-4 p-4 sm:p-6 max-h-[90vh] overflow-y-auto ${
+          isVisible
+            ? 'animate-in fade-in zoom-in-95 duration-200'
+            : 'animate-out fade-out zoom-out-95 duration-150'
+        }`}
         role="dialog"
         aria-modal="true"
         aria-labelledby="modal-title"
