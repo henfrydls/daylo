@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { render, screen, fireEvent, waitFor } from '@testing-library/react'
+import { render, screen, fireEvent, waitFor, act } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { ConfirmDialog } from './ConfirmDialog'
 
@@ -293,6 +293,7 @@ describe('ConfirmDialog', () => {
 
   describe('Multiple dialogs lifecycle', () => {
     it('should handle opening and closing correctly', () => {
+      vi.useFakeTimers()
       const onClose = vi.fn()
       const { rerender } = render(
         <ConfirmDialog {...defaultProps} isOpen={false} onClose={onClose} />
@@ -304,7 +305,13 @@ describe('ConfirmDialog', () => {
       expect(screen.getByText('Test Title')).toBeInTheDocument()
 
       rerender(<ConfirmDialog {...defaultProps} isOpen={false} onClose={onClose} />)
+      // Dialog stays rendered during exit animation (150ms)
+      act(() => {
+        vi.advanceTimersByTime(150)
+      })
       expect(screen.queryByText('Test Title')).not.toBeInTheDocument()
+
+      vi.useRealTimers()
     })
   })
 })
