@@ -211,19 +211,23 @@ describe('DropdownMenu', () => {
       expect(screen.getByRole('menu')).toBeInTheDocument()
     })
 
-    it('should focus first enabled item when menu opens', async () => {
+    it('should not focus any item when menu opens (mobile-friendly)', async () => {
       const user = userEvent.setup()
       const items = createItems()
       render(<DropdownMenu trigger={<span>Open Menu</span>} items={items} />)
 
       await user.click(screen.getByText('Open Menu'))
 
-      // First item should have visual focus (bg-gray-100 class)
+      // No item should have visual focus on open
       const editItem = screen.getByText('Edit').closest('button')
-      expect(editItem).toHaveClass('bg-gray-100')
+      const deleteItem = screen.getByText('Delete').closest('button')
+      const shareItem = screen.getByText('Share').closest('button')
+      expect(editItem).not.toHaveClass('bg-gray-100')
+      expect(deleteItem).not.toHaveClass('bg-gray-100')
+      expect(shareItem).not.toHaveClass('bg-gray-100')
     })
 
-    it('should skip disabled items when focusing first item on open', async () => {
+    it('should focus first enabled item on first ArrowDown press', async () => {
       const user = userEvent.setup()
       const items: DropdownMenuItem[] = [
         { label: 'Edit', onClick: vi.fn(), disabled: true },
@@ -234,9 +238,12 @@ describe('DropdownMenu', () => {
 
       await user.click(screen.getByText('Open Menu'))
 
-      // Second item (Delete) should have visual focus since first is disabled
-      const deleteItem = screen.getByText('Delete').closest('button')
-      expect(deleteItem).toHaveClass('bg-gray-100')
+      // No focus initially
+      expect(screen.getByText('Delete').closest('button')).not.toHaveClass('bg-gray-100')
+
+      // ArrowDown should focus first enabled item (Delete, since Edit is disabled)
+      await user.keyboard('{ArrowDown}')
+      expect(screen.getByText('Delete').closest('button')).toHaveClass('bg-gray-100')
     })
 
     it('should move focus down with ArrowDown key', async () => {
@@ -246,12 +253,12 @@ describe('DropdownMenu', () => {
 
       await user.click(screen.getByText('Open Menu'))
 
-      // First item focused initially
+      // First ArrowDown focuses first item
+      await user.keyboard('{ArrowDown}')
       expect(screen.getByText('Edit').closest('button')).toHaveClass('bg-gray-100')
 
+      // Second ArrowDown moves to second item
       await user.keyboard('{ArrowDown}')
-
-      // Second item should now be focused
       expect(screen.getByText('Edit').closest('button')).not.toHaveClass('bg-gray-100')
       expect(screen.getByText('Delete').closest('button')).toHaveClass('bg-gray-100')
     })
@@ -262,6 +269,8 @@ describe('DropdownMenu', () => {
       render(<DropdownMenu trigger={<span>Open Menu</span>} items={items} />)
 
       await user.click(screen.getByText('Open Menu'))
+      // ArrowDown twice: first focuses Edit, second focuses Delete
+      await user.keyboard('{ArrowDown}')
       await user.keyboard('{ArrowDown}')
 
       // Second item focused
@@ -280,7 +289,8 @@ describe('DropdownMenu', () => {
 
       await user.click(screen.getByText('Open Menu'))
 
-      // Navigate to last item
+      // Navigate to last item (3 ArrowDowns: -1→Edit→Delete→Share)
+      await user.keyboard('{ArrowDown}')
       await user.keyboard('{ArrowDown}')
       await user.keyboard('{ArrowDown}')
       expect(screen.getByText('Share').closest('button')).toHaveClass('bg-gray-100')
@@ -297,10 +307,7 @@ describe('DropdownMenu', () => {
 
       await user.click(screen.getByText('Open Menu'))
 
-      // First item focused initially
-      expect(screen.getByText('Edit').closest('button')).toHaveClass('bg-gray-100')
-
-      // Wrap to last
+      // No item focused initially; ArrowUp should go to last item
       await user.keyboard('{ArrowUp}')
       expect(screen.getByText('Share').closest('button')).toHaveClass('bg-gray-100')
     })
@@ -315,9 +322,12 @@ describe('DropdownMenu', () => {
       render(<DropdownMenu trigger={<span>Open Menu</span>} items={items} />)
 
       await user.click(screen.getByText('Open Menu'))
+
+      // First ArrowDown focuses Edit
+      await user.keyboard('{ArrowDown}')
       expect(screen.getByText('Edit').closest('button')).toHaveClass('bg-gray-100')
 
-      // ArrowDown should skip disabled Delete and focus Share
+      // Second ArrowDown should skip disabled Delete and focus Share
       await user.keyboard('{ArrowDown}')
       expect(screen.getByText('Share').closest('button')).toHaveClass('bg-gray-100')
     })
@@ -332,6 +342,8 @@ describe('DropdownMenu', () => {
       render(<DropdownMenu trigger={<span>Open Menu</span>} items={items} />)
 
       await user.click(screen.getByText('Open Menu'))
+      // Two ArrowDowns: -1→Edit→Delete
+      await user.keyboard('{ArrowDown}')
       await user.keyboard('{ArrowDown}')
       await user.keyboard('{Enter}')
 
@@ -349,13 +361,15 @@ describe('DropdownMenu', () => {
       render(<DropdownMenu trigger={<span>Open Menu</span>} items={items} />)
 
       await user.click(screen.getByText('Open Menu'))
+      // Focus first item via keyboard, then activate with Space
+      await user.keyboard('{ArrowDown}')
       await user.keyboard(' ')
 
       expect(handleEdit).toHaveBeenCalledTimes(1)
       await waitFor(() => expect(screen.queryByRole('menu')).not.toBeInTheDocument())
     })
 
-    it('should not execute onClick with Enter on disabled focused item', async () => {
+    it('should skip disabled items and focus first enabled via ArrowDown', async () => {
       const user = userEvent.setup()
       const handleEdit = vi.fn()
       const items: DropdownMenuItem[] = [
@@ -366,10 +380,11 @@ describe('DropdownMenu', () => {
 
       await user.click(screen.getByText('Open Menu'))
 
-      // Note: When all items before current are disabled, focusedIndex starts at first enabled
-      // But let's test the case where we somehow end up on a disabled item
-      // Actually the component skips disabled items, so Delete will be focused
-      // Let's test that disabled items don't get focused via keyboard at all
+      // No item focused on open
+      expect(screen.getByText('Delete').closest('button')).not.toHaveClass('bg-gray-100')
+
+      // ArrowDown should skip disabled Edit and focus Delete
+      await user.keyboard('{ArrowDown}')
       expect(screen.getByText('Delete').closest('button')).toHaveClass('bg-gray-100')
     })
   })
@@ -551,14 +566,17 @@ describe('DropdownMenu', () => {
       // Open and navigate
       await user.click(screen.getByText('Open Menu'))
       await user.keyboard('{ArrowDown}')
+      await user.keyboard('{ArrowDown}')
       expect(screen.getByText('Delete').closest('button')).toHaveClass('bg-gray-100')
 
       // Close
       await user.keyboard('{Escape}')
 
-      // Reopen - should start at first item again
+      // Reopen - should start with no focus
       await user.click(screen.getByText('Open Menu'))
-      expect(screen.getByText('Edit').closest('button')).toHaveClass('bg-gray-100')
+      expect(screen.getByText('Edit').closest('button')).not.toHaveClass('bg-gray-100')
+      expect(screen.getByText('Delete').closest('button')).not.toHaveClass('bg-gray-100')
+      expect(screen.getByText('Share').closest('button')).not.toHaveClass('bg-gray-100')
     })
   })
 })

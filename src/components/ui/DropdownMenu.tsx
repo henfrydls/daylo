@@ -86,6 +86,8 @@ export function DropdownMenu({ trigger, items, 'data-testid': testId }: Dropdown
           event.preventDefault()
           setFocusedIndex((prev) => {
             const enabledItems = actionItems.filter((item) => !item.disabled)
+            if (enabledItems.length === 0) return -1
+            if (prev === -1) return actionItems.indexOf(enabledItems[0])
             const currentEnabledIndex = enabledItems.findIndex(
               (_, i) => actionItems.indexOf(enabledItems[i]) === prev
             )
@@ -98,6 +100,8 @@ export function DropdownMenu({ trigger, items, 'data-testid': testId }: Dropdown
           event.preventDefault()
           setFocusedIndex((prev) => {
             const enabledItems = actionItems.filter((item) => !item.disabled)
+            if (enabledItems.length === 0) return -1
+            if (prev === -1) return actionItems.indexOf(enabledItems[enabledItems.length - 1])
             const currentEnabledIndex = enabledItems.findIndex(
               (_, i) => actionItems.indexOf(enabledItems[i]) === prev
             )
@@ -132,15 +136,11 @@ export function DropdownMenu({ trigger, items, 'data-testid': testId }: Dropdown
     }
   }, [isOpen, focusedIndex, actionItems, handleItemClick])
 
-  // Reset focus when menu opens (only consider action items)
+  // Reset focus when menu opens — start with no focus so mobile/touch
+  // doesn't show a pre-selected item. Keyboard arrows will set focus.
   useEffect(() => {
     /* eslint-disable react-hooks/set-state-in-effect */
-    if (isOpen) {
-      const firstEnabledIndex = actionItems.findIndex((item) => !item.disabled)
-      setFocusedIndex(firstEnabledIndex)
-    } else {
-      setFocusedIndex(-1)
-    }
+    setFocusedIndex(-1)
     /* eslint-enable react-hooks/set-state-in-effect */
   }, [isOpen, actionItems])
 

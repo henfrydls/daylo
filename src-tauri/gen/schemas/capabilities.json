@@ -1,1 +1,1 @@
-{"default":{"identifier":"default","description":"Capability for the main window","local":true,"windows":["main"],"permissions":["core:default","shell:allow-open","opener:default"]}}
+{"default":{"identifier":"default","description":"Capability for the main window on all platforms","local":true,"windows":["main"],"permissions":["core:default","shell:allow-open"]},"desktop":{"identifier":"desktop","description":"Desktop-only capabilities (opener plugin)","local":true,"windows":["main"],"permissions":["opener:default"],"platforms":["linux","macOS","windows"]}}

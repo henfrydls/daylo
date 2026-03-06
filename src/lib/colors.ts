@@ -15,6 +15,14 @@ export const ACTIVITY_COLORS = [
   { name: 'Red', value: '#EF4444' },
   { name: 'Teal', value: '#14B8A6' },
   { name: 'Indigo', value: '#6366F1' },
+  { name: 'Cyan', value: '#06B6D4' },
+  { name: 'Lime', value: '#84CC16' },
+  { name: 'Amber', value: '#D97706' },
+  { name: 'Rose', value: '#F43F5E' },
+  { name: 'Sky', value: '#0EA5E9' },
+  { name: 'Fuchsia', value: '#D946EF' },
+  { name: 'Emerald', value: '#059669' },
+  { name: 'Slate', value: '#64748B' },
 ] as const
 
 export function getHeatmapColor(level: 0 | 1 | 2 | 3 | 4): string {

@@ -5,8 +5,11 @@ import { useCalendarStore } from '../../store'
 import type { Activity } from '../../types'
 import { useShallow } from 'zustand/react/shallow'
 
+const MAX_VISIBLE = 8
+
 export const ActivityList = memo(function ActivityList() {
   const [isFormOpen, setIsFormOpen] = useState(false)
+  const [showAll, setShowAll] = useState(false)
   const [editingActivity, setEditingActivity] = useState<Activity | undefined>()
   const [deleteConfirm, setDeleteConfirm] = useState<{
     isOpen: boolean
@@ -65,7 +68,7 @@ export const ActivityList = memo(function ActivityList() {
         </p>
       ) : (
         <ul className="space-y-2" role="list" aria-label="Activities list">
-          {activities.map((activity) => (
+          {(showAll ? activities : activities.slice(0, MAX_VISIBLE)).map((activity) => (
             <li
               key={activity.id}
               className="flex items-center justify-between p-2 sm:p-3 rounded-lg hover:bg-gray-50 focus-within:bg-gray-50 transition-colors group"
@@ -101,6 +104,16 @@ export const ActivityList = memo(function ActivityList() {
             </li>
           ))}
         </ul>
+      )}
+
+      {activities.length > MAX_VISIBLE && (
+        <button
+          onClick={() => setShowAll((prev) => !prev)}
+          className="w-full min-h-[44px] mt-2 text-sm font-medium text-emerald-600 hover:text-emerald-700 hover:bg-emerald-50 rounded-lg transition-colors focus:outline-none focus:ring-2 focus:ring-emerald-500"
+          data-testid="show-more-button"
+        >
+          {showAll ? 'Show less' : `Show all (${activities.length})`}
+        </button>
       )}
 
       <ActivityForm isOpen={isFormOpen} onClose={handleCloseForm} activity={editingActivity} />

@@ -6,7 +6,7 @@ import { BottomSheet, DropdownMenu, ErrorBoundary, ToastContainer } from './comp
 import type { DropdownMenuItem } from './components/ui'
 import { AppSkeleton } from './components/skeletons'
 import { useCalendarStore } from './store'
-import { useAppVersion } from './hooks'
+import { useAppVersion, useSwipeGesture } from './hooks'
 
 // Lazy load modals - they are rarely used
 const ExportModal = lazy(() =>
@@ -67,11 +67,15 @@ function ViewToggle() {
 
 function App() {
   const hasHydrated = useCalendarStore((state) => state._hasHydrated)
-  const { selectedDate, currentView } = useCalendarStore()
+  const { selectedDate, currentView, setCurrentView } = useCalendarStore()
   const [isExportOpen, setIsExportOpen] = useState(false)
   const [isImportOpen, setIsImportOpen] = useState(false)
   const [isBottomSheetOpen, setIsBottomSheetOpen] = useState(false)
   const appVersion = useAppVersion()
+  const swipeRef = useSwipeGesture<HTMLDivElement>({
+    onSwipeLeft: () => setCurrentView('month'),
+    onSwipeRight: () => setCurrentView('year'),
+  })
 
   if (!hasHydrated) {
     return <AppSkeleton />
@@ -222,7 +226,7 @@ function App() {
         >
           <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
             {/* Calendar Section */}
-            <div className="lg:col-span-3 bg-white rounded-xl border border-gray-200">
+            <div ref={swipeRef} className="lg:col-span-3 bg-white rounded-xl border border-gray-200">
               <div key={currentView} className="animate-in fade-in duration-200">
                 {currentView === 'year' ? <YearView /> : <MonthView />}
               </div>
