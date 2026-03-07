@@ -153,7 +153,7 @@ export const ColorPicker = memo(function ColorPicker({
           <button
             type="button"
             onClick={() => setExpanded((prev) => !prev)}
-            className={`${sizeClasses[size]} rounded-full border-2 border-dashed border-gray-300 flex items-center justify-center text-gray-400 text-xs font-medium hover:border-gray-400 hover:text-gray-500 transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-emerald-500`}
+            className={`${sizeClasses[size]} rounded-full border-2 border-dashed border-gray-300 flex items-center justify-center text-gray-400 text-base font-bold hover:border-gray-400 hover:text-gray-500 transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-emerald-500`}
             aria-label={expanded ? 'Show fewer colors' : 'Show more colors'}
           >
             {expanded ? '\u2212' : '+'}
