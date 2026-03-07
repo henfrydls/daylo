@@ -139,7 +139,7 @@ export const QuickLog = memo(function QuickLog() {
         size="sm"
         label=""
         testIdPrefix="quicklog-color"
-        collapsedCount={8}
+        autoCollapse
         {...(centered ? { centered: true } : {})}
       />
       <div className={`flex gap-2 ${centered ? 'justify-center' : 'justify-end'}`}>

@@ -28,7 +28,7 @@ export function Modal({ isOpen, onClose, title, children, 'data-testid': testId 
       />
       <div
         ref={modalRef}
-        className={`relative bg-white rounded-t-xl sm:rounded-xl shadow-xl max-w-md w-full mx-0 sm:mx-4 p-4 sm:p-6 max-h-[90dvh] overflow-y-auto ${
+        className={`relative bg-white rounded-t-xl sm:rounded-xl shadow-xl max-w-md w-full mx-0 sm:mx-4 p-4 sm:p-6 max-h-[90dvh] flex flex-col overflow-hidden ${
           isVisible
             ? 'animate-in fade-in zoom-in-95 duration-200'
             : 'animate-out fade-out zoom-out-95 duration-150'
@@ -38,7 +38,7 @@ export function Modal({ isOpen, onClose, title, children, 'data-testid': testId 
         aria-labelledby="modal-title"
         data-testid={testId}
       >
-        <div className="flex items-center justify-between mb-4">
+        <div className="flex items-center justify-between mb-4 shrink-0">
           <h2 id="modal-title" className="text-base sm:text-lg font-semibold text-gray-900">
             {title}
           </h2>
@@ -50,7 +50,9 @@ export function Modal({ isOpen, onClose, title, children, 'data-testid': testId 
             <XIcon className="w-5 h-5" />
           </button>
         </div>
-        {children}
+        <div className="flex-1 overflow-y-auto min-h-0">
+          {children}
+        </div>
       </div>
     </div>
   )

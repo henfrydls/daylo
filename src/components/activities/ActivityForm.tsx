@@ -98,75 +98,88 @@ export const ActivityForm = memo(function ActivityForm({
       title={activity ? 'Edit Activity' : 'New Activity'}
       data-testid="activity-form-modal"
     >
-      <form onSubmit={handleSubmit}>
-        <div className="mb-4">
-          <label htmlFor="activity-name" className="block text-sm font-medium text-gray-700 mb-1">
-            Activity Name
-          </label>
-          <input
-            id="activity-name"
-            type="text"
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-            placeholder="e.g., Exercise, Read, Meditate"
-            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent min-h-[44px] sm:min-h-0"
-            autoFocus
-            data-testid="activity-name-input"
+      <form onSubmit={handleSubmit} className="flex flex-col min-h-0">
+        <div className="flex-1 overflow-y-auto min-h-0">
+          <div className="mb-4">
+            <label htmlFor="activity-name" className="block text-sm font-medium text-gray-700 mb-1">
+              Activity Name
+            </label>
+            <input
+              id="activity-name"
+              type="text"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              onFocus={(e) => {
+                // On mobile, scroll the input into view when keyboard opens
+                setTimeout(() => {
+                  e.target.scrollIntoView({ behavior: 'smooth', block: 'center' })
+                }, 300)
+              }}
+              placeholder="e.g., Exercise, Read, Meditate"
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent min-h-[44px] sm:min-h-0"
+              autoFocus
+              data-testid="activity-name-input"
+            />
+          </div>
+
+          <ColorPicker
+            value={color}
+            onChange={setColor}
+            colors={ACTIVITY_COLORS}
+            label="Color"
+            size="md"
+            className="mb-4"
+            autoCollapse
           />
+
+          {/* Date logging section - only show when creating new activity */}
+          {!isEditing && (
+            <div className="mb-4">
+              <div className="flex items-center gap-2 mb-2 min-h-[44px] sm:min-h-0">
+                <input
+                  id="log-for-date"
+                  type="checkbox"
+                  checked={logForDate}
+                  onChange={(e) => setLogForDate(e.target.checked)}
+                  className="w-5 h-5 sm:w-4 sm:h-4 rounded border-gray-300 text-emerald-500 focus:ring-emerald-500"
+                  data-testid="log-for-date-checkbox"
+                />
+                <label htmlFor="log-for-date" className="text-sm font-medium text-gray-700">
+                  Also log for a date
+                </label>
+              </div>
+
+              {logForDate && (
+                <div className="mt-2">
+                  <label
+                    htmlFor="selected-date"
+                    className="block text-sm font-medium text-gray-700 mb-1"
+                  >
+                    Date
+                  </label>
+                  <input
+                    id="selected-date"
+                    type="date"
+                    value={selectedDate}
+                    onChange={(e) => setSelectedDate(e.target.value)}
+                    onFocus={(e) => {
+                      setTimeout(() => {
+                        e.target.scrollIntoView({ behavior: 'smooth', block: 'center' })
+                      }, 300)
+                    }}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent min-h-[44px] sm:min-h-0"
+                    data-testid="selected-date-input"
+                  />
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Add bottom margin when editing (no date section shown) */}
+          {isEditing && <div className="mb-2" />}
         </div>
 
-        <ColorPicker
-          value={color}
-          onChange={setColor}
-          colors={ACTIVITY_COLORS}
-          label="Color"
-          size="md"
-          className="mb-4"
-          collapsedCount={8}
-        />
-
-        {/* Date logging section - only show when creating new activity */}
-        {!isEditing && (
-          <div className="mb-6">
-            <div className="flex items-center gap-2 mb-2 min-h-[44px] sm:min-h-0">
-              <input
-                id="log-for-date"
-                type="checkbox"
-                checked={logForDate}
-                onChange={(e) => setLogForDate(e.target.checked)}
-                className="w-5 h-5 sm:w-4 sm:h-4 rounded border-gray-300 text-emerald-500 focus:ring-emerald-500"
-                data-testid="log-for-date-checkbox"
-              />
-              <label htmlFor="log-for-date" className="text-sm font-medium text-gray-700">
-                Also log for a date
-              </label>
-            </div>
-
-            {logForDate && (
-              <div className="mt-2">
-                <label
-                  htmlFor="selected-date"
-                  className="block text-sm font-medium text-gray-700 mb-1"
-                >
-                  Date
-                </label>
-                <input
-                  id="selected-date"
-                  type="date"
-                  value={selectedDate}
-                  onChange={(e) => setSelectedDate(e.target.value)}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent min-h-[44px] sm:min-h-0"
-                  data-testid="selected-date-input"
-                />
-              </div>
-            )}
-          </div>
-        )}
-
-        {/* Add bottom margin when editing (no date section shown) */}
-        {isEditing && <div className="mb-2" />}
-
-        <div className="flex justify-end gap-3">
+        <div className="flex justify-end gap-3 pt-3 shrink-0">
           <Button type="button" variant="ghost" onClick={handleClose}>
             Cancel
           </Button>
