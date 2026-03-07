@@ -8,11 +8,8 @@ class MainActivity : TauriActivity() {
   override fun onCreate(savedInstanceState: Bundle?) {
     super.onCreate(savedInstanceState)
 
-    // Set emerald status bar color programmatically
-    window.statusBarColor = Color.parseColor("#10B981")
-
-    // Use light (white) icons on emerald background
+    // Dark icons on light status bar background (like Instagram)
     val controller = WindowInsetsControllerCompat(window, window.decorView)
-    controller.isAppearanceLightStatusBars = false
+    controller.isAppearanceLightStatusBars = true
   }
 }
