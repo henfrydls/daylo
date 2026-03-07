@@ -141,7 +141,7 @@ function App() {
         </a>
 
         {/* Header */}
-        <header className="sticky top-0 z-30 bg-emerald-800 pt-[env(safe-area-inset-top)]">
+        <header className="sticky top-0 z-30 bg-gray-800 pt-[env(safe-area-inset-top)]">
           <div className="bg-white border-b border-gray-200">
           <div className="max-w-7xl mx-auto px-3 sm:px-4 py-3 sm:py-4">
             <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
