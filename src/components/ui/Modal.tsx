@@ -28,7 +28,7 @@ export function Modal({ isOpen, onClose, title, children, 'data-testid': testId 
       />
       <div
         ref={modalRef}
-        className={`relative bg-white rounded-t-xl sm:rounded-xl shadow-xl max-w-md w-full mx-0 sm:mx-4 p-4 sm:p-6 max-h-[90dvh] flex flex-col overflow-hidden ${
+        className={`relative bg-white rounded-t-xl sm:rounded-xl shadow-xl max-w-md w-full mx-0 sm:mx-4 px-6 py-4 sm:p-6 max-h-[90dvh] flex flex-col overflow-hidden ${
           isVisible
             ? 'animate-in fade-in zoom-in-95 duration-200'
             : 'animate-out fade-out zoom-out-95 duration-150'
@@ -50,7 +50,7 @@ export function Modal({ isOpen, onClose, title, children, 'data-testid': testId 
             <XIcon className="w-5 h-5" />
           </button>
         </div>
-        <div className="flex-1 overflow-y-auto min-h-0">
+        <div className="flex-1 overflow-y-auto min-h-0 -mx-1 px-1">
           {children}
         </div>
       </div>

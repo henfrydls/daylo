@@ -114,7 +114,7 @@ export const QuickLog = memo(function QuickLog() {
   const date = parseDateString(selectedDate)
 
   const renderCreationForm = ({ centered, inputId }: { centered?: boolean; inputId: string }) => (
-    <div className="p-3 border-2 border-dashed border-gray-200 rounded-lg space-y-3">
+    <div className="space-y-3">
       <div>
         <label htmlFor={inputId} className="sr-only">
           Activity name
@@ -199,18 +199,14 @@ export const QuickLog = memo(function QuickLog() {
         )
       })}
 
-      {isCreating ? (
-        renderCreationForm({ inputId: 'quicklog-activity-name' })
-      ) : (
-        <button
-          onClick={handleStartCreating}
-          className="flex items-center gap-2 w-full p-3 border-2 border-dashed border-gray-200 rounded-lg text-gray-500 hover:bg-gray-50 hover:border-gray-300 transition-colors focus:outline-none focus:ring-2 focus:ring-emerald-500 min-h-[48px] sm:min-h-0"
-          data-testid="quicklog-new-activity-button"
-        >
-          <PlusIcon className="w-5 h-5" />
-          <span className="font-medium">New activity</span>
-        </button>
-      )}
+      <button
+        onClick={handleStartCreating}
+        className="flex items-center gap-2 w-full p-3 border-2 border-dashed border-gray-200 rounded-lg text-gray-500 hover:bg-gray-50 hover:border-gray-300 transition-colors focus:outline-none focus:ring-2 focus:ring-emerald-500 min-h-[48px] sm:min-h-0"
+        data-testid="quicklog-new-activity-button"
+      >
+        <PlusIcon className="w-5 h-5" />
+        <span className="font-medium">New activity</span>
+      </button>
     </div>
   )
 
@@ -241,7 +237,7 @@ export const QuickLog = memo(function QuickLog() {
       />
       <div
         ref={modalRef}
-        className={`relative bg-white rounded-t-xl sm:rounded-xl shadow-xl max-w-md w-full mx-0 sm:mx-4 p-4 sm:p-6 max-h-[85dvh] overflow-y-auto transition-all duration-[250ms] ease-[cubic-bezier(0.32,0.72,0,1)] ${
+        className={`relative bg-white rounded-t-xl sm:rounded-xl shadow-xl max-w-md w-full mx-0 sm:mx-4 px-6 py-4 sm:p-6 max-h-[85dvh] overflow-y-auto transition-all duration-[250ms] ease-[cubic-bezier(0.32,0.72,0,1)] ${
           isVisible
             ? 'translate-y-0 opacity-100 sm:scale-100'
             : 'translate-y-full opacity-0 sm:translate-y-0 sm:scale-95'
@@ -268,17 +264,23 @@ export const QuickLog = memo(function QuickLog() {
           </button>
         </div>
 
-        {activities.length === 0 ? renderEmptyState() : renderActivityList()}
-
-        <div className="mt-4 sm:mt-6 flex justify-end">
-          <Button
-            onClick={() => setSelectedDate(null)}
-            data-testid="quicklog-done-button"
-            className="w-full sm:w-auto"
-          >
-            Done
-          </Button>
-        </div>
+        {isCreating ? (
+          // Two-Phase: hide activity list when creating, show only the form
+          renderCreationForm({ inputId: 'quicklog-activity-name' })
+        ) : (
+          <>
+            {activities.length === 0 ? renderEmptyState() : renderActivityList()}
+            <div className="mt-4 sm:mt-6 flex justify-end">
+              <Button
+                onClick={() => setSelectedDate(null)}
+                data-testid="quicklog-done-button"
+                className="w-full sm:w-auto"
+              >
+                Done
+              </Button>
+            </div>
+          </>
+        )}
       </div>
     </div>
   )

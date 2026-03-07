@@ -29,8 +29,8 @@ export interface ColorPickerProps {
 }
 
 const sizeClasses = {
-  sm: 'w-11 h-11 sm:w-6 sm:h-6',
-  md: 'w-11 h-11 sm:w-8 sm:h-8',
+  sm: 'w-10 h-10 sm:w-6 sm:h-6',
+  md: 'w-10 h-10 sm:w-8 sm:h-8',
 }
 
 const hoverScales = {
@@ -38,8 +38,8 @@ const hoverScales = {
   md: 'hover:scale-105',
 }
 
-/** Dot pixel widths on mobile (matches w-11 = 2.75rem = 44px) */
-const DOT_SIZE_PX = 44
+/** Dot pixel widths on mobile (matches w-10 = 2.5rem = 40px) */
+const DOT_SIZE_PX = 40
 /** Gap in pixels (gap-2 = 0.5rem = 8px) */
 const GAP_PX = 8
 /** Mobile breakpoint matching Tailwind's sm: */

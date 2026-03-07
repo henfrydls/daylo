@@ -32,7 +32,8 @@ export const ActivityList = memo(function ActivityList() {
 
   const handleCloseForm = useCallback(() => {
     setIsFormOpen(false)
-    setEditingActivity(undefined)
+    // Don't clear editingActivity here — it causes a flash of "New Activity"
+    // during the exit animation. It gets cleared when "+ Add" is clicked.
   }, [])
 
   const handleDeleteClick = useCallback((id: string) => {
@@ -56,7 +57,7 @@ export const ActivityList = memo(function ActivityList() {
         <h2 className="text-base sm:text-lg font-semibold text-gray-900">Activities</h2>
         <Button
           size="sm"
-          onClick={() => setIsFormOpen(true)}
+          onClick={() => { setEditingActivity(undefined); setIsFormOpen(true) }}
           data-testid="add-activity-button"
         >
           + Add
