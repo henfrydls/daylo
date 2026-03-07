@@ -5,7 +5,7 @@ import { useCalendarStore } from '../../store'
 import type { Activity } from '../../types'
 import { useShallow } from 'zustand/react/shallow'
 
-const MAX_VISIBLE = 8
+const MAX_VISIBLE = 5
 
 export const ActivityList = memo(function ActivityList() {
   const [isFormOpen, setIsFormOpen] = useState(false)

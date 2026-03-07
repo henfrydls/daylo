@@ -57,34 +57,34 @@ describe('ActivityList', () => {
   })
 
   describe('Pagination', () => {
-    it('should show all activities when there are 8 or fewer', () => {
+    it('should show all activities when there are 5 or fewer', () => {
+      setupStore(makeActivities(5))
+      render(<ActivityList />)
+
+      const items = screen.getAllByTestId('activity-item')
+      expect(items).toHaveLength(5)
+      expect(screen.queryByTestId('show-more-button')).not.toBeInTheDocument()
+    })
+
+    it('should show only 5 activities when there are more than 5', () => {
       setupStore(makeActivities(8))
       render(<ActivityList />)
 
       const items = screen.getAllByTestId('activity-item')
-      expect(items).toHaveLength(8)
-      expect(screen.queryByTestId('show-more-button')).not.toBeInTheDocument()
+      expect(items).toHaveLength(5)
     })
 
-    it('should show only 8 activities when there are more than 8', () => {
-      setupStore(makeActivities(12))
-      render(<ActivityList />)
-
-      const items = screen.getAllByTestId('activity-item')
-      expect(items).toHaveLength(8)
-    })
-
-    it('should show "Show all" button with count when there are more than 8', () => {
-      setupStore(makeActivities(12))
+    it('should show "Show all" button with count when there are more than 5', () => {
+      setupStore(makeActivities(8))
       render(<ActivityList />)
 
       const button = screen.getByTestId('show-more-button')
       expect(button).toBeInTheDocument()
-      expect(button).toHaveTextContent('Show all (12)')
+      expect(button).toHaveTextContent('Show all (8)')
     })
 
-    it('should not show "Show all" button when there are 8 or fewer activities', () => {
-      setupStore(makeActivities(5))
+    it('should not show "Show all" button when there are 5 or fewer activities', () => {
+      setupStore(makeActivities(3))
       render(<ActivityList />)
 
       expect(screen.queryByTestId('show-more-button')).not.toBeInTheDocument()
@@ -92,20 +92,20 @@ describe('ActivityList', () => {
 
     it('should show all activities when "Show all" is clicked', async () => {
       const user = userEvent.setup()
-      setupStore(makeActivities(12))
+      setupStore(makeActivities(8))
       render(<ActivityList />)
 
       const button = screen.getByTestId('show-more-button')
       await user.click(button)
 
       const items = screen.getAllByTestId('activity-item')
-      expect(items).toHaveLength(12)
+      expect(items).toHaveLength(8)
       expect(button).toHaveTextContent('Show less')
     })
 
-    it('should collapse back to 8 when "Show less" is clicked', async () => {
+    it('should collapse back to 5 when "Show less" is clicked', async () => {
       const user = userEvent.setup()
-      setupStore(makeActivities(12))
+      setupStore(makeActivities(8))
       render(<ActivityList />)
 
       const button = screen.getByTestId('show-more-button')
@@ -113,8 +113,8 @@ describe('ActivityList', () => {
       await user.click(button) // collapse
 
       const items = screen.getAllByTestId('activity-item')
-      expect(items).toHaveLength(8)
-      expect(button).toHaveTextContent('Show all (12)')
+      expect(items).toHaveLength(5)
+      expect(button).toHaveTextContent('Show all (8)')
     })
   })
 
