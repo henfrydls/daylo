@@ -28,7 +28,7 @@ export function Modal({ isOpen, onClose, title, children, 'data-testid': testId 
       />
       <div
         ref={modalRef}
-        className={`relative bg-white rounded-t-xl sm:rounded-xl shadow-xl max-w-md w-full mx-0 sm:mx-4 p-4 sm:p-6 max-h-[90vh] overflow-y-auto ${
+        className={`relative bg-white rounded-t-xl sm:rounded-xl shadow-xl max-w-md w-full mx-0 sm:mx-4 p-4 sm:p-6 max-h-[90dvh] overflow-y-auto ${
           isVisible
             ? 'animate-in fade-in zoom-in-95 duration-200'
             : 'animate-out fade-out zoom-out-95 duration-150'

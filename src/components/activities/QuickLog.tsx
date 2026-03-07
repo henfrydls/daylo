@@ -281,7 +281,7 @@ export const QuickLog = memo(function QuickLog() {
       />
       <div
         ref={modalRef}
-        className={`relative bg-white rounded-t-xl sm:rounded-xl shadow-xl max-w-md w-full mx-0 sm:mx-4 p-4 sm:p-6 max-h-[85vh] overflow-y-auto transition-all duration-[250ms] ease-[cubic-bezier(0.32,0.72,0,1)] ${
+        className={`relative bg-white rounded-t-xl sm:rounded-xl shadow-xl max-w-md w-full mx-0 sm:mx-4 p-4 sm:p-6 max-h-[85dvh] overflow-y-auto transition-all duration-[250ms] ease-[cubic-bezier(0.32,0.72,0,1)] ${
           isVisible
             ? 'translate-y-0 opacity-100 sm:scale-100'
             : 'translate-y-full opacity-0 sm:translate-y-0 sm:scale-95'
