@@ -2,12 +2,13 @@ import { useState, useCallback, memo } from 'react'
 import { Button, ConfirmDialog, PencilIcon, TrashIcon, useToast } from '../ui'
 import { ActivityForm } from './ActivityForm'
 import { useCalendarStore } from '../../store'
+import { useMediaQuery } from '../../hooks'
 import type { Activity } from '../../types'
 import { useShallow } from 'zustand/react/shallow'
 
-const MAX_VISIBLE = 5
-
 export const ActivityList = memo(function ActivityList() {
+  const isDesktop = useMediaQuery('(min-width: 1024px)')
+  const maxVisible = isDesktop ? 8 : 5
   const [isFormOpen, setIsFormOpen] = useState(false)
   const [showAll, setShowAll] = useState(false)
   const [editingActivity, setEditingActivity] = useState<Activity | undefined>()
@@ -68,7 +69,7 @@ export const ActivityList = memo(function ActivityList() {
         </p>
       ) : (
         <ul className="space-y-2" role="list" aria-label="Activities list">
-          {(showAll ? activities : activities.slice(0, MAX_VISIBLE)).map((activity) => (
+          {(showAll ? activities : activities.slice(0, maxVisible)).map((activity) => (
             <li
               key={activity.id}
               className="flex items-center justify-between p-2 sm:p-3 rounded-lg hover:bg-gray-50 focus-within:bg-gray-50 transition-colors group"
@@ -106,7 +107,7 @@ export const ActivityList = memo(function ActivityList() {
         </ul>
       )}
 
-      {activities.length > MAX_VISIBLE && (
+      {activities.length > maxVisible && (
         <button
           onClick={() => setShowAll((prev) => !prev)}
           className="w-full min-h-[44px] mt-2 text-sm font-medium text-emerald-600 hover:text-emerald-700 hover:bg-emerald-50 rounded-lg transition-colors focus:outline-none focus:ring-2 focus:ring-emerald-500"

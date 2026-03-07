@@ -77,7 +77,7 @@ export const MonthView = memo(function MonthView() {
   const activities = useCalendarStore(useShallow((state) => state.activities))
   const logs = useCalendarStore(useShallow((state) => state.logs))
 
-  const { isMobile } = useMediaQuery()
+  const isMobile = !useMediaQuery('(min-width: 640px)')
 
   const monthDays = useMemo(
     () => getMonthDays(selectedYear, selectedMonth),

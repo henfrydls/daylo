@@ -15,6 +15,16 @@ vi.mock('./ActivityForm', () => ({
   ActivityForm: () => null,
 }))
 
+// Mock useMediaQuery — default to mobile (false = below 1024px → maxVisible = 5)
+const mockUseMediaQuery = vi.fn().mockReturnValue(false)
+vi.mock('../../hooks', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../../hooks')>()
+  return {
+    ...actual,
+    useMediaQuery: (...args: unknown[]) => mockUseMediaQuery(...args),
+  }
+})
+
 const makeActivities = (count: number): Activity[] =>
   Array.from({ length: count }, (_, i) => ({
     id: `id-${i + 1}`,
@@ -57,64 +67,136 @@ describe('ActivityList', () => {
   })
 
   describe('Pagination', () => {
-    it('should show all activities when there are 5 or fewer', () => {
-      setupStore(makeActivities(5))
-      render(<ActivityList />)
+    describe('Mobile (< 1024px) — maxVisible = 5', () => {
+      beforeEach(() => {
+        mockUseMediaQuery.mockReturnValue(false)
+      })
 
-      const items = screen.getAllByTestId('activity-item')
-      expect(items).toHaveLength(5)
-      expect(screen.queryByTestId('show-more-button')).not.toBeInTheDocument()
+      it('should show all activities when there are 5 or fewer', () => {
+        setupStore(makeActivities(5))
+        render(<ActivityList />)
+
+        const items = screen.getAllByTestId('activity-item')
+        expect(items).toHaveLength(5)
+        expect(screen.queryByTestId('show-more-button')).not.toBeInTheDocument()
+      })
+
+      it('should show only 5 activities when there are more than 5', () => {
+        setupStore(makeActivities(8))
+        render(<ActivityList />)
+
+        const items = screen.getAllByTestId('activity-item')
+        expect(items).toHaveLength(5)
+      })
+
+      it('should show "Show all" button with count when there are more than 5', () => {
+        setupStore(makeActivities(8))
+        render(<ActivityList />)
+
+        const button = screen.getByTestId('show-more-button')
+        expect(button).toBeInTheDocument()
+        expect(button).toHaveTextContent('Show all (8)')
+      })
+
+      it('should not show "Show all" button when there are 5 or fewer activities', () => {
+        setupStore(makeActivities(3))
+        render(<ActivityList />)
+
+        expect(screen.queryByTestId('show-more-button')).not.toBeInTheDocument()
+      })
+
+      it('should show all activities when "Show all" is clicked', async () => {
+        const user = userEvent.setup()
+        setupStore(makeActivities(8))
+        render(<ActivityList />)
+
+        const button = screen.getByTestId('show-more-button')
+        await user.click(button)
+
+        const items = screen.getAllByTestId('activity-item')
+        expect(items).toHaveLength(8)
+        expect(button).toHaveTextContent('Show less')
+      })
+
+      it('should collapse back to 5 when "Show less" is clicked', async () => {
+        const user = userEvent.setup()
+        setupStore(makeActivities(8))
+        render(<ActivityList />)
+
+        const button = screen.getByTestId('show-more-button')
+        await user.click(button) // expand
+        await user.click(button) // collapse
+
+        const items = screen.getAllByTestId('activity-item')
+        expect(items).toHaveLength(5)
+        expect(button).toHaveTextContent('Show all (8)')
+      })
     })
 
-    it('should show only 5 activities when there are more than 5', () => {
-      setupStore(makeActivities(8))
-      render(<ActivityList />)
+    describe('Desktop (>= 1024px) — maxVisible = 8', () => {
+      beforeEach(() => {
+        mockUseMediaQuery.mockReturnValue(true)
+      })
 
-      const items = screen.getAllByTestId('activity-item')
-      expect(items).toHaveLength(5)
+      it('should show up to 8 activities without pagination', () => {
+        setupStore(makeActivities(8))
+        render(<ActivityList />)
+
+        const items = screen.getAllByTestId('activity-item')
+        expect(items).toHaveLength(8)
+        expect(screen.queryByTestId('show-more-button')).not.toBeInTheDocument()
+      })
+
+      it('should show only 8 activities when there are more than 8', () => {
+        setupStore(makeActivities(12))
+        render(<ActivityList />)
+
+        const items = screen.getAllByTestId('activity-item')
+        expect(items).toHaveLength(8)
+      })
+
+      it('should show "Show all" button when there are more than 8', () => {
+        setupStore(makeActivities(12))
+        render(<ActivityList />)
+
+        const button = screen.getByTestId('show-more-button')
+        expect(button).toBeInTheDocument()
+        expect(button).toHaveTextContent('Show all (12)')
+      })
+
+      it('should show all activities when "Show all" is clicked', async () => {
+        const user = userEvent.setup()
+        setupStore(makeActivities(12))
+        render(<ActivityList />)
+
+        const button = screen.getByTestId('show-more-button')
+        await user.click(button)
+
+        const items = screen.getAllByTestId('activity-item')
+        expect(items).toHaveLength(12)
+        expect(button).toHaveTextContent('Show less')
+      })
+
+      it('should collapse back to 8 when "Show less" is clicked', async () => {
+        const user = userEvent.setup()
+        setupStore(makeActivities(12))
+        render(<ActivityList />)
+
+        const button = screen.getByTestId('show-more-button')
+        await user.click(button) // expand
+        await user.click(button) // collapse
+
+        const items = screen.getAllByTestId('activity-item')
+        expect(items).toHaveLength(8)
+        expect(button).toHaveTextContent('Show all (12)')
+      })
     })
 
-    it('should show "Show all" button with count when there are more than 5', () => {
-      setupStore(makeActivities(8))
-      render(<ActivityList />)
-
-      const button = screen.getByTestId('show-more-button')
-      expect(button).toBeInTheDocument()
-      expect(button).toHaveTextContent('Show all (8)')
-    })
-
-    it('should not show "Show all" button when there are 5 or fewer activities', () => {
+    it('should call useMediaQuery with the lg breakpoint', () => {
       setupStore(makeActivities(3))
       render(<ActivityList />)
 
-      expect(screen.queryByTestId('show-more-button')).not.toBeInTheDocument()
-    })
-
-    it('should show all activities when "Show all" is clicked', async () => {
-      const user = userEvent.setup()
-      setupStore(makeActivities(8))
-      render(<ActivityList />)
-
-      const button = screen.getByTestId('show-more-button')
-      await user.click(button)
-
-      const items = screen.getAllByTestId('activity-item')
-      expect(items).toHaveLength(8)
-      expect(button).toHaveTextContent('Show less')
-    })
-
-    it('should collapse back to 5 when "Show less" is clicked', async () => {
-      const user = userEvent.setup()
-      setupStore(makeActivities(8))
-      render(<ActivityList />)
-
-      const button = screen.getByTestId('show-more-button')
-      await user.click(button) // expand
-      await user.click(button) // collapse
-
-      const items = screen.getAllByTestId('activity-item')
-      expect(items).toHaveLength(5)
-      expect(button).toHaveTextContent('Show all (8)')
+      expect(mockUseMediaQuery).toHaveBeenCalledWith('(min-width: 1024px)')
     })
   })
 

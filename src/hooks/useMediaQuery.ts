@@ -1,14 +1,12 @@
 import { useState, useEffect } from 'react'
 
 /**
- * Hook to detect if the viewport is below a given breakpoint.
- * Defaults to the Tailwind `sm` breakpoint (640px).
+ * Hook to reactively match a CSS media query.
  *
- * @returns `isMobile` - true when the viewport width is below the breakpoint.
+ * @returns true when the media query matches, false otherwise.
  */
-export function useMediaQuery(query = '(min-width: 640px)'): { isMobile: boolean } {
+export function useMediaQuery(query: string): boolean {
   const [matches, setMatches] = useState<boolean>(() => {
-    // SSR safe: default to false (assume desktop) when window is unavailable
     if (typeof window === 'undefined') return false
     return window.matchMedia(query).matches
   })
@@ -17,8 +15,6 @@ export function useMediaQuery(query = '(min-width: 640px)'): { isMobile: boolean
     if (typeof window === 'undefined') return
 
     const mediaQuery = window.matchMedia(query)
-
-    // Sync initial value in case it differs from the SSR default
     setMatches(mediaQuery.matches)
 
     const handler = (event: MediaQueryListEvent) => {
@@ -26,11 +22,8 @@ export function useMediaQuery(query = '(min-width: 640px)'): { isMobile: boolean
     }
 
     mediaQuery.addEventListener('change', handler)
-
-    return () => {
-      mediaQuery.removeEventListener('change', handler)
-    }
+    return () => mediaQuery.removeEventListener('change', handler)
   }, [query])
 
-  return { isMobile: !matches }
+  return matches
 }

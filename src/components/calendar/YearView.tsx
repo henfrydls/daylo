@@ -30,7 +30,7 @@ export const YearView = memo(function YearView() {
   const setSelectedYear = useCalendarStore((state) => state.setSelectedYear)
   const navigateToMonth = useCalendarStore((state) => state.navigateToMonth)
 
-  const { isMobile } = useMediaQuery()
+  const isMobile = !useMediaQuery('(min-width: 640px)')
 
   const yearDays = useMemo(() => getYearDays(selectedYear), [selectedYear])
 
