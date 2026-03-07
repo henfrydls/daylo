@@ -7,6 +7,7 @@ export const HEATMAP_COLORS = {
 } as const
 
 export const ACTIVITY_COLORS = [
+  // Primary 8 — most visually distinct (shown collapsed)
   { name: 'Green', value: '#10B981' },
   { name: 'Blue', value: '#3B82F6' },
   { name: 'Purple', value: '#8B5CF6' },
@@ -14,6 +15,8 @@ export const ACTIVITY_COLORS = [
   { name: 'Orange', value: '#F59E0B' },
   { name: 'Red', value: '#EF4444' },
   { name: 'Teal', value: '#14B8A6' },
+  { name: 'Slate', value: '#64748B' },
+  // Extended palette
   { name: 'Indigo', value: '#6366F1' },
   { name: 'Cyan', value: '#06B6D4' },
   { name: 'Lime', value: '#84CC16' },
@@ -22,7 +25,6 @@ export const ACTIVITY_COLORS = [
   { name: 'Sky', value: '#0EA5E9' },
   { name: 'Fuchsia', value: '#D946EF' },
   { name: 'Emerald', value: '#059669' },
-  { name: 'Slate', value: '#64748B' },
 ] as const
 
 export function getHeatmapColor(level: 0 | 1 | 2 | 3 | 4): string {

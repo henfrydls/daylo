@@ -113,6 +113,56 @@ export const QuickLog = memo(function QuickLog() {
 
   const date = parseDateString(selectedDate)
 
+  const renderCreationForm = ({ centered, inputId }: { centered?: boolean; inputId: string }) => (
+    <div className="p-3 border-2 border-dashed border-gray-200 rounded-lg space-y-3">
+      <div>
+        <label htmlFor={inputId} className="sr-only">
+          Activity name
+        </label>
+        <input
+          id={inputId}
+          ref={nameInputRef}
+          type="text"
+          value={newName}
+          onChange={(e) => setNewName(e.target.value)}
+          onKeyDown={handleKeyDown}
+          placeholder="Activity name"
+          aria-label="New activity name"
+          className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent min-h-[44px] sm:min-h-0"
+          data-testid="quicklog-new-activity-input"
+        />
+      </div>
+      <ColorPicker
+        value={newColor}
+        onChange={setNewColor}
+        colors={ACTIVITY_COLORS}
+        size="sm"
+        label=""
+        testIdPrefix="quicklog-color"
+        collapsedCount={8}
+        {...(centered ? { centered: true } : {})}
+      />
+      <div className={`flex gap-2 ${centered ? 'justify-center' : 'justify-end'}`}>
+        <Button
+          variant="ghost"
+          size="sm"
+          onClick={handleCancelCreating}
+          data-testid="quicklog-cancel-create"
+        >
+          Cancel
+        </Button>
+        <Button
+          size="sm"
+          onClick={handleCreateActivity}
+          disabled={!newName.trim()}
+          data-testid="quicklog-add-activity"
+        >
+          Add
+        </Button>
+      </div>
+    </div>
+  )
+
   const renderActivityList = () => (
     <div className="space-y-2 sm:space-y-3">
       {activities.map((activity) => {
@@ -150,50 +200,7 @@ export const QuickLog = memo(function QuickLog() {
       })}
 
       {isCreating ? (
-        <div className="p-3 border-2 border-dashed border-gray-200 rounded-lg space-y-3">
-          <div>
-            <label htmlFor="quicklog-activity-name" className="sr-only">
-              Activity name
-            </label>
-            <input
-              id="quicklog-activity-name"
-              ref={nameInputRef}
-              type="text"
-              value={newName}
-              onChange={(e) => setNewName(e.target.value)}
-              onKeyDown={handleKeyDown}
-              placeholder="Activity name"
-              aria-label="New activity name"
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent min-h-[44px] sm:min-h-0"
-              data-testid="quicklog-new-activity-input"
-            />
-          </div>
-          <ColorPicker
-            value={newColor}
-            onChange={setNewColor}
-            colors={ACTIVITY_COLORS}
-            size="sm"
-            testIdPrefix="quicklog-color"
-          />
-          <div className="flex gap-2 justify-end">
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={handleCancelCreating}
-              data-testid="quicklog-cancel-create"
-            >
-              Cancel
-            </Button>
-            <Button
-              size="sm"
-              onClick={handleCreateActivity}
-              disabled={!newName.trim()}
-              data-testid="quicklog-add-activity"
-            >
-              Add
-            </Button>
-          </div>
-        </div>
+        renderCreationForm({ inputId: 'quicklog-activity-name' })
       ) : (
         <button
           onClick={handleStartCreating}
@@ -208,53 +215,9 @@ export const QuickLog = memo(function QuickLog() {
   )
 
   const renderEmptyState = () => (
-    <div className="text-center py-8">
+    <div className="text-center py-4">
       {isCreating ? (
-        <div className="p-3 border-2 border-dashed border-gray-200 rounded-lg space-y-3">
-          <div>
-            <label htmlFor="quicklog-empty-activity-name" className="sr-only">
-              Activity name
-            </label>
-            <input
-              id="quicklog-empty-activity-name"
-              ref={nameInputRef}
-              type="text"
-              value={newName}
-              onChange={(e) => setNewName(e.target.value)}
-              onKeyDown={handleKeyDown}
-              placeholder="Activity name"
-              aria-label="New activity name"
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent min-h-[44px] sm:min-h-0"
-              data-testid="quicklog-new-activity-input"
-            />
-          </div>
-          <ColorPicker
-            value={newColor}
-            onChange={setNewColor}
-            colors={ACTIVITY_COLORS}
-            size="sm"
-            testIdPrefix="quicklog-color"
-            centered
-          />
-          <div className="flex gap-2 justify-center">
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={handleCancelCreating}
-              data-testid="quicklog-cancel-create"
-            >
-              Cancel
-            </Button>
-            <Button
-              size="sm"
-              onClick={handleCreateActivity}
-              disabled={!newName.trim()}
-              data-testid="quicklog-add-activity"
-            >
-              Add
-            </Button>
-          </div>
-        </div>
+        renderCreationForm({ centered: true, inputId: 'quicklog-empty-activity-name' })
       ) : (
         <>
           <p className="text-gray-500 mb-4">No activities to log yet.</p>
@@ -269,9 +232,6 @@ export const QuickLog = memo(function QuickLog() {
   return (
     <div
       className="fixed inset-0 z-40 flex items-end sm:items-center justify-center"
-      role="dialog"
-      aria-modal="true"
-      aria-labelledby="quicklog-title"
     >
       {/* Backdrop */}
       <div
@@ -287,7 +247,14 @@ export const QuickLog = memo(function QuickLog() {
             : 'translate-y-full opacity-0 sm:translate-y-0 sm:scale-95'
         }`}
         data-testid="quicklog-modal"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="quicklog-title"
       >
+        {/* Drag handle - mobile only */}
+        <div className="flex justify-center pt-3 pb-1 sm:hidden" aria-hidden="true">
+          <div className="w-10 h-1 bg-gray-300 rounded-full" />
+        </div>
         <div className="flex items-center justify-between mb-4">
           <h2 id="quicklog-title" className="text-base sm:text-lg font-semibold text-gray-900">
             {formatDisplayDate(date)}

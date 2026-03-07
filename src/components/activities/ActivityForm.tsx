@@ -122,6 +122,7 @@ export const ActivityForm = memo(function ActivityForm({
           label="Color"
           size="md"
           className="mb-4"
+          collapsedCount={8}
         />
 
         {/* Date logging section - only show when creating new activity */}

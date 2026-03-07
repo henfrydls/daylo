@@ -1,4 +1,4 @@
-import { memo } from 'react'
+import { memo, useState } from 'react'
 
 export interface ColorOption {
   name: string
@@ -22,6 +22,8 @@ export interface ColorPickerProps {
   className?: string
   /** Center the color options */
   centered?: boolean
+  /** Number of colors to show when collapsed (0 = show all) */
+  collapsedCount?: number
 }
 
 const sizeClasses = {
@@ -43,8 +45,21 @@ export const ColorPicker = memo(function ColorPicker({
   testIdPrefix,
   className = '',
   centered = false,
+  collapsedCount = 0,
 }: ColorPickerProps) {
+  const [expanded, setExpanded] = useState(false)
+
   const isSelected = (colorValue: string): boolean => value === colorValue
+
+  // Determine if we need to auto-expand because the selected color is hidden
+  const selectedIsHidden =
+    collapsedCount > 0 &&
+    !expanded &&
+    colors.findIndex((c) => c.value === value) >= collapsedCount
+
+  const shouldShowAll = collapsedCount <= 0 || expanded || selectedIsHidden
+  const visibleColors = shouldShowAll ? colors : colors.slice(0, collapsedCount)
+  const canToggle = collapsedCount > 0 && !selectedIsHidden && colors.length > collapsedCount
 
   return (
     <fieldset className={className}>
@@ -56,7 +71,7 @@ export const ColorPicker = memo(function ColorPicker({
         role="radiogroup"
         aria-label={`Select ${label?.toLowerCase() || 'color'}`}
       >
-        {colors.map((color) => (
+        {visibleColors.map((color) => (
           <button
             key={color.value}
             type="button"
@@ -74,12 +89,23 @@ export const ColorPicker = memo(function ColorPicker({
             `}
             style={{ backgroundColor: color.value }}
             aria-label={`${color.name} color`}
-            aria-pressed={isSelected(color.value)}
+            role="radio"
+            aria-checked={isSelected(color.value)}
             data-testid={
               testIdPrefix ? `${testIdPrefix}-${color.name.toLowerCase()}` : 'color-option'
             }
           />
         ))}
+        {canToggle && (
+          <button
+            type="button"
+            onClick={() => setExpanded((prev) => !prev)}
+            className={`${sizeClasses[size]} rounded-full border-2 border-dashed border-gray-300 flex items-center justify-center text-gray-400 text-xs font-medium hover:border-gray-400 hover:text-gray-500 transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-emerald-500`}
+            aria-label={expanded ? 'Show fewer colors' : 'Show more colors'}
+          >
+            {expanded ? '\u2212' : '+'}
+          </button>
+        )}
       </div>
     </fieldset>
   )
