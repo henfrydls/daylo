@@ -30,7 +30,7 @@ function ViewToggle() {
       aria-label="Calendar view toggle"
     >
       <button
-        onClick={() => setCurrentView('year')}
+        onClick={() => setCurrentView('year', 'drill-up')}
         className={`
           px-3 py-2 sm:py-1.5 text-sm font-medium rounded-md transition-all duration-150
           focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:ring-offset-1
@@ -46,7 +46,7 @@ function ViewToggle() {
         Year
       </button>
       <button
-        onClick={() => setCurrentView('month')}
+        onClick={() => setCurrentView('month', 'drill-down')}
         className={`
           px-3 py-2 sm:py-1.5 text-sm font-medium rounded-md transition-all duration-150
           focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:ring-offset-1
@@ -67,14 +67,14 @@ function ViewToggle() {
 
 function App() {
   const hasHydrated = useCalendarStore((state) => state._hasHydrated)
-  const { selectedDate, currentView, setCurrentView } = useCalendarStore()
+  const { selectedDate, currentView, setCurrentView, _viewTransitionDirection } = useCalendarStore()
   const [isExportOpen, setIsExportOpen] = useState(false)
   const [isImportOpen, setIsImportOpen] = useState(false)
   const [isBottomSheetOpen, setIsBottomSheetOpen] = useState(false)
   const appVersion = useAppVersion()
   const swipeRef = useSwipeGesture<HTMLDivElement>({
-    onSwipeLeft: () => setCurrentView('month'),
-    onSwipeRight: () => setCurrentView('year'),
+    onSwipeLeft: () => setCurrentView('month', 'drill-down'),
+    onSwipeRight: () => setCurrentView('year', 'drill-up'),
   })
 
   if (!hasHydrated) {
@@ -228,8 +228,17 @@ function App() {
         >
           <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
             {/* Calendar Section */}
-            <div ref={swipeRef} className="lg:col-span-3 bg-white rounded-xl border border-gray-200">
-              <div key={currentView} className="animate-in fade-in duration-200">
+            <div ref={swipeRef} className="lg:col-span-3 bg-white rounded-xl border border-gray-200 overflow-hidden">
+              <div
+                key={currentView}
+                style={{
+                  animation: _viewTransitionDirection === 'drill-down'
+                    ? 'view-drill-down 250ms var(--ease-emphasized-decel) both'
+                    : _viewTransitionDirection === 'drill-up'
+                      ? 'view-drill-up 200ms var(--ease-emphasized-decel) both'
+                      : 'view-fade 200ms ease both',
+                }}
+              >
                 {currentView === 'year' ? <YearView /> : <MonthView />}
               </div>
             </div>

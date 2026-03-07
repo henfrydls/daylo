@@ -158,7 +158,7 @@ export const MonthView = memo(function MonthView() {
       {/* Month Navigation */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 sm:gap-4 mb-4 sm:mb-6">
         <button
-          onClick={() => setCurrentView('year')}
+          onClick={() => setCurrentView('year', 'drill-up')}
           className="text-xl sm:text-2xl font-bold text-gray-900 hover:text-emerald-600 transition-colors focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:ring-offset-1 rounded-lg px-1 -mx-1"
           aria-label={`Switch to year view for ${selectedYear}`}
           data-testid="month-title-button"

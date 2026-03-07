@@ -4,6 +4,7 @@ import type { Activity, ActivityLog } from '../types'
 import { generateId } from '../lib/dates'
 
 type ViewType = 'year' | 'month'
+type ViewTransitionDirection = 'drill-down' | 'drill-up' | null
 
 // Deferred localStorage adapter for optimistic UI
 // UI updates immediately, persistence happens during idle time
@@ -78,6 +79,7 @@ interface CalendarState {
   currentView: ViewType
   selectedMonth: number
   _hasHydrated: boolean
+  _viewTransitionDirection: ViewTransitionDirection
 
   // Activity actions
   addActivity: (name: string, color: string) => void
@@ -91,7 +93,7 @@ interface CalendarState {
   // Navigation
   setSelectedYear: (year: number) => void
   setSelectedDate: (date: string | null) => void
-  setCurrentView: (view: ViewType) => void
+  setCurrentView: (view: ViewType, direction?: ViewTransitionDirection) => void
   setSelectedMonth: (month: number) => void
   navigateToMonth: (year: number, month: number) => void
 
@@ -115,6 +117,7 @@ export const useCalendarStore = create<CalendarState>()(
         : 'year') as ViewType,
       selectedMonth: new Date().getMonth(),
       _hasHydrated: false,
+      _viewTransitionDirection: null as ViewTransitionDirection,
 
       setHasHydrated: (value: boolean) => set({ _hasHydrated: value }),
 
@@ -180,10 +183,10 @@ export const useCalendarStore = create<CalendarState>()(
 
       setSelectedYear: (year) => set({ selectedYear: year }),
       setSelectedDate: (date) => set({ selectedDate: date }),
-      setCurrentView: (view) => set({ currentView: view }),
+      setCurrentView: (view, direction) => set({ currentView: view, _viewTransitionDirection: direction ?? null }),
       setSelectedMonth: (month) => set({ selectedMonth: month }),
       navigateToMonth: (year, month) =>
-        set({ selectedYear: year, selectedMonth: month, currentView: 'month' }),
+        set({ selectedYear: year, selectedMonth: month, currentView: 'month', _viewTransitionDirection: 'drill-down' }),
 
       getLogsForDate: (date) => {
         return get().logs.filter((l) => l.date === date && l.completed)
