@@ -82,10 +82,11 @@ export function BottomSheet({
     <div className="fixed inset-0 z-30" data-testid="bottom-sheet-container">
       {/* Backdrop */}
       <div
-        className="absolute inset-0 transition-opacity"
+        className="absolute inset-0 transition-[opacity,backdrop-filter]"
         style={{
           backgroundColor: `rgba(0, 0, 0, ${backdropOpacity})`,
-          transitionDuration: isDragging ? '0ms' : `${ANIMATION_DURATION}ms`,
+          backdropFilter: isVisible && !isDragging ? 'blur(4px)' : 'blur(0px)',
+          transitionDuration: isDragging ? '0ms' : isVisible ? '300ms' : '200ms',
         }}
         onClick={onClose}
         aria-hidden="true"
@@ -100,7 +101,9 @@ export function BottomSheet({
           transform: `translateY(${translateY}px)`,
           transition: isDragging
             ? 'none'
-            : `transform ${ANIMATION_DURATION}ms cubic-bezier(0.32, 0.72, 0, 1)`,
+            : isVisible
+              ? 'transform 300ms var(--ease-emphasized-decel)'
+              : 'transform 200ms var(--ease-emphasized-accel)',
         }}
         role="dialog"
         aria-modal="true"
