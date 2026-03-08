@@ -88,7 +88,10 @@ jobs:
         with:
           tagName: ${{ github.ref_name }}
           releaseName: '${{ github.ref_name }}'
-          releaseBody: 'See the assets below to download the installer for your platform.'
+          releaseBody: |
+            See the assets below to download the installer for your platform.
+
+            **Android:** The APK is built for arm64 (aarch64) devices, which covers all Android phones and tablets released since ~2017 (Galaxy S8+, Pixel 2+, etc.). Older 32-bit devices are not supported.
           releaseDraft: false
           prerelease: false
           args: ${{ matrix.args }}
@@ -115,10 +118,10 @@ jobs:
       - name: Install Android NDK
         run: sdkmanager "ndk;29.0.14206865"
 
-      - name: Install Rust stable with Android targets
+      - name: Install Rust stable with Android target
         uses: dtolnay/rust-toolchain@stable
         with:
-          targets: aarch64-linux-android,armv7-linux-androideabi,x86_64-linux-android,i686-linux-android
+          targets: aarch64-linux-android
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -138,8 +141,8 @@ jobs:
       - name: Install Tauri CLI
         run: npm install --save-dev @tauri-apps/cli
 
-      - name: Build Android APK
-        run: npx tauri android build --apk
+      - name: Build Android APK (arm64 only)
+        run: npx tauri android build --apk --target aarch64
         env:
           NDK_HOME: ${{ env.ANDROID_HOME }}/ndk/29.0.14206865
 
