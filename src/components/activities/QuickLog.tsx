@@ -18,6 +18,7 @@ export const QuickLog = memo(function QuickLog() {
   const [isCreating, setIsCreating] = useState(false)
   const [newName, setNewName] = useState('')
   const [newColor, setNewColor] = useState<string>(ACTIVITY_COLORS[0].value)
+  const [bouncingId, setBouncingId] = useState<string | null>(null)
   const nameInputRef = useRef<HTMLInputElement>(null)
   const modalRef = useRef<HTMLDivElement>(null)
 
@@ -59,6 +60,7 @@ export const QuickLog = memo(function QuickLog() {
     (activityId: string): void => {
       if (!selectedDate) return
       toggleLog(activityId, selectedDate)
+      setBouncingId(activityId)
     },
     [selectedDate, toggleLog]
   )
@@ -173,6 +175,8 @@ export const QuickLog = memo(function QuickLog() {
             className={`flex items-center gap-3 p-3 sm:p-3 rounded-lg cursor-pointer transition-colors focus-within:ring-2 focus-within:ring-emerald-500 min-h-[48px] ${
               isCompleted ? 'bg-emerald-50' : 'hover:bg-gray-50'
             }`}
+            style={bouncingId === activity.id ? { animation: 'check-bounce 300ms var(--ease-standard)' } : undefined}
+            onAnimationEnd={() => { if (bouncingId === activity.id) setBouncingId(null) }}
           >
             <input
               type="checkbox"
