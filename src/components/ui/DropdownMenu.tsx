@@ -178,10 +178,11 @@ export function DropdownMenu({ trigger, items, 'data-testid': testId }: Dropdown
             absolute right-0 mt-2 min-w-[160px] z-50
             bg-white border border-gray-200 rounded-lg shadow-lg
             py-1 origin-top-right
+            transition-[transform,opacity]
             ${
               isMenuVisible
-                ? 'animate-in fade-in slide-in-from-top-2 duration-150'
-                : 'animate-out fade-out slide-out-to-top-2 duration-100'
+                ? 'opacity-100 scale-100 duration-150 ease-[var(--ease-emphasized-decel)]'
+                : 'opacity-0 scale-95 duration-100 ease-[var(--ease-emphasized-accel)]'
             }
           `}
           role="menu"

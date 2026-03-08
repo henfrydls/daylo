@@ -1,4 +1,4 @@
-import { memo, useCallback, useState } from 'react'
+import { memo, useCallback, useState, useEffect } from 'react'
 import { useToastStore } from '../../store/toast'
 import type { Toast as ToastType } from '../../store/toast'
 import { CheckCircleIcon, ExclamationCircleIcon, InfoCircleIcon, XIcon } from './Icons'
@@ -30,6 +30,13 @@ interface ToastItemProps {
 const ToastItem = memo(function ToastItem({ toast, onClose }: ToastItemProps) {
   const styles = variantStyles[toast.variant]
   const [isExiting, setIsExiting] = useState(false)
+  const [hasEntered, setHasEntered] = useState(false)
+
+  useEffect(() => {
+    requestAnimationFrame(() => setHasEntered(true))
+  }, [])
+
+  const isVisible = hasEntered && !isExiting
 
   const handleClose = useCallback(() => {
     setIsExiting(true)
@@ -41,10 +48,11 @@ const ToastItem = memo(function ToastItem({ toast, onClose }: ToastItemProps) {
       className={`
         flex items-center gap-3 px-4 py-3
         border rounded-lg shadow-sm
+        transition-[transform,opacity]
         ${
-          isExiting
-            ? 'animate-out slide-out-to-right-full fade-out duration-200'
-            : 'animate-in slide-in-from-right-full fade-in duration-300'
+          isVisible
+            ? 'opacity-100 translate-x-0 duration-300 ease-[var(--ease-emphasized-decel)]'
+            : 'opacity-0 translate-x-full duration-200 ease-[var(--ease-emphasized-accel)]'
         }
         ${styles.bg}
       `}

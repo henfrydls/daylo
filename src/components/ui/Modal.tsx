@@ -28,10 +28,10 @@ export function Modal({ isOpen, onClose, title, children, 'data-testid': testId 
       />
       <div
         ref={modalRef}
-        className={`relative bg-white rounded-t-xl sm:rounded-xl shadow-xl max-w-md w-full mx-0 sm:mx-4 px-6 py-4 sm:p-6 max-h-[90dvh] flex flex-col overflow-hidden ${
+        className={`relative bg-white rounded-t-xl sm:rounded-xl shadow-xl max-w-md w-full mx-0 sm:mx-4 px-6 py-4 sm:p-6 max-h-[90dvh] flex flex-col overflow-hidden transition-[transform,opacity] ${
           isVisible
-            ? 'animate-in fade-in zoom-in-95 duration-200'
-            : 'animate-out fade-out zoom-out-95 duration-150'
+            ? 'opacity-100 scale-100 duration-250 ease-[var(--ease-emphasized-decel)]'
+            : 'opacity-0 scale-95 duration-150 ease-[var(--ease-emphasized-accel)]'
         }`}
         role="dialog"
         aria-modal="true"
