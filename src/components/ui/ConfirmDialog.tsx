@@ -1,4 +1,5 @@
 import { useRef, useEffect } from 'react'
+import { createPortal } from 'react-dom'
 import { Button } from './Button'
 import { useFocusTrap, useAnimatedPresence } from '../../hooks'
 
@@ -107,7 +108,7 @@ export function ConfirmDialog({
         ? 'bg-amber-600 hover:bg-amber-700 focus:ring-amber-500 text-white'
         : ''
 
-  return (
+  return createPortal(
     <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center">
       <div
         className={`absolute inset-0 bg-black/50 transition-opacity duration-150 ${isVisible ? 'opacity-100' : 'opacity-0'}`}
@@ -162,6 +163,7 @@ export function ConfirmDialog({
           </button>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body
   )
 }

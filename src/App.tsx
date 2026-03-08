@@ -73,8 +73,16 @@ function App() {
   const [isBottomSheetOpen, setIsBottomSheetOpen] = useState(false)
   const appVersion = useAppVersion()
   const swipeRef = useSwipeGesture<HTMLDivElement>({
-    onSwipeLeft: () => setCurrentView('month', 'drill-down'),
-    onSwipeRight: () => setCurrentView('year', 'drill-up'),
+    onSwipeLeft: () =>
+      setCurrentView(
+        currentView === 'year' ? 'month' : 'year',
+        currentView === 'year' ? 'drill-down' : 'drill-up'
+      ),
+    onSwipeRight: () =>
+      setCurrentView(
+        currentView === 'month' ? 'year' : 'month',
+        currentView === 'month' ? 'drill-up' : 'drill-down'
+      ),
   })
 
   if (!hasHydrated) {

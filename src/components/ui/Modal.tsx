@@ -1,4 +1,5 @@
 import { useRef } from 'react'
+import { createPortal } from 'react-dom'
 import type { ReactNode } from 'react'
 import { useFocusTrap, useAnimatedPresence } from '../../hooks'
 import { XIcon } from './Icons'
@@ -19,7 +20,7 @@ export function Modal({ isOpen, onClose, title, children, 'data-testid': testId 
 
   if (!shouldRender) return null
 
-  return (
+  return createPortal(
     <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center">
       <div
         className={`absolute inset-0 bg-black/50 transition-opacity duration-150 ${isVisible ? 'opacity-100' : 'opacity-0'}`}
@@ -52,6 +53,7 @@ export function Modal({ isOpen, onClose, title, children, 'data-testid': testId 
         </div>
         <div className="flex-1 overflow-y-auto min-h-0 -mx-1 px-1">{children}</div>
       </div>
-    </div>
+    </div>,
+    document.body
   )
 }

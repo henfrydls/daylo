@@ -25,7 +25,7 @@ export function BottomSheet({
   const [hasEntered, setHasEntered] = useState(false)
   useEffect(() => {
     if (isVisible) {
-      requestAnimationFrame(() => setHasEntered(true))
+      requestAnimationFrame(() => requestAnimationFrame(() => setHasEntered(true)))
     } else {
       /* eslint-disable react-hooks/set-state-in-effect */
       setHasEntered(false)

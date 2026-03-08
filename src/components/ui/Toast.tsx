@@ -33,7 +33,7 @@ const ToastItem = memo(function ToastItem({ toast, onClose }: ToastItemProps) {
   const [hasEntered, setHasEntered] = useState(false)
 
   useEffect(() => {
-    requestAnimationFrame(() => setHasEntered(true))
+    requestAnimationFrame(() => requestAnimationFrame(() => setHasEntered(true)))
   }, [])
 
   const isVisible = hasEntered && !isExiting
