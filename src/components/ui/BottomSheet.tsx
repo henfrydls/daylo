@@ -20,18 +20,33 @@ export function BottomSheet({
   const sheetRef = useRef<HTMLDivElement>(null)
   const { shouldRender, isVisible } = useAnimatedPresence(isOpen, ANIMATION_DURATION)
 
+  // Delay visibility by one frame so the enter transition can play
+  // (component must render off-screen first, then transition on-screen)
+  const [hasEntered, setHasEntered] = useState(false)
+  useEffect(() => {
+    if (isVisible) {
+      requestAnimationFrame(() => setHasEntered(true))
+    } else {
+      /* eslint-disable react-hooks/set-state-in-effect */
+      setHasEntered(false)
+      /* eslint-enable react-hooks/set-state-in-effect */
+    }
+  }, [isVisible])
+
+  const sheetVisible = hasEntered && isVisible
+
   useFocusTrap(sheetRef, isOpen, { onEscape: onClose, autoFocus: false })
 
   // Drag state
   const [dragOffset, setDragOffset] = useState(0)
   const [isDragging, setIsDragging] = useState(false)
+  const [sheetHeight, setSheetHeight] = useState(0)
   const dragStartY = useRef(0)
-  const sheetHeight = useRef(0)
 
   // Measure sheet height when visible
   useEffect(() => {
     if (isVisible && sheetRef.current) {
-      sheetHeight.current = sheetRef.current.getBoundingClientRect().height
+      setSheetHeight(sheetRef.current.getBoundingClientRect().height)
     }
   }, [isVisible])
 
@@ -53,30 +68,32 @@ export function BottomSheet({
     if (!isDragging) return
     setIsDragging(false)
 
-    if (sheetHeight.current > 0 && dragOffset > sheetHeight.current * DISMISS_THRESHOLD) {
+    if (sheetHeight > 0 && dragOffset > sheetHeight * DISMISS_THRESHOLD) {
       onClose()
     }
     setDragOffset(0)
-  }, [isDragging, dragOffset, onClose])
+  }, [isDragging, dragOffset, sheetHeight, onClose])
 
   // Reset drag state when closing
   useEffect(() => {
     if (!isOpen) {
+      /* eslint-disable react-hooks/set-state-in-effect */
       setDragOffset(0)
       setIsDragging(false)
+      /* eslint-enable react-hooks/set-state-in-effect */
     }
   }, [isOpen])
 
   if (!shouldRender) return null
 
-  const maxDrag = sheetHeight.current || 400
+  const maxDrag = sheetHeight || 400
   const backdropOpacity = isDragging
     ? Math.max(0, 0.3 * (1 - dragOffset / maxDrag))
-    : isVisible
+    : sheetVisible
       ? 0.3
       : 0
 
-  const translateY = isVisible ? dragOffset : sheetHeight.current || 400
+  const translateY = sheetVisible ? dragOffset : sheetHeight || 400
 
   return (
     <div className="fixed inset-0 z-30" data-testid="bottom-sheet-container">
@@ -85,8 +102,8 @@ export function BottomSheet({
         className="absolute inset-0 transition-[opacity,backdrop-filter]"
         style={{
           backgroundColor: `rgba(0, 0, 0, ${backdropOpacity})`,
-          backdropFilter: isVisible && !isDragging ? 'blur(4px)' : 'blur(0px)',
-          transitionDuration: isDragging ? '0ms' : isVisible ? '300ms' : '200ms',
+          backdropFilter: sheetVisible && !isDragging ? 'blur(4px)' : 'blur(0px)',
+          transitionDuration: isDragging ? '0ms' : sheetVisible ? '300ms' : '200ms',
         }}
         onClick={onClose}
         aria-hidden="true"
@@ -101,7 +118,7 @@ export function BottomSheet({
           transform: `translateY(${translateY}px)`,
           transition: isDragging
             ? 'none'
-            : isVisible
+            : sheetVisible
               ? 'transform 300ms var(--ease-emphasized-decel)'
               : 'transform 200ms var(--ease-emphasized-accel)',
         }}
