@@ -268,23 +268,27 @@ export const QuickLog = memo(function QuickLog() {
           </button>
         </div>
 
-        {isCreating ? (
-          // Two-Phase: hide activity list when creating, show only the form
-          renderCreationForm({ inputId: 'quicklog-activity-name' })
-        ) : (
-          <>
-            {activities.length === 0 ? renderEmptyState() : renderActivityList()}
-            <div className="mt-4 sm:mt-6 flex justify-end">
-              <Button
-                onClick={() => setSelectedDate(null)}
-                data-testid="quicklog-done-button"
-                className="w-full sm:w-auto"
-              >
-                Done
-              </Button>
-            </div>
-          </>
-        )}
+        <div
+          key={isCreating ? 'creating' : 'list'}
+          style={{ animation: 'view-fade 150ms ease both' }}
+        >
+          {isCreating ? (
+            renderCreationForm({ inputId: 'quicklog-activity-name' })
+          ) : (
+            <>
+              {activities.length === 0 ? renderEmptyState() : renderActivityList()}
+              <div className="mt-4 sm:mt-6 flex justify-end">
+                <Button
+                  onClick={() => setSelectedDate(null)}
+                  data-testid="quicklog-done-button"
+                  className="w-full sm:w-auto"
+                >
+                  Done
+                </Button>
+              </div>
+            </>
+          )}
+        </div>
       </div>
     </div>
   )
