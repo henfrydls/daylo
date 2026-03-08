@@ -93,15 +93,91 @@ jobs:
           prerelease: false
           args: ${{ matrix.args }}
 
+  build-android:
+    permissions:
+      contents: write
+    runs-on: ubuntu-latest
+    name: Build (android-apk)
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Install Android NDK
+        run: sdkmanager "ndk;29.0.14206865"
+
+      - name: Install Rust stable with Android targets
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-linux-android,armv7-linux-androideabi,x86_64-linux-android,i686-linux-android
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+
+      - name: Cache Rust dependencies
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: './src-tauri -> target'
+          shared-key: android
+
+      - name: Install Node.js dependencies
+        run: npm ci
+
+      - name: Install Tauri CLI
+        run: npm install --save-dev @tauri-apps/cli
+
+      - name: Build Android APK
+        run: npx tauri android build --apk
+        env:
+          NDK_HOME: ${{ env.ANDROID_HOME }}/ndk/29.0.14206865
+
+      - name: Sign APK
+        run: |
+          APK_PATH="src-tauri/gen/android/app/build/outputs/apk/universal/release/app-universal-release-unsigned.apk"
+          ALIGNED_PATH="src-tauri/gen/android/app/build/outputs/apk/universal/release/daylo-android.apk"
+
+          # Generate a signing key
+          keytool -genkey -v -keystore release.jks -keyalg RSA -keysize 2048 \
+            -validity 10000 -alias release -storepass android -keypass android \
+            -dname "CN=Daylo,O=DLSLabs,C=US"
+
+          # Align
+          ${ANDROID_HOME}/build-tools/$(ls ${ANDROID_HOME}/build-tools/ | tail -1)/zipalign -f 4 \
+            "$APK_PATH" "$ALIGNED_PATH"
+
+          # Sign
+          ${ANDROID_HOME}/build-tools/$(ls ${ANDROID_HOME}/build-tools/ | tail -1)/apksigner sign \
+            --ks release.jks --ks-pass pass:android --ks-key-alias release \
+            "$ALIGNED_PATH"
+
+      - name: Upload APK to release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: src-tauri/gen/android/app/build/outputs/apk/universal/release/daylo-android.apk
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
   # Create a summary job that runs after all builds complete
   release-summary:
-    needs: build
+    needs: [build, build-android]
     runs-on: ubuntu-latest
     if: always()
     steps:
       - name: Check build results
         run: |
-          if [ "${{ needs.build.result }}" == "success" ]; then
+          if [ "${{ needs.build.result }}" == "success" ] && [ "${{ needs.build-android.result }}" == "success" ]; then
             echo "All builds completed successfully!"
             echo "Release artifacts have been uploaded to: ${{ github.server_url }}/${{ github.repository }}/releases/tag/${{ github.ref_name }}"
           else
