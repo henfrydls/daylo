@@ -1,4 +1,4 @@
-import { useMemo, useCallback, memo } from 'react'
+import { useMemo, useCallback, memo, useRef } from 'react'
 import { useCalendarStore } from '../../store'
 import { formatDate, formatMonthYear, checkIsToday } from '../../lib/dates'
 import { useMediaQuery } from '../../hooks/useMediaQuery'
@@ -79,6 +79,8 @@ export const MonthView = memo(function MonthView() {
 
   const isMobile = !useMediaQuery('(min-width: 640px)')
 
+  const slideDirection = useRef<'left' | 'right' | null>(null)
+
   const monthDays = useMemo(
     () => getMonthDays(selectedYear, selectedMonth),
     [selectedYear, selectedMonth]
@@ -115,6 +117,7 @@ export const MonthView = memo(function MonthView() {
   }, [activities])
 
   const handlePrevMonth = useCallback((): void => {
+    slideDirection.current = 'right'
     if (selectedMonth === 0) {
       setSelectedYear(selectedYear - 1)
       setSelectedMonth(11)
@@ -124,6 +127,7 @@ export const MonthView = memo(function MonthView() {
   }, [selectedMonth, selectedYear, setSelectedMonth, setSelectedYear])
 
   const handleNextMonth = useCallback((): void => {
+    slideDirection.current = 'left'
     if (selectedMonth === 11) {
       setSelectedYear(selectedYear + 1)
       setSelectedMonth(0)
@@ -133,6 +137,7 @@ export const MonthView = memo(function MonthView() {
   }, [selectedMonth, selectedYear, setSelectedMonth, setSelectedYear])
 
   const handleToday = useCallback((): void => {
+    slideDirection.current = null
     const today = new Date()
     setSelectedYear(today.getFullYear())
     setSelectedMonth(today.getMonth())
@@ -243,79 +248,91 @@ export const MonthView = memo(function MonthView() {
       )}
 
       {/* Calendar Grid */}
-      <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
-        {/* Day of Week Headers */}
-        <div className="grid grid-cols-7 border-b border-gray-200 bg-gray-50">
-          {DAYS_OF_WEEK.map((day, index) => (
-            <div
-              key={day}
-              className="px-1 sm:px-2 py-2 sm:py-3 text-center text-xs font-semibold text-gray-500 uppercase tracking-wider"
-            >
-              {/* Show single letter on mobile, full abbreviation on larger screens */}
-              <span className="sm:hidden">{DAYS_OF_WEEK_SHORT[index]}</span>
-              <span className="hidden sm:inline">{day}</span>
-            </div>
-          ))}
-        </div>
-
-        {/* Days Grid */}
-        <div className="grid grid-cols-7">
-          {enrichedDays.map((day, index) => {
-            const isLastRow = index >= 35
-            const isLastColumn = (index + 1) % 7 === 0
-
-            const isSelected = day.dateStr === selectedDate
-
-            return (
-              <button
-                key={day.dateStr}
-                onClick={() => handleDayClick(day.dateStr)}
-                className={`
-                  relative min-h-[60px] sm:min-h-[80px] p-1.5 sm:p-2 text-left transition-colors
-                  hover:bg-gray-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-emerald-500
-                  ${!isLastRow ? 'border-b border-gray-200' : ''}
-                  ${!isLastColumn ? 'border-r border-gray-200' : ''}
-                  ${isSelected ? 'bg-emerald-50 ring-2 ring-inset ring-emerald-500' : day.isCurrentMonth ? 'bg-white' : 'bg-gray-50'}
-                `}
-                aria-label={`${day.dateStr}, ${day.logs.length} activities completed`}
+      <div className="rounded-xl border border-gray-200 overflow-hidden">
+        <div
+          key={`${selectedYear}-${selectedMonth}`}
+          style={
+            slideDirection.current
+              ? {
+                  animation: `${slideDirection.current === 'left' ? 'slide-from-right' : 'slide-from-left'} 250ms var(--ease-emphasized-decel) both`,
+                }
+              : undefined
+          }
+          className="bg-white"
+        >
+          {/* Day of Week Headers */}
+          <div className="grid grid-cols-7 border-b border-gray-200 bg-gray-50">
+            {DAYS_OF_WEEK.map((day, index) => (
+              <div
+                key={day}
+                className="px-1 sm:px-2 py-2 sm:py-3 text-center text-xs font-semibold text-gray-500 uppercase tracking-wider"
               >
-                {/* Day Number */}
-                <span
-                  className={`
-                    inline-flex items-center justify-center w-6 h-6 sm:w-7 sm:h-7 text-xs sm:text-sm font-medium rounded-full
-                    ${day.isToday ? 'bg-emerald-500 text-white ring-2 ring-emerald-300' : ''}
-                    ${!day.isToday && day.isCurrentMonth ? 'text-gray-900' : ''}
-                    ${!day.isToday && !day.isCurrentMonth ? 'text-gray-400' : ''}
-                  `}
-                >
-                  {day.date.getDate()}
-                </span>
+                {/* Show single letter on mobile, full abbreviation on larger screens */}
+                <span className="sm:hidden">{DAYS_OF_WEEK_SHORT[index]}</span>
+                <span className="hidden sm:inline">{day}</span>
+              </div>
+            ))}
+          </div>
 
-                {/* Activity Dots */}
-                {day.logs.length > 0 && (
-                  <div className="flex flex-wrap gap-0.5 sm:gap-1 mt-1" aria-hidden="true">
-                    {day.logs.slice(0, 3).map((log) => {
-                      const activity = activityMap.get(log.activityId)
-                      return (
-                        <span
-                          key={log.id}
-                          className="w-1.5 h-1.5 sm:w-2 sm:h-2 rounded-full"
-                          style={{
-                            backgroundColor: activity?.color || '#10B981',
-                          }}
-                        />
-                      )
-                    })}
-                    {day.logs.length > 3 && (
-                      <span className="text-[10px] sm:text-xs text-gray-400 font-medium">
-                        +{day.logs.length - 3}
-                      </span>
-                    )}
-                  </div>
-                )}
-              </button>
-            )
-          })}
+          {/* Days Grid */}
+          <div className="grid grid-cols-7">
+            {enrichedDays.map((day, index) => {
+              const isLastRow = index >= 35
+              const isLastColumn = (index + 1) % 7 === 0
+
+              const isSelected = day.dateStr === selectedDate
+
+              return (
+                <button
+                  key={day.dateStr}
+                  onClick={() => handleDayClick(day.dateStr)}
+                  className={`
+                    relative min-h-[60px] sm:min-h-[80px] p-1.5 sm:p-2 text-left transition-colors
+                    hover:bg-gray-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-emerald-500
+                    ${!isLastRow ? 'border-b border-gray-200' : ''}
+                    ${!isLastColumn ? 'border-r border-gray-200' : ''}
+                    ${isSelected ? 'bg-emerald-50 ring-2 ring-inset ring-emerald-500' : day.isCurrentMonth ? 'bg-white' : 'bg-gray-50'}
+                  `}
+                  aria-label={`${day.dateStr}, ${day.logs.length} activities completed`}
+                >
+                  {/* Day Number */}
+                  <span
+                    className={`
+                      inline-flex items-center justify-center w-6 h-6 sm:w-7 sm:h-7 text-xs sm:text-sm font-medium rounded-full
+                      ${day.isToday ? 'bg-emerald-500 text-white ring-2 ring-emerald-300' : ''}
+                      ${!day.isToday && day.isCurrentMonth ? 'text-gray-900' : ''}
+                      ${!day.isToday && !day.isCurrentMonth ? 'text-gray-400' : ''}
+                    `}
+                  >
+                    {day.date.getDate()}
+                  </span>
+
+                  {/* Activity Dots */}
+                  {day.logs.length > 0 && (
+                    <div className="flex flex-wrap gap-0.5 sm:gap-1 mt-1" aria-hidden="true">
+                      {day.logs.slice(0, 3).map((log) => {
+                        const activity = activityMap.get(log.activityId)
+                        return (
+                          <span
+                            key={log.id}
+                            className="w-1.5 h-1.5 sm:w-2 sm:h-2 rounded-full"
+                            style={{
+                              backgroundColor: activity?.color || '#10B981',
+                            }}
+                          />
+                        )
+                      })}
+                      {day.logs.length > 3 && (
+                        <span className="text-[10px] sm:text-xs text-gray-400 font-medium">
+                          +{day.logs.length - 3}
+                        </span>
+                      )}
+                    </div>
+                  )}
+                </button>
+              )
+            })}
+          </div>
         </div>
       </div>
 
