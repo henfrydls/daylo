@@ -287,7 +287,7 @@ export const MonthView = memo(function MonthView() {
                   key={day.dateStr}
                   onClick={() => handleDayClick(day.dateStr)}
                   className={`
-                    relative min-h-[60px] sm:min-h-[80px] p-1.5 sm:p-2 text-left transition-colors
+                    ripple-container relative min-h-[60px] sm:min-h-[80px] p-1.5 sm:p-2 text-left transition-colors
                     hover:bg-gray-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-emerald-500
                     ${!isLastRow ? 'border-b border-gray-200' : ''}
                     ${!isLastColumn ? 'border-r border-gray-200' : ''}

@@ -70,10 +70,14 @@ export const ActivityList = memo(function ActivityList() {
         </p>
       ) : (
         <ul className="space-y-2" role="list" aria-label="Activities list">
-          {(showAll ? activities : activities.slice(0, maxVisible)).map((activity) => (
+          {(showAll ? activities : activities.slice(0, maxVisible)).map((activity, index) => (
             <li
               key={activity.id}
               className="flex items-center justify-between p-2 sm:p-3 rounded-lg hover:bg-gray-50 focus-within:bg-gray-50 transition-colors group"
+              style={{
+                animation: 'view-fade 200ms var(--ease-emphasized-decel) both',
+                animationDelay: `${index * 30}ms`,
+              }}
               data-testid="activity-item"
             >
               <div className="flex items-center gap-2 sm:gap-3 min-w-0 flex-1">

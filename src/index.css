@@ -91,3 +91,32 @@ body {
   padding-left: env(safe-area-inset-left, 0px);
   padding-right: env(safe-area-inset-right, 0px);
 }
+
+/* Ripple touch feedback */
+@keyframes ripple {
+  to { transform: scale(4); opacity: 0; }
+}
+
+.ripple-container {
+  position: relative;
+  overflow: hidden;
+}
+
+.ripple-container::after {
+  content: '';
+  display: block;
+  position: absolute;
+  width: 100%;
+  aspect-ratio: 1;
+  border-radius: 50%;
+  background: rgba(16, 185, 129, 0.15);
+  transform: scale(0);
+  opacity: 1;
+  pointer-events: none;
+  top: 0;
+  left: 0;
+}
+
+.ripple-container:active::after {
+  animation: ripple 400ms var(--ease-standard) forwards;
+}
