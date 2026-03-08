@@ -82,7 +82,9 @@ export const ColorPicker = memo(function ColorPicker({
   useEffect(() => {
     if (!autoCollapse) return
 
+    /* eslint-disable react-hooks/set-state-in-effect */
     measureAndSetCount()
+    /* eslint-enable react-hooks/set-state-in-effect */
 
     const container = containerRef.current
     if (!container) return

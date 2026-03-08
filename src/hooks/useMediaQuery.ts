@@ -15,7 +15,9 @@ export function useMediaQuery(query: string): boolean {
     if (typeof window === 'undefined') return
 
     const mediaQuery = window.matchMedia(query)
+    /* eslint-disable react-hooks/set-state-in-effect */
     setMatches(mediaQuery.matches)
+    /* eslint-enable react-hooks/set-state-in-effect */
 
     const handler = (event: MediaQueryListEvent) => {
       setMatches(event.matches)

@@ -36,9 +36,7 @@ describe('useMediaQuery', () => {
     Object.defineProperty(window, 'matchMedia', {
       writable: true,
       configurable: true,
-      value: vi.fn().mockImplementation((query: string) =>
-        createMockMediaQueryList(true, query)
-      ),
+      value: vi.fn().mockImplementation((query: string) => createMockMediaQueryList(true, query)),
     })
 
     const { result } = renderHook(() => useMediaQuery('(min-width: 1024px)'))
@@ -49,9 +47,7 @@ describe('useMediaQuery', () => {
     Object.defineProperty(window, 'matchMedia', {
       writable: true,
       configurable: true,
-      value: vi.fn().mockImplementation((query: string) =>
-        createMockMediaQueryList(false, query)
-      ),
+      value: vi.fn().mockImplementation((query: string) => createMockMediaQueryList(false, query)),
     })
 
     const { result } = renderHook(() => useMediaQuery('(min-width: 1024px)'))
@@ -62,18 +58,14 @@ describe('useMediaQuery', () => {
     Object.defineProperty(window, 'matchMedia', {
       writable: true,
       configurable: true,
-      value: vi.fn().mockImplementation((query: string) =>
-        createMockMediaQueryList(true, query)
-      ),
+      value: vi.fn().mockImplementation((query: string) => createMockMediaQueryList(true, query)),
     })
 
     const { result } = renderHook(() => useMediaQuery('(min-width: 1024px)'))
     expect(result.current).toBe(true)
 
     act(() => {
-      listeners.forEach((handler) =>
-        handler({ matches: false } as MediaQueryListEvent)
-      )
+      listeners.forEach((handler) => handler({ matches: false } as MediaQueryListEvent))
     })
 
     expect(result.current).toBe(false)
@@ -83,18 +75,14 @@ describe('useMediaQuery', () => {
     Object.defineProperty(window, 'matchMedia', {
       writable: true,
       configurable: true,
-      value: vi.fn().mockImplementation((query: string) =>
-        createMockMediaQueryList(false, query)
-      ),
+      value: vi.fn().mockImplementation((query: string) => createMockMediaQueryList(false, query)),
     })
 
     const { result } = renderHook(() => useMediaQuery('(min-width: 1024px)'))
     expect(result.current).toBe(false)
 
     act(() => {
-      listeners.forEach((handler) =>
-        handler({ matches: true } as MediaQueryListEvent)
-      )
+      listeners.forEach((handler) => handler({ matches: true } as MediaQueryListEvent))
     })
 
     expect(result.current).toBe(true)

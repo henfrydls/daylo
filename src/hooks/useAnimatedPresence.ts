@@ -21,8 +21,10 @@ export function useAnimatedPresence(
         clearTimeout(timerRef.current)
         timerRef.current = null
       }
+      /* eslint-disable react-hooks/set-state-in-effect */
       setShouldRender(true)
       setIsVisible(true)
+      /* eslint-enable react-hooks/set-state-in-effect */
     } else {
       setIsVisible(false)
       timerRef.current = setTimeout(() => {

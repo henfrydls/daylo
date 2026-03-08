@@ -27,17 +27,13 @@ describe('useSwipeGesture', () => {
   it('should detect a swipe left (negative deltaX)', () => {
     const onSwipeLeft = vi.fn()
     const onSwipeRight = vi.fn()
-    const { result } = renderHook(() =>
-      useSwipeGesture({ onSwipeLeft, onSwipeRight })
-    )
+    const { result } = renderHook(() => useSwipeGesture({ onSwipeLeft, onSwipeRight }))
 
     const div = document.createElement('div')
     ;(result.current as React.MutableRefObject<HTMLDivElement>).current = div
 
     // Re-render so useEffect picks up the element
-    const { result: result2 } = renderHook(() =>
-      useSwipeGesture({ onSwipeLeft, onSwipeRight })
-    )
+    const { result: result2 } = renderHook(() => useSwipeGesture({ onSwipeLeft, onSwipeRight }))
     const div2 = document.createElement('div')
     Object.defineProperty(result2.current, 'current', {
       writable: true,
