@@ -183,10 +183,16 @@ export const useCalendarStore = create<CalendarState>()(
 
       setSelectedYear: (year) => set({ selectedYear: year }),
       setSelectedDate: (date) => set({ selectedDate: date }),
-      setCurrentView: (view, direction) => set({ currentView: view, _viewTransitionDirection: direction ?? null }),
+      setCurrentView: (view, direction) =>
+        set({ currentView: view, _viewTransitionDirection: direction ?? null }),
       setSelectedMonth: (month) => set({ selectedMonth: month }),
       navigateToMonth: (year, month) =>
-        set({ selectedYear: year, selectedMonth: month, currentView: 'month', _viewTransitionDirection: 'drill-down' }),
+        set({
+          selectedYear: year,
+          selectedMonth: month,
+          currentView: 'month',
+          _viewTransitionDirection: 'drill-down',
+        }),
 
       getLogsForDate: (date) => {
         return get().logs.filter((l) => l.date === date && l.completed)

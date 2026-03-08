@@ -175,8 +175,14 @@ export const QuickLog = memo(function QuickLog() {
             className={`flex items-center gap-3 p-3 sm:p-3 rounded-lg cursor-pointer transition-colors focus-within:ring-2 focus-within:ring-emerald-500 min-h-[48px] ${
               isCompleted ? 'bg-emerald-50' : 'hover:bg-gray-50'
             }`}
-            style={bouncingId === activity.id ? { animation: 'check-bounce 300ms var(--ease-standard)' } : undefined}
-            onAnimationEnd={() => { if (bouncingId === activity.id) setBouncingId(null) }}
+            style={
+              bouncingId === activity.id
+                ? { animation: 'check-bounce 300ms var(--ease-standard)' }
+                : undefined
+            }
+            onAnimationEnd={() => {
+              if (bouncingId === activity.id) setBouncingId(null)
+            }}
           >
             <input
               type="checkbox"
@@ -230,9 +236,7 @@ export const QuickLog = memo(function QuickLog() {
   )
 
   return (
-    <div
-      className="fixed inset-0 z-40 flex items-end sm:items-center justify-center"
-    >
+    <div className="fixed inset-0 z-40 flex items-end sm:items-center justify-center">
       {/* Backdrop */}
       <div
         className={`absolute inset-0 bg-black/50 transition-opacity duration-250 ${isVisible ? 'opacity-100' : 'opacity-0'}`}

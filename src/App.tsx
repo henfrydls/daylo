@@ -143,80 +143,80 @@ function App() {
         {/* Header */}
         <header className="sticky top-0 z-30 bg-white pt-[env(safe-area-inset-top)]">
           <div className="bg-white border-b border-gray-200">
-          <div className="max-w-7xl mx-auto px-3 sm:px-4 py-3 sm:py-4">
-            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-              <div
-                className="flex items-center justify-between sm:justify-start gap-3"
-                data-testid="app-header"
-              >
-                <div className="flex items-center gap-3">
-                  <h1 className="text-lg sm:text-xl font-semibold text-gray-900">
-                    Daylo
-                    <span className="hidden md:inline text-sm font-normal text-gray-400 ml-2">
-                      · Simple Activity Tracking
-                    </span>
-                  </h1>
-                </div>
-                {/* Menu button visible on mobile next to title */}
-                <div className="sm:hidden">
-                  <DropdownMenu
-                    trigger={
-                      <span
-                        className="p-2.5 rounded-lg text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition-colors min-h-[44px] min-w-[44px] flex items-center justify-center"
-                        aria-label="More options"
-                      >
-                        <svg
-                          className="w-5 h-5"
-                          fill="none"
-                          viewBox="0 0 24 24"
-                          stroke="currentColor"
-                          aria-hidden="true"
-                        >
-                          <path
-                            strokeLinecap="round"
-                            strokeLinejoin="round"
-                            strokeWidth={2}
-                            d="M12 5v.01M12 12v.01M12 19v.01M12 6a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2z"
-                          />
-                        </svg>
+            <div className="max-w-7xl mx-auto px-3 sm:px-4 py-3 sm:py-4">
+              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+                <div
+                  className="flex items-center justify-between sm:justify-start gap-3"
+                  data-testid="app-header"
+                >
+                  <div className="flex items-center gap-3">
+                    <h1 className="text-lg sm:text-xl font-semibold text-gray-900">
+                      Daylo
+                      <span className="hidden md:inline text-sm font-normal text-gray-400 ml-2">
+                        · Simple Activity Tracking
                       </span>
-                    }
-                    items={menuItems}
-                  />
-                </div>
-              </div>
-              <div className="flex items-center justify-between sm:justify-end gap-3">
-                <ViewToggle />
-                {/* Menu button hidden on mobile, visible on larger screens */}
-                <div className="hidden sm:block">
-                  <DropdownMenu
-                    trigger={
-                      <span
-                        className="p-2 rounded-lg text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition-colors min-h-[44px] min-w-[44px] flex items-center justify-center"
-                        aria-label="More options"
-                      >
-                        <svg
-                          className="w-5 h-5"
-                          fill="none"
-                          viewBox="0 0 24 24"
-                          stroke="currentColor"
-                          aria-hidden="true"
+                    </h1>
+                  </div>
+                  {/* Menu button visible on mobile next to title */}
+                  <div className="sm:hidden">
+                    <DropdownMenu
+                      trigger={
+                        <span
+                          className="p-2.5 rounded-lg text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition-colors min-h-[44px] min-w-[44px] flex items-center justify-center"
+                          aria-label="More options"
                         >
-                          <path
-                            strokeLinecap="round"
-                            strokeLinejoin="round"
-                            strokeWidth={2}
-                            d="M12 5v.01M12 12v.01M12 19v.01M12 6a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2z"
-                          />
-                        </svg>
-                      </span>
-                    }
-                    items={menuItems}
-                  />
+                          <svg
+                            className="w-5 h-5"
+                            fill="none"
+                            viewBox="0 0 24 24"
+                            stroke="currentColor"
+                            aria-hidden="true"
+                          >
+                            <path
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                              strokeWidth={2}
+                              d="M12 5v.01M12 12v.01M12 19v.01M12 6a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2z"
+                            />
+                          </svg>
+                        </span>
+                      }
+                      items={menuItems}
+                    />
+                  </div>
+                </div>
+                <div className="flex items-center justify-between sm:justify-end gap-3">
+                  <ViewToggle />
+                  {/* Menu button hidden on mobile, visible on larger screens */}
+                  <div className="hidden sm:block">
+                    <DropdownMenu
+                      trigger={
+                        <span
+                          className="p-2 rounded-lg text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition-colors min-h-[44px] min-w-[44px] flex items-center justify-center"
+                          aria-label="More options"
+                        >
+                          <svg
+                            className="w-5 h-5"
+                            fill="none"
+                            viewBox="0 0 24 24"
+                            stroke="currentColor"
+                            aria-hidden="true"
+                          >
+                            <path
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                              strokeWidth={2}
+                              d="M12 5v.01M12 12v.01M12 19v.01M12 6a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2z"
+                            />
+                          </svg>
+                        </span>
+                      }
+                      items={menuItems}
+                    />
+                  </div>
                 </div>
               </div>
             </div>
-          </div>
           </div>
         </header>
 
@@ -228,15 +228,19 @@ function App() {
         >
           <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
             {/* Calendar Section */}
-            <div ref={swipeRef} className="lg:col-span-3 bg-white rounded-xl border border-gray-200 overflow-hidden">
+            <div
+              ref={swipeRef}
+              className="lg:col-span-3 bg-white rounded-xl border border-gray-200 overflow-hidden"
+            >
               <div
                 key={currentView}
                 style={{
-                  animation: _viewTransitionDirection === 'drill-down'
-                    ? 'view-drill-down 250ms var(--ease-emphasized-decel) both'
-                    : _viewTransitionDirection === 'drill-up'
-                      ? 'view-drill-up 200ms var(--ease-emphasized-decel) both'
-                      : 'view-fade 200ms ease both',
+                  animation:
+                    _viewTransitionDirection === 'drill-down'
+                      ? 'view-drill-down 250ms var(--ease-emphasized-decel) both'
+                      : _viewTransitionDirection === 'drill-up'
+                        ? 'view-drill-up 200ms var(--ease-emphasized-decel) both'
+                        : 'view-fade 200ms ease both',
                 }}
               >
                 {currentView === 'year' ? <YearView /> : <MonthView />}

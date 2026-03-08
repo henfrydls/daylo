@@ -57,7 +57,10 @@ export const ActivityList = memo(function ActivityList() {
         <h2 className="text-base sm:text-lg font-semibold text-gray-900">Activities</h2>
         <Button
           size="sm"
-          onClick={() => { setEditingActivity(undefined); setIsFormOpen(true) }}
+          onClick={() => {
+            setEditingActivity(undefined)
+            setIsFormOpen(true)
+          }}
           data-testid="add-activity-button"
         >
           + Add

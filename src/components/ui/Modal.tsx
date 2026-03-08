@@ -50,9 +50,7 @@ export function Modal({ isOpen, onClose, title, children, 'data-testid': testId 
             <XIcon className="w-5 h-5" />
           </button>
         </div>
-        <div className="flex-1 overflow-y-auto min-h-0 -mx-1 px-1">
-          {children}
-        </div>
+        <div className="flex-1 overflow-y-auto min-h-0 -mx-1 px-1">{children}</div>
       </div>
     </div>
   )
