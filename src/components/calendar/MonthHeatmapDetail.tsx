@@ -4,8 +4,18 @@ import { calculateHeatmapLevel, getHeatmapColor } from '../../lib/colors'
 import type { Activity } from '../../types'
 
 const MONTHS_FULL = [
-  'January', 'February', 'March', 'April', 'May', 'June',
-  'July', 'August', 'September', 'October', 'November', 'December',
+  'January',
+  'February',
+  'March',
+  'April',
+  'May',
+  'June',
+  'July',
+  'August',
+  'September',
+  'October',
+  'November',
+  'December',
 ]
 const DAYS_SHORT = ['S', 'M', 'T', 'W', 'T', 'F', 'S']
 
@@ -136,13 +146,16 @@ export const MonthHeatmapDetail = memo(function MonthHeatmapDetail({
             stroke="currentColor"
             aria-hidden="true"
           >
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+            <path
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              strokeWidth={2}
+              d="M15 19l-7-7 7-7"
+            />
           </svg>
         </button>
 
-        <h2 className="text-lg font-bold text-gray-900">
-          {MONTHS_FULL[month]}
-        </h2>
+        <h2 className="text-lg font-bold text-gray-900">{MONTHS_FULL[month]}</h2>
 
         <button
           type="button"
@@ -176,7 +189,11 @@ export const MonthHeatmapDetail = memo(function MonthHeatmapDetail({
       </div>
 
       {/* Calendar grid */}
-      <div className="grid grid-cols-7 gap-1" role="grid" aria-label={`${MONTHS_FULL[month]} ${year} detail`}>
+      <div
+        className="grid grid-cols-7 gap-1"
+        role="grid"
+        aria-label={`${MONTHS_FULL[month]} ${year} detail`}
+      >
         {cells.map((cell) => {
           const heatmapClass = cell.isCurrentMonth ? getHeatmapColor(cell.level) : ''
 
@@ -190,17 +207,16 @@ export const MonthHeatmapDetail = memo(function MonthHeatmapDetail({
                 w-full aspect-square rounded-lg flex items-center justify-center
                 text-sm font-medium transition-colors
                 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:ring-offset-1
-                ${cell.isCurrentMonth
-                  ? `${heatmapClass} ${cell.level === 0 ? 'border border-gray-200' : ''} active:scale-95`
-                  : 'text-gray-300 cursor-default'
+                ${
+                  cell.isCurrentMonth
+                    ? `${heatmapClass} ${cell.level === 0 ? 'border border-gray-200' : ''} active:scale-95`
+                    : 'text-gray-300 cursor-default'
                 }
                 ${cell.isToday && cell.isCurrentMonth ? 'ring-2 ring-offset-1 ring-blue-500' : ''}
               `}
               style={{ minHeight: '46px' }}
               aria-label={
-                cell.isCurrentMonth
-                  ? `${cell.dateStr}${cell.isToday ? ' (today)' : ''}`
-                  : undefined
+                cell.isCurrentMonth ? `${cell.dateStr}${cell.isToday ? ' (today)' : ''}` : undefined
               }
               data-testid={cell.isCurrentMonth ? 'month-detail-cell' : undefined}
             >

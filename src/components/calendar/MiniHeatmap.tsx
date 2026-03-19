@@ -64,11 +64,7 @@ export const MiniHeatmap = memo(function MiniHeatmap({
   }, [year])
 
   return (
-    <div
-      className="grid grid-cols-3 gap-3"
-      role="grid"
-      aria-label={`Mini heatmap for ${year}`}
-    >
+    <div className="grid grid-cols-3 gap-3" role="grid" aria-label={`Mini heatmap for ${year}`}>
       {miniMonths.map(({ month, cells }) => {
         const isSelected = month === selectedMonth
 
@@ -85,15 +81,10 @@ export const MiniHeatmap = memo(function MiniHeatmap({
             aria-pressed={isSelected}
           >
             {/* Month label */}
-            <span className="text-[10px] font-semibold text-gray-600 mb-1">
-              {MONTHS[month]}
-            </span>
+            <span className="text-[10px] font-semibold text-gray-600 mb-1">{MONTHS[month]}</span>
 
             {/* Mini grid */}
-            <div
-              className="grid grid-cols-7 gap-[2px]"
-              role="presentation"
-            >
+            <div className="grid grid-cols-7 gap-[2px]" role="presentation">
               {cells.map((date, idx) => {
                 if (!date) {
                   return (

@@ -1,4 +1,4 @@
-import { useMemo, useCallback, memo, useRef } from 'react'
+import { useMemo, useCallback, memo, useState } from 'react'
 import { useCalendarStore } from '../../store'
 import { formatDate, formatMonthYear, checkIsToday } from '../../lib/dates'
 import { useMediaQuery } from '../../hooks/useMediaQuery'
@@ -79,7 +79,7 @@ export const MonthView = memo(function MonthView() {
 
   const isMobile = !useMediaQuery('(min-width: 640px)')
 
-  const slideDirection = useRef<'left' | 'right' | null>(null)
+  const [slideDirection, setSlideDirection] = useState<'left' | 'right' | null>(null)
 
   const monthDays = useMemo(
     () => getMonthDays(selectedYear, selectedMonth),
@@ -117,7 +117,7 @@ export const MonthView = memo(function MonthView() {
   }, [activities])
 
   const handlePrevMonth = useCallback((): void => {
-    slideDirection.current = 'right'
+    setSlideDirection('right')
     if (selectedMonth === 0) {
       setSelectedYear(selectedYear - 1)
       setSelectedMonth(11)
@@ -127,7 +127,7 @@ export const MonthView = memo(function MonthView() {
   }, [selectedMonth, selectedYear, setSelectedMonth, setSelectedYear])
 
   const handleNextMonth = useCallback((): void => {
-    slideDirection.current = 'left'
+    setSlideDirection('left')
     if (selectedMonth === 11) {
       setSelectedYear(selectedYear + 1)
       setSelectedMonth(0)
@@ -137,7 +137,7 @@ export const MonthView = memo(function MonthView() {
   }, [selectedMonth, selectedYear, setSelectedMonth, setSelectedYear])
 
   const handleToday = useCallback((): void => {
-    slideDirection.current = null
+    setSlideDirection(null)
     const today = new Date()
     setSelectedYear(today.getFullYear())
     setSelectedMonth(today.getMonth())
@@ -252,9 +252,9 @@ export const MonthView = memo(function MonthView() {
         <div
           key={`${selectedYear}-${selectedMonth}`}
           style={
-            slideDirection.current
+            slideDirection
               ? {
-                  animation: `${slideDirection.current === 'left' ? 'slide-from-right' : 'slide-from-left'} 250ms var(--ease-emphasized-decel) both`,
+                  animation: `${slideDirection === 'left' ? 'slide-from-right' : 'slide-from-left'} 250ms var(--ease-emphasized-decel) both`,
                 }
               : undefined
           }

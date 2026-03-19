@@ -12,7 +12,9 @@ describe('YearViewSkeleton', () => {
     const { container } = render(<YearViewSkeleton />)
     // Each month skeleton has a grid of 6 columns (weeks) x 7 rows (days) = 42 cells
     // The months grid container has 12 children
-    const monthsGrid = container.querySelector('.grid.grid-cols-1.sm\\:grid-cols-2.lg\\:grid-cols-3.xl\\:grid-cols-4')
+    const monthsGrid = container.querySelector(
+      '.grid.grid-cols-1.sm\\:grid-cols-2.lg\\:grid-cols-3.xl\\:grid-cols-4'
+    )
     expect(monthsGrid).toBeInTheDocument()
     expect(monthsGrid?.children.length).toBe(12)
   })

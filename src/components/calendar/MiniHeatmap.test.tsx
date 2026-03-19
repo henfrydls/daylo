@@ -31,7 +31,20 @@ describe('MiniHeatmap', () => {
     it('should render all 12 month labels', () => {
       render(<MiniHeatmap {...defaultProps} />)
 
-      const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
+      const months = [
+        'Jan',
+        'Feb',
+        'Mar',
+        'Apr',
+        'May',
+        'Jun',
+        'Jul',
+        'Aug',
+        'Sep',
+        'Oct',
+        'Nov',
+        'Dec',
+      ]
       months.forEach((month) => {
         expect(screen.getByText(month)).toBeInTheDocument()
       })

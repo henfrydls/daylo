@@ -7,7 +7,7 @@ import { defineConfig, globalIgnores } from 'eslint/config'
 import eslintPluginPrettier from 'eslint-plugin-prettier'
 
 export default defineConfig([
-  globalIgnores(['dist']),
+  globalIgnores(['dist', 'src-tauri', '.claude']),
   {
     files: ['**/*.{ts,tsx}'],
     extends: [

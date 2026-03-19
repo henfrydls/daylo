@@ -16,7 +16,9 @@ function ActivityListSkeleton() {
             {/* Color dot */}
             <Skeleton className="w-4 h-4 rounded-full flex-shrink-0" />
             {/* Activity name */}
-            <Skeleton className={`h-4 rounded flex-1 ${i === 0 ? 'max-w-[120px]' : i === 1 ? 'max-w-[90px]' : 'max-w-[140px]'}`} />
+            <Skeleton
+              className={`h-4 rounded flex-1 ${i === 0 ? 'max-w-[120px]' : i === 1 ? 'max-w-[90px]' : 'max-w-[140px]'}`}
+            />
           </li>
         ))}
       </ul>

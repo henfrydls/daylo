@@ -14,13 +14,8 @@ function MonthSkeleton() {
         {/* Day Labels column */}
         <div className="grid grid-rows-7 gap-1 mr-2 pr-2 border-r border-gray-100">
           {Array.from({ length: DAYS_PER_WEEK }).map((_, i) => (
-            <div
-              key={i}
-              className="min-h-[10px] flex items-center justify-end"
-            >
-              {i % 2 === 1 ? (
-                <Skeleton className="w-[8px] h-[10px] rounded-sm" />
-              ) : null}
+            <div key={i} className="min-h-[10px] flex items-center justify-end">
+              {i % 2 === 1 ? <Skeleton className="w-[8px] h-[10px] rounded-sm" /> : null}
             </div>
           ))}
         </div>
@@ -64,10 +59,7 @@ export function YearViewSkeleton() {
           <Skeleton className="w-8 h-4 rounded" />
           <div className="flex gap-1">
             {Array.from({ length: 5 }).map((_, i) => (
-              <div
-                key={i}
-                className="w-[14px] h-[14px] rounded-sm bg-gray-200 animate-pulse"
-              />
+              <div key={i} className="w-[14px] h-[14px] rounded-sm bg-gray-200 animate-pulse" />
             ))}
           </div>
           <Skeleton className="w-10 h-4 rounded" />
