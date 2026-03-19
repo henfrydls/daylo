@@ -1,6 +1,6 @@
 [package]
 name = "activity-tracker"
-version = "1.0.1"
+version = "1.1.0"
 description = "Activity Tracker with GitHub-style contribution calendar"
 authors = ["you"]
 edition = "2021"
