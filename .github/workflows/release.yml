@@ -89,9 +89,19 @@ jobs:
           tagName: ${{ github.ref_name }}
           releaseName: '${{ github.ref_name }}'
           releaseBody: |
-            See the assets below to download the installer for your platform.
+            Download the installer for your platform below.
 
-            **Android:** The APK is built for arm64 (aarch64) devices, which covers all Android phones and tablets released since ~2017 (Galaxy S8+, Pixel 2+, etc.). Older 32-bit devices are not supported.
+            | Platform | File | Notes |
+            |----------|------|-------|
+            | Windows | `.exe` | Installer (NSIS). x64 and ARM64 available. |
+            | macOS | `.dmg` | Disk image. Intel and Apple Silicon available. |
+            | Linux | `.deb`, `.AppImage` | Debian package or portable AppImage. x64. |
+            | Android | `.apk` | Direct install. arm64 devices only (all phones/tablets since ~2017). |
+
+            ### Android install
+            1. Download `daylo-android.apk` on your phone
+            2. Open the file and allow "Install from unknown sources" if prompted
+            3. The app does not require any special permissions
           releaseDraft: false
           prerelease: false
           args: ${{ matrix.args }}
