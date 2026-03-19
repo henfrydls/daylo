@@ -2,11 +2,15 @@ import { useState, useCallback, memo } from 'react'
 import { Button, ConfirmDialog, PencilIcon, TrashIcon, useToast } from '../ui'
 import { ActivityForm } from './ActivityForm'
 import { useCalendarStore } from '../../store'
+import { useMediaQuery } from '../../hooks'
 import type { Activity } from '../../types'
 import { useShallow } from 'zustand/react/shallow'
 
 export const ActivityList = memo(function ActivityList() {
+  const isDesktop = useMediaQuery('(min-width: 1024px)')
+  const maxVisible = isDesktop ? 8 : 5
   const [isFormOpen, setIsFormOpen] = useState(false)
+  const [showAll, setShowAll] = useState(false)
   const [editingActivity, setEditingActivity] = useState<Activity | undefined>()
   const [deleteConfirm, setDeleteConfirm] = useState<{
     isOpen: boolean
@@ -28,7 +32,8 @@ export const ActivityList = memo(function ActivityList() {
 
   const handleCloseForm = useCallback(() => {
     setIsFormOpen(false)
-    setEditingActivity(undefined)
+    // Don't clear editingActivity here — it causes a flash of "New Activity"
+    // during the exit animation. It gets cleared when "+ Add" is clicked.
   }, [])
 
   const handleDeleteClick = useCallback((id: string) => {
@@ -52,9 +57,11 @@ export const ActivityList = memo(function ActivityList() {
         <h2 className="text-base sm:text-lg font-semibold text-gray-900">Activities</h2>
         <Button
           size="sm"
-          onClick={() => setIsFormOpen(true)}
+          onClick={() => {
+            setEditingActivity(undefined)
+            setIsFormOpen(true)
+          }}
           data-testid="add-activity-button"
-          className="min-h-[44px] sm:min-h-0"
         >
           + Add
         </Button>
@@ -66,10 +73,14 @@ export const ActivityList = memo(function ActivityList() {
         </p>
       ) : (
         <ul className="space-y-2" role="list" aria-label="Activities list">
-          {activities.map((activity) => (
+          {(showAll ? activities : activities.slice(0, maxVisible)).map((activity, index) => (
             <li
               key={activity.id}
               className="flex items-center justify-between p-2 sm:p-3 rounded-lg hover:bg-gray-50 focus-within:bg-gray-50 transition-colors group"
+              style={{
+                animation: 'view-fade 200ms var(--ease-emphasized-decel) both',
+                animationDelay: `${index * 30}ms`,
+              }}
               data-testid="activity-item"
             >
               <div className="flex items-center gap-2 sm:gap-3 min-w-0 flex-1">
@@ -102,6 +113,16 @@ export const ActivityList = memo(function ActivityList() {
             </li>
           ))}
         </ul>
+      )}
+
+      {activities.length > maxVisible && (
+        <button
+          onClick={() => setShowAll((prev) => !prev)}
+          className="w-full min-h-[44px] mt-2 text-sm font-medium text-emerald-600 hover:text-emerald-700 hover:bg-emerald-50 rounded-lg transition-colors focus:outline-none focus:ring-2 focus:ring-emerald-500"
+          data-testid="show-more-button"
+        >
+          {showAll ? 'Show less' : `Show all (${activities.length})`}
+        </button>
       )}
 
       <ActivityForm isOpen={isFormOpen} onClose={handleCloseForm} activity={editingActivity} />

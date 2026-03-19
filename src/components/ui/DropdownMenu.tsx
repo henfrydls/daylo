@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect, useCallback, useMemo } from 'react'
 import type { ReactNode } from 'react'
+import { useAnimatedPresence } from '../../hooks'
 
 export interface DropdownMenuActionItem {
   type?: 'action'
@@ -29,6 +30,10 @@ export interface DropdownMenuProps {
 
 export function DropdownMenu({ trigger, items, 'data-testid': testId }: DropdownMenuProps) {
   const [isOpen, setIsOpen] = useState(false)
+  const { shouldRender: shouldRenderMenu, isVisible: isMenuVisible } = useAnimatedPresence(
+    isOpen,
+    100
+  )
   const dropdownRef = useRef<HTMLDivElement>(null)
   const triggerRef = useRef<HTMLButtonElement>(null)
   const menuRef = useRef<HTMLDivElement>(null)
@@ -81,6 +86,8 @@ export function DropdownMenu({ trigger, items, 'data-testid': testId }: Dropdown
           event.preventDefault()
           setFocusedIndex((prev) => {
             const enabledItems = actionItems.filter((item) => !item.disabled)
+            if (enabledItems.length === 0) return -1
+            if (prev === -1) return actionItems.indexOf(enabledItems[0])
             const currentEnabledIndex = enabledItems.findIndex(
               (_, i) => actionItems.indexOf(enabledItems[i]) === prev
             )
@@ -93,6 +100,8 @@ export function DropdownMenu({ trigger, items, 'data-testid': testId }: Dropdown
           event.preventDefault()
           setFocusedIndex((prev) => {
             const enabledItems = actionItems.filter((item) => !item.disabled)
+            if (enabledItems.length === 0) return -1
+            if (prev === -1) return actionItems.indexOf(enabledItems[enabledItems.length - 1])
             const currentEnabledIndex = enabledItems.findIndex(
               (_, i) => actionItems.indexOf(enabledItems[i]) === prev
             )
@@ -127,15 +136,11 @@ export function DropdownMenu({ trigger, items, 'data-testid': testId }: Dropdown
     }
   }, [isOpen, focusedIndex, actionItems, handleItemClick])
 
-  // Reset focus when menu opens (only consider action items)
+  // Reset focus when menu opens — start with no focus so mobile/touch
+  // doesn't show a pre-selected item. Keyboard arrows will set focus.
   useEffect(() => {
     /* eslint-disable react-hooks/set-state-in-effect */
-    if (isOpen) {
-      const firstEnabledIndex = actionItems.findIndex((item) => !item.disabled)
-      setFocusedIndex(firstEnabledIndex)
-    } else {
-      setFocusedIndex(-1)
-    }
+    setFocusedIndex(-1)
     /* eslint-enable react-hooks/set-state-in-effect */
   }, [isOpen, actionItems])
 
@@ -165,7 +170,7 @@ export function DropdownMenu({ trigger, items, 'data-testid': testId }: Dropdown
         {trigger}
       </button>
 
-      {isOpen && (
+      {shouldRenderMenu && (
         <div
           ref={menuRef}
           id="dropdown-menu"
@@ -173,7 +178,12 @@ export function DropdownMenu({ trigger, items, 'data-testid': testId }: Dropdown
             absolute right-0 mt-2 min-w-[160px] z-50
             bg-white border border-gray-200 rounded-lg shadow-lg
             py-1 origin-top-right
-            animate-in fade-in slide-in-from-top-2 duration-150
+            transition-[transform,opacity]
+            ${
+              isMenuVisible
+                ? 'opacity-100 scale-100 duration-150 ease-[var(--ease-emphasized-decel)]'
+                : 'opacity-0 scale-95 duration-100 ease-[var(--ease-emphasized-accel)]'
+            }
           `}
           role="menu"
           aria-orientation="vertical"
@@ -222,6 +232,7 @@ export function DropdownMenu({ trigger, items, 'data-testid': testId }: Dropdown
                   flex items-center gap-2
                   transition-colors duration-150
                   focus:outline-none focus:ring-2 focus:ring-inset focus:ring-emerald-500
+                  min-h-[44px] sm:min-h-0
                   ${
                     item.disabled
                       ? 'text-gray-400 cursor-not-allowed'

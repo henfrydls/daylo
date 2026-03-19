@@ -135,7 +135,7 @@ describe('ActivityForm', () => {
       await user.click(blueColorButton)
 
       // The button should now be pressed
-      expect(blueColorButton).toHaveAttribute('aria-pressed', 'true')
+      expect(blueColorButton).toHaveAttribute('aria-checked', 'true')
     })
 
     it('should preselect color from activity prop in edit mode', () => {
@@ -143,7 +143,7 @@ describe('ActivityForm', () => {
 
       // Blue is the color of mockActivity (#3B82F6)
       const blueColorButton = screen.getByLabelText('Blue color')
-      expect(blueColorButton).toHaveAttribute('aria-pressed', 'true')
+      expect(blueColorButton).toHaveAttribute('aria-checked', 'true')
     })
   })
 
@@ -207,7 +207,8 @@ describe('ActivityForm', () => {
       const submitButton = screen.getByTestId('activity-form-submit')
       await user.click(submitButton)
 
-      // Rerender with isOpen true to check form was reset
+      // Close and reopen to trigger form reset
+      rerender(<ActivityForm isOpen={false} onClose={onClose} />)
       rerender(<ActivityForm isOpen={true} onClose={onClose} />)
 
       expect(screen.getByTestId('activity-name-input')).toHaveValue('')
@@ -374,9 +375,9 @@ describe('ActivityForm', () => {
       const colorPicker = screen.getByRole('radiogroup', { name: /select color/i })
       expect(colorPicker).toBeInTheDocument()
 
-      const colorButtons = screen.getAllByRole('button', { name: /color$/i })
+      const colorButtons = screen.getAllByRole('radio', { name: /color$/i })
       colorButtons.forEach((button) => {
-        expect(button).toHaveAttribute('aria-pressed')
+        expect(button).toHaveAttribute('aria-checked')
       })
     })
 

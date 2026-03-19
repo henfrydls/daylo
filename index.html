@@ -2,7 +2,7 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, interactive-widget=resizes-content" />
 
     <!-- Primary favicon (SVG with dark mode support) -->
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
@@ -24,9 +24,31 @@
     <meta name="application-name" content="Daylo" />
 
     <title>Daylo</title>
+    <style>
+      @keyframes skeleton-pulse {
+        0%, 100% { opacity: 1; }
+        50% { opacity: 0.5; }
+      }
+      .sk { animation: skeleton-pulse 2s cubic-bezier(0.4,0,0.6,1) infinite; background: #e5e7eb; border-radius: 0.25rem; }
+    </style>
   </head>
   <body>
-    <div id="root"></div>
+    <div id="root">
+      <!-- Pre-React skeleton: replaced automatically when React mounts -->
+      <div style="min-height:100vh;background:#f9fafb">
+        <header style="background:#fff;border-bottom:1px solid #e5e7eb">
+          <div style="max-width:80rem;margin:0 auto;padding:0.75rem 1rem">
+            <div style="display:flex;align-items:center;justify-content:space-between">
+              <div class="sk" style="width:4rem;height:1.5rem"></div>
+              <div style="display:flex;gap:0.5rem">
+                <div class="sk" style="width:3.5rem;height:1.75rem;border-radius:0.375rem"></div>
+                <div class="sk" style="width:4rem;height:1.75rem;border-radius:0.375rem"></div>
+              </div>
+            </div>
+          </div>
+        </header>
+      </div>
+    </div>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>

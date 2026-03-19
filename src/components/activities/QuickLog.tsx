@@ -3,7 +3,7 @@ import { useCalendarStore } from '../../store'
 import { formatDisplayDate, parseDateString } from '../../lib/dates'
 import { ACTIVITY_COLORS } from '../../lib/colors'
 import { Button, CheckIcon, ColorPicker, PlusIcon, XIcon } from '../ui'
-import { useFocusTrap } from '../../hooks'
+import { useFocusTrap, useAnimatedPresence } from '../../hooks'
 import { useShallow } from 'zustand/react/shallow'
 
 export const QuickLog = memo(function QuickLog() {
@@ -18,6 +18,7 @@ export const QuickLog = memo(function QuickLog() {
   const [isCreating, setIsCreating] = useState(false)
   const [newName, setNewName] = useState('')
   const [newColor, setNewColor] = useState<string>(ACTIVITY_COLORS[0].value)
+  const [bouncingId, setBouncingId] = useState<string | null>(null)
   const nameInputRef = useRef<HTMLInputElement>(null)
   const modalRef = useRef<HTMLDivElement>(null)
 
@@ -59,6 +60,7 @@ export const QuickLog = memo(function QuickLog() {
     (activityId: string): void => {
       if (!selectedDate) return
       toggleLog(activityId, selectedDate)
+      setBouncingId(activityId)
     },
     [selectedDate, toggleLog]
   )
@@ -105,10 +107,63 @@ export const QuickLog = memo(function QuickLog() {
     [handleCreateActivity, handleCancelCreating]
   )
 
+  const isOpen = !!selectedDate
+  const { shouldRender, isVisible } = useAnimatedPresence(isOpen, 250)
+
   // Early return after all hooks
-  if (!selectedDate) return null
+  if (!shouldRender || !selectedDate) return null
 
   const date = parseDateString(selectedDate)
+
+  const renderCreationForm = ({ centered, inputId }: { centered?: boolean; inputId: string }) => (
+    <div className="space-y-3">
+      <div>
+        <label htmlFor={inputId} className="sr-only">
+          Activity name
+        </label>
+        <input
+          id={inputId}
+          ref={nameInputRef}
+          type="text"
+          value={newName}
+          onChange={(e) => setNewName(e.target.value)}
+          onKeyDown={handleKeyDown}
+          placeholder="Activity name"
+          aria-label="New activity name"
+          className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent min-h-[44px] sm:min-h-0"
+          data-testid="quicklog-new-activity-input"
+        />
+      </div>
+      <ColorPicker
+        value={newColor}
+        onChange={setNewColor}
+        colors={ACTIVITY_COLORS}
+        size="sm"
+        label=""
+        testIdPrefix="quicklog-color"
+        autoCollapse
+        {...(centered ? { centered: true } : {})}
+      />
+      <div className={`flex gap-2 ${centered ? 'justify-center' : 'justify-end'}`}>
+        <Button
+          variant="ghost"
+          size="sm"
+          onClick={handleCancelCreating}
+          data-testid="quicklog-cancel-create"
+        >
+          Cancel
+        </Button>
+        <Button
+          size="sm"
+          onClick={handleCreateActivity}
+          disabled={!newName.trim()}
+          data-testid="quicklog-add-activity"
+        >
+          Add
+        </Button>
+      </div>
+    </div>
+  )
 
   const renderActivityList = () => (
     <div className="space-y-2 sm:space-y-3">
@@ -120,6 +175,14 @@ export const QuickLog = memo(function QuickLog() {
             className={`flex items-center gap-3 p-3 sm:p-3 rounded-lg cursor-pointer transition-colors focus-within:ring-2 focus-within:ring-emerald-500 min-h-[48px] ${
               isCompleted ? 'bg-emerald-50' : 'hover:bg-gray-50'
             }`}
+            style={
+              bouncingId === activity.id
+                ? { animation: 'check-bounce 300ms var(--ease-standard)' }
+                : undefined
+            }
+            onAnimationEnd={() => {
+              if (bouncingId === activity.id) setBouncingId(null)
+            }}
           >
             <input
               type="checkbox"
@@ -146,112 +209,21 @@ export const QuickLog = memo(function QuickLog() {
         )
       })}
 
-      {isCreating ? (
-        <div className="p-3 border-2 border-dashed border-gray-200 rounded-lg space-y-3">
-          <div>
-            <label htmlFor="quicklog-activity-name" className="sr-only">
-              Activity name
-            </label>
-            <input
-              id="quicklog-activity-name"
-              ref={nameInputRef}
-              type="text"
-              value={newName}
-              onChange={(e) => setNewName(e.target.value)}
-              onKeyDown={handleKeyDown}
-              placeholder="Activity name"
-              aria-label="New activity name"
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
-              data-testid="quicklog-new-activity-input"
-            />
-          </div>
-          <ColorPicker
-            value={newColor}
-            onChange={setNewColor}
-            colors={ACTIVITY_COLORS}
-            size="sm"
-            testIdPrefix="quicklog-color"
-          />
-          <div className="flex gap-2 justify-end">
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={handleCancelCreating}
-              data-testid="quicklog-cancel-create"
-            >
-              Cancel
-            </Button>
-            <Button
-              size="sm"
-              onClick={handleCreateActivity}
-              disabled={!newName.trim()}
-              data-testid="quicklog-add-activity"
-            >
-              Add
-            </Button>
-          </div>
-        </div>
-      ) : (
-        <button
-          onClick={handleStartCreating}
-          className="flex items-center gap-2 w-full p-3 border-2 border-dashed border-gray-200 rounded-lg text-gray-500 hover:bg-gray-50 hover:border-gray-300 transition-colors focus:outline-none focus:ring-2 focus:ring-emerald-500"
-          data-testid="quicklog-new-activity-button"
-        >
-          <PlusIcon className="w-5 h-5" />
-          <span className="font-medium">New activity</span>
-        </button>
-      )}
+      <button
+        onClick={handleStartCreating}
+        className="flex items-center gap-2 w-full p-3 border-2 border-dashed border-gray-200 rounded-lg text-gray-500 hover:bg-gray-50 hover:border-gray-300 transition-colors focus:outline-none focus:ring-2 focus:ring-emerald-500 min-h-[48px] sm:min-h-0"
+        data-testid="quicklog-new-activity-button"
+      >
+        <PlusIcon className="w-5 h-5" />
+        <span className="font-medium">New activity</span>
+      </button>
     </div>
   )
 
   const renderEmptyState = () => (
-    <div className="text-center py-8">
+    <div className="text-center py-4">
       {isCreating ? (
-        <div className="p-3 border-2 border-dashed border-gray-200 rounded-lg space-y-3">
-          <div>
-            <label htmlFor="quicklog-empty-activity-name" className="sr-only">
-              Activity name
-            </label>
-            <input
-              id="quicklog-empty-activity-name"
-              ref={nameInputRef}
-              type="text"
-              value={newName}
-              onChange={(e) => setNewName(e.target.value)}
-              onKeyDown={handleKeyDown}
-              placeholder="Activity name"
-              aria-label="New activity name"
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
-              data-testid="quicklog-new-activity-input"
-            />
-          </div>
-          <ColorPicker
-            value={newColor}
-            onChange={setNewColor}
-            colors={ACTIVITY_COLORS}
-            size="sm"
-            testIdPrefix="quicklog-color"
-            centered
-          />
-          <div className="flex gap-2 justify-center">
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={handleCancelCreating}
-              data-testid="quicklog-cancel-create"
-            >
-              Cancel
-            </Button>
-            <Button
-              size="sm"
-              onClick={handleCreateActivity}
-              disabled={!newName.trim()}
-              data-testid="quicklog-add-activity"
-            >
-              Add
-            </Button>
-          </div>
-        </div>
+        renderCreationForm({ centered: true, inputId: 'quicklog-empty-activity-name' })
       ) : (
         <>
           <p className="text-gray-500 mb-4">No activities to log yet.</p>
@@ -264,23 +236,29 @@ export const QuickLog = memo(function QuickLog() {
   )
 
   return (
-    <div
-      className="fixed inset-0 z-40 flex items-end sm:items-center justify-center"
-      role="dialog"
-      aria-modal="true"
-      aria-labelledby="quicklog-title"
-    >
+    <div className="fixed inset-0 z-40 flex items-end sm:items-center justify-center">
       {/* Backdrop */}
       <div
-        className="absolute inset-0 bg-black/50"
+        className={`absolute inset-0 bg-black/50 transition-opacity duration-250 ${isVisible ? 'opacity-100' : 'opacity-0'}`}
         onClick={() => setSelectedDate(null)}
         aria-hidden="true"
       />
       <div
         ref={modalRef}
-        className="relative bg-white rounded-t-xl sm:rounded-xl shadow-xl max-w-md w-full mx-0 sm:mx-4 p-4 sm:p-6 max-h-[85vh] overflow-y-auto"
+        className={`relative bg-white rounded-t-xl sm:rounded-xl shadow-xl max-w-md w-full mx-0 sm:mx-4 px-6 py-4 sm:p-6 max-h-[85dvh] overflow-y-auto transition-all duration-[250ms] ease-[cubic-bezier(0.32,0.72,0,1)] ${
+          isVisible
+            ? 'translate-y-0 opacity-100 sm:scale-100'
+            : 'translate-y-full opacity-0 sm:translate-y-0 sm:scale-95'
+        }`}
         data-testid="quicklog-modal"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="quicklog-title"
       >
+        {/* Drag handle - mobile only */}
+        <div className="flex justify-center pt-3 pb-1 sm:hidden" aria-hidden="true">
+          <div className="w-10 h-1 bg-gray-300 rounded-full" />
+        </div>
         <div className="flex items-center justify-between mb-4">
           <h2 id="quicklog-title" className="text-base sm:text-lg font-semibold text-gray-900">
             {formatDisplayDate(date)}
@@ -294,16 +272,26 @@ export const QuickLog = memo(function QuickLog() {
           </button>
         </div>
 
-        {activities.length === 0 ? renderEmptyState() : renderActivityList()}
-
-        <div className="mt-4 sm:mt-6 flex justify-end">
-          <Button
-            onClick={() => setSelectedDate(null)}
-            data-testid="quicklog-done-button"
-            className="min-h-[44px] sm:min-h-0 w-full sm:w-auto"
-          >
-            Done
-          </Button>
+        <div
+          key={isCreating ? 'creating' : 'list'}
+          style={{ animation: 'view-fade 150ms ease both' }}
+        >
+          {isCreating ? (
+            renderCreationForm({ inputId: 'quicklog-activity-name' })
+          ) : (
+            <>
+              {activities.length === 0 ? renderEmptyState() : renderActivityList()}
+              <div className="mt-4 sm:mt-6 flex justify-end">
+                <Button
+                  onClick={() => setSelectedDate(null)}
+                  data-testid="quicklog-done-button"
+                  className="w-full sm:w-auto"
+                >
+                  Done
+                </Button>
+              </div>
+            </>
+          )}
         </div>
       </div>
     </div>

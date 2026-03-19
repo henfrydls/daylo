@@ -1,8 +1,12 @@
 import { useMemo, useCallback, memo } from 'react'
 import { DayCell } from './DayCell'
+import { MonthCard } from './MonthCard'
+import { YearProgressBar } from './YearProgressBar'
+import { HeatmapLegend } from './HeatmapLegend'
 import { useCalendarStore } from '../../store'
 import { getYearDays, formatDate } from '../../lib/dates'
 import { calculateHeatmapLevel } from '../../lib/colors'
+import { useMediaQuery } from '../../hooks/useMediaQuery'
 import { useShallow } from 'zustand/react/shallow'
 
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
@@ -25,6 +29,8 @@ export const YearView = memo(function YearView() {
   const setSelectedDate = useCalendarStore((state) => state.setSelectedDate)
   const setSelectedYear = useCalendarStore((state) => state.setSelectedYear)
   const navigateToMonth = useCalendarStore((state) => state.navigateToMonth)
+
+  const isMobile = !useMediaQuery('(min-width: 640px)')
 
   const yearDays = useMemo(() => getYearDays(selectedYear), [selectedYear])
 
@@ -120,6 +126,98 @@ export const YearView = memo(function YearView() {
     return months
   }, [yearDays])
 
+  // --- Mobile Layout: Year Summary Cards ---
+  if (isMobile) {
+    return (
+      <div className="p-4 w-full">
+        {/* Year Navigation */}
+        <div className="flex items-center justify-between mb-4">
+          <div className="flex items-center gap-3">
+            <h1 className="text-2xl font-bold text-gray-900">{selectedYear}</h1>
+            <div className="flex items-center gap-1">
+              <button
+                onClick={handlePrevYear}
+                className="min-h-[44px] min-w-[44px] flex items-center justify-center rounded-lg text-gray-500 hover:bg-gray-100 hover:text-gray-700 transition-colors focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:ring-offset-1"
+                aria-label="Previous year"
+              >
+                <svg
+                  className="w-5 h-5"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  stroke="currentColor"
+                  aria-hidden="true"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M15 19l-7-7 7-7"
+                  />
+                </svg>
+              </button>
+              <button
+                onClick={handleNextYear}
+                className="min-h-[44px] min-w-[44px] flex items-center justify-center rounded-lg text-gray-500 hover:bg-gray-100 hover:text-gray-700 transition-colors focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:ring-offset-1"
+                aria-label="Next year"
+              >
+                <svg
+                  className="w-5 h-5"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  stroke="currentColor"
+                  aria-hidden="true"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M9 5l7 7-7 7"
+                  />
+                </svg>
+              </button>
+            </div>
+          </div>
+          <button
+            onClick={handleCurrentYear}
+            className="min-h-[44px] px-4 text-sm font-medium text-gray-600 hover:bg-gray-100 hover:text-gray-800 rounded-lg transition-colors border border-gray-200 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:ring-offset-1"
+            aria-label="Go to current year"
+          >
+            Today
+          </button>
+        </div>
+
+        {/* Year Progress Bar */}
+        <div className="mb-5">
+          <YearProgressBar
+            year={selectedYear}
+            logsByDate={logsByDate}
+            totalActivities={activities.length}
+          />
+        </div>
+
+        {/* Month Cards Grid (3 columns x 4 rows) */}
+        <div className="grid grid-cols-3 gap-2" data-testid="month-cards-grid">
+          {Array.from({ length: 12 }, (_, month) => (
+            <MonthCard
+              key={month}
+              year={selectedYear}
+              month={month}
+              totalActivities={activities.length}
+              logsByDate={logsByDate}
+              onSelect={(m) => navigateToMonth(selectedYear, m)}
+            />
+          ))}
+        </div>
+
+        {/* Heatmap Legend */}
+        <div className="mt-4 flex justify-center">
+          <HeatmapLegend />
+        </div>
+      </div>
+    )
+  }
+
+  // --- Desktop Layout (unchanged) ---
   return (
     <div className="p-4 sm:p-6 lg:p-8 w-full">
       {/* Year Navigation */}
@@ -129,7 +227,7 @@ export const YearView = memo(function YearView() {
           <div className="flex items-center gap-1">
             <button
               onClick={handlePrevYear}
-              className="p-2 rounded-lg text-gray-500 hover:bg-gray-100 hover:text-gray-700 transition-colors focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:ring-offset-1"
+              className="p-2 rounded-lg text-gray-500 hover:bg-gray-100 hover:text-gray-700 transition-colors focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:ring-offset-1 min-h-[44px] min-w-[44px] sm:min-h-0 sm:min-w-0 flex items-center justify-center"
               aria-label="Previous year"
             >
               <svg
@@ -149,7 +247,7 @@ export const YearView = memo(function YearView() {
             </button>
             <button
               onClick={handleNextYear}
-              className="p-2 rounded-lg text-gray-500 hover:bg-gray-100 hover:text-gray-700 transition-colors focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:ring-offset-1"
+              className="p-2 rounded-lg text-gray-500 hover:bg-gray-100 hover:text-gray-700 transition-colors focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:ring-offset-1 min-h-[44px] min-w-[44px] sm:min-h-0 sm:min-w-0 flex items-center justify-center"
               aria-label="Next year"
             >
               <svg
@@ -169,7 +267,7 @@ export const YearView = memo(function YearView() {
             </button>
             <button
               onClick={handleCurrentYear}
-              className="ml-2 px-4 py-1.5 text-sm font-medium text-gray-600 hover:bg-gray-100 hover:text-gray-800 rounded-lg transition-colors border border-gray-200 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:ring-offset-1"
+              className="ml-2 px-4 py-1.5 text-sm font-medium text-gray-600 hover:bg-gray-100 hover:text-gray-800 rounded-lg transition-colors border border-gray-200 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:ring-offset-1 min-h-[44px] sm:min-h-0"
               aria-label="Go to current year"
             >
               Today
@@ -178,45 +276,7 @@ export const YearView = memo(function YearView() {
         </div>
 
         {/* Legend */}
-        <div
-          className="flex items-center gap-3 text-sm text-gray-500"
-          role="group"
-          aria-label="Activity level legend"
-        >
-          <span className="font-medium" id="legend-less">
-            Less
-          </span>
-          <div className="flex gap-1" role="list" aria-labelledby="legend-less legend-more">
-            <div
-              className="w-[14px] h-[14px] rounded-sm bg-gray-100 border border-gray-200"
-              role="listitem"
-              aria-label="No activity: 0%"
-            />
-            <div
-              className="w-[14px] h-[14px] rounded-sm bg-emerald-100"
-              role="listitem"
-              aria-label="Low activity: 1-25%"
-            />
-            <div
-              className="w-[14px] h-[14px] rounded-sm bg-emerald-300"
-              role="listitem"
-              aria-label="Medium activity: 26-50%"
-            />
-            <div
-              className="w-[14px] h-[14px] rounded-sm bg-emerald-400"
-              role="listitem"
-              aria-label="High activity: 51-75%"
-            />
-            <div
-              className="w-[14px] h-[14px] rounded-sm bg-emerald-500"
-              role="listitem"
-              aria-label="Very high activity: 76-100%"
-            />
-          </div>
-          <span className="font-medium" id="legend-more">
-            More
-          </span>
-        </div>
+        <HeatmapLegend />
       </div>
 
       {/* Calendar Grid - Organized by Months */}
@@ -235,7 +295,7 @@ export const YearView = memo(function YearView() {
               {/* Month Label */}
               <button
                 onClick={() => navigateToMonth(selectedYear, month)}
-                className="mb-2 text-sm font-semibold text-gray-700 hover:text-emerald-600 transition-colors text-left"
+                className="mb-2 text-sm font-semibold text-gray-700 hover:text-emerald-600 transition-colors text-left py-2 sm:py-0 min-h-[44px] sm:min-h-0 flex items-center"
                 aria-label={`View ${MONTHS[month]} ${selectedYear}`}
               >
                 {MONTHS[month]}
@@ -248,7 +308,7 @@ export const YearView = memo(function YearView() {
                   {DAYS.map((day, i) => (
                     <div
                       key={day}
-                      className="min-h-[10px] flex items-center justify-end text-[10px] text-gray-400 font-medium"
+                      className="min-h-[44px] sm:min-h-[10px] flex items-center justify-end text-[10px] text-gray-400 font-medium"
                     >
                       {i % 2 === 1 ? day.charAt(0) : ''}
                     </div>

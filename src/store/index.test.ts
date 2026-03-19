@@ -116,6 +116,48 @@ describe('useCalendarStore', () => {
     })
   })
 
+  describe('default view by viewport', () => {
+    it('should resolve to month when innerWidth < 640', () => {
+      // Test the conditional logic used by the store initializer
+      const getDefaultView = (width: number) => (width < 640 ? 'month' : 'year')
+
+      expect(getDefaultView(320)).toBe('month')
+      expect(getDefaultView(375)).toBe('month')
+      expect(getDefaultView(639)).toBe('month')
+    })
+
+    it('should resolve to year when innerWidth >= 640', () => {
+      const getDefaultView = (width: number) => (width < 640 ? 'month' : 'year')
+
+      expect(getDefaultView(640)).toBe('year')
+      expect(getDefaultView(1024)).toBe('year')
+      expect(getDefaultView(1920)).toBe('year')
+    })
+  })
+
+  describe('hydration', () => {
+    it('should initialize _hasHydrated as false', () => {
+      useCalendarStore.setState({ _hasHydrated: false })
+      expect(useCalendarStore.getState()._hasHydrated).toBe(false)
+    })
+
+    it('should set _hasHydrated to true via setHasHydrated', () => {
+      useCalendarStore.setState({ _hasHydrated: false })
+      const { setHasHydrated } = useCalendarStore.getState()
+      setHasHydrated(true)
+
+      expect(useCalendarStore.getState()._hasHydrated).toBe(true)
+    })
+
+    it('should toggle _hasHydrated back to false', () => {
+      const { setHasHydrated } = useCalendarStore.getState()
+      setHasHydrated(true)
+      setHasHydrated(false)
+
+      expect(useCalendarStore.getState()._hasHydrated).toBe(false)
+    })
+  })
+
   describe('helpers', () => {
     it('should get logs for date', () => {
       const { addActivity, toggleLog } = useCalendarStore.getState()

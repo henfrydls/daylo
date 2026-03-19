@@ -2,10 +2,11 @@ import { useState, lazy, Suspense } from 'react'
 import { YearView, MonthView } from './components/calendar'
 import { ActivityList, QuickLog } from './components/activities'
 import { StatsPanel } from './components/stats'
-import { DropdownMenu, ErrorBoundary, ToastContainer } from './components/ui'
+import { BottomSheet, DropdownMenu, ErrorBoundary, ToastContainer } from './components/ui'
 import type { DropdownMenuItem } from './components/ui'
+import { AppSkeleton } from './components/skeletons'
 import { useCalendarStore } from './store'
-import { useAppVersion } from './hooks'
+import { useAppVersion, useSwipeGesture } from './hooks'
 
 // Lazy load modals - they are rarely used
 const ExportModal = lazy(() =>
@@ -29,7 +30,7 @@ function ViewToggle() {
       aria-label="Calendar view toggle"
     >
       <button
-        onClick={() => setCurrentView('year')}
+        onClick={() => setCurrentView('year', 'drill-up')}
         className={`
           px-3 py-2 sm:py-1.5 text-sm font-medium rounded-md transition-all duration-150
           focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:ring-offset-1
@@ -45,7 +46,7 @@ function ViewToggle() {
         Year
       </button>
       <button
-        onClick={() => setCurrentView('month')}
+        onClick={() => setCurrentView('month', 'drill-down')}
         className={`
           px-3 py-2 sm:py-1.5 text-sm font-medium rounded-md transition-all duration-150
           focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:ring-offset-1
@@ -65,10 +66,28 @@ function ViewToggle() {
 }
 
 function App() {
-  const { selectedDate, currentView } = useCalendarStore()
+  const hasHydrated = useCalendarStore((state) => state._hasHydrated)
+  const { selectedDate, currentView, setCurrentView, _viewTransitionDirection } = useCalendarStore()
   const [isExportOpen, setIsExportOpen] = useState(false)
   const [isImportOpen, setIsImportOpen] = useState(false)
+  const [isBottomSheetOpen, setIsBottomSheetOpen] = useState(false)
   const appVersion = useAppVersion()
+  const swipeRef = useSwipeGesture<HTMLDivElement>({
+    onSwipeLeft: () =>
+      setCurrentView(
+        currentView === 'year' ? 'month' : 'year',
+        currentView === 'year' ? 'drill-down' : 'drill-up'
+      ),
+    onSwipeRight: () =>
+      setCurrentView(
+        currentView === 'month' ? 'year' : 'month',
+        currentView === 'month' ? 'drill-up' : 'drill-down'
+      ),
+  })
+
+  if (!hasHydrated) {
+    return <AppSkeleton />
+  }
 
   const menuItems: DropdownMenuItem[] = [
     {
@@ -130,77 +149,79 @@ function App() {
         </a>
 
         {/* Header */}
-        <header className="bg-white border-b border-gray-200">
-          <div className="max-w-7xl mx-auto px-3 sm:px-4 py-3 sm:py-4">
-            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-              <div
-                className="flex items-center justify-between sm:justify-start gap-3"
-                data-testid="app-header"
-              >
-                <div className="flex items-center gap-3">
-                  <h1 className="text-lg sm:text-xl font-semibold text-gray-900">
-                    Daylo
-                    <span className="hidden md:inline text-sm font-normal text-gray-400 ml-2">
-                      · Simple Activity Tracking
-                    </span>
-                  </h1>
-                </div>
-                {/* Menu button visible on mobile next to title */}
-                <div className="sm:hidden">
-                  <DropdownMenu
-                    trigger={
-                      <span
-                        className="p-2.5 rounded-lg text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition-colors min-h-[44px] min-w-[44px] flex items-center justify-center"
-                        aria-label="More options"
-                      >
-                        <svg
-                          className="w-5 h-5"
-                          fill="none"
-                          viewBox="0 0 24 24"
-                          stroke="currentColor"
-                          aria-hidden="true"
-                        >
-                          <path
-                            strokeLinecap="round"
-                            strokeLinejoin="round"
-                            strokeWidth={2}
-                            d="M12 5v.01M12 12v.01M12 19v.01M12 6a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2z"
-                          />
-                        </svg>
+        <header className="sticky top-0 z-30 bg-white pt-[env(safe-area-inset-top)]">
+          <div className="bg-white border-b border-gray-200">
+            <div className="max-w-7xl mx-auto px-3 sm:px-4 py-3 sm:py-4">
+              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+                <div
+                  className="flex items-center justify-between sm:justify-start gap-3"
+                  data-testid="app-header"
+                >
+                  <div className="flex items-center gap-3">
+                    <h1 className="text-lg sm:text-xl font-semibold text-gray-900">
+                      Daylo
+                      <span className="hidden md:inline text-sm font-normal text-gray-400 ml-2">
+                        · Simple Activity Tracking
                       </span>
-                    }
-                    items={menuItems}
-                  />
-                </div>
-              </div>
-              <div className="flex items-center justify-between sm:justify-end gap-3">
-                <ViewToggle />
-                {/* Menu button hidden on mobile, visible on larger screens */}
-                <div className="hidden sm:block">
-                  <DropdownMenu
-                    trigger={
-                      <span
-                        className="p-2 rounded-lg text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition-colors min-h-[44px] min-w-[44px] flex items-center justify-center"
-                        aria-label="More options"
-                      >
-                        <svg
-                          className="w-5 h-5"
-                          fill="none"
-                          viewBox="0 0 24 24"
-                          stroke="currentColor"
-                          aria-hidden="true"
+                    </h1>
+                  </div>
+                  {/* Menu button visible on mobile next to title */}
+                  <div className="sm:hidden">
+                    <DropdownMenu
+                      trigger={
+                        <span
+                          className="p-2.5 rounded-lg text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition-colors min-h-[44px] min-w-[44px] flex items-center justify-center"
+                          aria-label="More options"
                         >
-                          <path
-                            strokeLinecap="round"
-                            strokeLinejoin="round"
-                            strokeWidth={2}
-                            d="M12 5v.01M12 12v.01M12 19v.01M12 6a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2z"
-                          />
-                        </svg>
-                      </span>
-                    }
-                    items={menuItems}
-                  />
+                          <svg
+                            className="w-5 h-5"
+                            fill="none"
+                            viewBox="0 0 24 24"
+                            stroke="currentColor"
+                            aria-hidden="true"
+                          >
+                            <path
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                              strokeWidth={2}
+                              d="M12 5v.01M12 12v.01M12 19v.01M12 6a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2z"
+                            />
+                          </svg>
+                        </span>
+                      }
+                      items={menuItems}
+                    />
+                  </div>
+                </div>
+                <div className="flex items-center justify-between sm:justify-end gap-3">
+                  <ViewToggle />
+                  {/* Menu button hidden on mobile, visible on larger screens */}
+                  <div className="hidden sm:block">
+                    <DropdownMenu
+                      trigger={
+                        <span
+                          className="p-2 rounded-lg text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition-colors min-h-[44px] min-w-[44px] flex items-center justify-center"
+                          aria-label="More options"
+                        >
+                          <svg
+                            className="w-5 h-5"
+                            fill="none"
+                            viewBox="0 0 24 24"
+                            stroke="currentColor"
+                            aria-hidden="true"
+                          >
+                            <path
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                              strokeWidth={2}
+                              d="M12 5v.01M12 12v.01M12 19v.01M12 6a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2z"
+                            />
+                          </svg>
+                        </span>
+                      }
+                      items={menuItems}
+                    />
+                  </div>
                 </div>
               </div>
             </div>
@@ -215,17 +236,67 @@ function App() {
         >
           <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
             {/* Calendar Section */}
-            <div className="lg:col-span-3 bg-white rounded-xl border border-gray-200">
-              {currentView === 'year' ? <YearView /> : <MonthView />}
+            <div
+              ref={swipeRef}
+              className="lg:col-span-3 bg-white rounded-xl border border-gray-200 overflow-hidden"
+            >
+              <div
+                key={currentView}
+                style={{
+                  animation:
+                    _viewTransitionDirection === 'drill-down'
+                      ? 'view-drill-down 250ms var(--ease-emphasized-decel) both'
+                      : _viewTransitionDirection === 'drill-up'
+                        ? 'view-drill-up 200ms var(--ease-emphasized-decel) both'
+                        : 'view-fade 200ms ease both',
+                }}
+              >
+                {currentView === 'year' ? <YearView /> : <MonthView />}
+              </div>
             </div>
 
-            {/* Sidebar */}
-            <div className="space-y-6">
+            {/* Sidebar - Hidden on mobile, visible on large screens */}
+            <div className="hidden lg:block space-y-6">
               <ActivityList />
               <StatsPanel />
             </div>
           </div>
         </main>
+
+        {/* FAB Button - Visible only on mobile (< lg) */}
+        <button
+          onClick={() => setIsBottomSheetOpen(true)}
+          className="fixed bottom-6 right-6 z-20 lg:hidden w-14 h-14 bg-emerald-500 hover:bg-emerald-600 active:bg-emerald-700 text-white rounded-full shadow-lg flex items-center justify-center transition-colors focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:ring-offset-2"
+          aria-label="Open activities panel"
+          data-testid="fab-button"
+        >
+          <svg
+            className="w-6 h-6"
+            fill="none"
+            viewBox="0 0 24 24"
+            stroke="currentColor"
+            aria-hidden="true"
+          >
+            <path
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              strokeWidth={2}
+              d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4"
+            />
+          </svg>
+        </button>
+
+        {/* Bottom Sheet - Activities + Stats for mobile */}
+        <BottomSheet
+          isOpen={isBottomSheetOpen}
+          onClose={() => setIsBottomSheetOpen(false)}
+          aria-label="Activities and statistics"
+        >
+          <div className="space-y-6">
+            <ActivityList />
+            <StatsPanel />
+          </div>
+        </BottomSheet>
 
         {/* Quick Log Modal */}
         {selectedDate && <QuickLog />}

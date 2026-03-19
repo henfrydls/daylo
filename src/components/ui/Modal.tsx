@@ -1,6 +1,7 @@
 import { useRef } from 'react'
+import { createPortal } from 'react-dom'
 import type { ReactNode } from 'react'
-import { useFocusTrap } from '../../hooks'
+import { useFocusTrap, useAnimatedPresence } from '../../hooks'
 import { XIcon } from './Icons'
 
 interface ModalProps {
@@ -13,27 +14,32 @@ interface ModalProps {
 
 export function Modal({ isOpen, onClose, title, children, 'data-testid': testId }: ModalProps) {
   const modalRef = useRef<HTMLDivElement>(null)
+  const { shouldRender, isVisible } = useAnimatedPresence(isOpen, 150)
 
   useFocusTrap(modalRef, isOpen, { onEscape: onClose, autoFocus: false })
 
-  if (!isOpen) return null
+  if (!shouldRender) return null
 
-  return (
+  return createPortal(
     <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center">
       <div
-        className="absolute inset-0 bg-black/50 transition-opacity"
+        className={`absolute inset-0 bg-black/50 transition-opacity duration-150 ${isVisible ? 'opacity-100' : 'opacity-0'}`}
         onClick={onClose}
         aria-hidden="true"
       />
       <div
         ref={modalRef}
-        className="relative bg-white rounded-t-xl sm:rounded-xl shadow-xl max-w-md w-full mx-0 sm:mx-4 p-4 sm:p-6 animate-in fade-in zoom-in-95 duration-200 max-h-[90vh] overflow-y-auto"
+        className={`relative bg-white rounded-t-xl sm:rounded-xl shadow-xl max-w-md w-full mx-0 sm:mx-4 px-6 py-4 sm:p-6 max-h-[90dvh] flex flex-col overflow-hidden transition-[transform,opacity] ${
+          isVisible
+            ? 'opacity-100 scale-100 duration-250 ease-[var(--ease-emphasized-decel)]'
+            : 'opacity-0 scale-95 duration-150 ease-[var(--ease-emphasized-accel)]'
+        }`}
         role="dialog"
         aria-modal="true"
         aria-labelledby="modal-title"
         data-testid={testId}
       >
-        <div className="flex items-center justify-between mb-4">
+        <div className="flex items-center justify-between mb-4 shrink-0">
           <h2 id="modal-title" className="text-base sm:text-lg font-semibold text-gray-900">
             {title}
           </h2>
@@ -45,8 +51,9 @@ export function Modal({ isOpen, onClose, title, children, 'data-testid': testId 
             <XIcon className="w-5 h-5" />
           </button>
         </div>
-        {children}
+        <div className="flex-1 overflow-y-auto min-h-0 -mx-1 px-1">{children}</div>
       </div>
-    </div>
+    </div>,
+    document.body
   )
 }

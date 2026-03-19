@@ -24,6 +24,22 @@ describe('YearView', () => {
     // Mock Date using Vitest's fake timers
     vi.useFakeTimers()
     vi.setSystemTime(MOCK_DATE)
+
+    // Mock matchMedia to simulate desktop viewport (>= 640px) so existing tests see the desktop layout
+    Object.defineProperty(window, 'matchMedia', {
+      writable: true,
+      configurable: true,
+      value: vi.fn().mockImplementation((query: string) => ({
+        matches: true, // >= 640px → desktop
+        media: query,
+        onchange: null,
+        addListener: vi.fn(),
+        removeListener: vi.fn(),
+        addEventListener: vi.fn(),
+        removeEventListener: vi.fn(),
+        dispatchEvent: vi.fn(),
+      })),
+    })
   })
 
   afterEach(() => {
@@ -463,6 +479,89 @@ describe('YearView', () => {
       })
 
       expect(useCalendarStore.getState().selectedDate).not.toBeNull()
+    })
+  })
+
+  describe('Mobile layout', () => {
+    beforeEach(() => {
+      // Override matchMedia to simulate mobile viewport (< 640px)
+      Object.defineProperty(window, 'matchMedia', {
+        writable: true,
+        configurable: true,
+        value: vi.fn().mockImplementation((query: string) => ({
+          matches: false, // < 640px → mobile
+          media: query,
+          onchange: null,
+          addListener: vi.fn(),
+          removeListener: vi.fn(),
+          addEventListener: vi.fn(),
+          removeEventListener: vi.fn(),
+          dispatchEvent: vi.fn(),
+        })),
+      })
+    })
+
+    it('should render 12 MonthCards on mobile', () => {
+      useCalendarStore.setState({ selectedYear: 2024 })
+      render(<YearView />)
+
+      const monthCards = screen.getAllByTestId('month-card')
+      expect(monthCards).toHaveLength(12)
+    })
+
+    it('should render the month cards grid', () => {
+      render(<YearView />)
+
+      expect(screen.getByTestId('month-cards-grid')).toBeInTheDocument()
+    })
+
+    it('should render YearProgressBar when activities exist', () => {
+      const activities: Activity[] = [
+        {
+          id: '1',
+          name: 'Exercise',
+          color: '#22c55e',
+          createdAt: '2024-01-01',
+          updatedAt: '2024-01-01',
+        },
+      ]
+      useCalendarStore.setState({ activities, selectedYear: 2024 })
+      render(<YearView />)
+
+      expect(screen.getByTestId('year-progress-bar')).toBeInTheDocument()
+    })
+
+    it('should render HeatmapLegend on mobile', () => {
+      render(<YearView />)
+
+      expect(screen.getByRole('group', { name: 'Activity level legend' })).toBeInTheDocument()
+    })
+
+    it('should navigate to MonthView when tapping a MonthCard', () => {
+      useCalendarStore.setState({ selectedYear: 2024 })
+      render(<YearView />)
+
+      const monthCards = screen.getAllByTestId('month-card')
+      fireEvent.click(monthCards[2]) // March
+
+      const state = useCalendarStore.getState()
+      expect(state.currentView).toBe('month')
+      expect(state.selectedMonth).toBe(2)
+    })
+
+    it('should show year navigation on mobile', () => {
+      render(<YearView />)
+
+      expect(screen.getByLabelText('Previous year')).toBeInTheDocument()
+      expect(screen.getByLabelText('Next year')).toBeInTheDocument()
+      expect(screen.getByRole('button', { name: 'Go to current year' })).toBeInTheDocument()
+    })
+
+    it('should not render desktop day cells on mobile', () => {
+      render(<YearView />)
+
+      const dayCells = screen.queryAllByTestId('day-cell')
+      expect(dayCells).toHaveLength(0)
     })
   })
 })

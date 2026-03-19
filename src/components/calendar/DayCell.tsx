@@ -44,7 +44,7 @@ export const DayCell = memo(function DayCell({
         onClick={onClick}
         className={`
           relative
-          w-full h-full min-w-[10px] min-h-[10px] aspect-square
+          w-full h-full min-w-[44px] min-h-[44px] sm:min-w-[10px] sm:min-h-[10px] aspect-square
           rounded-sm
           transition-all duration-150 ease-in-out
           hover:ring-2 hover:ring-offset-1 hover:ring-gray-400 hover:scale-110 hover:z-20

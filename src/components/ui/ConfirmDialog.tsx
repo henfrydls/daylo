@@ -1,6 +1,7 @@
 import { useRef, useEffect } from 'react'
+import { createPortal } from 'react-dom'
 import { Button } from './Button'
-import { useFocusTrap } from '../../hooks'
+import { useFocusTrap, useAnimatedPresence } from '../../hooks'
 
 interface ConfirmDialogProps {
   isOpen: boolean
@@ -27,6 +28,7 @@ export function ConfirmDialog({
 }: ConfirmDialogProps) {
   const confirmButtonRef = useRef<HTMLButtonElement>(null)
   const dialogRef = useRef<HTMLDivElement>(null)
+  const { shouldRender, isVisible } = useAnimatedPresence(isOpen, 150)
 
   // Use focus trap with autoFocus disabled so we can focus the cancel button instead
   useFocusTrap(dialogRef, isOpen, { onEscape: onClose, autoFocus: false })
@@ -43,7 +45,7 @@ export function ConfirmDialog({
     }
   }, [isOpen])
 
-  if (!isOpen) return null
+  if (!shouldRender) return null
 
   const handleConfirm = () => {
     onConfirm()
@@ -106,16 +108,20 @@ export function ConfirmDialog({
         ? 'bg-amber-600 hover:bg-amber-700 focus:ring-amber-500 text-white'
         : ''
 
-  return (
+  return createPortal(
     <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center">
       <div
-        className="absolute inset-0 bg-black/50 transition-opacity"
+        className={`absolute inset-0 bg-black/50 transition-opacity duration-150 ${isVisible ? 'opacity-100' : 'opacity-0'}`}
         onClick={onClose}
         aria-hidden="true"
       />
       <div
         ref={dialogRef}
-        className="relative bg-white rounded-t-xl sm:rounded-xl shadow-xl max-w-sm w-full mx-0 sm:mx-4 p-4 sm:p-6 animate-in fade-in zoom-in-95 duration-200"
+        className={`relative bg-white rounded-t-xl sm:rounded-xl shadow-xl max-w-sm w-full mx-0 sm:mx-4 p-4 sm:p-6 transition-[transform,opacity] ${
+          isVisible
+            ? 'opacity-100 scale-100 duration-250 ease-[var(--ease-emphasized-decel)]'
+            : 'opacity-0 scale-95 duration-150 ease-[var(--ease-emphasized-accel)]'
+        }`}
         role="alertdialog"
         aria-modal="true"
         aria-labelledby="confirm-dialog-title"
@@ -138,7 +144,7 @@ export function ConfirmDialog({
         <div className="flex flex-col sm:flex-row gap-2 sm:gap-3">
           <Button
             variant="ghost"
-            className="flex-1 min-h-[44px] sm:min-h-0 order-2 sm:order-1"
+            className="flex-1 order-2 sm:order-1"
             onClick={onClose}
             data-testid="confirm-dialog-cancel"
           >
@@ -157,6 +163,7 @@ export function ConfirmDialog({
           </button>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body
   )
 }
