@@ -214,7 +214,6 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-  # Create a summary job that runs after all builds complete
   # La demo web de la landing. La aplicacion es 100% web -- Tauri solo la envuelve --
   # asi que un 'vite build' con base '/demo/' produce un sitio estatico que funciona bajo
   # esa ruta, sin contenedor ni servidor. Verificado en un navegador real: renderiza, no da
@@ -244,19 +243,19 @@ jobs:
       - name: Build demo with /demo/ base
         run: npx vite build --base=/demo/ --outDir dist-demo
 
+      - name: Ajustar el manifest de la PWA a /demo/
+        run: node scripts/fix-demo-manifest.mjs dist-demo /demo/
+
       - name: Comprobar que el artefacto sale sin analitica
         run: |
-          set -uo pipefail
-          # Defensa en profundidad: el CI ya comprueba el codigo fuente en cada PR, y esto
-          # comprueba lo que de verdad se va a desplegar. Si algun dia el script de la
-          # landing acabara aqui por error, el deploy publicaria una demo que llama a casa
-          # con el mismo bundle que empaqueta la aplicacion de escritorio.
-          if grep -rniE 'analytics\.|umami|google-analytics|googletagmanager' dist-demo 2>/dev/null; then
-            echo "::error::El artefacto de la demo contiene codigo de analitica. Ese"
-            echo "::error::script debe inyectarlo el despliegue del sitio web, no el build."
-            exit 1
-          fi
-          echo "Artefacto limpio: sin analitica."
+          # Defensa en profundidad con la MISMA lista que el CI, no con una copia
+          # recortada: comprueba lo que de verdad se va a desplegar. Si algun dia el
+          # script de la landing acabara aqui por error, el deploy publicaria una demo que
+          # llama a casa con el mismo bundle que empaqueta la aplicacion de escritorio.
+          #
+          # '--solo-textos' porque es un bundle: los nombres de paquete desaparecen al
+          # minificar y las cadenas de URL no.
+          scripts/check-no-analytics.sh --solo-textos dist-demo
           echo "index.html: $(wc -c < dist-demo/index.html) bytes, rutas con base /demo/"
 
       - name: Upload demo artifact
@@ -267,8 +266,9 @@ jobs:
           retention-days: 90
           if-no-files-found: error
 
+  # Create a summary job that runs after all builds complete
   release-summary:
-    needs: [build, build-android]
+    needs: [build, build-android, build-demo]
     runs-on: ubuntu-latest
     # El repositorio tiene default_workflow_permissions en "read", asi que sin declarar
     # esto 'gh release upload' devuelve 403. Los otros dos jobs ya lo declaran; este no
