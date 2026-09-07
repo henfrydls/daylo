@@ -78,7 +78,11 @@ Download the latest release for your platform from the [Releases](../../releases
 | Linux (Debian/Ubuntu) | [`Daylo-linux-amd64.deb`](../../releases/latest/download/Daylo-linux-amd64.deb) |
 | Linux (Other) | `Daylo_<version>_amd64.AppImage` on the [Releases](../../releases/latest) page |
 
-Every release also ships a [`SHA256SUMS.txt`](../../releases/latest/download/SHA256SUMS.txt). To verify a download: `sha256sum -c SHA256SUMS.txt --ignore-missing` (Linux/macOS) or `Get-FileHash` (Windows) and compare.
+Every release from v1.1.1 onward ships a [`SHA256SUMS.txt`](../../releases/latest/download/SHA256SUMS.txt). To verify a download, put it next to the file you downloaded and run:
+
+- **Linux:** `sha256sum -c SHA256SUMS.txt --ignore-missing`
+- **macOS:** `shasum -a 256 -c SHA256SUMS.txt --ignore-missing`
+- **Windows (PowerShell):** `Select-String -Path .\SHA256SUMS.txt -Pattern (Get-FileHash .\Daylo-windows-x64-setup.exe -Algorithm SHA256).Hash` (replace the file name with the one you downloaded). One matching line means the file is intact; no output means it is not.
 
 Just install and open — no setup, no accounts, no internet required.
 
