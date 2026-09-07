@@ -23,6 +23,36 @@ SHA256: 2C:D5:A0:EB:D7:A5:F6:0C:24:D1:6D:8B:99:6D:42:EB:69:DC:6D:5B:1F:5A:3D:DE:
 El workflow ya no genera llaves: ahora exige un keystore en `secrets` y **aborta el build**
 si no lo encuentra, en vez de publicar otro APK sin ruta de actualización.
 
+## Lo que hace falta para que una actualizacion se instale encima
+
+Android exige **dos** cosas, y la firma es solo una:
+
+1. **La misma firma.** Un APK firmado con otra llave no puede instalarse sobre el
+   instalado: falla con "App not installed" y la unica salida del usuario es desinstalar,
+   lo que borra sus datos.
+2. **Un `versionCode` mayor.** Aunque la firma coincida, un `versionCode` que no crezca
+   impide la actualizacion.
+
+El segundo es facil de olvidar porque no lo escribe nadie a mano: `build.gradle.kts` lo lee
+de `tauri.properties`, que Tauri genera al construir y **no esta en el repositorio**. Su
+valor por defecto en el gradle es `1`, asi que si esa propiedad faltara, todos los APK
+saldrian con el mismo numero y ninguna actualizacion se instalaria — con la firma correcta y
+sin ningun error visible en el build.
+
+Comprobado en los APK publicados, parseando su `AndroidManifest.xml`:
+
+| Version | `versionCode` |
+|---|---|
+| v1.1.0 | 1001000 |
+| v1.1.1 | 1001001 |
+
+Tauri lo deriva de la version (`major * 1000000 + minor * 1000 + patch`), asi que progresa
+solo con cada bump. No hay nada que mantener a mano, pero si algun dia una actualizacion no
+se instala y la firma coincide, **este es el segundo sitio donde mirar**.
+
+Para comprobarlo en un APK sin el SDK de Android instalado, basta parsear el manifest
+binario: el `versionCode` es un atributo de tipo entero del elemento `manifest`.
+
 ## Paso 0 — comprobar antes de generar nada
 
 Puede que la llave no esté perdida. Hay un keystore en el working tree que quizá sea el que
