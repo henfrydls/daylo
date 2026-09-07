@@ -141,3 +141,102 @@ jobs:
       # Build Tauri app (debug mode for faster CI)
       - name: Build Tauri app
         run: npm run tauri:build -- --debug
+
+      # Smoke-run: comprobar que el binario ARRANCA, no solo que compila. Un fallo de
+      # arranque que solo se da en una plataforma no lo detecta ningun test unitario, y
+      # sin esto solo se veria cuando alguien descargase el binario publicado.
+      #
+      # QUE AFIRMA ESTO: "el codigo arranca en esta plataforma".
+      # QUE NO AFIRMA: "el instalador que publicamos arranca". Aqui se prueba el perfil
+      # --debug, sin pasar por NSIS ni por el DMG, y el binario lo acaba de compilar el
+      # runner, asi que no lleva la marca de origen que dispara SmartScreen en Windows ni
+      # Gatekeeper en macOS. Verificar el artefacto publicado es un test aparte, sobre
+      # release.yml, que instala el paquete de verdad.
+      - name: Smoke-run del binario (Linux)
+        if: matrix.platform == 'ubuntu-22.04'
+        run: |
+          set -uo pipefail
+          sudo apt-get install -y --no-install-recommends xvfb
+          BIN="src-tauri/target/debug/activity-tracker"
+          if [ ! -x "$BIN" ]; then
+            echo "::error::No se encontro el binario en $BIN"; ls -la src-tauri/target/debug/ | head -20; exit 1
+          fi
+          # Sin sesion grafica en el runner, hace falta un servidor X virtual.
+          xvfb-run -a "$BIN" > smoke.log 2>&1 &
+          PID=$!
+          for i in $(seq 1 10); do
+            kill -0 "$PID" 2>/dev/null || { echo "::error::El binario murio tras ~${i}s"; cat smoke.log; exit 1; }
+            sleep 1
+          done
+          echo "El binario sigue vivo tras 10s"
+          kill "$PID" 2>/dev/null || true
+          # Los errores de gvfs son del sistema del runner, no de la app.
+          grep -viE 'gvfs|libgvfscommon|Failed to load module' smoke.log || true
+
+          # En Linux se comprueba algo mas fuerte que "el proceso no murio": que el
+          # webview cargo y el JS de la app llego a persistir su estado. Un proceso
+          # vivo con una ventana en blanco pasaria la prueba anterior; esto no.
+          # Solo se hace aqui porque es la ruta que esta verificada empiricamente; en
+          # macOS y Windows el almacenamiento del webview vive en otro sitio y con otro
+          # formato, y una comprobacion a ciegas daria falsos negativos que bloquearian
+          # los PR.
+          STORE="$HOME/.local/share/com.daylo.app/localstorage"
+          if ! ls "$STORE"/*.localstorage >/dev/null 2>&1; then
+            echo "::error::El proceso vivio pero no creo su almacenamiento en $STORE:"
+            echo "::error::el webview no llego a cargar la aplicacion."
+            ls -la "$HOME/.local/share/com.daylo.app" 2>/dev/null || true
+            exit 1
+          fi
+          # El valor del store lo guarda WebKit en UTF-16LE, asi que se lee con
+          # 'strings -e l'. Se comprueba la forma del estado, no solo que el archivo
+          # exista: un almacenamiento creado y vacio significaria que el webview
+          # arranco pero la aplicacion no llego a inicializarse.
+          if strings -e l "$STORE"/*.localstorage | grep -q '"activities"'; then
+            echo "El store se inicializo y persistio su estado:"
+            strings -e l "$STORE"/*.localstorage | grep -o '"selectedYear":[0-9]*' | head -1
+          else
+            echo "::error::El almacenamiento existe pero no contiene el estado del store:"
+            echo "::error::el webview arranco y la aplicacion no llego a inicializarse."
+            strings -e l "$STORE"/*.localstorage | head -5
+            exit 1
+          fi
+
+      - name: Smoke-run del binario (macOS)
+        if: matrix.platform == 'macos-latest'
+        run: |
+          set -uo pipefail
+          BIN="src-tauri/target/debug/activity-tracker"
+          if [ ! -x "$BIN" ]; then
+            echo "::error::No se encontro el binario en $BIN"; ls -la src-tauri/target/debug/ | head -20; exit 1
+          fi
+          "$BIN" > smoke.log 2>&1 &
+          PID=$!
+          for i in $(seq 1 10); do
+            kill -0 "$PID" 2>/dev/null || { echo "::error::El binario murio tras ~${i}s"; cat smoke.log; exit 1; }
+            sleep 1
+          done
+          echo "El binario sigue vivo tras 10s"
+          kill "$PID" 2>/dev/null || true
+          cat smoke.log || true
+
+      - name: Smoke-run del binario (Windows)
+        if: matrix.platform == 'windows-latest'
+        shell: pwsh
+        run: |
+          $bin = "src-tauri/target/debug/activity-tracker.exe"
+          if (-not (Test-Path $bin)) {
+            Write-Output "::error::No se encontro el binario en $bin"
+            Get-ChildItem src-tauri/target/debug | Select-Object -First 20 | Format-Table Name
+            exit 1
+          }
+          $p = Start-Process -FilePath $bin -PassThru -RedirectStandardError smoke-err.log -RedirectStandardOutput smoke-out.log
+          for ($i = 1; $i -le 10; $i++) {
+            if ($p.HasExited) {
+              Write-Output "::error::El binario murio tras ~${i}s con codigo $($p.ExitCode)"
+              if (Test-Path smoke-err.log) { Get-Content smoke-err.log }
+              exit 1
+            }
+            Start-Sleep -Seconds 1
+          }
+          Write-Output "El binario sigue vivo tras 10s"
+          Stop-Process -Id $p.Id -Force -ErrorAction SilentlyContinue
