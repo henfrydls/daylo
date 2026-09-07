@@ -15,7 +15,7 @@
 </p>
 
 <p align="center">
-  <img src="docs/daylo-year-view.png" alt="Daylo — Year View" width="100%" />
+  <img src="docs/daylo-year-view.png" alt="Daylo year view" width="100%" />
 </p>
 
 ## Installation
@@ -41,16 +41,23 @@ Daylo runs entirely on your device — no account, no cloud, no tracking.
 ## Screenshots
 
 <p align="center">
-  <img src="docs/daylo-year-view.png" alt="Year View — Annual heatmap calendar" width="100%" />
+  <img src="docs/daylo-year-view.png" alt="Year view: twelve month heatmaps next to your activities and statistics" width="100%" />
 </p>
-<p align="center"><sub>Year View — See your entire year at a glance</sub></p>
+<p align="center"><sub>Year view. See your entire year at a glance.</sub></p>
 
 <br/>
 
 <p align="center">
-  <img src="docs/daylo-month-view.png" alt="Month View — Detailed monthly calendar" width="100%" />
+  <img src="docs/daylo-month-view.png" alt="Month view: a calendar with a dot per activity on each day" width="100%" />
 </p>
-<p align="center"><sub>Month View — Drill down into any month</sub></p>
+<p align="center"><sub>Month view. Drill down into any month.</sub></p>
+
+<br/>
+
+<p align="center">
+  <img src="docs/daylo-mobile-month.png" alt="Month view on a phone, with a card for today" width="300" />
+</p>
+<p align="center"><sub>On Android, the same calendar in your pocket.</sub></p>
 
 ## Tech Stack
 
