@@ -88,6 +88,9 @@ jobs:
   build-check:
     needs: test
     runs-on: ${{ matrix.platform }}
+    # Cota superior explicita: sin ella, un proceso que no muera dejaria el job colgado
+    # hasta el limite por defecto de Actions, que son 6 horas.
+    timeout-minutes: 30
     strategy:
       fail-fast: false
       matrix:
@@ -132,7 +135,10 @@ jobs:
             librsvg2-dev \
             patchelf \
             libgtk-3-dev \
-            libayatana-appindicator3-dev
+            libayatana-appindicator3-dev \
+            xvfb \
+            x11-utils \
+            xdg-dbus-proxy
 
       # Install Node.js dependencies
       - name: Install Node.js dependencies
@@ -141,3 +147,317 @@ jobs:
       # Build Tauri app (debug mode for faster CI)
       - name: Build Tauri app
         run: npm run tauri:build -- --debug
+
+      # Smoke-run: comprobar que el binario ARRANCA, no solo que compila. Un fallo de
+      # arranque que solo se da en una plataforma no lo detecta ningun test unitario, y
+      # sin esto solo se veria cuando alguien descargase el binario publicado.
+      #
+      # QUE AFIRMA: "el codigo arranca en esta plataforma". Es un guardian por PR.
+      # QUE NO AFIRMA: "el instalador que publicamos arranca". Aqui se prueba el perfil
+      # --debug, sin pasar por NSIS ni por el DMG, y el binario lo acaba de compilar el
+      # runner, asi que no lleva la marca de origen que dispara SmartScreen en Windows ni
+      # Gatekeeper en macOS. Verificar el artefacto publicado es un test aparte, sobre
+      # release.yml, que instalaria el paquete de verdad.
+      - name: Smoke-run del binario (Linux y macOS)
+        if: runner.os != 'Windows'
+        run: |
+          set -uo pipefail
+          shopt -s nullglob
+          BIN="src-tauri/target/debug/activity-tracker"
+          if [ ! -x "$BIN" ]; then
+            echo "::error::No se encontro el binario ejecutable en $BIN"
+            ls -la src-tauri/target/debug/ 2>/dev/null | head -20
+            exit 1
+          fi
+
+          XVFB_PID=""
+          APP_PID=""
+          limpiar() {
+            [ -n "$APP_PID" ] && kill "$APP_PID" 2>/dev/null
+            [ -n "$XVFB_PID" ] && kill "$XVFB_PID" 2>/dev/null
+            return 0
+          }
+          trap limpiar EXIT
+
+          # Estado heredado, antes de tocar nada. En el runner de Actions resulto que
+          # XDG_RUNTIME_DIR SI viene definido y que no hay bus de sesion de D-Bus, y aun
+          # asi el webview arranca: ninguna de las dos cosas era la causa del fallo. Se
+          # siguen imprimiendo porque en otro entorno pueden serlo.
+          echo "XDG_RUNTIME_DIR heredado: ${XDG_RUNTIME_DIR:-<sin definir>}"
+          echo "DBUS_SESSION_BUS_ADDRESS heredado: ${DBUS_SESSION_BUS_ADDRESS:-<sin definir>}"
+
+          # En un runner de Actions no hay sesion de usuario, asi que XDG_RUNTIME_DIR no
+          # existe. El sandbox de WebKitGTK lo necesita para el socket del proxy de D-Bus,
+          # y sin el el lanzamiento del WebProcess puede fallar sin decir nada. En las
+          # pruebas locales esta variable venia dada por la sesion de escritorio, que es
+          # justo la diferencia con el runner.
+          if [ -z "${XDG_RUNTIME_DIR:-}" ] || [ ! -d "${XDG_RUNTIME_DIR:-/nonexistent}" ]; then
+            XDG_RUNTIME_DIR=/tmp/xdg-runtime
+            mkdir -p "$XDG_RUNTIME_DIR"
+            chmod 700 "$XDG_RUNTIME_DIR"
+            export XDG_RUNTIME_DIR
+            echo "XDG_RUNTIME_DIR creado en $XDG_RUNTIME_DIR"
+          fi
+
+          if [ "$RUNNER_OS" = "Linux" ]; then
+            # Xvfb propio en lugar de 'xvfb-run': ese script lanza el comando como hijo y
+            # se queda en 'wait' (xvfb-run:200 no hace exec), asi que $! seria el PID del
+            # envoltorio y no el de la app. Matar el envoltorio deja la app huerfana: no
+            # recibe TERM, no corre su flush de cierre y no cierra limpiamente su SQLite.
+            Xvfb :99 -screen 0 1280x1024x24 >xvfb.log 2>&1 &
+            XVFB_PID=$!
+            export DISPLAY=:99
+            # Se espera el SOCKET, no un numero de segundos: con el runner cargado, un
+            # 'sleep' a ciegas puede dejar arrancar la app antes de que el display acepte
+            # conexiones, y entonces GTK aborta y el fallo se reporta como "el binario
+            # murio" -- diagnosticando la aplicacion por un problema del entorno.
+            # El socket existiendo no basta: un Xvfb muerto de un intento anterior deja
+            # el fichero, y la aplicacion arrancaria contra un display que no responde.
+            # La comprobacion va DENTRO del bucle: hacerla una vez al final daria falso
+            # negativo con un display que tarda en aceptar conexiones.
+            display_listo=0
+            xvfb_murio=0
+            for _ in $(seq 1 15); do
+              if ! kill -0 "$XVFB_PID" 2>/dev/null; then xvfb_murio=1; break; fi
+              if command -v xdpyinfo >/dev/null 2>&1; then
+                xdpyinfo -display :99 >/dev/null 2>&1 && { display_listo=1; break; }
+              elif [ -S /tmp/.X11-unix/X99 ]; then
+                display_listo=1; break
+              fi
+              sleep 1
+            done
+            if [ "$display_listo" -ne 1 ]; then
+              if [ "$xvfb_murio" -eq 1 ]; then
+                echo "::error::Xvfb murio antes de aceptar conexiones."
+              else
+                echo "::error::El display :99 no respondio en 15s."
+              fi
+              echo "::error::El problema es del entorno del runner, no del arranque de la"
+              echo "::error::aplicacion:"
+              cat xvfb.log 2>/dev/null || true
+              exit 1
+            fi
+            # Sin GPU ni /dev/dri, el WebProcess de WebKitGTK muere al crear buffers
+            # DMABUF/GBM: el proceso principal sigue vivo pero el webview nunca carga.
+            export WEBKIT_DISABLE_DMABUF_RENDERER=1
+            export WEBKIT_DISABLE_COMPOSITING_MODE=1
+            export LIBGL_ALWAYS_SOFTWARE=1
+            # Explicito para quitar una variable de la ecuacion: sin WAYLAND_DISPLAY GTK
+            # deberia elegir x11 solo, pero si por cualquier motivo intentara otro backend
+            # el fallo se pareceria a "el webview no arranca".
+            export GDK_BACKEND=x11
+          fi
+
+          "$BIN" > smoke.log 2>&1 &
+          APP_PID=$!
+
+          # Se duerme y DESPUES se comprueba: al revés, la ultima comprobacion caeria en
+          # t=9s y un binario que muere en el ultimo segundo pasaria la prueba.
+          for i in $(seq 1 10); do
+            sleep 1
+            if ! kill -0 "$APP_PID" 2>/dev/null; then
+              echo "::error::El binario murio tras ~${i}s"
+              cat smoke.log 2>/dev/null
+              exit 1
+            fi
+          done
+          echo "El proceso principal sigue vivo tras 10s"
+
+          # "Vivo" no es "arrancado": si el webview falla, el proceso principal se queda
+          # en pie con una ventana en blanco y el bucle de arriba lo daria por bueno.
+          #
+          # La comprobacion BLOQUEANTE es el store, mas abajo: que la aplicacion haya
+          # persistido su estado demuestra que el webview cargo y que el JS corrio, y no
+          # depende de como organice WebKit sus procesos. El arbol de procesos se queda
+          # como DIAGNOSTICO, no como criterio: el WebProcess puede lanzarse a traves de
+          # 'bwrap' cuando el sandbox esta activo, y entonces no seria hijo directo del
+          # binario aunque todo funcione.
+          #
+          # Se imprime siempre, no solo al fallar: un rojo sin arbol de procesos es
+          # indiagnosticable desde el log, que es lo que paso en el primer run real.
+          echo "--- arbol de procesos, mientras la aplicacion vive ---"
+          if [ "$RUNNER_OS" = "Linux" ]; then
+            ps -ef --forest 2>/dev/null | grep -iE 'activity-tracker|webkit|bwrap|Xvfb' \
+              | grep -v grep || true
+            echo "hijos directos del binario: $(pgrep -P "$APP_PID" 2>/dev/null | wc -l || true)"
+          else
+            ps -ef 2>/dev/null | grep -iE 'activity-tracker|WebKit' | grep -v grep || true
+            echo "En macOS no se juzga el webview por el arbol: sus procesos son servicios"
+            echo "XPC de launchd, no hijos del binario. Aqui solo se verifica que el"
+            echo "proceso no muere."
+          fi
+
+          # En Linux se espera a que aparezca el almacenamiento antes de cerrar. Esto no
+          # es precaucion teorica: en el runner de Actions el webview tarda unos 28
+          # segundos en escribir por primera vez, contra menos de uno en una maquina de
+          # desarrollo. El primer intento cerraba la aplicacion a los 10 s y reportaba
+          # "el webview no arranco" cuando lo que faltaba era esperar.
+          #
+          # El margen es generoso a proposito: con 20 s el run pasaba por dos segundos, y
+          # un runner mas cargado habria vuelto a dar rojo con la aplicacion sana.
+          STORE="$HOME/.local/share/com.daylo.app/localstorage"
+          if [ "$RUNNER_OS" = "Linux" ]; then
+            for s in $(seq 1 45); do
+              # Con 'nullglob', un glob sin coincidencias DESAPARECE, asi que un
+              # 'ls "$STORE"/*localstorage*' correria sin argumentos, listaria el
+              # directorio actual y devolveria exito: falso positivo inmediato. Hay que
+              # contar la expansion, no preguntarle a ls.
+              esperando=( "$STORE"/*localstorage* )
+              if [ ${#esperando[@]} -gt 0 ]; then
+                echo "El almacenamiento aparecio a los ~$((10 + s))s desde el arranque"
+                break
+              fi
+              sleep 1
+            done
+          fi
+
+          # Cierre limpio ANTES de mirar el almacenamiento. WebKit lleva el localStorage
+          # en modo WAL y el checkpoint ocurre al cerrar: si se lee sin esperar a que el
+          # proceso termine, el estado puede estar todavia solo en el -wal.
+          kill -TERM "$APP_PID" 2>/dev/null || true
+          # Sin timeout, una app que ignore SIGTERM dejaria el 'wait' bloqueado y el job
+          # colgado hasta el limite de Actions.
+          for _ in $(seq 1 15); do
+            kill -0 "$APP_PID" 2>/dev/null || break
+            sleep 1
+          done
+          if kill -0 "$APP_PID" 2>/dev/null; then
+            echo "::warning::La aplicacion no respondio a SIGTERM en 15s; se fuerza el cierre."
+            echo "::warning::El localStorage puede no haber hecho checkpoint."
+            kill -KILL "$APP_PID" 2>/dev/null || true
+          fi
+          # 'wait' devuelve 143 cuando el proceso termina por SIGTERM, y el shell de
+          # Actions corre con -e ('bash -e {0}'), que 'set -uo pipefail' no desactiva:
+          # sin el '|| true' el paso abortaria SIEMPRE, con la aplicacion perfectamente
+          # sana, en Linux y en macOS.
+          wait "$APP_PID" 2>/dev/null || true
+          APP_PID=""
+
+          # Comprobacion extra solo en Linux, que es la ruta verificada. En macOS el
+          # almacenamiento del webview vive en otro sitio y con otro formato, y hacerlo a
+          # ciegas daria falsos negativos que bloquearian los PR.
+          if [ "$RUNNER_OS" != "Linux" ]; then
+            exit 0
+          fi
+          STORE="$HOME/.local/share/com.daylo.app/localstorage"
+          # El glob incluye el -wal y el -shm a proposito: aunque ahora se cierra limpio,
+          # leer solo el archivo base dependeria de que el checkpoint haya ocurrido.
+          archivos=( "$STORE"/*localstorage* )
+          if [ ${#archivos[@]} -eq 0 ]; then
+            echo "::error::El proceso arranco pero no creo su almacenamiento en:"
+            echo "::error::  $STORE"
+            echo "::error::El webview no llego a cargar la aplicacion."
+            echo "--- que hay bajo el directorio de datos ---"
+            find "$HOME/.local/share/com.daylo.app" 2>/dev/null | head -20 || true
+            echo "--- salida completa de la aplicacion ---"
+            cat smoke.log 2>/dev/null || true
+            echo "--- sandbox de WebKitGTK ---"
+            # Desde WebKit 2.26 el WebProcess se lanza a traves de bwrap. Si el entorno no
+            # permite namespaces de usuario sin privilegios, ese proceso no arranca y el
+            # principal se queda vivo con una ventana vacia: el sintoma exacto de este
+            # fallo. En el runner de Actions esto ya salio descartado (bwrap presente y
+            # namespaces permitidos), pero se sigue volcando porque en otro entorno puede
+            # ser justo la causa.
+            command -v bwrap >/dev/null 2>&1 && echo "bwrap: $(command -v bwrap)" \
+              || echo "bwrap: no esta instalado"
+            for f in /proc/sys/kernel/unprivileged_userns_clone \
+                     /proc/sys/user/max_user_namespaces; do
+              [ -r "$f" ] && echo "$f = $(cat "$f" 2>/dev/null)" || echo "$f: no legible"
+            done
+            echo "--- el ejecutable del WebProcess esta donde WebKit lo busca? ---"
+            # El WebProcess es un binario aparte, no una libreria: si el paquete de
+            # runtime no lo trae, el proceso principal arranca igual y se queda con una
+            # ventana vacia, sin decir nada por stderr.
+            ls -la /usr/lib/*/webkit2gtk-4.1/ 2>/dev/null | head -10 || \
+              echo "no existe ningun directorio webkit2gtk-4.1 en /usr/lib"
+            echo "--- version de webkit y utilidades del sandbox ---"
+            # La version importa: WEBKIT_DISABLE_DMABUF_RENDERER solo existe desde WebKit
+            # 2.42, asi que en una imagen mas antigua las variables de arriba no hacen
+            # nada y el WebProcess seguiria muriendo al crear buffers. Y el sandbox
+            # necesita xdg-dbus-proxy ademas de bwrap: es dependencia declarada de
+            # libwebkit2gtk-4.1-0, pero conviene verlo y no suponerlo.
+            dpkg -l 2>/dev/null | grep -iE 'webkit|bubblewrap|xdg-dbus-proxy' \
+              | awk '{print $2, $3}' || true
+            command -v xdg-dbus-proxy >/dev/null 2>&1 \
+              && echo "xdg-dbus-proxy: $(command -v xdg-dbus-proxy)" \
+              || echo "xdg-dbus-proxy: NO ESTA (el sandbox de WebKit lo necesita)"
+            echo "imagen del runner: ${ImageOS:-desconocida} ${ImageVersion:-}"
+            echo "XDG_RUNTIME_DIR en uso: ${XDG_RUNTIME_DIR:-<sin definir>}"
+            echo "DBUS_SESSION_BUS_ADDRESS en uso: ${DBUS_SESSION_BUS_ADDRESS:-<sin definir>}"
+            exit 1
+          fi
+          # El valor lo guarda WebKit en UTF-16LE, de ahi 'strings -e l'. Se comprueba la
+          # forma del estado y no solo que el archivo exista: un almacenamiento creado y
+          # vacio significaria que el webview arranco y la aplicacion no se inicializo.
+          #
+          # La salida se captura primero en vez de encadenar 'strings | grep': el -wal y
+          # el -shm desaparecen cuando WebKit hace checkpoint al cerrar, asi que entre la
+          # expansion del glob y la lectura pueden dejar de existir. 'strings' devuelve
+          # entonces un codigo distinto de cero y, con 'pipefail', eso tumbaria el
+          # pipeline entero -- dando por vacio un almacenamiento que si tiene el estado.
+          contenido=$(strings -e l "${archivos[@]}" 2>/dev/null || true)
+          if printf '%s' "$contenido" | grep -q '"activities"'; then
+            echo "El store se inicializo y persistio su estado:"
+            printf '%s' "$contenido" | grep -o '"selectedYear":[0-9]*' | head -1 || true
+          else
+            echo "::error::El almacenamiento existe pero no contiene el estado del store:"
+            echo "::error::el webview arranco y la aplicacion no llego a inicializarse."
+            ls -la "$STORE"
+            exit 1
+          fi
+
+      - name: Smoke-run del binario (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $rel = 'src-tauri/target/debug/activity-tracker.exe'
+          if (-not (Test-Path $rel)) {
+            Write-Output "::error::No se encontro el binario en $rel"
+            Get-ChildItem src-tauri/target/debug | Select-Object -First 20 | Format-Table Name
+            exit 1
+          }
+          # Rutas absolutas: -FilePath y -RedirectStandard* se resuelven contra
+          # [Environment]::CurrentDirectory, que no sigue a $PWD.
+          $bin = (Resolve-Path $rel).Path
+          $out = Join-Path $PWD 'smoke-out.log'
+          $err = Join-Path $PWD 'smoke-err.log'
+
+          $p = Start-Process -FilePath $bin -PassThru -RedirectStandardOutput $out -RedirectStandardError $err
+          try {
+            # Dormir y despues comprobar, para no dejar el ultimo segundo sin vigilar.
+            for ($i = 1; $i -le 10; $i++) {
+              Start-Sleep -Seconds 1
+              if ($p.HasExited) {
+                Write-Output "::error::El binario murio tras ~${i}s con codigo $($p.ExitCode)"
+                if (Test-Path $err) { Get-Content $err }
+                exit 1
+              }
+            }
+            Write-Output "El proceso principal sigue vivo tras 10s"
+
+            # "Vivo" no es "arrancado": sin escritorio interactivo, si WebView2 falla y
+            # Tauri abre un dialogo modal, el proceso sigue en pie con la app rota.
+            #
+            # Se filtra por ParentProcessId en vez de buscar msedgewebview2 en toda la
+            # maquina: un runner con cualquier otro proceso de WebView2 abierto daria un
+            # falso positivo.
+            # Filtrado por NOMBRE, no solo por padre: 'tauri build --debug' no aplica
+            # windows_subsystem = "windows" (main.rs usa cfg_attr(not(debug_assertions))),
+            # asi que el .exe es de consola y Start-Process sin -NoNewWindow le crea un
+            # conhost.exe hijo. Contar hijos a secas daria >=1 aunque WebView2 no arranque
+            # nunca: verde con la aplicacion rota.
+            $hijos = @(Get-CimInstance Win32_Process -Filter "ParentProcessId = $($p.Id)" -ErrorAction SilentlyContinue |
+                       Where-Object { $_.Name -eq 'msedgewebview2.exe' })
+            if ($hijos.Count -eq 0) {
+              Write-Output "::error::El proceso principal vive pero no ha lanzado ningun"
+              Write-Output "::error::proceso msedgewebview2: no arranco y la ventana estaria vacia."
+              if (Test-Path $err) { Get-Content $err }
+              exit 1
+            }
+            Write-Output "El webview arranco: $($hijos.Count) procesos hijos del binario"
+            $hijos | ForEach-Object { Write-Output "  - $($_.ProcessId) $($_.Name)" }
+          }
+          finally {
+            if (-not $p.HasExited) { Stop-Process -Id $p.Id -Force -ErrorAction SilentlyContinue }
+          }
