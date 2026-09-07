@@ -50,7 +50,10 @@ const createDeferredStorage = (): StateStorage => {
             .then(({ useToastStore }) => {
               useToastStore
                 .getState()
-                .addToast('No se pudieron guardar tus cambios. Exporta tus datos por seguridad.', 'error')
+                .addToast(
+                  'No se pudieron guardar tus cambios. Exporta tus datos por seguridad.',
+                  'error'
+                )
             })
             .catch(() => {
               /* si ni el aviso carga, el console.error de arriba es lo que queda */
