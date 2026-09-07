@@ -4,9 +4,25 @@ on:
   push:
     tags:
       - 'v*.*.*'
+  # Relanzar a mano SOLO reconstruye la demo. Los artefactos de Actions caducan a los 90
+  # dias, y pasado ese plazo no habria de donde bajar la demo para redesplegarla sin
+  # volver a taguear -- que crearia una release nueva por un motivo que no lo es.
+  #
+  # Los jobs que PUBLICAN llevan una guarda de tag: sin ella, un dispatch desde una rama
+  # haria que tauri-action creara una release llamada como la rama, porque el nombre sale
+  # de github.ref_name.
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: 'Tag o rama de la que construir la demo (vacio = la rama actual)'
+        required: false
+        type: string
 
 jobs:
   build:
+    # Solo en tags: un dispatch manual no debe publicar una release, porque el nombre
+    # sale de github.ref_name y desde una rama crearia una release llamada como ella.
+    if: startsWith(github.ref, 'refs/tags/')
     permissions:
       contents: write
     strategy:
@@ -107,6 +123,9 @@ jobs:
           args: ${{ matrix.args }}
 
   build-android:
+    # Solo en tags: un dispatch manual no debe publicar una release, porque el nombre
+    # sale de github.ref_name y desde una rama crearia una release llamada como ella.
+    if: startsWith(github.ref, 'refs/tags/')
     permissions:
       contents: write
     runs-on: ubuntu-latest
@@ -214,9 +233,65 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
+  # La demo web de la landing. La aplicacion es 100% web -- Tauri solo la envuelve --
+  # asi que un 'vite build' con base '/demo/' produce un sitio estatico que funciona bajo
+  # esa ruta, sin contenedor ni servidor. Verificado en un navegador real: renderiza, no da
+  # 404 y el ciclo de crear, marcar y recargar conserva los datos.
+  #
+  # El artefacto sale LIMPIO, sin analitica: el script de la landing lo inyecta el
+  # despliegue del sitio web sobre este mismo artefacto. Asi el repositorio de la
+  # aplicacion no contiene nada que exista solo para la web.
+  build-demo:
+    name: Build web demo
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          # En un dispatch se puede pedir un tag concreto, para reconstruir la demo de una
+          # version publicada tal como era.
+          ref: ${{ inputs.ref || github.ref }}
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+
+      - name: Install Node.js dependencies
+        run: npm ci
+
+      - name: Build demo with /demo/ base
+        run: npx vite build --base=/demo/ --outDir dist-demo
+
+      - name: Ajustar el manifest de la PWA a /demo/
+        run: node scripts/fix-demo-manifest.mjs dist-demo /demo/
+
+      - name: Comprobar que el artefacto sale sin analitica
+        run: |
+          # Defensa en profundidad con la MISMA lista que el CI, no con una copia
+          # recortada: comprueba lo que de verdad se va a desplegar. Si algun dia el
+          # script de la landing acabara aqui por error, el deploy publicaria una demo que
+          # llama a casa con el mismo bundle que empaqueta la aplicacion de escritorio.
+          #
+          # '--solo-textos' porque es un bundle: los nombres de paquete desaparecen al
+          # minificar y las cadenas de URL no.
+          scripts/check-no-analytics.sh --solo-textos dist-demo
+          echo "index.html: $(wc -c < dist-demo/index.html) bytes, rutas con base /demo/"
+
+      - name: Upload demo artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: daylo-web-demo
+          path: dist-demo/
+          retention-days: 90
+          if-no-files-found: error
+
   # Create a summary job that runs after all builds complete
   release-summary:
-    needs: [build, build-android]
+    needs: [build, build-android, build-demo]
     runs-on: ubuntu-latest
     # El repositorio tiene default_workflow_permissions en "read", asi que sin declarar
     # esto 'gh release upload' devuelve 403. Los otros dos jobs ya lo declaran; este no
@@ -227,7 +302,7 @@ jobs:
     # copias fijas y un SHA256SUMS.txt que solo cubre lo subido hasta ese instante. La
     # comprobacion de cobertura no protege de eso: los dos conteos verian la misma
     # release a medias.
-    if: ${{ !cancelled() }}
+    if: ${{ !cancelled() && startsWith(github.ref, 'refs/tags/') }}
     steps:
       - name: Check build results
         run: |

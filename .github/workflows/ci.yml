@@ -84,6 +84,45 @@ jobs:
       - name: Build frontend
         run: npm run build
 
+      # La demo de la landing se construye con una base distinta ('/demo/'), y eso puede
+      # romperse por cosas que no rompen el build normal: una ruta absoluta escrita a mano,
+      # un import de un asset por URL. Construirla tambien aqui hace que se descubra en el
+      # PR y no en la release, que es donde se descubriria si solo se construyera al taguear.
+      - name: Build demo (base /demo/)
+        run: |
+          npx vite build --base=/demo/ --outDir dist-demo
+          node scripts/fix-demo-manifest.mjs dist-demo /demo/
+
+      # La promesa de Daylo es que los datos del usuario no salen de su dispositivo, y esa
+      # promesa se sostiene enteramente sobre que la aplicacion no contenga codigo de
+      # analitica ni telemetria. Esto lo comprueba en cada PR, en vez de dejarlo a que
+      # alguien se acuerde de mirarlo en la revision.
+      #
+      # La lista de patrones vive en scripts/check-no-analytics.sh y no aqui: la llaman
+      # este job y el que construye la demo, y duplicarla en los dos workflows haria que
+      # derivaran, con lo que uno de los dos daria una garantia mas debil de lo que dice.
+      #
+      # El script de analitica de la landing NO vive en este repositorio: lo inyecta el
+      # despliegue del sitio web sobre el artefacto ya construido.
+      - name: Comprobar que no hay analitica ni telemetria
+        run: |
+          # Declaraciones directas: aqui si tiene sentido buscar nombres de paquete y de
+          # crate, porque es donde alguien los anade. src-tauri va incluido porque es la
+          # puerta por la que entraria telemetria al binario empaquetado, que es
+          # exactamente lo que la promesa protege.
+          scripts/check-no-analytics.sh \
+            src index.html package.json \
+            src-tauri/Cargo.toml src-tauri/src src-tauri/capabilities
+
+          # En el lock y en el bundle solo se buscan hosts y APIs. El lock contiene el
+          # arbol completo de dependencias con sus peers opcionales -- '@opentelemetry/api'
+          # esta ahi como peer de vitest, sin instalar y sin llegar al bundle -- asi que
+          # buscar nombres de paquete daria un falso positivo el primer dia. Lo que cubre
+          # el riesgo de un SDK transitivo es su host en dist/: los nombres se minifican,
+          # las cadenas de URL no.
+          scripts/check-no-analytics.sh --solo-textos package-lock.json dist dist-demo
+
+
   # Verify Tauri builds (without uploading artifacts)
   build-check:
     needs: test
