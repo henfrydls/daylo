@@ -5,7 +5,7 @@
   "type": "module",
   "description": "A personal activity tracker with a GitHub-style contribution calendar",
   "author": "Henfry De Los Santos",
-  "license": "PolyForm-Noncommercial-1.0.0",
+  "license": "MIT",
   "repository": {
     "type": "git",
     "url": "https://github.com/henfrydls/daylo.git"

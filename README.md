@@ -155,4 +155,6 @@ src/
 
 ## License
 
-[PolyForm Noncommercial 1.0.0](https://polyformproject.org/licenses/noncommercial/1.0.0) — free for any non-commercial use. Commercial use requires written permission from the author. See [LICENSE](LICENSE).
+[MIT](LICENSE) — free for any use, including commercial.
+
+Releases up to and including v1.1.0 were published under the PolyForm Noncommercial 1.0.0 license and remain available under those terms; everything from this change onward is MIT.
