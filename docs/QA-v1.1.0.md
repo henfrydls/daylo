@@ -160,9 +160,28 @@ están **bien construidos**, no que arranquen:
 | `aarch64.dmg` | UDIF válido → `Daylo.app` con **Mach-O arm64** | Ídem |
 | `daylo-android.apk` | Firmado (`RELEASE.RSA`), 920 entradas, `classes.dex`, manifest `com.daylo` + `1.1.0` | Que instale y abra en un teléfono |
 
-También gris: **el render visual en Linux** y **el ciclo con clics humanos reales**, ambos
-por la sesión bloqueada. La persistencia se verificó por inyección de estado, que demuestra
-que la app lee y conserva datos existentes, no que el usuario pueda crearlos con la interfaz.
+### Render e interacción: cerrados el 2026-09-07
+
+Estaban en gris por la sesión bloqueada. Se cerraron sirviendo el build web (`npm run build`,
+452 KB, JS de 297 KB) en `127.0.0.1` y conduciéndolo con un navegador real:
+
+1. La interfaz **renderiza correctamente**: vista anual 2026 con los doce meses, leyenda del
+   heatmap de cinco niveles, panel de actividades y estadísticas.
+2. Ciclo completo **con clics de verdad**, no por inyección: crear la actividad "QA
+   Persistencia" → abrir el día 7 de septiembre → marcar su casilla → recargar. Tras la
+   recarga la actividad sigue ahí, **el día aparece verde en el heatmap** y las estadísticas
+   marcan 1 día activo, racha actual 1 y 14% del mes.
+3. Sin errores ni advertencias en consola. El `import()` dinámico de `@tauri-apps/api` en
+   `useAppVersion.ts` cae en su fallback fuera de Tauri sin romper nada.
+
+**Precisión sobre qué cubre esto.** Se verificó el **build web del código actual**, que es el
+mismo bundle que empaqueta Tauri, no el binario v1.1.0 publicado. Para el AppImage publicado
+lo verificado sigue siendo: arranca, crea ventana real y conserva los datos entre reinicios.
+Que la interfaz renderice y el ciclo de clics funcione es evidencia fuerte para el paquete,
+no idéntica.
+
+De rebote queda demostrado que **la demo web de la landing es viable hoy**: la app funciona
+completa en el navegador sin Tauri.
 
 **Cobertura honesta: 2 de 7 artefactos ejecutados. 1 de 5 plataformas verificada en
 ejecución (Linux). 4 de 5 en gris (Windows, macOS, Android, iOS).**
