@@ -23,6 +23,7 @@
 Daylo runs entirely on your device — no account, no cloud, no tracking.
 
 - **[Desktop app](#desktop-app)** (Windows, macOS, Linux) — Download from GitHub Releases
+- **[Android app](#android-app)** (arm64 phones and tablets) — Download the APK from GitHub Releases
 - **[Docker](#docker)** — Self-hosted via `docker compose`
 - **[From source](#from-source)** — Clone and build
 
@@ -58,7 +59,7 @@ Daylo runs entirely on your device — no account, no cloud, no tracking.
 | Frontend | React 19, TypeScript, Vite 7 |
 | Styling | Tailwind CSS 4 |
 | State | Zustand 5 (persisted to localStorage) |
-| Desktop | Tauri 2 |
+| Desktop & Android | Tauri 2 |
 | Testing | Vitest + Testing Library (unit), Playwright (E2E) |
 | CI/CD | GitHub Actions |
 
@@ -70,13 +71,30 @@ Download the latest release for your platform from the [Releases](../../releases
 
 | Platform | File |
 |----------|------|
-| Windows | `Daylo_x.x.x_x64-setup.exe` |
+| Windows (x64) | `Daylo_x.x.x_x64-setup.exe` |
+| Windows (ARM64) | `Daylo_x.x.x_arm64-setup.exe` |
 | macOS (Apple Silicon) | `Daylo_x.x.x_aarch64.dmg` |
 | macOS (Intel) | `Daylo_x.x.x_x64.dmg` |
 | Linux (Debian/Ubuntu) | `Daylo_x.x.x_amd64.deb` |
 | Linux (Other) | `Daylo_x.x.x_amd64.AppImage` |
 
 Just install and open — no setup, no accounts, no internet required.
+
+#### About the security warning
+
+The desktop installers are not code-signed yet, so your operating system will warn you the first time you open Daylo:
+
+- **Windows** shows "Windows protected your PC". Click **More info**, then **Run anyway**.
+- **macOS** may refuse to open the app. Go to **System Settings → Privacy & Security**, scroll down and click **Open Anyway** next to Daylo. On macOS 15 and later, right-click → Open no longer bypasses this.
+
+The warning means "unknown publisher", not "unsafe". Every release is built by GitHub Actions from this repository; the [Actions](../../actions) tab shows the run that produced it. A signed Microsoft Store build is on the roadmap.
+
+### Android App
+
+Download `daylo-android.apk` from the [Releases](../../releases) page and open it on your phone. Android will ask you to allow installs from this source the first time.
+
+- Runs on **arm64 devices** — practically every phone and tablet made since 2017. It will not install on 32-bit devices or on Android Studio emulators.
+- Your data lives in the app's local storage on the device. **Export a JSON backup from inside the app before uninstalling or switching to a different build** — uninstalling deletes the data.
 
 ### Docker
 
