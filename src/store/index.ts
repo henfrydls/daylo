@@ -10,8 +10,10 @@ type ViewTransitionDirection = 'drill-down' | 'drill-up' | null
 // UI updates immediately, persistence happens during idle time
 const createDeferredStorage = (): StateStorage => {
   let pendingWrite: string | null = null
+  let pendingKey: string | null = null
   let scheduledWrite: ReturnType<typeof setTimeout> | number | null = null
   let useIdleCallback = false
+  let failureReported = false
 
   // Check if requestIdleCallback is available (browser environment)
   if (typeof window !== 'undefined' && typeof window.requestIdleCallback === 'function') {
@@ -33,12 +35,49 @@ const createDeferredStorage = (): StateStorage => {
     if (pendingWrite !== null) {
       try {
         localStorage.setItem(key, pendingWrite)
-      } catch {
-        // Ignore storage errors
+        // Solo se descarta el pendiente cuando de verdad se escribio. Si falla se
+        // conserva para que el siguiente flush lo reintente.
+        pendingWrite = null
+        pendingKey = null
+      } catch (error) {
+        // No se silencia: perder datos sin avisar es lo peor que puede hacer una app
+        // cuyo argumento es que tus datos son tuyos.
+        console.error('[Daylo] No se pudieron guardar los cambios en localStorage:', error)
+        if (!failureReported) {
+          failureReported = true
+          // Import perezoso para no acoplar el storage al arranque del store de avisos.
+          import('./toast')
+            .then(({ useToastStore }) => {
+              useToastStore
+                .getState()
+                .addToast('No se pudieron guardar tus cambios. Exporta tus datos por seguridad.', 'error')
+            })
+            .catch(() => {
+              /* si ni el aviso carga, el console.error de arriba es lo que queda */
+            })
+        }
       }
-      pendingWrite = null
     }
     scheduledWrite = null
+  }
+
+  // Red de seguridad: al ocultarse o cerrarse la app hay que escribir YA, sincronicamente.
+  // Sin esto, un cierre dentro de la ventana del idle callback pierde el ultimo cambio, que
+  // es justo el flujo principal (abrir, marcar el dia, cerrar). En el WebView de Android
+  // 'beforeunload' no es fiable; 'pagehide' y visibilitychange->hidden si llegan.
+  if (typeof window !== 'undefined') {
+    const flushNow = () => {
+      if (pendingWrite !== null && pendingKey !== null) {
+        cancelScheduledWrite()
+        flushWrite(pendingKey)
+      }
+    }
+    window.addEventListener('pagehide', flushNow)
+    window.addEventListener('visibilitychange', () => {
+      if (typeof document !== 'undefined' && document.visibilityState === 'hidden') {
+        flushNow()
+      }
+    })
   }
 
   return {
@@ -51,13 +90,16 @@ const createDeferredStorage = (): StateStorage => {
     },
     setItem: (name: string, value: string): void => {
       pendingWrite = value
+      pendingKey = name
 
       // Cancel any existing scheduled write
       cancelScheduledWrite()
 
-      // Schedule write during idle time for instant UI response
+      // Se sigue difiriendo para que la UI responda al instante, pero con una ventana
+      // corta: 1000 ms dejaba un hueco grande de perdida con las animaciones ocupando
+      // el hilo. Serializar en cada toggle seria peor con anos de historial acumulado.
       if (useIdleCallback) {
-        scheduledWrite = window.requestIdleCallback(() => flushWrite(name), { timeout: 1000 })
+        scheduledWrite = window.requestIdleCallback(() => flushWrite(name), { timeout: 200 })
       } else {
         // Fallback for browsers without requestIdleCallback or Node.js
         scheduledWrite = setTimeout(() => flushWrite(name), 0)
@@ -65,6 +107,7 @@ const createDeferredStorage = (): StateStorage => {
     },
     removeItem: (name: string): void => {
       pendingWrite = null
+      pendingKey = null
       cancelScheduledWrite()
       localStorage.removeItem(name)
     },

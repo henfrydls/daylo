@@ -1,23 +1,33 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 
 /**
- * Estos tests documentan el comportamiento de createDeferredStorage (src/store/index.ts).
- * La escritura a localStorage esta diferida a requestIdleCallback con timeout de 1000 ms y
- * no hay ningun flush en visibilitychange / pagehide / beforeunload, asi que un cierre
- * dentro de esa ventana pierde el cambio. El catch de flushWrite tampoco informa de nada.
+ * Durabilidad de createDeferredStorage (src/store/index.ts).
  *
- * Estos tests PASAN describiendo el defecto, no el comportamiento deseado. Si algun dia
- * fallan es porque se corrigio, y entonces hay que reescribirlos al reves: que el dato SI
- * sobreviva al cierre y que un fallo de localStorage llegue al usuario.
+ * La escritura a localStorage esta diferida para que la UI responda al instante, asi que
+ * hace falta una red de seguridad que escriba SI O SI cuando la app se oculta o se cierra.
+ * Sin ella se pierde el ultimo cambio, que es justo el flujo principal de la app: abrir,
+ * marcar el dia, cerrar.
+ *
+ * Estos tests describen el comportamiento CORRECTO. Si alguno falla, alguien reintrodujo
+ * el defecto: o quito el flush de cierre, o volvio a silenciar los fallos de escritura.
  */
 describe('createDeferredStorage: durabilidad de la escritura', () => {
   let idleCallbacks: Array<() => void>
 
+  const ocultarPagina = () => {
+    Object.defineProperty(document, 'visibilityState', {
+      value: 'hidden',
+      configurable: true,
+    })
+    document.dispatchEvent(new Event('visibilitychange'))
+    window.dispatchEvent(new Event('visibilitychange'))
+  }
+
   beforeEach(() => {
     localStorage.clear()
     idleCallbacks = []
-    // requestIdleCallback que REGISTRA pero no ejecuta: simula el hilo ocupado
-    // (animaciones) o el proceso terminado antes de que el navegador quede libre.
+    // requestIdleCallback que REGISTRA pero no ejecuta: simula el hilo ocupado por las
+    // animaciones, o el proceso terminado antes de que el navegador quede libre.
     vi.stubGlobal('requestIdleCallback', (cb: () => void) => {
       idleCallbacks.push(cb)
       return idleCallbacks.length
@@ -31,53 +41,81 @@ describe('createDeferredStorage: durabilidad de la escritura', () => {
     vi.restoreAllMocks()
   })
 
-  it('pierde el cambio si la app se cierra antes de que corra el idle callback', async () => {
-    const { useCalendarStore } = await import('./index')
+  const leerGuardado = () => {
+    const raw = localStorage.getItem('simple-calendar-storage')
+    return raw ? JSON.parse(raw).state.activities : []
+  }
 
+  it('guarda el cambio en pagehide aunque el idle callback no haya corrido', async () => {
+    const { useCalendarStore } = await import('./index')
     useCalendarStore.getState().addActivity('Ejercicio', '#22c55e')
 
-    // El estado en memoria tiene la actividad.
-    expect(useCalendarStore.getState().activities).toHaveLength(1)
+    // Todavia no se escribio: el idle callback esta pendiente a proposito.
+    expect(leerGuardado()).toHaveLength(0)
 
-    // Pero localStorage no la tiene: el idle callback quedo pendiente.
-    const guardado = localStorage.getItem('simple-calendar-storage')
-    const persistido = guardado ? JSON.parse(guardado).state.activities : []
-    expect(persistido).toHaveLength(0)
+    window.dispatchEvent(new Event('pagehide'))
 
-    // Si el callback llega a correr, si se guarda. El problema es que al cerrar no corre.
-    idleCallbacks.forEach((cb) => cb())
-    const trasFlush = JSON.parse(localStorage.getItem('simple-calendar-storage')!)
-    expect(trasFlush.state.activities).toHaveLength(1)
+    // La red de seguridad tuvo que escribirlo de forma sincrona.
+    expect(leerGuardado()).toHaveLength(1)
+    expect(leerGuardado()[0].name).toBe('Ejercicio')
   })
 
-  it('descarta el dato en silencio si localStorage falla', async () => {
+  it('guarda el cambio cuando la app pasa a segundo plano (visibilitychange -> hidden)', async () => {
     const { useCalendarStore } = await import('./index')
     useCalendarStore.getState().addActivity('Leer', '#3b82f6')
+    expect(leerGuardado()).toHaveLength(0)
 
-    const err = new DOMException('cuota excedida', 'QuotaExceededError')
-    const setItem = vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => {
-      throw err
-    })
+    ocultarPagina()
 
-    // El flush no lanza: el catch se lo come.
-    expect(() => idleCallbacks.forEach((cb) => cb())).not.toThrow()
-    expect(setItem).toHaveBeenCalled()
-
-    setItem.mockRestore()
-    // Y no queda nada guardado, sin que nadie se lo diga al usuario.
-    expect(localStorage.getItem('simple-calendar-storage')).toBeNull()
+    expect(leerGuardado()).toHaveLength(1)
+    expect(leerGuardado()[0].name).toBe('Leer')
   })
 
-  it('no hay ningun listener de cierre que fuerce el flush', async () => {
-    const añadidos: string[] = []
+  it('registra los listeners de cierre al crear el storage', async () => {
+    const eventos: string[] = []
     vi.spyOn(window, 'addEventListener').mockImplementation(((ev: string) => {
-      añadidos.push(ev)
+      eventos.push(ev)
     }) as typeof window.addEventListener)
 
-    await import('./index')
+    const { useCalendarStore } = await import('./index')
+    // El storage se instancia de forma perezosa: hace falta una escritura para crearlo.
+    useCalendarStore.getState().addActivity('Meditar', '#a855f7')
 
-    expect(añadidos).not.toContain('beforeunload')
-    expect(añadidos).not.toContain('visibilitychange')
-    expect(añadidos).not.toContain('pagehide')
+    expect(eventos).toContain('pagehide')
+    expect(eventos).toContain('visibilitychange')
+  })
+
+  it('avisa por consola si localStorage falla, en vez de tragarselo', async () => {
+    const { useCalendarStore } = await import('./index')
+    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
+    const setItem = vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => {
+      throw new DOMException('cuota excedida', 'QuotaExceededError')
+    })
+
+    useCalendarStore.getState().addActivity('Correr', '#ef4444')
+    idleCallbacks.forEach((cb) => cb())
+
+    expect(setItem).toHaveBeenCalled()
+    expect(errorSpy).toHaveBeenCalled()
+    expect(String(errorSpy.mock.calls[0][0])).toContain('localStorage')
+  })
+
+  it('conserva el cambio pendiente para reintentarlo si la escritura falla', async () => {
+    const { useCalendarStore } = await import('./index')
+    vi.spyOn(console, 'error').mockImplementation(() => {})
+    const setItem = vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => {
+      throw new DOMException('cuota excedida', 'QuotaExceededError')
+    })
+
+    useCalendarStore.getState().addActivity('Estirar', '#f59e0b')
+    idleCallbacks.forEach((cb) => cb())
+
+    // Se recupera el almacenamiento (el usuario libero espacio) y se vuelve a intentar.
+    setItem.mockRestore()
+    window.dispatchEvent(new Event('pagehide'))
+
+    // El dato no se habia descartado: el reintento lo salva.
+    expect(leerGuardado()).toHaveLength(1)
+    expect(leerGuardado()[0].name).toBe('Estirar')
   })
 })
