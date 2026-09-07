@@ -202,6 +202,20 @@ export const useCalendarStore = create<CalendarState>()(
         const existingLog = get().logs.find((l) => l.activityId === activityId && l.date === date)
 
         if (existingLog) {
+          // Al desmarcar un dia sin notas se borra el registro en vez de guardarlo con
+          // completed:false. Un dia desmarcado y sin contenido del usuario no representa
+          // nada que quiera conservar, y cada registro cuenta contra la cuota de
+          // localStorage. Si tiene notas se conserva: la nota si es contenido suyo.
+          const estaDesmarcando = existingLog.completed
+          const sinNotas = !existingLog.notes?.trim()
+
+          if (estaDesmarcando && sinNotas) {
+            set((state) => ({
+              logs: state.logs.filter((l) => l.id !== existingLog.id),
+            }))
+            return
+          }
+
           set((state) => ({
             logs: state.logs.map((l) =>
               l.id === existingLog.id ? { ...l, completed: !l.completed } : l
