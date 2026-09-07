@@ -20,7 +20,20 @@ export default defineConfig({
     coverage: {
       provider: 'v8',
       reporter: ['text', 'json', 'html'],
-      exclude: ['node_modules/', 'src/test/', '**/*.d.ts', '**/*.config.*', '**/index.ts'],
+      exclude: [
+        'node_modules/',
+        'src/test/',
+        '**/*.d.ts',
+        '**/*.config.*',
+        // Barrels de re-exportacion: no tienen logica que cubrir.
+        // Antes habia un '**/index.ts' generico que tambien excluia
+        // src/store/index.ts, o sea el store completo: el archivo con mas logica
+        // del proyecto quedaba fuera del umbral de cobertura. El defecto de
+        // durabilidad del storage vivia justo ahi, sin medir.
+        'src/components/**/index.ts',
+        'src/hooks/index.ts',
+        'src/types/index.ts',
+      ],
       thresholds: {
         statements: 80,
         branches: 80,
