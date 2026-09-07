@@ -157,23 +157,55 @@ jobs:
           NDK_HOME: ${{ env.ANDROID_HOME }}/ndk/29.0.14206865
 
       - name: Sign APK
+        env:
+          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
         run: |
+          set -euo pipefail
           APK_PATH="src-tauri/gen/android/app/build/outputs/apk/universal/release/app-universal-release-unsigned.apk"
           ALIGNED_PATH="src-tauri/gen/android/app/build/outputs/apk/universal/release/daylo-android.apk"
 
-          # Generate a signing key
-          keytool -genkey -v -keystore release.jks -keyalg RSA -keysize 2048 \
-            -validity 10000 -alias release -storepass android -keypass android \
-            -dname "CN=Daylo,O=DLSLabs,C=US"
+          # El keystore TIENE que venir de secrets. Antes se generaba aqui con
+          # 'keytool -genkey', lo que producia una llave nueva en cada build que solo
+          # existia en este runner. Android exige firma identica para actualizar, asi
+          # que cada APK publicado asi queda incapaz de recibir actualizaciones: el
+          # usuario tiene que desinstalar, y siendo la app local-first, eso le borra
+          # los datos. Preferimos que el build falle antes que publicar eso otra vez.
+          if [ -z "${ANDROID_KEYSTORE_BASE64:-}" ]; then
+            echo "::error::No hay ANDROID_KEYSTORE_BASE64 en secrets. Se aborta en vez de"
+            echo "::error::generar una llave efimera: un APK firmado con llave distinta a la"
+            echo "::error::de la version anterior no se puede instalar encima, y desinstalar"
+            echo "::error::borra los datos locales del usuario."
+            echo "::error::Configura ANDROID_KEYSTORE_BASE64, ANDROID_KEYSTORE_PASSWORD,"
+            echo "::error::ANDROID_KEY_ALIAS y ANDROID_KEY_PASSWORD en los secrets del repo."
+            exit 1
+          fi
+          for v in ANDROID_KEYSTORE_PASSWORD ANDROID_KEY_ALIAS ANDROID_KEY_PASSWORD; do
+            if [ -z "$(eval echo "\${$v:-}")" ]; then
+              echo "::error::Falta el secret $v"; exit 1
+            fi
+          done
 
-          # Align
-          ${ANDROID_HOME}/build-tools/$(ls ${ANDROID_HOME}/build-tools/ | tail -1)/zipalign -f 4 \
-            "$APK_PATH" "$ALIGNED_PATH"
+          echo "$ANDROID_KEYSTORE_BASE64" | base64 -d > release.jks
+          trap 'rm -f release.jks' EXIT
 
-          # Sign
-          ${ANDROID_HOME}/build-tools/$(ls ${ANDROID_HOME}/build-tools/ | tail -1)/apksigner sign \
-            --ks release.jks --ks-pass pass:android --ks-key-alias release \
+          BT="${ANDROID_HOME}/build-tools/$(ls ${ANDROID_HOME}/build-tools/ | tail -1)"
+
+          "$BT/zipalign" -f 4 "$APK_PATH" "$ALIGNED_PATH"
+
+          "$BT/apksigner" sign \
+            --ks release.jks \
+            --ks-pass "env:ANDROID_KEYSTORE_PASSWORD" \
+            --key-pass "env:ANDROID_KEY_PASSWORD" \
+            --ks-key-alias "$ANDROID_KEY_ALIAS" \
             "$ALIGNED_PATH"
+
+          # Dejar el fingerprint en el log del build. Si algun dia la llave vuelve a
+          # cambiar, se ve aqui y no seis meses despues en el APK publicado.
+          echo "--- firma del APK que se va a publicar ---"
+          "$BT/apksigner" verify --print-certs "$ALIGNED_PATH" | grep -iE 'SHA-256|Subject'
 
       - name: Upload APK to release
         uses: softprops/action-gh-release@v2
