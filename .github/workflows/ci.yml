@@ -45,7 +45,8 @@ jobs:
             librsvg2-dev \
             patchelf \
             libgtk-3-dev \
-            libayatana-appindicator3-dev
+            libayatana-appindicator3-dev \
+            xvfb
 
       # Install Node.js dependencies
       - name: Install Node.js dependencies
@@ -88,6 +89,9 @@ jobs:
   build-check:
     needs: test
     runs-on: ${{ matrix.platform }}
+    # Cota superior explicita: sin ella, un proceso que no muera dejaria el job colgado
+    # hasta el limite por defecto de Actions, que son 6 horas.
+    timeout-minutes: 30
     strategy:
       fail-fast: false
       matrix:
@@ -181,12 +185,28 @@ jobs:
             Xvfb :99 -screen 0 1280x1024x24 >xvfb.log 2>&1 &
             XVFB_PID=$!
             export DISPLAY=:99
-            sleep 2
-            if ! kill -0 "$XVFB_PID" 2>/dev/null; then
-              # Distinguir esto del "el binario murio" evita diagnosticar la app por un
-              # fallo del runner.
-              echo "::error::Xvfb no arranco. El problema es del entorno del runner, no"
-              echo "::error::del arranque de la aplicacion:"
+            # Se espera el SOCKET, no un numero de segundos: con el runner cargado, un
+            # 'sleep' a ciegas puede dejar arrancar la app antes de que el display acepte
+            # conexiones, y entonces GTK aborta y el fallo se reporta como "el binario
+            # murio" -- diagnosticando la aplicacion por un problema del entorno.
+            for _ in $(seq 1 15); do
+              [ -S /tmp/.X11-unix/X99 ] && break
+              kill -0 "$XVFB_PID" 2>/dev/null || break
+              sleep 1
+            done
+            # El socket existiendo no basta: un Xvfb muerto de un intento anterior deja
+            # el fichero, y la aplicacion arrancaria contra un display que no responde.
+            # Si 'xdpyinfo' esta disponible se comprueba de verdad; si no, queda el
+            # socket mas el proceso vivo, que es lo mejor que se puede hacer sin el.
+            display_listo=0
+            if command -v xdpyinfo >/dev/null 2>&1; then
+              xdpyinfo -display :99 >/dev/null 2>&1 && display_listo=1
+            elif [ -S /tmp/.X11-unix/X99 ] && kill -0 "$XVFB_PID" 2>/dev/null; then
+              display_listo=1
+            fi
+            if [ "$display_listo" -ne 1 ]; then
+              echo "::error::El display :99 no responde tras 15s. El problema es del"
+              echo "::error::entorno del runner, no del arranque de la aplicacion:"
               cat xvfb.log 2>/dev/null
               exit 1
             fi
@@ -215,28 +235,59 @@ jobs:
           # "Vivo" no es "arrancado": si el webview falla, el proceso principal se queda
           # en pie con una ventana en blanco y el bucle de arriba lo daria por bueno.
           #
-          # Se buscan los hijos DEL PID de la aplicacion, no procesos de webkit por
-          # nombre en toda la maquina: un 'pgrep -f WebKitWebProcess' global daria un
-          # falso positivo si el runner tuviera cualquier otra aplicacion GTK/WebKit
-          # abierta. El webview arranca como hijo directo del binario (verificado: el
-          # proceso principal tiene como hijos WebKitWebProcess y WebKitNetworkProcess).
-          hijos=$(pgrep -P "$APP_PID" 2>/dev/null | wc -l)
-          if [ "$hijos" -eq 0 ]; then
-            echo "::error::El proceso principal vive pero no ha lanzado ningun proceso"
-            echo "::error::hijo: el webview no llego a arrancar y la ventana estaria vacia."
-            cat smoke.log 2>/dev/null
-            exit 1
+          # Se buscan los hijos DEL PID de la aplicacion, no procesos de webkit por nombre
+          # en toda la maquina: un 'pgrep -f WebKitWebProcess' global daria un falso
+          # positivo si el runner tuviera cualquier otra aplicacion GTK/WebKit abierta.
+          # Verificado que WebKitWebProcess y WebKitNetworkProcess son hijos directos del
+          # binario.
+          #
+          # Solo en Linux: en macOS los procesos de WKWebView son servicios XPC que lanza
+          # launchd, NO hijos del binario, asi que aqui la cuenta seria cero siempre. Ahi
+          # el smoke-run se queda en "el proceso no muere", que es menos, y se deja asi a
+          # proposito: la alternativa seria buscar 'com.apple.WebKit.WebContent' por
+          # nombre, y sin un runner de macOS delante no hay forma de comprobar que ese
+          # nombre es el correcto -- un falso negativo permanente y sin diagnosticar es
+          # peor que una comprobacion mas debil y declarada.
+          if [ "$RUNNER_OS" = "Linux" ]; then
+            # '|| true' porque pgrep sin coincidencias devuelve 1 y, con pipefail y el
+            # -e del shell de Actions, el paso moriria en esta asignacion sin llegar a
+            # imprimir el error ni volcar el log.
+            hijos=$(pgrep -P "$APP_PID" 2>/dev/null | wc -l || true)
+            if [ "${hijos:-0}" -eq 0 ]; then
+              echo "::error::El proceso principal vive pero no ha lanzado ningun proceso"
+              echo "::error::hijo: el webview no llego a arrancar y la ventana estaria vacia."
+              cat smoke.log 2>/dev/null
+              exit 1
+            fi
+            echo "El webview arranco: $hijos procesos hijos del binario"
+            pgrep -P "$APP_PID" 2>/dev/null | while read -r c; do
+              echo "  - $c $(cat "/proc/$c/comm" 2>/dev/null || true)"
+            done
+          else
+            echo "En macOS no se comprueba el webview: sus procesos son servicios XPC de"
+            echo "launchd y no hijos del binario. Aqui solo se verifica que no muere."
           fi
-          echo "El webview arranco: $hijos procesos hijos del binario"
-          pgrep -P "$APP_PID" 2>/dev/null | while read -r c; do
-            echo "  - $c $(cat "/proc/$c/comm" 2>/dev/null || ps -p "$c" -o comm= 2>/dev/null)"
-          done
 
           # Cierre limpio ANTES de mirar el almacenamiento. WebKit lleva el localStorage
           # en modo WAL y el checkpoint ocurre al cerrar: si se lee sin esperar a que el
           # proceso termine, el estado puede estar todavia solo en el -wal.
-          kill -TERM "$APP_PID" 2>/dev/null
-          wait "$APP_PID" 2>/dev/null
+          kill -TERM "$APP_PID" 2>/dev/null || true
+          # Sin timeout, una app que ignore SIGTERM dejaria el 'wait' bloqueado y el job
+          # colgado hasta el limite de Actions.
+          for _ in $(seq 1 15); do
+            kill -0 "$APP_PID" 2>/dev/null || break
+            sleep 1
+          done
+          if kill -0 "$APP_PID" 2>/dev/null; then
+            echo "::warning::La aplicacion no respondio a SIGTERM en 15s; se fuerza el cierre."
+            echo "::warning::El localStorage puede no haber hecho checkpoint."
+            kill -KILL "$APP_PID" 2>/dev/null || true
+          fi
+          # 'wait' devuelve 143 cuando el proceso termina por SIGTERM, y el shell de
+          # Actions corre con -e ('bash -e {0}'), que 'set -uo pipefail' no desactiva:
+          # sin el '|| true' el paso abortaria SIEMPRE, con la aplicacion perfectamente
+          # sana, en Linux y en macOS.
+          wait "$APP_PID" 2>/dev/null || true
           APP_PID=""
 
           # Comprobacion extra solo en Linux, que es la ruta verificada. En macOS el
@@ -269,7 +320,7 @@ jobs:
           contenido=$(strings -e l "${archivos[@]}" 2>/dev/null || true)
           if printf '%s' "$contenido" | grep -q '"activities"'; then
             echo "El store se inicializo y persistio su estado:"
-            printf '%s' "$contenido" | grep -o '"selectedYear":[0-9]*' | head -1
+            printf '%s' "$contenido" | grep -o '"selectedYear":[0-9]*' | head -1 || true
           else
             echo "::error::El almacenamiento existe pero no contiene el estado del store:"
             echo "::error::el webview arranco y la aplicacion no llego a inicializarse."
@@ -313,10 +364,16 @@ jobs:
             # Se filtra por ParentProcessId en vez de buscar msedgewebview2 en toda la
             # maquina: un runner con cualquier otro proceso de WebView2 abierto daria un
             # falso positivo.
-            $hijos = @(Get-CimInstance Win32_Process -Filter "ParentProcessId = $($p.Id)" -ErrorAction SilentlyContinue)
+            # Filtrado por NOMBRE, no solo por padre: 'tauri build --debug' no aplica
+            # windows_subsystem = "windows" (main.rs usa cfg_attr(not(debug_assertions))),
+            # asi que el .exe es de consola y Start-Process sin -NoNewWindow le crea un
+            # conhost.exe hijo. Contar hijos a secas daria >=1 aunque WebView2 no arranque
+            # nunca: verde con la aplicacion rota.
+            $hijos = @(Get-CimInstance Win32_Process -Filter "ParentProcessId = $($p.Id)" -ErrorAction SilentlyContinue |
+                       Where-Object { $_.Name -eq 'msedgewebview2.exe' })
             if ($hijos.Count -eq 0) {
               Write-Output "::error::El proceso principal vive pero no ha lanzado ningun"
-              Write-Output "::error::proceso hijo: WebView2 no arranco y la ventana estaria vacia."
+              Write-Output "::error::proceso msedgewebview2: no arranco y la ventana estaria vacia."
               if (Test-Path $err) { Get-Content $err }
               exit 1
             }
