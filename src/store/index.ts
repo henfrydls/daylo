@@ -204,24 +204,28 @@ export const useCalendarStore = create<CalendarState>()(
         const existingLog = get().logs.find((l) => l.activityId === activityId && l.date === date)
 
         if (existingLog) {
-          // Al desmarcar un dia sin notas se borra el registro en vez de guardarlo con
-          // completed:false. Un dia desmarcado y sin contenido del usuario no representa
-          // nada que quiera conservar, y cada registro cuenta contra la cuota de
-          // localStorage. Si tiene notas se conserva: la nota si es contenido suyo.
-          const estaDesmarcando = existingLog.completed
-          const sinNotas = !existingLog.notes?.trim()
+          // Se opera sobre TODOS los registros de ese dia y actividad, no solo sobre el
+          // que devolvio find: un dispositivo puede arrastrar duplicados de un import
+          // hecho antes de que mergeData deduplicara por actividad y dia, y si el clic
+          // solo tocara uno, el dia se quedaria verde despues de desmarcarlo.
+          const esDeEsteDia = (l: ActivityLog) => l.activityId === activityId && l.date === date
 
-          if (estaDesmarcando && sinNotas) {
+          if (existingLog.completed) {
+            // Al desmarcar, los registros sin notas se borran en vez de guardarse con
+            // completed:false. Un dia desmarcado y sin contenido del usuario no
+            // representa nada que quiera conservar, y cada registro cuenta contra la
+            // cuota de localStorage. Los que tengan notas se conservan desmarcados: la
+            // nota si es contenido suyo.
             set((state) => ({
-              logs: state.logs.filter((l) => l.id !== existingLog.id),
+              logs: state.logs
+                .filter((l) => !(esDeEsteDia(l) && !l.notes?.trim()))
+                .map((l) => (esDeEsteDia(l) ? { ...l, completed: false } : l)),
             }))
             return
           }
 
           set((state) => ({
-            logs: state.logs.map((l) =>
-              l.id === existingLog.id ? { ...l, completed: !l.completed } : l
-            ),
+            logs: state.logs.map((l) => (esDeEsteDia(l) ? { ...l, completed: true } : l)),
           }))
         } else {
           const newLog: ActivityLog = {

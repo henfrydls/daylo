@@ -115,6 +115,34 @@ describe('useCalendarStore', () => {
       expect(logs[0].notes).toBe('Me costo pero lo hice')
     })
 
+    it('borra todos los registros del dia al desmarcar, no solo uno', () => {
+      // Un dispositivo puede arrastrar duplicados de un import hecho antes de que
+      // mergeData deduplicara por actividad y dia. Si al desmarcar solo desaparece uno,
+      // el dia se queda verde despues del clic y el usuario no entiende nada.
+      useCalendarStore.setState({
+        logs: [
+          {
+            id: 'dup-1',
+            activityId: 'act-1',
+            date: '2026-01-05',
+            completed: true,
+            createdAt: '2026-01-05T10:00:00.000Z',
+          },
+          {
+            id: 'dup-2',
+            activityId: 'act-1',
+            date: '2026-01-05',
+            completed: true,
+            createdAt: '2026-01-05T11:00:00.000Z',
+          },
+        ],
+      })
+
+      useCalendarStore.getState().toggleLog('act-1', '2026-01-05')
+
+      expect(useCalendarStore.getState().logs).toHaveLength(0)
+    })
+
     it('should update log notes', () => {
       const { addActivity, toggleLog, updateLogNotes } = useCalendarStore.getState()
       addActivity('Exercise', '#10B981')
