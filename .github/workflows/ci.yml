@@ -172,17 +172,17 @@ jobs:
 
           XVFB_PID=""
           APP_PID=""
-          DBUS_PID=""
           limpiar() {
             [ -n "$APP_PID" ] && kill "$APP_PID" 2>/dev/null
-            [ -n "$DBUS_PID" ] && kill "$DBUS_PID" 2>/dev/null
             [ -n "$XVFB_PID" ] && kill "$XVFB_PID" 2>/dev/null
             return 0
           }
           trap limpiar EXIT
 
-          # Estado heredado, antes de tocar nada: si el arranque falla, estos dos valores
-          # dicen si la causa era el entorno del runner y cual de las dos.
+          # Estado heredado, antes de tocar nada. En el runner de Actions resulto que
+          # XDG_RUNTIME_DIR SI viene definido y que no hay bus de sesion de D-Bus, y aun
+          # asi el webview arranca: ninguna de las dos cosas era la causa del fallo. Se
+          # siguen imprimiendo porque en otro entorno pueden serlo.
           echo "XDG_RUNTIME_DIR heredado: ${XDG_RUNTIME_DIR:-<sin definir>}"
           echo "DBUS_SESSION_BUS_ADDRESS heredado: ${DBUS_SESSION_BUS_ADDRESS:-<sin definir>}"
 
@@ -197,26 +197,6 @@ jobs:
             chmod 700 "$XDG_RUNTIME_DIR"
             export XDG_RUNTIME_DIR
             echo "XDG_RUNTIME_DIR creado en $XDG_RUNTIME_DIR"
-          fi
-
-          # Y tampoco hay bus de sesion de D-Bus. El aviso de AT-SPI del primer run
-          # ("The name org.a11y.Bus was not provided") lo decia literalmente. WebKitGTK usa
-          # D-Bus para el proxy del sandbox, asi que sin bus el WebProcess no arranca.
-          #
-          # Se levanta el bus con dbus-daemon y NO con 'dbus-run-session': ese envoltorio
-          # tampoco hace exec -- verificado, $! devuelve el PID del envoltorio y la
-          # aplicacion queda como su hijo, junto al propio dbus-daemon -- y volveria a
-          # perderse el PID de la app, que es el bug que ya costo un run entero.
-          if [ -z "${DBUS_SESSION_BUS_ADDRESS:-}" ] && command -v dbus-daemon >/dev/null 2>&1; then
-            dbus_salida=$(dbus-daemon --session --fork --print-address --print-pid 2>/dev/null || true)
-            if [ -n "$dbus_salida" ]; then
-              DBUS_SESSION_BUS_ADDRESS=$(printf '%s\n' "$dbus_salida" | head -1)
-              DBUS_PID=$(printf '%s\n' "$dbus_salida" | tail -1)
-              export DBUS_SESSION_BUS_ADDRESS
-              echo "Bus de sesion levantado (PID $DBUS_PID)"
-            else
-              echo "::warning::No se pudo levantar un bus de sesion de D-Bus."
-            fi
           fi
 
           if [ "$RUNNER_OS" = "Linux" ]; then
@@ -307,13 +287,17 @@ jobs:
             echo "proceso no muere."
           fi
 
-          # En Linux se espera a que aparezca el almacenamiento antes de cerrar: en un
-          # runner frio y con GL por software el primer arranque puede tardar bastante mas
-          # que en una maquina de desarrollo, y cerrar a los 10 s dejaria el store vacio
-          # por prisa y no por fallo.
+          # En Linux se espera a que aparezca el almacenamiento antes de cerrar. Esto no
+          # es precaucion teorica: en el runner de Actions el webview tarda unos 28
+          # segundos en escribir por primera vez, contra menos de uno en una maquina de
+          # desarrollo. El primer intento cerraba la aplicacion a los 10 s y reportaba
+          # "el webview no arranco" cuando lo que faltaba era esperar.
+          #
+          # El margen es generoso a proposito: con 20 s el run pasaba por dos segundos, y
+          # un runner mas cargado habria vuelto a dar rojo con la aplicacion sana.
           STORE="$HOME/.local/share/com.daylo.app/localstorage"
           if [ "$RUNNER_OS" = "Linux" ]; then
-            for s in $(seq 1 20); do
+            for s in $(seq 1 45); do
               # Con 'nullglob', un glob sin coincidencias DESAPARECE, asi que un
               # 'ls "$STORE"/*localstorage*' correria sin argumentos, listaria el
               # directorio actual y devolveria exito: falso positivo inmediato. Hay que
