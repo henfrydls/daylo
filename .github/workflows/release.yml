@@ -252,6 +252,16 @@ jobs:
           # sin ese artefacto; abortar aqui dejaria sin copia fija a las plataformas que
           # SI compilaron, y sus enlaces en la landing darian 404. Un build caido degrada
           # una fila de la tabla, no todas.
+          # AVISO para quien añada mas jobs de empaquetado a este workflow:
+          # los patrones de abajo ABORTAN si uno casa con mas de un archivo. Si algun
+          # dia un job sube a ESTA MISMA release otro instalador de Windows -- por
+          # ejemplo el paquete de la Microsoft Store, que necesita
+          # webviewInstallMode=offlineInstaller y pesa mas de 100 MB frente a los 2 MB
+          # del NSIS -- tiene que llamarse de forma que NO case con
+          # 'Daylo_*_x64-setup.exe' (p. ej. 'Daylo-store-x64.msix'), o este paso se
+          # cae y ninguna plataforma recibe su copia de nombre fijo.
+          # Y si ese paquete llega a publicarse aqui, hay que añadir su extension a la
+          # lista de 'existentes' mas abajo para que entre en SHA256SUMS.txt.
           subidos=()
           faltantes=()
 
