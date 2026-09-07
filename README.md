@@ -4,7 +4,7 @@
 
 <p align="center">
   A personal activity tracker with a GitHub-style contribution calendar.<br/>
-  Track daily habits, visualize progress with a heatmap, and stay on top of your goals — all locally, no account required.
+  Track daily habits, visualize progress with a heatmap, and stay on top of your goals, all locally, no account required.
 </p>
 
 <p align="center">
@@ -20,23 +20,23 @@
 
 ## Installation
 
-Daylo runs entirely on your device — no account, no cloud, no tracking.
+Daylo runs entirely on your device: no account, no cloud, no tracking.
 
-- **[Desktop app](#desktop-app)** (Windows, macOS, Linux) — Download from GitHub Releases
-- **[Android app](#android-app)** (arm64 phones and tablets) — Download the APK from GitHub Releases
-- **[Docker](#docker)** — Self-hosted via `docker compose`
-- **[From source](#from-source)** — Clone and build
+- **[Desktop app](#desktop-app)** (Windows, macOS, Linux): Download from GitHub Releases
+- **[Android app](#android-app)** (arm64 phones and tablets): Download the APK from GitHub Releases
+- **[Docker](#docker)**: Self-hosted via `docker compose`
+- **[From source](#from-source)**: Clone and build
 
 ## Features
 
-- **Annual heatmap view** — See your entire year at a glance with a 5-level color heatmap
-- **Monthly detail view** — Drill down into any month with activity dots per day
-- **Quick daily logging** — Click any day to check off completed activities
-- **Activity management** — Create, edit, and delete activities with custom colors
-- **Statistics** — Current streak, longest streak, monthly completion rate
-- **Export/Import** — Back up your data as JSON or CSV, restore from backup
-- **Offline-first** — All data stays on your device, works 100% offline
-- **Cross-platform** — Runs as a desktop app (Windows, macOS, Linux) or in the browser
+- **Annual heatmap view**: See your entire year at a glance with a 5-level color heatmap
+- **Monthly detail view**: Drill down into any month with activity dots per day
+- **Quick daily logging**: Click any day to check off completed activities
+- **Activity management**: Create, edit, and delete activities with custom colors
+- **Statistics**: Current streak, longest streak, monthly completion rate
+- **Export/Import**: Back up your data as JSON or CSV, restore from backup
+- **Offline-first**: All data stays on your device, works 100% offline
+- **Cross-platform**: Runs as a desktop app (Windows, macOS, Linux) or in the browser
 
 ## Screenshots
 
@@ -57,7 +57,7 @@ Daylo runs entirely on your device — no account, no cloud, no tracking.
 <p align="center">
   <img src="docs/daylo-mobile-month.png" alt="Month view on a phone, with a card for today" width="300" />
 </p>
-<p align="center"><sub>On Android, the same calendar in your pocket.</sub></p>
+<p align="center"><sub>On a phone, the same calendar in your pocket.</sub></p>
 
 ## Tech Stack
 
@@ -91,7 +91,7 @@ Every release from v1.1.1 onward ships a [`SHA256SUMS.txt`](../../releases/lates
 - **macOS:** `shasum -a 256 -c SHA256SUMS.txt --ignore-missing`
 - **Windows (PowerShell):** `Select-String -Path .\SHA256SUMS.txt -Pattern (Get-FileHash .\Daylo-windows-x64-setup.exe -Algorithm SHA256).Hash` (replace the file name with the one you downloaded). One matching line means the file is intact; no output means it is not.
 
-Just install and open — no setup, no accounts, no internet required.
+Just install and open: no setup, no accounts, no internet required.
 
 #### About the security warning
 
@@ -106,8 +106,8 @@ The warning means "unknown publisher", not "unsafe". Every release is built by G
 
 Download [`Daylo-android-arm64.apk`](../../releases/latest/download/Daylo-android-arm64.apk) and open it on your phone. Android will ask you to allow installs from this source the first time.
 
-- Runs on **arm64 devices** — practically every phone and tablet made since 2017. It will not install on 32-bit devices or on Android Studio emulators.
-- Your data lives in the app's local storage on the device. **Use Export Data inside the app before uninstalling** — uninstalling deletes the data.
+- Runs on **arm64 devices**, practically every phone and tablet made since 2017. It will not install on 32-bit devices or on Android Studio emulators.
+- Your data lives in the app's local storage on the device. **Use Export Data inside the app before uninstalling**: uninstalling deletes the data.
 - **Updating from v1.1.0:** that build was signed with a key that no longer exists, so v1.1.1 cannot install over it. One-time step: Export Data, uninstall v1.1.0, install v1.1.1, Import Data. From v1.1.1 onward, updates install in place.
 
 ### Docker
@@ -187,6 +187,6 @@ src/
 
 ## License
 
-[MIT](LICENSE) — free for any use, including commercial.
+[MIT](LICENSE): free for any use, including commercial.
 
 Releases up to and including v1.1.0 were published under the PolyForm Noncommercial 1.0.0 license and remain available under those terms; everything from this change onward is MIT.
