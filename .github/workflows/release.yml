@@ -4,9 +4,25 @@ on:
   push:
     tags:
       - 'v*.*.*'
+  # Relanzar a mano SOLO reconstruye la demo. Los artefactos de Actions caducan a los 90
+  # dias, y pasado ese plazo no habria de donde bajar la demo para redesplegarla sin
+  # volver a taguear -- que crearia una release nueva por un motivo que no lo es.
+  #
+  # Los jobs que PUBLICAN llevan una guarda de tag: sin ella, un dispatch desde una rama
+  # haria que tauri-action creara una release llamada como la rama, porque el nombre sale
+  # de github.ref_name.
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: 'Tag o rama de la que construir la demo (vacio = la rama actual)'
+        required: false
+        type: string
 
 jobs:
   build:
+    # Solo en tags: un dispatch manual no debe publicar una release, porque el nombre
+    # sale de github.ref_name y desde una rama crearia una release llamada como ella.
+    if: startsWith(github.ref, 'refs/tags/')
     permissions:
       contents: write
     strategy:
@@ -107,6 +123,9 @@ jobs:
           args: ${{ matrix.args }}
 
   build-android:
+    # Solo en tags: un dispatch manual no debe publicar una release, porque el nombre
+    # sale de github.ref_name y desde una rama crearia una release llamada como ella.
+    if: startsWith(github.ref, 'refs/tags/')
     permissions:
       contents: write
     runs-on: ubuntu-latest
@@ -230,6 +249,10 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+        with:
+          # En un dispatch se puede pedir un tag concreto, para reconstruir la demo de una
+          # version publicada tal como era.
+          ref: ${{ inputs.ref || github.ref }}
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -279,7 +302,7 @@ jobs:
     # copias fijas y un SHA256SUMS.txt que solo cubre lo subido hasta ese instante. La
     # comprobacion de cobertura no protege de eso: los dos conteos verian la misma
     # release a medias.
-    if: ${{ !cancelled() }}
+    if: ${{ !cancelled() && startsWith(github.ref, 'refs/tags/') }}
     steps:
       - name: Check build results
         run: |
