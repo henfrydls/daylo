@@ -16,18 +16,18 @@ habría verificado algo que nadie usa. Lo que sigue mide el artefacto publicado.
 - **"Arranca"** no es que se abra una ventana. Exige el ciclo: dato creado → app cerrada →
   app reabierta → dato presente.
 - **Tres cajones, nunca dos:** VERDE (ejecutado), ROJO (falla con causa), **GRIS (no
-  verificable aquí)**. Gris no se colapsa en ninguno de los otros dos.
+  verificable con el equipo disponible)**. Gris no se colapsa en ninguno de los otros dos.
 - Una compilación que no termina es **gris por presupuesto**, jamás roja.
 
-Controles aplicados para separar "el paquete está roto" de "es mi máquina":
+Controles aplicados para separar "el paquete está roto" de "es el entorno de pruebas":
 `A` compilar desde fuente si el publicado falla · `B` identificar la dependencia exacta y
 compararla con `Depends` del paquete · `C` ciclo de persistencia · `D` HOME limpio en cada
 intento, sin tocar los datos reales del usuario.
 
 **El control B evitó una conclusión falsa.** La primera captura de la ventana salió negra.
-Antes de escribir "Daylo renderiza en negro" comprobé el entorno: `LockedHint=yes` y
-`org.gnome.ScreenSaver.GetActive` → `true`. La sesión estaba bloqueada; el negro era la
-pantalla de bloqueo. Queda como gris, no como rojo.
+Antes de anotarlo como fallo se comprobó el entorno: `LockedHint=yes` y
+`org.gnome.ScreenSaver.GetActive` → `true`. La sesión de escritorio estaba bloqueada y el
+negro era la pantalla de bloqueo. Queda como gris, no como rojo.
 
 ## VERDE — ejecutado y verificado
 
@@ -69,7 +69,8 @@ SHA256: 2C:D5:A0:EB:D7:A5:F6:0C:24:D1:6D:8B:99:6D:42:EB:69:DC:6D:5B:1F:5A:3D:DE:
 ```
 
 El certificado nació **dos minutos después** de publicarse la release: se generó durante el
-build. Hallazgo original de la sesión de growth, verificado aquí de forma independiente.
+build. Hallazgo original de la revisión de distribución, verificado de forma independiente en
+este QA.
 
 **Consecuencia.** Android exige firma idéntica para actualizar. Cualquier v1.2 firmada con
 otra llave falla con "App not installed" sobre una v1.1.0 instalada. La única salida del
@@ -82,9 +83,10 @@ escrita en claro en `release.yml:166` y en el historial público desde `9fa82d3`
 de firma de por vida con contraseña pública no es una llave de firma. Así que la pregunta no
 es sólo "¿se puede recuperar?" sino "¿se debe?", y la respuesta a la segunda es no.
 
-**Pendiente de comprobar, y sólo Henfry puede:** si `src-tauri/gen/android/daylo-release.keystore`
-resultara tener este mismo SHA256, la continuidad estaría salvada. Abrir un keystore está
-bloqueado por el clasificador de permisos de la sesión, con razón. El comando es
+**Pendiente de comprobar por quien tenga la contraseña del keystore:** si
+`src-tauri/gen/android/daylo-release.keystore` resultara tener este mismo SHA256, la
+continuidad estaría salvada. Abrir el keystore quedó fuera del alcance de este QA. El
+comando es
 `keytool -list -v -keystore src-tauri/gen/android/daylo-release.keystore` y hay que comparar
 el SHA256 con el de arriba. **Hasta que eso se comprueba, esto sigue siendo el rojo número 1.**
 
@@ -147,10 +149,10 @@ Quien instale el `.deb` y teclee `daylo` no encuentra nada; en Windows aparece c
 10,7 MB el ELF de Linux. Es parte de por qué el AppImage pesa **81,5 MB frente a 4,0 MB del
 `.deb`** — 20 veces más para la misma app.
 
-## GRIS — no verificable en esta máquina
+## GRIS — no verificable con el equipo disponible
 
-No tengo Windows, ni Mac, ni dispositivo Android. De estos artefactos puedo demostrar que
-están **bien construidos**, no que arranquen:
+No hubo acceso a Windows, macOS ni a un dispositivo Android físico. De estos artefactos se
+puede demostrar que están **bien construidos**, no que arranquen:
 
 | Artefacto | Verificado | **No** verificado |
 |---|---|---|
@@ -162,7 +164,8 @@ están **bien construidos**, no que arranquen:
 
 ### Render e interacción: cerrados el 2026-09-07
 
-Estaban en gris por la sesión bloqueada. Se cerraron sirviendo el build web (`npm run build`,
+Estaban en gris porque la sesión de escritorio estaba bloqueada. Se cerraron sirviendo el
+build web (`npm run build`,
 452 KB, JS de 297 KB) en `127.0.0.1` y conduciéndolo con un navegador real:
 
 1. La interfaz **renderiza correctamente**: vista anual 2026 con los doce meses, leyenda del
@@ -200,8 +203,8 @@ Ordenado por daño que evita, no por esfuerzo.
    si el keystore del working tree es el que firmó v1.1.0 (ver rojo #1).
 2. **Nota de migración en la próxima release de Android.** Daylo tiene export/import JSON, y
    es lo único que salva los datos de los 2 usuarios que ya tienen el APK: exportar →
-   desinstalar → instalar → importar. Sin esa línea, el update les borra todo. Artefacto de
-   la sesión de growth; queda anotado aquí porque el defecto es de CI.
+   desinstalar → instalar → importar. Sin esa línea, el update les borra todo. Corresponde a
+   la documentación de release; queda anotado aquí porque el defecto es de CI.
 3. **Firmar y notarizar el escritorio, o documentar el bypass.** macOS necesita cuenta de
    Apple Developer (99 USD/año) más notarización; Windows, un certificado de firma (los OV
    rondan 200-400 USD/año, y SmartScreen sigue avisando hasta acumular reputación). Si el
@@ -231,7 +234,8 @@ Ordenado por daño que evita, no por esfuerzo.
   `windows-latest` / `macos-latest` y compruebe que el proceso vive. GitHub Actions ya se usa
   para construir; verificar el arranque es una extensión pequeña.
 - **Android:** dispositivo arm64 físico. El emulador x86_64 **no puede** con este APK.
-- **Render e interacción en Linux:** con la sesión desbloqueada, capturar la ventana y
+- **Render e interacción en Linux:** con la sesión de escritorio desbloqueada, capturar la
+  ventana y
   automatizar clics (hay `ffmpeg` y `python-xlib`; falta `xdotool`).
 
 ## Nota de seguridad resuelta durante este trabajo
