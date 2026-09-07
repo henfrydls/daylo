@@ -218,7 +218,16 @@ jobs:
   release-summary:
     needs: [build, build-android]
     runs-on: ubuntu-latest
-    if: always()
+    # El repositorio tiene default_workflow_permissions en "read", asi que sin declarar
+    # esto 'gh release upload' devuelve 403. Los otros dos jobs ya lo declaran; este no
+    # lo necesitaba hasta que empezo a publicar assets.
+    permissions:
+      contents: write
+    # 'always()' correria tambien cuando se cancela el run, y entonces se publicarian
+    # copias fijas y un SHA256SUMS.txt que solo cubre lo subido hasta ese instante. La
+    # comprobacion de cobertura no protege de eso: los dos conteos verian la misma
+    # release a medias.
+    if: ${{ !cancelled() }}
     steps:
       - name: Check build results
         run: |
@@ -236,7 +245,7 @@ jobs:
       # SI compilaron, y romperia sus enlaces. La degradacion por plataforma de
       # 'preparar' solo sirve si el paso llega a ejecutarse.
       - name: Publicar copias con nombre estable y SHA256SUMS
-        if: always()
+        if: ${{ !cancelled() }}
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
@@ -298,7 +307,14 @@ jobs:
           # APK ya se publica con su nombre definitivo y tampoco hace falta tocarlo.
           gh release download "$TAG" --repo "$REPO" --clobber \
             --pattern '*.exe' --pattern '*.dmg' --pattern '*.deb' || {
-            echo "::error::Fallo la descarga de los assets de $TAG."; exit 1; }
+            # 'gh release download' tambien sale 1 cuando simplemente no hay nada que case,
+            # que es lo que pasa si fallaron los cinco builds de escritorio. Eso no es un
+            # fallo de descarga, y decirlo asi manda a mirar al sitio equivocado. Se avisa
+            # y se sigue: 'preparar' informara de cada copia que falte, y el SHA256SUMS
+            # del APK -- que si existe -- se publica igual.
+            echo "::warning::La descarga no trajo ningun instalador de escritorio para $TAG."
+            echo "::warning::O fallaron esos builds, o la release no los tiene todavia."
+          }
 
           # Copias con nombre estable para que la landing pueda enlazar a
           # /releases/latest/download/<nombre> sin la version dentro de la URL. Los
@@ -356,9 +372,14 @@ jobs:
           preparar 'Daylo_*_amd64.deb'        Daylo-linux-amd64.deb
 
           if [ ${#subidos[@]} -eq 0 ]; then
-            echo "::error::No se preparo ninguna copia fija: la release no tiene assets de"
-            echo "::error::escritorio con los nombres esperados."
-            exit 1
+            # No se aborta: puede ser una release donde solo salio el APK. Abortar aqui
+            # tiraria tambien el SHA256SUMS.txt, que cubre los assets que SI existen, y
+            # dejaria la release sin ninguna forma de verificar la descarga.
+            echo "::warning::No se preparo ninguna copia con nombre estable: la release no"
+            echo "::warning::tiene instaladores de escritorio con los nombres esperados."
+            echo "::warning::Todos los enlaces /releases/latest/download/ daran 404 hasta"
+            echo "::warning::la proxima release que los incluya. SHA256SUMS.txt se publica"
+            echo "::warning::igual, con los assets que haya."
           fi
 
           # SHA256SUMS con todo lo publicado. Los instaladores de escritorio no van
