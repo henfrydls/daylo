@@ -66,16 +66,53 @@ describe('useCalendarStore', () => {
       expect(logs[0].completed).toBe(true)
     })
 
-    it('should toggle log off (update)', () => {
+    it('vuelve a crear el registro si se marca otra vez tras desmarcar', () => {
       const { addActivity, toggleLog } = useCalendarStore.getState()
       addActivity('Exercise', '#10B981')
 
       const activity = useCalendarStore.getState().activities[0]
-      toggleLog(activity.id, '2024-01-15') // Create
-      toggleLog(activity.id, '2024-01-15') // Toggle off
+      toggleLog(activity.id, '2024-01-15') // marcar
+      toggleLog(activity.id, '2024-01-15') // desmarcar: el registro se borra
+      toggleLog(activity.id, '2024-01-15') // marcar de nuevo
 
+      // Al borrarse el registro al desmarcar, volver a marcar tiene que crear uno nuevo
+      // en lugar de no encontrar nada que actualizar.
       const { logs } = useCalendarStore.getState()
+      expect(logs).toHaveLength(1)
+      expect(logs[0].completed).toBe(true)
+      expect(logs[0].date).toBe('2024-01-15')
+    })
+
+    it('borra el registro al desmarcar un dia sin notas', () => {
+      const { addActivity, toggleLog } = useCalendarStore.getState()
+      addActivity('Exercise', '#10B981')
+
+      const activity = useCalendarStore.getState().activities[0]
+      toggleLog(activity.id, '2024-01-15')
+      expect(useCalendarStore.getState().logs).toHaveLength(1)
+
+      toggleLog(activity.id, '2024-01-15')
+
+      // Un dia desmarcado y sin notas no representa nada que el usuario quiera
+      // conservar, y cada uno de esos registros cuenta contra la cuota de localStorage.
+      expect(useCalendarStore.getState().logs).toHaveLength(0)
+    })
+
+    it('conserva el registro con sus notas al desmarcar', () => {
+      const { addActivity, toggleLog, updateLogNotes } = useCalendarStore.getState()
+      addActivity('Exercise', '#10B981')
+
+      const activity = useCalendarStore.getState().activities[0]
+      toggleLog(activity.id, '2024-01-15')
+      updateLogNotes(useCalendarStore.getState().logs[0].id, 'Me costo pero lo hice')
+
+      toggleLog(activity.id, '2024-01-15')
+
+      // La nota es contenido del usuario: desmarcar el dia no la borra.
+      const { logs } = useCalendarStore.getState()
+      expect(logs).toHaveLength(1)
       expect(logs[0].completed).toBe(false)
+      expect(logs[0].notes).toBe('Me costo pero lo hice')
     })
 
     it('should update log notes', () => {

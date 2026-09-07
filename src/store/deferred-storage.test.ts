@@ -77,10 +77,10 @@ describe('createDeferredStorage: durabilidad de la escritura', () => {
       eventos.push(ev)
     }) as typeof window.addEventListener)
 
-    const { useCalendarStore } = await import('./index')
-    // El storage se instancia de forma perezosa: hace falta una escritura para crearlo.
-    useCalendarStore.getState().addActivity('Meditar', '#a855f7')
+    await import('./index')
 
+    // createJSONStorage llama a getStorage() al evaluar el modulo, no en la primera
+    // escritura, asi que los listeners quedan registrados con solo importar el store.
     expect(eventos).toContain('pagehide')
     expect(eventos).toContain('visibilitychange')
   })

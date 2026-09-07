@@ -2,6 +2,9 @@ import { create } from 'zustand'
 import { persist, createJSONStorage, type StateStorage } from 'zustand/middleware'
 import type { Activity, ActivityLog } from '../types'
 import { generateId } from '../lib/dates'
+// Import estatico a proposito: Toast.tsx ya importa este modulo de forma estatica,
+// asi que un import() dinamico aqui no partiria el bundle -- solo retrasaria el aviso.
+import { useToastStore } from './toast'
 
 type ViewType = 'year' | 'month'
 type ViewTransitionDirection = 'drill-down' | 'drill-up' | null
@@ -45,19 +48,12 @@ const createDeferredStorage = (): StateStorage => {
         console.error('[Daylo] No se pudieron guardar los cambios en localStorage:', error)
         if (!failureReported) {
           failureReported = true
-          // Import perezoso para no acoplar el storage al arranque del store de avisos.
-          import('./toast')
-            .then(({ useToastStore }) => {
-              useToastStore
-                .getState()
-                .addToast(
-                  'No se pudieron guardar tus cambios. Exporta tus datos por seguridad.',
-                  'error'
-                )
-            })
-            .catch(() => {
-              /* si ni el aviso carga, el console.error de arriba es lo que queda */
-            })
+          useToastStore
+            .getState()
+            .addToast(
+              'No se pudieron guardar tus cambios. Exporta tus datos por seguridad.',
+              'error'
+            )
         }
       }
     }
@@ -98,11 +94,17 @@ const createDeferredStorage = (): StateStorage => {
       // Cancel any existing scheduled write
       cancelScheduledWrite()
 
-      // Se sigue difiriendo para que la UI responda al instante, pero con una ventana
-      // corta: 1000 ms dejaba un hueco grande de perdida con las animaciones ocupando
-      // el hilo. Serializar en cada toggle seria peor con anos de historial acumulado.
+      // El diferido coalesce escrituras a localStorage: la durabilidad no depende de
+      // esta ventana, sino del flush de 'pagehide' y visibilitychange de arriba, asi que
+      // conviene que sea holgada. Con una ventana corta cada clic de navegacion
+      // (cambiar de mes, de vista, elegir un dia) acaba en una escritura propia, porque
+      // partialize tambien persiste esos campos.
+      //
+      // Ojo: esto NO ahorra serializacion. createJSONStorage hace el JSON.stringify de
+      // forma sincrona en cada set(), antes de llamar a este adaptador; lo que se
+      // coalesce es la escritura en disco, nada mas.
       if (useIdleCallback) {
-        scheduledWrite = window.requestIdleCallback(() => flushWrite(name), { timeout: 200 })
+        scheduledWrite = window.requestIdleCallback(() => flushWrite(name), { timeout: 1000 })
       } else {
         // Fallback for browsers without requestIdleCallback or Node.js
         scheduledWrite = setTimeout(() => flushWrite(name), 0)
@@ -202,6 +204,20 @@ export const useCalendarStore = create<CalendarState>()(
         const existingLog = get().logs.find((l) => l.activityId === activityId && l.date === date)
 
         if (existingLog) {
+          // Al desmarcar un dia sin notas se borra el registro en vez de guardarlo con
+          // completed:false. Un dia desmarcado y sin contenido del usuario no representa
+          // nada que quiera conservar, y cada registro cuenta contra la cuota de
+          // localStorage. Si tiene notas se conserva: la nota si es contenido suyo.
+          const estaDesmarcando = existingLog.completed
+          const sinNotas = !existingLog.notes?.trim()
+
+          if (estaDesmarcando && sinNotas) {
+            set((state) => ({
+              logs: state.logs.filter((l) => l.id !== existingLog.id),
+            }))
+            return
+          }
+
           set((state) => ({
             logs: state.logs.map((l) =>
               l.id === existingLog.id ? { ...l, completed: !l.completed } : l
