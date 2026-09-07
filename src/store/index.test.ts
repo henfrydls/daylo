@@ -115,6 +115,125 @@ describe('useCalendarStore', () => {
       expect(logs[0].notes).toBe('Me costo pero lo hice')
     })
 
+    it('borra todos los registros del dia al desmarcar, no solo uno', () => {
+      // Un dispositivo puede arrastrar duplicados de un import hecho antes de que
+      // mergeData deduplicara por actividad y dia. Si al desmarcar solo desaparece uno,
+      // el dia se queda verde despues del clic y el usuario no entiende nada.
+      useCalendarStore.setState({
+        logs: [
+          {
+            id: 'dup-1',
+            activityId: 'act-1',
+            date: '2026-01-05',
+            completed: true,
+            createdAt: '2026-01-05T10:00:00.000Z',
+          },
+          {
+            id: 'dup-2',
+            activityId: 'act-1',
+            date: '2026-01-05',
+            completed: true,
+            createdAt: '2026-01-05T11:00:00.000Z',
+          },
+        ],
+      })
+
+      useCalendarStore.getState().toggleLog('act-1', '2026-01-05')
+
+      expect(useCalendarStore.getState().logs).toHaveLength(0)
+    })
+
+    it('al desmarcar con duplicados mixtos deja solo el que tiene nota, sin marcar', () => {
+      useCalendarStore.setState({
+        logs: [
+          {
+            id: 'sin-nota',
+            activityId: 'act-1',
+            date: '2026-01-07',
+            completed: true,
+            createdAt: '2026-01-07T10:00:00.000Z',
+          },
+          {
+            id: 'con-nota',
+            activityId: 'act-1',
+            date: '2026-01-07',
+            completed: true,
+            notes: 'lo hice a medias',
+            createdAt: '2026-01-07T11:00:00.000Z',
+          },
+        ],
+      })
+
+      useCalendarStore.getState().toggleLog('act-1', '2026-01-07')
+
+      const { logs } = useCalendarStore.getState()
+      expect(logs).toHaveLength(1)
+      expect(logs[0].notes).toBe('lo hice a medias')
+      expect(logs[0].completed).toBe(false)
+    })
+
+    it('al marcar un dia con duplicados no cuenta el dia dos veces', () => {
+      // Los duplicados heredados pueden estar en completed:false, que es la forma que
+      // dejaban las versiones anteriores al arreglo del desmarcado. Si un clic los pone
+      // todos en true, el heatmap cuenta el dia dos veces y pinta un nivel que no
+      // corresponde: el mismo sintoma que este cambio dice arreglar, pero al marcar.
+      useCalendarStore.setState({
+        logs: [
+          {
+            id: 'dup-1',
+            activityId: 'act-1',
+            date: '2026-01-05',
+            completed: false,
+            createdAt: '2026-01-05T10:00:00.000Z',
+          },
+          {
+            id: 'dup-2',
+            activityId: 'act-1',
+            date: '2026-01-05',
+            completed: false,
+            createdAt: '2026-01-05T11:00:00.000Z',
+          },
+        ],
+      })
+
+      useCalendarStore.getState().toggleLog('act-1', '2026-01-05')
+
+      const { logs } = useCalendarStore.getState()
+      const completadosDelDia = logs.filter(
+        (l) => l.activityId === 'act-1' && l.date === '2026-01-05' && l.completed
+      )
+      expect(completadosDelDia).toHaveLength(1)
+    })
+
+    it('al marcar conserva un duplicado con notas en vez de borrarlo', () => {
+      useCalendarStore.setState({
+        logs: [
+          {
+            id: 'sin-nota',
+            activityId: 'act-1',
+            date: '2026-01-06',
+            completed: false,
+            createdAt: '2026-01-06T10:00:00.000Z',
+          },
+          {
+            id: 'con-nota',
+            activityId: 'act-1',
+            date: '2026-01-06',
+            completed: false,
+            notes: 'me costo',
+            createdAt: '2026-01-06T11:00:00.000Z',
+          },
+        ],
+      })
+
+      useCalendarStore.getState().toggleLog('act-1', '2026-01-06')
+
+      const { logs } = useCalendarStore.getState()
+      // La nota es contenido del usuario y no se pierde por colapsar duplicados.
+      expect(logs.some((l) => l.notes === 'me costo')).toBe(true)
+      expect(logs.filter((l) => l.date === '2026-01-06' && l.completed)).toHaveLength(1)
+    })
+
     it('should update log notes', () => {
       const { addActivity, toggleLog, updateLogNotes } = useCalendarStore.getState()
       addActivity('Exercise', '#10B981')

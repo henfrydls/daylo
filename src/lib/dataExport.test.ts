@@ -940,6 +940,73 @@ describe('dataExport utility functions', () => {
       expect(result.logs[1].date).toBe('2024-01-17')
     })
 
+    it('no duplica un dia ya registrado aunque el id del respaldo sea otro', () => {
+      // Escenario real: se exporta un respaldo, se desmarca el dia (con lo que el
+      // registro se borra) y se vuelve a marcar, naciendo otro id para el mismo dia.
+      // Al importar el respaldo en modo merge, el filtro por id no reconoce el
+      // duplicado y quedan dos registros del mismo dia y actividad.
+      const enElDispositivo = [
+        createValidLog({ id: 'log-nuevo', activityId: 'act-1', date: '2026-01-05' }),
+      ]
+      const delRespaldo = [
+        createValidLog({ id: 'log-viejo', activityId: 'act-1', date: '2026-01-05' }),
+      ]
+
+      const result = mergeData([], enElDispositivo, [], delRespaldo)
+
+      // Dos registros del mismo dia inflan el heatmap y las estadisticas, y un clic
+      // solo borraria uno.
+      expect(result.logs).toHaveLength(1)
+      expect(result.logs[0].id).toBe('log-nuevo')
+    })
+
+    it('no duplica dias repetidos dentro del propio respaldo', () => {
+      const delRespaldo = [
+        createValidLog({ id: 'log-a', activityId: 'act-1', date: '2026-02-10' }),
+        createValidLog({ id: 'log-b', activityId: 'act-1', date: '2026-02-10' }),
+      ]
+
+      const result = mergeData([], [], [], delRespaldo)
+
+      expect(result.logs).toHaveLength(1)
+    })
+
+    it('sigue saltando un id ya existente aunque la fecha sea otra', () => {
+      // Dos registros con el mismo id romperian las claves de React en las listas,
+      // asi que el id sigue siendo motivo para saltar aunque el dia sea distinto.
+      const enElDispositivo = [createValidLog({ id: 'log-1', date: '2026-03-01' })]
+      const delRespaldo = [createValidLog({ id: 'log-1', date: '2026-03-02' })]
+
+      const result = mergeData([], enElDispositivo, [], delRespaldo)
+
+      expect(result.logs).toHaveLength(1)
+      expect(result.logs[0].date).toBe('2026-03-01')
+    })
+
+    it('si importa el mismo dia de una actividad distinta', () => {
+      // Este es el eje que justifica incluir activityId en la clave: el mismo dia de dos
+      // actividades distintas son dos registros legitimos, no un duplicado.
+      const enElDispositivo = [
+        createValidLog({ id: 'log-1', activityId: 'act-1', date: '2026-05-01' }),
+      ]
+      const delRespaldo = [createValidLog({ id: 'log-2', activityId: 'act-2', date: '2026-05-01' })]
+
+      const result = mergeData([], enElDispositivo, [], delRespaldo)
+
+      expect(result.logs).toHaveLength(2)
+    })
+
+    it('si importa dias distintos de la misma actividad', () => {
+      const enElDispositivo = [
+        createValidLog({ id: 'log-1', activityId: 'act-1', date: '2026-04-01' }),
+      ]
+      const delRespaldo = [createValidLog({ id: 'log-2', activityId: 'act-1', date: '2026-04-02' })]
+
+      const result = mergeData([], enElDispositivo, [], delRespaldo)
+
+      expect(result.logs).toHaveLength(2)
+    })
+
     it('should preserve existing data', () => {
       const existingActivities = [createValidActivity({ id: 'act-1' })]
       const existingLogs = [createValidLog({ id: 'log-1' })]
@@ -952,7 +1019,12 @@ describe('dataExport utility functions', () => {
 
     it('should add all imported data when no duplicates', () => {
       const imported = [createValidActivity({ id: 'act-1' }), createValidActivity({ id: 'act-2' })]
-      const importedLogs = [createValidLog({ id: 'log-1' }), createValidLog({ id: 'log-2' })]
+      // Fechas distintas a proposito: con el mismo dia y la misma actividad, dos ids
+      // distintos SI son un duplicado, y el nombre de este test dice "no duplicates".
+      const importedLogs = [
+        createValidLog({ id: 'log-1', date: '2024-01-15' }),
+        createValidLog({ id: 'log-2', date: '2024-01-16' }),
+      ]
 
       const result = mergeData([], [], imported, importedLogs)
 

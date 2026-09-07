@@ -567,8 +567,25 @@ export function generateExportFilename(format: 'json' | 'csv'): string {
   return `activity-tracker-backup-${date}.${format}`
 }
 
+/** Identidad de negocio de un registro: una actividad en un dia concreto. */
+function logKey(log: ActivityLog): string {
+  return `${log.activityId}|${log.date}`
+}
+
 /**
- * Merge imported data with existing data, skipping duplicates by ID
+ * Merge imported data with existing data, skipping duplicates.
+ *
+ * Los registros se descartan por dos motivos, y hacen falta los dos:
+ *
+ * - Por `id`, porque dos registros con el mismo id romperian las claves de las listas.
+ * - Por actividad y dia, porque el id de un dia marcado NO es estable: al desmarcar, el
+ *   registro se borra, y volver a marcar crea otro id para el mismo dia. Sin esta
+ *   comprobacion, importar un respaldo hecho antes de ese ciclo mete un segundo registro
+ *   del mismo dia: el heatmap pinta un nivel que no corresponde, las estadisticas cuentan
+ *   el dia dos veces y un clic solo borra uno de los dos.
+ *
+ * La comprobacion tambien acumula lo ya aceptado, para que un respaldo que traiga el
+ * mismo dia repetido no lo duplique contra si mismo.
  */
 export function mergeData(
   existingActivities: Activity[],
@@ -577,10 +594,18 @@ export function mergeData(
   importedLogs: ActivityLog[]
 ): { activities: Activity[]; logs: ActivityLog[] } {
   const existingActivityIds = new Set(existingActivities.map((a) => a.id))
-  const existingLogIds = new Set(existingLogs.map((l) => l.id))
-
   const newActivities = importedActivities.filter((a) => !existingActivityIds.has(a.id))
-  const newLogs = importedLogs.filter((l) => !existingLogIds.has(l.id))
+
+  const seenIds = new Set(existingLogs.map((l) => l.id))
+  const seenKeys = new Set(existingLogs.map(logKey))
+  const newLogs: ActivityLog[] = []
+
+  for (const log of importedLogs) {
+    if (seenIds.has(log.id) || seenKeys.has(logKey(log))) continue
+    seenIds.add(log.id)
+    seenKeys.add(logKey(log))
+    newLogs.push(log)
+  }
 
   return {
     activities: [...existingActivities, ...newActivities],
