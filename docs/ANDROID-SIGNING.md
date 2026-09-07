@@ -36,8 +36,8 @@ Android exige **dos** cosas, y la firma es solo una:
 El segundo es facil de olvidar porque no lo escribe nadie a mano: `build.gradle.kts` lo lee
 de `tauri.properties`, que Tauri genera al construir y **no esta en el repositorio**. Su
 valor por defecto en el gradle es `1`, asi que si esa propiedad faltara, todos los APK
-saldrian con el mismo numero y ninguna actualizacion se instalaria — con la firma correcta y
-sin ningun error visible en el build.
+saldrian con el mismo numero y ninguna actualizacion se instalaria, con la firma
+correcta y sin ningun error visible en el build.
 
 Comprobado en los APK publicados, parseando su `AndroidManifest.xml`:
 
