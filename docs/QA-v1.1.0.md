@@ -29,7 +29,7 @@ Antes de anotarlo como fallo se comprobó el entorno: `LockedHint=yes` y
 `org.gnome.ScreenSaver.GetActive` → `true`. La sesión de escritorio estaba bloqueada y el
 negro era la pantalla de bloqueo. Queda como gris, no como rojo.
 
-## VERDE — ejecutado y verificado
+## VERDE: ejecutado y verificado
 
 | Artefacto | Resultado |
 |---|---|
@@ -42,7 +42,7 @@ negro era la pantalla de bloqueo. Queda como gris, no como rojo.
 El primer arranque con datos vacíos **no falla**, y el arranque con datos preexistentes
 tampoco. Era la hipótesis heredada de actual-mcp y aquí no se reproduce.
 
-## ROJO — defectos reales encontrados
+## ROJO: defectos reales encontrados
 
 ### 1. La llave que firmó el APK es efímera: pérdida de datos en la primera actualización
 
@@ -115,7 +115,7 @@ técnica asumida a conciencia para que el build no fallara, no un error.
 (sólo `shell` y `opener`). Quien instaló v1.1.0 en Windows, macOS o Linux **no tiene forma de
 enterarse de que existe una v1.2**: tiene que volver al repo por su cuenta.
 
-Eso hace que la llave de updater retirada en `dbacaed` no rompiera nada — no había updater
+Eso hace que la llave de updater retirada en `dbacaed` no rompiera nada, porque no había updater
 que firmar. Pero explica por qué todo el tráfico entra frío desde fuera: no hay base
 instalada a la que avisar.
 
@@ -147,9 +147,9 @@ Quien instale el `.deb` y teclee `daylo` no encuentra nada; en Windows aparece c
 ### 7. Binario sin `strip`, con `debug_info`
 
 10,7 MB el ELF de Linux. Es parte de por qué el AppImage pesa **81,5 MB frente a 4,0 MB del
-`.deb`** — 20 veces más para la misma app.
+`.deb`**, 20 veces más para la misma app.
 
-## GRIS — no verificable con el equipo disponible
+## GRIS: no verificable con el equipo disponible
 
 No hubo acceso a Windows, macOS ni a un dispositivo Android físico. De estos artefactos se
 puede demostrar que están **bien construidos**, no que arranquen:
@@ -217,7 +217,7 @@ Ordenado por daño que evita, no por esfuerzo.
    el manifiesto. Es una decisión de producto con coste real, no un arreglo.
 5. **`Categories=Utility;Office;`** en el `.desktop`. Una línea.
 6. **Renombrar el binario** de `activity-tracker` a `daylo` en las tres plataformas. Ojo:
-   **no tocar** el `identifier`/`applicationId` `com.daylo.app` — cambiarlo rompe la
+   **no tocar** el `identifier`/`applicationId` `com.daylo.app`, porque cambiarlo rompe la
    actualización de las instalaciones existentes y en Android exige la misma llave de firma,
    con lo que se sumaría al problema del rojo #1.
 7. **`strip` + `debug = false`** en el perfil release de Cargo, y revisar el AppImage: 81 MB
@@ -241,7 +241,7 @@ Ordenado por daño que evita, no por esfuerzo.
 ## Nota de seguridad resuelta durante este trabajo
 
 Los dos keystores de firma Android del working tree (`src-tauri/keystore.jks`,
-`src-tauri/gen/android/daylo-release.keystore`) **no estaban en `.gitignore`** — verificado
+`src-tauri/gen/android/daylo-release.keystore`) **no estaban en `.gitignore`**, verificado
 con `git check-ignore`, no supuesto. Un `git add -A` los habría publicado. Añadidos los
 patrones `*.jks`, `*.keystore`, `keystore.properties`, `*.p12`, `*.mobileprovision`.
 
