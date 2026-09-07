@@ -69,14 +69,20 @@ Daylo runs entirely on your device — no account, no cloud, no tracking.
 
 Download the latest release for your platform from the [Releases](../../releases) page:
 
-| Platform | File |
+| Platform | Direct download (always the latest version) |
 |----------|------|
-| Windows (x64) | `Daylo_x.x.x_x64-setup.exe` |
-| Windows (ARM64) | `Daylo_x.x.x_arm64-setup.exe` |
-| macOS (Apple Silicon) | `Daylo_x.x.x_aarch64.dmg` |
-| macOS (Intel) | `Daylo_x.x.x_x64.dmg` |
-| Linux (Debian/Ubuntu) | `Daylo_x.x.x_amd64.deb` |
-| Linux (Other) | `Daylo_x.x.x_amd64.AppImage` |
+| Windows (x64) | [`Daylo-windows-x64-setup.exe`](../../releases/latest/download/Daylo-windows-x64-setup.exe) |
+| Windows (ARM64) | [`Daylo-windows-arm64-setup.exe`](../../releases/latest/download/Daylo-windows-arm64-setup.exe) |
+| macOS (Apple Silicon) | [`Daylo-macos-apple-silicon.dmg`](../../releases/latest/download/Daylo-macos-apple-silicon.dmg) |
+| macOS (Intel) | [`Daylo-macos-intel.dmg`](../../releases/latest/download/Daylo-macos-intel.dmg) |
+| Linux (Debian/Ubuntu) | [`Daylo-linux-amd64.deb`](../../releases/latest/download/Daylo-linux-amd64.deb) |
+| Linux (Other) | `Daylo_<version>_amd64.AppImage` on the [Releases](../../releases/latest) page |
+
+Every release from v1.1.1 onward ships a [`SHA256SUMS.txt`](../../releases/latest/download/SHA256SUMS.txt). To verify a download, put it next to the file you downloaded and run:
+
+- **Linux:** `sha256sum -c SHA256SUMS.txt --ignore-missing`
+- **macOS:** `shasum -a 256 -c SHA256SUMS.txt --ignore-missing`
+- **Windows (PowerShell):** `Select-String -Path .\SHA256SUMS.txt -Pattern (Get-FileHash .\Daylo-windows-x64-setup.exe -Algorithm SHA256).Hash` (replace the file name with the one you downloaded). One matching line means the file is intact; no output means it is not.
 
 Just install and open — no setup, no accounts, no internet required.
 
@@ -84,17 +90,18 @@ Just install and open — no setup, no accounts, no internet required.
 
 The desktop installers are not code-signed yet, so your operating system will warn you the first time you open Daylo:
 
-- **Windows** shows "Windows protected your PC". Click **More info**, then **Run anyway**.
-- **macOS** may refuse to open the app. Go to **System Settings → Privacy & Security**, scroll down and click **Open Anyway** next to Daylo. On macOS 15 and later, right-click → Open no longer bypasses this.
+- **Windows** shows "Windows protected your PC". Click **More info**, then **Run anyway**. On a work-managed PC that button can be hidden by policy; ask your administrator.
+- **macOS** may refuse to open the app. Go to **System Settings → Privacy & Security**, scroll down and click **Open Anyway** next to Daylo, then enter your password. The button appears for about an hour after your first attempt to open the app; if it's gone, try opening Daylo again first. On macOS 15 and later, right-click → Open no longer bypasses this.
 
-The warning means "unknown publisher", not "unsafe". Every release is built by GitHub Actions from this repository; the [Actions](../../actions) tab shows the run that produced it. A signed Microsoft Store build is on the roadmap.
+The warning means "unknown publisher", not "unsafe". Every release is built by GitHub Actions from this repository; the [Actions](../../actions) tab shows the run that produced it, and `SHA256SUMS.txt` lets you confirm the file you downloaded is the one it built. A signed Microsoft Store build is on the roadmap.
 
 ### Android App
 
-Download `Daylo-android-arm64.apk` from the [Releases](../../releases) page and open it on your phone. Android will ask you to allow installs from this source the first time.
+Download [`Daylo-android-arm64.apk`](../../releases/latest/download/Daylo-android-arm64.apk) and open it on your phone. Android will ask you to allow installs from this source the first time.
 
 - Runs on **arm64 devices** — practically every phone and tablet made since 2017. It will not install on 32-bit devices or on Android Studio emulators.
-- Your data lives in the app's local storage on the device. **Export a JSON backup from inside the app before uninstalling or switching to a different build** — uninstalling deletes the data.
+- Your data lives in the app's local storage on the device. **Use Export Data inside the app before uninstalling** — uninstalling deletes the data.
+- **Updating from v1.1.0:** that build was signed with a key that no longer exists, so v1.1.1 cannot install over it. One-time step: Export Data, uninstall v1.1.0, install v1.1.1, Import Data. From v1.1.1 onward, updates install in place.
 
 ### Docker
 
