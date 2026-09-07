@@ -157,23 +157,55 @@ jobs:
           NDK_HOME: ${{ env.ANDROID_HOME }}/ndk/29.0.14206865
 
       - name: Sign APK
+        env:
+          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
         run: |
+          set -euo pipefail
           APK_PATH="src-tauri/gen/android/app/build/outputs/apk/universal/release/app-universal-release-unsigned.apk"
           ALIGNED_PATH="src-tauri/gen/android/app/build/outputs/apk/universal/release/daylo-android.apk"
 
-          # Generate a signing key
-          keytool -genkey -v -keystore release.jks -keyalg RSA -keysize 2048 \
-            -validity 10000 -alias release -storepass android -keypass android \
-            -dname "CN=Daylo,O=DLSLabs,C=US"
+          # El keystore TIENE que venir de secrets. Antes se generaba aqui con
+          # 'keytool -genkey', lo que producia una llave nueva en cada build que solo
+          # existia en este runner. Android exige firma identica para actualizar, asi
+          # que cada APK publicado asi queda incapaz de recibir actualizaciones: el
+          # usuario tiene que desinstalar, y siendo la app local-first, eso le borra
+          # los datos. Preferimos que el build falle antes que publicar eso otra vez.
+          if [ -z "${ANDROID_KEYSTORE_BASE64:-}" ]; then
+            echo "::error::No hay ANDROID_KEYSTORE_BASE64 en secrets. Se aborta en vez de"
+            echo "::error::generar una llave efimera: un APK firmado con llave distinta a la"
+            echo "::error::de la version anterior no se puede instalar encima, y desinstalar"
+            echo "::error::borra los datos locales del usuario."
+            echo "::error::Configura ANDROID_KEYSTORE_BASE64, ANDROID_KEYSTORE_PASSWORD,"
+            echo "::error::ANDROID_KEY_ALIAS y ANDROID_KEY_PASSWORD en los secrets del repo."
+            exit 1
+          fi
+          for v in ANDROID_KEYSTORE_PASSWORD ANDROID_KEY_ALIAS ANDROID_KEY_PASSWORD; do
+            if [ -z "$(eval echo "\${$v:-}")" ]; then
+              echo "::error::Falta el secret $v"; exit 1
+            fi
+          done
 
-          # Align
-          ${ANDROID_HOME}/build-tools/$(ls ${ANDROID_HOME}/build-tools/ | tail -1)/zipalign -f 4 \
-            "$APK_PATH" "$ALIGNED_PATH"
+          echo "$ANDROID_KEYSTORE_BASE64" | base64 -d > release.jks
+          trap 'rm -f release.jks' EXIT
 
-          # Sign
-          ${ANDROID_HOME}/build-tools/$(ls ${ANDROID_HOME}/build-tools/ | tail -1)/apksigner sign \
-            --ks release.jks --ks-pass pass:android --ks-key-alias release \
+          BT="${ANDROID_HOME}/build-tools/$(ls ${ANDROID_HOME}/build-tools/ | tail -1)"
+
+          "$BT/zipalign" -f 4 "$APK_PATH" "$ALIGNED_PATH"
+
+          "$BT/apksigner" sign \
+            --ks release.jks \
+            --ks-pass "env:ANDROID_KEYSTORE_PASSWORD" \
+            --key-pass "env:ANDROID_KEY_PASSWORD" \
+            --ks-key-alias "$ANDROID_KEY_ALIAS" \
             "$ALIGNED_PATH"
+
+          # Dejar el fingerprint en el log del build. Si algun dia la llave vuelve a
+          # cambiar, se ve aqui y no seis meses despues en el APK publicado.
+          echo "--- firma del APK que se va a publicar ---"
+          "$BT/apksigner" verify --print-certs "$ALIGNED_PATH" | grep -iE 'SHA-256|Subject'
 
       - name: Upload APK to release
         uses: softprops/action-gh-release@v2
@@ -197,3 +229,110 @@ jobs:
             echo "Some builds failed. Check the individual build logs for details."
             exit 1
           fi
+
+      - name: Publicar copias con nombre estable y SHA256SUMS
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -uo pipefail
+          shopt -s nullglob
+          TAG="${{ github.ref_name }}"
+          mkdir -p assets && cd assets
+
+          gh release download "$TAG" --repo "${{ github.repository }}" --clobber || true
+
+          # Copias con nombre estable para que la landing pueda enlazar a
+          # /releases/latest/download/<nombre> sin la version dentro de la URL. Los
+          # nombres versionados se conservan: quien archive instaladores los distingue.
+          # El AppImage queda fuera a proposito -- 81 MB duplicados por release no se
+          # justifican hasta que 'strip' + debug=false lo adelgacen.
+          #
+          # Cada copia se trata de forma INDEPENDIENTE y a proposito. Si el runner de
+          # una plataforma falla (ocurre, y no por culpa del codigo), la release existe
+          # sin ese artefacto; abortar aqui dejaria sin copia fija a las plataformas que
+          # SI compilaron, y sus enlaces en la landing darian 404. Un build caido degrada
+          # una fila de la tabla, no todas.
+          # AVISO para quien añada mas jobs de empaquetado a este workflow:
+          # los patrones de abajo ABORTAN si uno casa con mas de un archivo. Si algun
+          # dia un job sube a ESTA MISMA release otro instalador de Windows -- por
+          # ejemplo el paquete de la Microsoft Store, que necesita
+          # webviewInstallMode=offlineInstaller y pesa mas de 100 MB frente a los 2 MB
+          # del NSIS -- tiene que llamarse de forma que NO case con
+          # 'Daylo_*_x64-setup.exe' (p. ej. 'Daylo-store-x64.msix'), o este paso se
+          # cae y ninguna plataforma recibe su copia de nombre fijo.
+          # Y si ese paquete llega a publicarse aqui, hay que añadir su extension a la
+          # lista de 'existentes' mas abajo para que entre en SHA256SUMS.txt.
+          subidos=()
+          faltantes=()
+
+          preparar() {
+            local patron="$1" destino="$2" candidatos=() f n origen
+            # Se comprueba la existencia real de cada candidato en vez de fiarse del
+            # glob: 'nullglob' solo elimina los patrones CON comodin, asi que un nombre
+            # literal como 'daylo-android.apk' sobrevive a la expansion aunque el
+            # archivo no exista, y se intentaria subir un fantasma.
+            for f in $patron; do [ -f "$f" ] && candidatos+=("$f"); done
+            n=${#candidatos[@]}
+            if [ "$n" -eq 0 ]; then
+              echo "::warning::Ningun asset casa con '$patron'; se omite $destino. Su enlace"
+              echo "::warning::en la landing dara 404 hasta la proxima release que lo incluya."
+              faltantes+=("$destino")
+              return 0
+            fi
+            if [ "$n" -gt 1 ]; then
+              # Ambiguedad real: no hay forma de saber cual es el correcto y elegir mal
+              # publicaria un binario bajo un nombre que promete otra cosa.
+              echo "::error::'$patron' casa con $n archivos y no se puede elegir:"
+              printf '::error::  %s\n' "${candidatos[@]}"
+              exit 1
+            fi
+            origen="${candidatos[0]}"
+            if ! cp "$origen" "$destino"; then
+              echo "::error::No se pudo copiar '$origen' a '$destino'"
+              exit 1
+            fi
+            subidos+=("$destino")
+            echo "  $origen -> $destino"
+          }
+
+          preparar 'Daylo_*_x64-setup.exe'    Daylo-windows-x64-setup.exe
+          preparar 'Daylo_*_arm64-setup.exe'  Daylo-windows-arm64-setup.exe
+          preparar 'Daylo_*_aarch64.dmg'      Daylo-macos-apple-silicon.dmg
+          preparar 'Daylo_*_x64.dmg'          Daylo-macos-intel.dmg
+          preparar 'Daylo_*_amd64.deb'        Daylo-linux-amd64.deb
+          preparar 'daylo-android.apk'        Daylo-android-arm64.apk
+
+          if [ ${#subidos[@]} -eq 0 ]; then
+            echo "::error::No se preparo ninguna copia fija: la release no tiene assets."
+            exit 1
+          fi
+
+          # Hashes de lo que efectivamente hay, nombres versionados y fijos incluidos.
+          # Los instaladores de escritorio no van firmados, asi que Windows y macOS avisan
+          # de "editor desconocido"; este fichero es lo unico que permite al usuario
+          # comprobar por su cuenta que lo que bajo es lo que construyo el CI.
+          existentes=( *.exe *.dmg *.deb *.AppImage *.apk )
+          if [ ${#existentes[@]} -eq 0 ]; then
+            # Sin esta guarda, 'sha256sum' sin argumentos se pone a leer de stdin y
+            # deja el job colgado esperando una entrada que nunca llega.
+            echo "::error::No hay ningun artefacto que hashear en la release."
+            exit 1
+          fi
+          sha256sum "${existentes[@]}" > SHA256SUMS.txt
+          echo "--- SHA256SUMS.txt ---"; cat SHA256SUMS.txt
+
+          gh release upload "$TAG" --repo "${{ github.repository }}" --clobber \
+            "${subidos[@]}" SHA256SUMS.txt
+
+          # Resumen visible en la pagina del run: un ::warning:: se pierde entre los logs,
+          # y que falte una plataforma tiene que verse sin abrir nada.
+          {
+            echo "### Assets con nombre estable"
+            echo
+            echo "| Copia | Estado |"
+            echo "|---|---|"
+            for a in "${subidos[@]}"; do echo "| \`$a\` | publicada |"; done
+            for a in "${faltantes[@]+"${faltantes[@]}"}"; do echo "| \`$a\` | **FALTA** (build no disponible) |"; done
+            echo
+            echo "\`SHA256SUMS.txt\` cubre ${#existentes[@]} archivos."
+          } >> "$GITHUB_STEP_SUMMARY"

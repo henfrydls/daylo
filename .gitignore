@@ -39,3 +39,11 @@ src-tauri/target/
 *.sqlite
 *.db
 nul
+
+# Firma de apps — NUNCA commitear (si se filtran, hay que rotar la llave
+# y Android deja de poder actualizar las instalaciones existentes)
+*.jks
+*.keystore
+keystore.properties
+*.p12
+*.mobileprovision
