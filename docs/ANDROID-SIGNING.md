@@ -101,8 +101,8 @@ actualización romperá las instalaciones existentes.
 ## Y comprobarlo sobre el APK publicado
 
 ```bash
-gh release download <tag> --pattern 'daylo-android.apk'
-unzip -p daylo-android.apk 'META-INF/*.RSA' > /tmp/sig.rsa
+gh release download <tag> --pattern 'Daylo-android-arm64.apk'
+unzip -p Daylo-android-arm64.apk 'META-INF/*.RSA' > /tmp/sig.rsa
 keytool -printcert -file /tmp/sig.rsa | grep SHA256
 ```
 

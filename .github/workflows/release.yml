@@ -230,7 +230,13 @@ jobs:
             exit 1
           fi
 
+      # 'always()' es imprescindible: el paso anterior hace 'exit 1' si algun build
+      # fallo, y sin esto este paso no correria nunca en ese caso -- con lo que un runner
+      # de macOS caido dejaria sin copia de nombre fijo a Windows, Linux y Android, que
+      # SI compilaron, y romperia sus enlaces. La degradacion por plataforma de
+      # 'preparar' solo sirve si el paso llega a ejecutarse.
       - name: Publicar copias con nombre estable y SHA256SUMS
+        if: always()
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
@@ -243,21 +249,46 @@ jobs:
           # El sha256 de cada asset ya lo publica la API, asi que no hay que rehashear
           # nada. Se lee ANTES de subir las copias para que el mapa contenga solo los
           # originales; cada copia hereda despues el hash del asset del que sale.
+          # Cuantos assets deberia haber, para detectar un mapa truncado.
+          n_esperados=$(gh api "repos/$REPO/releases/tags/$TAG" --jq '.assets | length') || {
+            echo "::error::No se pudo consultar la lista de assets de $TAG."; exit 1; }
+
           declare -A digest_de
           # Se cuenta a mano en vez de usar ${#digest_de[@]}: con 'set -u' un array
           # ASOCIATIVO declarado y vacio da "unbound variable" al consultar su longitud
           # (los indexados no), asi que la guarda de abajo no llegaria a evaluarse nunca.
           n_assets=0
-          while read -r sha nombre; do
-            if [ -n "${nombre:-}" ]; then
-              digest_de["$nombre"]="$sha"
-              n_assets=$((n_assets + 1))
+          # El digest se saca con '// ""' y 'sub' en vez de 'ltrimstr': si un asset trae
+          # digest nulo, 'ltrimstr' aborta jq con "startswith() requires string inputs"
+          # DESPUES de haber emitido las lineas anteriores. Al ir en sustitucion de
+          # procesos, 'pipefail' no ve ese fallo, asi que el mapa quedaria truncado en
+          # silencio y el job saldria verde con un SHA256SUMS.txt incompleto.
+          #
+          # El NOMBRE va primero y el digest despues, no al reves: el tab es whitespace,
+          # asi que 'read' colapsa un primer campo vacio y desplaza los valores -- con el
+          # digest delante, un asset sin digest hacia que el nombre acabara en la variable
+          # del sha y la del nombre quedara vacia. Con el nombre primero, que nunca esta
+          # vacio, un digest ausente se ve como lo que es y se puede nombrar el asset.
+          while IFS=$'\t' read -r nombre sha; do
+            [ -z "${nombre:-}" ] && continue
+            if [ -z "${sha:-}" ]; then
+              echo "::error::La API no trae digest del asset '$nombre'. Sin el no se puede"
+              echo "::error::publicar su hash sin descargarlo y calcularlo a mano."
+              exit 1
             fi
+            digest_de["$nombre"]="$sha"
+            n_assets=$((n_assets + 1))
           done < <(gh api "repos/$REPO/releases/tags/$TAG" \
-                     --jq '.assets[] | "\(.digest | ltrimstr("sha256:"))  \(.name)"')
+                     --jq '.assets[] | [.name, ((.digest // "") | sub("^sha256:";""))] | @tsv')
+
           if [ "$n_assets" -eq 0 ]; then
             echo "::error::La API no devolvio ningun asset para $TAG. Sin los digest no se"
             echo "::error::puede publicar SHA256SUMS.txt sin descargar y hashear todo."
+            exit 1
+          fi
+          if [ "$n_assets" -ne "${n_esperados:-0}" ]; then
+            echo "::error::La API devolvio $n_assets digest de $n_esperados assets. Publicar"
+            echo "::error::un SHA256SUMS.txt incompleto es peor que no publicarlo."
             exit 1
           fi
 
@@ -266,7 +297,8 @@ jobs:
           # que 'strip' lo adelgace), asi que no se baja: su hash sale de la API igual. El
           # APK ya se publica con su nombre definitivo y tampoco hace falta tocarlo.
           gh release download "$TAG" --repo "$REPO" --clobber \
-            --pattern '*.exe' --pattern '*.dmg' --pattern '*.deb' || true
+            --pattern '*.exe' --pattern '*.dmg' --pattern '*.deb' || {
+            echo "::error::Fallo la descarga de los assets de $TAG."; exit 1; }
 
           # Copias con nombre estable para que la landing pueda enlazar a
           # /releases/latest/download/<nombre> sin la version dentro de la URL. Los
@@ -329,21 +361,32 @@ jobs:
             exit 1
           fi
 
-          gh release upload "$TAG" --repo "$REPO" --clobber "${subidos[@]}" || {
-            echo "::error::Fallo la subida de las copias con nombre estable."; exit 1; }
-
           # SHA256SUMS con todo lo publicado. Los instaladores de escritorio no van
           # firmados, asi que Windows y macOS avisan de "editor desconocido"; este fichero
           # es lo unico que permite al usuario comprobar por su cuenta que lo que bajo es
           # lo que construyo el CI, sin tener que creerse nuestra palabra.
+          #
+          # Se construye ANTES de subir nada, para hacer una sola subida al final.
           : > SHA256SUMS.txt
           for nombre in "${!digest_de[@]}"; do
+            # En un re-run la release ya contiene el SHA256SUMS.txt anterior y las copias
+            # fijas de la vez pasada. Sin estos dos saltos, el fichero se referenciaria a
+            # si mismo con su hash viejo -- 'sha256sum -c' daria FAILED sobre el propio
+            # fichero -- y las copias saldrian duplicadas, una por cada bucle.
+            [ "$nombre" = "SHA256SUMS.txt" ] && continue
+            ya_es_copia=0
+            for c in "${subidos[@]}"; do
+              [ "$nombre" = "$c" ] && { ya_es_copia=1; break; }
+            done
+            [ "$ya_es_copia" -eq 1 ] && continue
             printf '%s  %s\n' "${digest_de[$nombre]}" "$nombre" >> SHA256SUMS.txt
           done
           for copia in "${subidos[@]}"; do
             orig="${origen_de[$copia]}"
             sha="${digest_de[$orig]:-}"
             if [ -z "$sha" ]; then
+              # Puede pasar si la API trajo el asset con digest nulo: mejor abortar que
+              # publicar una linea sin hash, que 'sha256sum -c' leeria como formato roto.
               echo "::error::La API no dio digest de '$orig', asi que no se puede publicar"
               echo "::error::el hash de su copia '$copia' sin calcularlo a mano."
               exit 1
@@ -353,8 +396,8 @@ jobs:
           sort -k2 -o SHA256SUMS.txt SHA256SUMS.txt
           echo "--- SHA256SUMS.txt ---"; cat SHA256SUMS.txt
 
-          gh release upload "$TAG" --repo "$REPO" --clobber SHA256SUMS.txt || {
-            echo "::error::Fallo la subida de SHA256SUMS.txt."; exit 1; }
+          gh release upload "$TAG" --repo "$REPO" --clobber "${subidos[@]}" SHA256SUMS.txt || {
+            echo "::error::Fallo la subida de los assets con nombre estable."; exit 1; }
 
           # Resumen visible en la portada del run: un ::warning:: se pierde entre los logs,
           # y que falte una plataforma tiene que verse sin abrir nada.
