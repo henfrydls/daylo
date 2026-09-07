@@ -45,8 +45,7 @@ jobs:
             librsvg2-dev \
             patchelf \
             libgtk-3-dev \
-            libayatana-appindicator3-dev \
-            xvfb
+            libayatana-appindicator3-dev
 
       # Install Node.js dependencies
       - name: Install Node.js dependencies
@@ -136,7 +135,9 @@ jobs:
             librsvg2-dev \
             patchelf \
             libgtk-3-dev \
-            libayatana-appindicator3-dev
+            libayatana-appindicator3-dev \
+            xvfb \
+            x11-utils
 
       # Install Node.js dependencies
       - name: Install Node.js dependencies
@@ -189,25 +190,30 @@ jobs:
             # 'sleep' a ciegas puede dejar arrancar la app antes de que el display acepte
             # conexiones, y entonces GTK aborta y el fallo se reporta como "el binario
             # murio" -- diagnosticando la aplicacion por un problema del entorno.
-            for _ in $(seq 1 15); do
-              [ -S /tmp/.X11-unix/X99 ] && break
-              kill -0 "$XVFB_PID" 2>/dev/null || break
-              sleep 1
-            done
             # El socket existiendo no basta: un Xvfb muerto de un intento anterior deja
             # el fichero, y la aplicacion arrancaria contra un display que no responde.
-            # Si 'xdpyinfo' esta disponible se comprueba de verdad; si no, queda el
-            # socket mas el proceso vivo, que es lo mejor que se puede hacer sin el.
+            # La comprobacion va DENTRO del bucle: hacerla una vez al final daria falso
+            # negativo con un display que tarda en aceptar conexiones.
             display_listo=0
-            if command -v xdpyinfo >/dev/null 2>&1; then
-              xdpyinfo -display :99 >/dev/null 2>&1 && display_listo=1
-            elif [ -S /tmp/.X11-unix/X99 ] && kill -0 "$XVFB_PID" 2>/dev/null; then
-              display_listo=1
-            fi
+            xvfb_murio=0
+            for _ in $(seq 1 15); do
+              if ! kill -0 "$XVFB_PID" 2>/dev/null; then xvfb_murio=1; break; fi
+              if command -v xdpyinfo >/dev/null 2>&1; then
+                xdpyinfo -display :99 >/dev/null 2>&1 && { display_listo=1; break; }
+              elif [ -S /tmp/.X11-unix/X99 ]; then
+                display_listo=1; break
+              fi
+              sleep 1
+            done
             if [ "$display_listo" -ne 1 ]; then
-              echo "::error::El display :99 no responde tras 15s. El problema es del"
-              echo "::error::entorno del runner, no del arranque de la aplicacion:"
-              cat xvfb.log 2>/dev/null
+              if [ "$xvfb_murio" -eq 1 ]; then
+                echo "::error::Xvfb murio antes de aceptar conexiones."
+              else
+                echo "::error::El display :99 no respondio en 15s."
+              fi
+              echo "::error::El problema es del entorno del runner, no del arranque de la"
+              echo "::error::aplicacion:"
+              cat xvfb.log 2>/dev/null || true
               exit 1
             fi
             # Sin GPU ni /dev/dri, el WebProcess de WebKitGTK muere al crear buffers
@@ -235,37 +241,40 @@ jobs:
           # "Vivo" no es "arrancado": si el webview falla, el proceso principal se queda
           # en pie con una ventana en blanco y el bucle de arriba lo daria por bueno.
           #
-          # Se buscan los hijos DEL PID de la aplicacion, no procesos de webkit por nombre
-          # en toda la maquina: un 'pgrep -f WebKitWebProcess' global daria un falso
-          # positivo si el runner tuviera cualquier otra aplicacion GTK/WebKit abierta.
-          # Verificado que WebKitWebProcess y WebKitNetworkProcess son hijos directos del
-          # binario.
+          # La comprobacion BLOQUEANTE es el store, mas abajo: que la aplicacion haya
+          # persistido su estado demuestra que el webview cargo y que el JS corrio, y no
+          # depende de como organice WebKit sus procesos. El arbol de procesos se queda
+          # como DIAGNOSTICO, no como criterio: el WebProcess puede lanzarse a traves de
+          # 'bwrap' cuando el sandbox esta activo, y entonces no seria hijo directo del
+          # binario aunque todo funcione.
           #
-          # Solo en Linux: en macOS los procesos de WKWebView son servicios XPC que lanza
-          # launchd, NO hijos del binario, asi que aqui la cuenta seria cero siempre. Ahi
-          # el smoke-run se queda en "el proceso no muere", que es menos, y se deja asi a
-          # proposito: la alternativa seria buscar 'com.apple.WebKit.WebContent' por
-          # nombre, y sin un runner de macOS delante no hay forma de comprobar que ese
-          # nombre es el correcto -- un falso negativo permanente y sin diagnosticar es
-          # peor que una comprobacion mas debil y declarada.
+          # Se imprime siempre, no solo al fallar: un rojo sin arbol de procesos es
+          # indiagnosticable desde el log, que es lo que paso en el primer run real.
+          echo "--- arbol de procesos, mientras la aplicacion vive ---"
           if [ "$RUNNER_OS" = "Linux" ]; then
-            # '|| true' porque pgrep sin coincidencias devuelve 1 y, con pipefail y el
-            # -e del shell de Actions, el paso moriria en esta asignacion sin llegar a
-            # imprimir el error ni volcar el log.
-            hijos=$(pgrep -P "$APP_PID" 2>/dev/null | wc -l || true)
-            if [ "${hijos:-0}" -eq 0 ]; then
-              echo "::error::El proceso principal vive pero no ha lanzado ningun proceso"
-              echo "::error::hijo: el webview no llego a arrancar y la ventana estaria vacia."
-              cat smoke.log 2>/dev/null
-              exit 1
-            fi
-            echo "El webview arranco: $hijos procesos hijos del binario"
-            pgrep -P "$APP_PID" 2>/dev/null | while read -r c; do
-              echo "  - $c $(cat "/proc/$c/comm" 2>/dev/null || true)"
-            done
+            ps -ef --forest 2>/dev/null | grep -iE 'activity-tracker|webkit|bwrap|Xvfb' \
+              | grep -v grep || true
+            echo "hijos directos del binario: $(pgrep -P "$APP_PID" 2>/dev/null | wc -l || true)"
           else
-            echo "En macOS no se comprueba el webview: sus procesos son servicios XPC de"
-            echo "launchd y no hijos del binario. Aqui solo se verifica que no muere."
+            ps -ef 2>/dev/null | grep -iE 'activity-tracker|WebKit' | grep -v grep || true
+            echo "En macOS no se juzga el webview por el arbol: sus procesos son servicios"
+            echo "XPC de launchd, no hijos del binario. Aqui solo se verifica que el"
+            echo "proceso no muere."
+          fi
+
+          # En Linux se espera a que aparezca el almacenamiento antes de cerrar: en un
+          # runner frio y con GL por software el primer arranque puede tardar bastante mas
+          # que en una maquina de desarrollo, y cerrar a los 10 s dejaria el store vacio
+          # por prisa y no por fallo.
+          STORE="$HOME/.local/share/com.daylo.app/localstorage"
+          if [ "$RUNNER_OS" = "Linux" ]; then
+            for s in $(seq 1 20); do
+              if ls "$STORE"/*localstorage* >/dev/null 2>&1; then
+                echo "El almacenamiento aparecio a los ~$((10 + s))s desde el arranque"
+                break
+              fi
+              sleep 1
+            done
           fi
 
           # Cierre limpio ANTES de mirar el almacenamiento. WebKit lleva el localStorage
@@ -303,9 +312,22 @@ jobs:
           if [ ${#archivos[@]} -eq 0 ]; then
             echo "::error::El proceso arranco pero no creo su almacenamiento en:"
             echo "::error::  $STORE"
-            echo "::error::Lo que hay bajo el directorio de datos de la aplicacion:"
-            find "$HOME/.local/share/com.daylo.app" -name '*localstorage*' 2>/dev/null
-            ls -la "$HOME/.local/share/com.daylo.app" 2>/dev/null
+            echo "::error::El webview no llego a cargar la aplicacion."
+            echo "--- que hay bajo el directorio de datos ---"
+            find "$HOME/.local/share/com.daylo.app" 2>/dev/null | head -20 || true
+            echo "--- salida completa de la aplicacion ---"
+            cat smoke.log 2>/dev/null || true
+            echo "--- sandbox de WebKitGTK ---"
+            # Desde WebKit 2.26 el WebProcess se lanza a traves de bwrap. Si el entorno no
+            # permite namespaces de usuario sin privilegios, ese proceso no arranca y el
+            # principal se queda vivo con una ventana vacia: el sintoma exacto de este
+            # fallo. Estos tres datos dicen si esa es la causa, sin tener que suponerlo.
+            command -v bwrap >/dev/null 2>&1 && echo "bwrap: $(command -v bwrap)" \
+              || echo "bwrap: no esta instalado"
+            for f in /proc/sys/kernel/unprivileged_userns_clone \
+                     /proc/sys/user/max_user_namespaces; do
+              [ -r "$f" ] && echo "$f = $(cat "$f" 2>/dev/null)" || echo "$f: no legible"
+            done
             exit 1
           fi
           # El valor lo guarda WebKit en UTF-16LE, de ahi 'strings -e l'. Se comprueba la
