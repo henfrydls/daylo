@@ -229,3 +229,55 @@ jobs:
             echo "Some builds failed. Check the individual build logs for details."
             exit 1
           fi
+
+      - name: Publicar copias con nombre estable y SHA256SUMS
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          TAG="${{ github.ref_name }}"
+          mkdir -p assets && cd assets
+
+          gh release download "$TAG" --repo "${{ github.repository }}" --clobber
+
+          # Copias con nombre estable para que la landing pueda enlazar a
+          # /releases/latest/download/<nombre> sin la version dentro de la URL. Los
+          # nombres versionados se conservan: quien archive instaladores los distingue.
+          # El AppImage queda fuera a proposito -- 81 MB duplicados por release no se
+          # justifican hasta que 'strip' + debug=false lo adelgacen.
+          copiar() {
+            local patron="$1" destino="$2" origen
+            origen=$(ls $patron 2>/dev/null | head -1) || true
+            if [ -z "${origen:-}" ]; then
+              echo "::error::Ningun asset publicado casa con '$patron'. La landing enlaza"
+              echo "::error::a estos nombres fijos, asi que se aborta antes de dejar"
+              echo "::error::enlaces roturados en produccion."
+              exit 1
+            fi
+            cp "$origen" "$destino"
+            echo "  $origen -> $destino"
+          }
+
+          copiar 'Daylo_*_x64-setup.exe'    Daylo-windows-x64-setup.exe
+          copiar 'Daylo_*_arm64-setup.exe'  Daylo-windows-arm64-setup.exe
+          copiar 'Daylo_*_aarch64.dmg'      Daylo-macos-apple-silicon.dmg
+          copiar 'Daylo_*_x64.dmg'          Daylo-macos-intel.dmg
+          copiar 'Daylo_*_amd64.deb'        Daylo-linux-amd64.deb
+          copiar 'daylo-android.apk'        Daylo-android-arm64.apk
+
+          # Hashes de todo lo publicado, nombres versionados y fijos incluidos. Los
+          # instaladores de escritorio no van firmados, asi que SmartScreen y Gatekeeper
+          # avisan de "editor desconocido"; esto es lo unico que permite al usuario
+          # comprobar por su cuenta que lo que bajo es lo que construyo el CI, sin
+          # tener que creerse nuestra palabra.
+          sha256sum *.exe *.dmg *.deb *.AppImage *.apk > SHA256SUMS.txt
+          echo "--- SHA256SUMS.txt ---"; cat SHA256SUMS.txt
+
+          gh release upload "$TAG" --repo "${{ github.repository }}" --clobber \
+            Daylo-windows-x64-setup.exe \
+            Daylo-windows-arm64-setup.exe \
+            Daylo-macos-apple-silicon.dmg \
+            Daylo-macos-intel.dmg \
+            Daylo-linux-amd64.deb \
+            Daylo-android-arm64.apk \
+            SHA256SUMS.txt
