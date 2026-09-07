@@ -53,7 +53,7 @@ se instala y la firma coincide, **este es el segundo sitio donde mirar**.
 Para comprobarlo en un APK sin el SDK de Android instalado, basta parsear el manifest
 binario: el `versionCode` es un atributo de tipo entero del elemento `manifest`.
 
-## Paso 0 — comprobar antes de generar nada
+## Paso 0: comprobar antes de generar nada
 
 Puede que la llave no esté perdida. Hay un keystore en el working tree que quizá sea el que
 firmó v1.1.0. **Comprobar esto primero**, porque si coincide se conserva la continuidad con
@@ -76,7 +76,7 @@ en claro en `release.yml` y en el historial público desde `9fa82d3`. Con esa co
 pública, cualquiera podría firmar un APK que Android aceptaría como actualización legítima de
 Daylo.
 
-## Paso 1 — generar el keystore (sólo si el paso 0 no dio coincidencia)
+## Paso 1: generar el keystore (sólo si el paso 0 no dio coincidencia)
 
 En local, **nunca en CI**. `keytool` pedirá la contraseña de forma interactiva; no la pases
 por línea de comandos, porque queda en el historial del shell.
@@ -93,7 +93,7 @@ siga válido bastante más allá de 2033, y renovarlo no es posible sin perder l
 Anotar el `SHA256` resultante (`keytool -list -v -keystore daylo-release.jks`) en un sitio
 seguro. Sirve para verificar en el futuro que un APK publicado se firmó con la llave correcta.
 
-## Paso 2 — cargar los cuatro secrets
+## Paso 2: cargar los cuatro secrets
 
 ```bash
 base64 -w0 daylo-release.jks > /tmp/ks.b64
@@ -105,7 +105,7 @@ gh secret set ANDROID_KEY_ALIAS           # 'daylo' si se siguió el paso 1
 gh secret set ANDROID_KEY_PASSWORD
 ```
 
-## Paso 3 — guardar la llave donde no se pierda
+## Paso 3: guardar la llave donde no se pierda
 
 **Esto es lo que de verdad importa a largo plazo.** Si el `.jks` se pierde, Daylo no puede
 volver a publicar una actualización de Android nunca más, y todos los usuarios instalados
