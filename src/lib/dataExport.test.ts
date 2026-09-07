@@ -983,6 +983,19 @@ describe('dataExport utility functions', () => {
       expect(result.logs[0].date).toBe('2026-03-01')
     })
 
+    it('si importa el mismo dia de una actividad distinta', () => {
+      // Este es el eje que justifica incluir activityId en la clave: el mismo dia de dos
+      // actividades distintas son dos registros legitimos, no un duplicado.
+      const enElDispositivo = [
+        createValidLog({ id: 'log-1', activityId: 'act-1', date: '2026-05-01' }),
+      ]
+      const delRespaldo = [createValidLog({ id: 'log-2', activityId: 'act-2', date: '2026-05-01' })]
+
+      const result = mergeData([], enElDispositivo, [], delRespaldo)
+
+      expect(result.logs).toHaveLength(2)
+    })
+
     it('si importa dias distintos de la misma actividad', () => {
       const enElDispositivo = [
         createValidLog({ id: 'log-1', activityId: 'act-1', date: '2026-04-01' }),

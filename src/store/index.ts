@@ -224,8 +224,16 @@ export const useCalendarStore = create<CalendarState>()(
             return
           }
 
+          // Al marcar se COLAPSA en vez de propagar. Poner completed:true en todos los
+          // registros del dia haria que el heatmap contara el dia dos veces y pintara un
+          // nivel que no corresponde -- el mismo defecto que este cambio arregla, pero al
+          // marcar. Se marca solo el registro encontrado y se descartan los duplicados
+          // sin notas; los que tengan notas se conservan como esten, porque la nota es
+          // contenido del usuario.
           set((state) => ({
-            logs: state.logs.map((l) => (esDeEsteDia(l) ? { ...l, completed: true } : l)),
+            logs: state.logs
+              .filter((l) => !(esDeEsteDia(l) && l.id !== existingLog.id && !l.notes?.trim()))
+              .map((l) => (l.id === existingLog.id ? { ...l, completed: true } : l)),
           }))
         } else {
           const newLog: ActivityLog = {
