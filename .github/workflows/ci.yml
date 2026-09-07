@@ -137,7 +137,8 @@ jobs:
             libgtk-3-dev \
             libayatana-appindicator3-dev \
             xvfb \
-            x11-utils
+            x11-utils \
+            xdg-dbus-proxy
 
       # Install Node.js dependencies
       - name: Install Node.js dependencies
@@ -221,6 +222,10 @@ jobs:
             export WEBKIT_DISABLE_DMABUF_RENDERER=1
             export WEBKIT_DISABLE_COMPOSITING_MODE=1
             export LIBGL_ALWAYS_SOFTWARE=1
+            # Explicito para quitar una variable de la ecuacion: sin WAYLAND_DISPLAY GTK
+            # deberia elegir x11 solo, pero si por cualquier motivo intentara otro backend
+            # el fallo se pareceria a "el webview no arranca".
+            export GDK_BACKEND=x11
           fi
 
           "$BIN" > smoke.log 2>&1 &
@@ -269,7 +274,12 @@ jobs:
           STORE="$HOME/.local/share/com.daylo.app/localstorage"
           if [ "$RUNNER_OS" = "Linux" ]; then
             for s in $(seq 1 20); do
-              if ls "$STORE"/*localstorage* >/dev/null 2>&1; then
+              # Con 'nullglob', un glob sin coincidencias DESAPARECE, asi que un
+              # 'ls "$STORE"/*localstorage*' correria sin argumentos, listaria el
+              # directorio actual y devolveria exito: falso positivo inmediato. Hay que
+              # contar la expansion, no preguntarle a ls.
+              esperando=( "$STORE"/*localstorage* )
+              if [ ${#esperando[@]} -gt 0 ]; then
                 echo "El almacenamiento aparecio a los ~$((10 + s))s desde el arranque"
                 break
               fi
@@ -321,13 +331,33 @@ jobs:
             # Desde WebKit 2.26 el WebProcess se lanza a traves de bwrap. Si el entorno no
             # permite namespaces de usuario sin privilegios, ese proceso no arranca y el
             # principal se queda vivo con una ventana vacia: el sintoma exacto de este
-            # fallo. Estos tres datos dicen si esa es la causa, sin tener que suponerlo.
+            # fallo. En el runner de Actions esto ya salio descartado (bwrap presente y
+            # namespaces permitidos), pero se sigue volcando porque en otro entorno puede
+            # ser justo la causa.
             command -v bwrap >/dev/null 2>&1 && echo "bwrap: $(command -v bwrap)" \
               || echo "bwrap: no esta instalado"
             for f in /proc/sys/kernel/unprivileged_userns_clone \
                      /proc/sys/user/max_user_namespaces; do
               [ -r "$f" ] && echo "$f = $(cat "$f" 2>/dev/null)" || echo "$f: no legible"
             done
+            echo "--- el ejecutable del WebProcess esta donde WebKit lo busca? ---"
+            # El WebProcess es un binario aparte, no una libreria: si el paquete de
+            # runtime no lo trae, el proceso principal arranca igual y se queda con una
+            # ventana vacia, sin decir nada por stderr.
+            ls -la /usr/lib/*/webkit2gtk-4.1/ 2>/dev/null | head -10 || \
+              echo "no existe ningun directorio webkit2gtk-4.1 en /usr/lib"
+            echo "--- version de webkit y utilidades del sandbox ---"
+            # La version importa: WEBKIT_DISABLE_DMABUF_RENDERER solo existe desde WebKit
+            # 2.42, asi que en una imagen mas antigua las variables de arriba no hacen
+            # nada y el WebProcess seguiria muriendo al crear buffers. Y el sandbox
+            # necesita xdg-dbus-proxy ademas de bwrap: es dependencia declarada de
+            # libwebkit2gtk-4.1-0, pero conviene verlo y no suponerlo.
+            dpkg -l 2>/dev/null | grep -iE 'webkit|bubblewrap|xdg-dbus-proxy' \
+              | awk '{print $2, $3}' || true
+            command -v xdg-dbus-proxy >/dev/null 2>&1 \
+              && echo "xdg-dbus-proxy: $(command -v xdg-dbus-proxy)" \
+              || echo "xdg-dbus-proxy: NO ESTA (el sandbox de WebKit lo necesita)"
+            echo "imagen del runner: ${ImageOS:-desconocida} ${ImageVersion:-}"
             exit 1
           fi
           # El valor lo guarda WebKit en UTF-16LE, de ahi 'strings -e l'. Se comprueba la
