@@ -215,6 +215,58 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
   # Create a summary job that runs after all builds complete
+  # La demo web de la landing. La aplicacion es 100% web -- Tauri solo la envuelve --
+  # asi que un 'vite build' con base '/demo/' produce un sitio estatico que funciona bajo
+  # esa ruta, sin contenedor ni servidor. Verificado en un navegador real: renderiza, no da
+  # 404 y el ciclo de crear, marcar y recargar conserva los datos.
+  #
+  # El artefacto sale LIMPIO, sin analitica: el script de la landing lo inyecta el
+  # despliegue del sitio web sobre este mismo artefacto. Asi el repositorio de la
+  # aplicacion no contiene nada que exista solo para la web.
+  build-demo:
+    name: Build web demo
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+
+      - name: Install Node.js dependencies
+        run: npm ci
+
+      - name: Build demo with /demo/ base
+        run: npx vite build --base=/demo/ --outDir dist-demo
+
+      - name: Comprobar que el artefacto sale sin analitica
+        run: |
+          set -uo pipefail
+          # Defensa en profundidad: el CI ya comprueba el codigo fuente en cada PR, y esto
+          # comprueba lo que de verdad se va a desplegar. Si algun dia el script de la
+          # landing acabara aqui por error, el deploy publicaria una demo que llama a casa
+          # con el mismo bundle que empaqueta la aplicacion de escritorio.
+          if grep -rniE 'analytics\.|umami|google-analytics|googletagmanager' dist-demo 2>/dev/null; then
+            echo "::error::El artefacto de la demo contiene codigo de analitica. Ese"
+            echo "::error::script debe inyectarlo el despliegue del sitio web, no el build."
+            exit 1
+          fi
+          echo "Artefacto limpio: sin analitica."
+          echo "index.html: $(wc -c < dist-demo/index.html) bytes, rutas con base /demo/"
+
+      - name: Upload demo artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: daylo-web-demo
+          path: dist-demo/
+          retention-days: 90
+          if-no-files-found: error
+
   release-summary:
     needs: [build, build-android]
     runs-on: ubuntu-latest

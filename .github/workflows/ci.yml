@@ -84,6 +84,52 @@ jobs:
       - name: Build frontend
         run: npm run build
 
+      # La promesa de Daylo es que los datos del usuario no salen de su dispositivo, y esa
+      # promesa se sostiene enteramente sobre que la aplicacion no contenga codigo de
+      # analitica ni telemetria. Esto lo comprueba en cada PR, en vez de dejarlo a que
+      # alguien se acuerde de mirarlo en la revision.
+      #
+      # El script de analitica de la landing NO vive en este repositorio: lo inyecta el
+      # despliegue del sitio web sobre el artefacto ya construido. Asi es imposible que
+      # acabe en el binario, no solo improbable.
+      - name: Comprobar que no hay analitica ni telemetria
+        run: |
+          set -uo pipefail
+          # Hosts y APIs de analitica, telemetria y reporte de errores. Cualquiera de
+          # estos en el codigo fuente o en el bundle significa que la aplicacion llama a
+          # casa. Verificado que ninguno da falso positivo contra el bundle actual, que
+          # incluye React, Zustand y Tailwind minificados.
+          # Hosts a los que se enviarian datos.
+          PATRONES='analytics\.|umami|google-analytics|googletagmanager|plausible\.io'
+          PATRONES="$PATRONES"'|matomo|mixpanel|segment\.(com|io)|amplitude\.com|sentry\.io'
+          PATRONES="$PATRONES"'|posthog|hotjar|fullstory|datadoghq|bugsnag|rollbar'
+          PATRONES="$PATRONES"'|newrelic|gtag\(|dataLayer|_paq'
+          # Y nombres de paquete npm, porque un SDK declarado como dependencia no
+          # menciona su propio host en package.json: probado, '@sentry/react' pasaba el
+          # check anterior sin que nadie se enterara hasta que el bundle lo delatara.
+          PATRONES="$PATRONES"'|@sentry/|posthog-js|mixpanel-browser|amplitude-js'
+          PATRONES="$PATRONES"'|@amplitude/|plausible-tracker|react-ga|@vercel/analytics'
+          PATRONES="$PATRONES"'|@datadog/|logrocket|@microsoft/clarity|web-vitals'
+
+          encontrado=0
+          for objetivo in src index.html package.json dist; do
+            [ -e "$objetivo" ] || continue
+            if grep -rniE "$PATRONES" "$objetivo" 2>/dev/null; then
+              encontrado=1
+            fi
+          done
+
+          if [ "$encontrado" -eq 1 ]; then
+            echo "::error::Se encontro codigo de analitica o telemetria en la aplicacion."
+            echo "::error::Daylo promete que los datos del usuario no salen de su"
+            echo "::error::dispositivo, y eso solo se sostiene si este repositorio no"
+            echo "::error::contiene nada de esto. El script de la landing se inyecta en el"
+            echo "::error::despliegue del sitio web, sobre el artefacto ya construido."
+            exit 1
+          fi
+          echo "Sin analitica ni telemetria en src/, index.html, package.json ni dist/."
+
+
   # Verify Tauri builds (without uploading artifacts)
   build-check:
     needs: test
