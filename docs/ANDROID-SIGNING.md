@@ -100,9 +100,12 @@ actualización romperá las instalaciones existentes.
 
 ## Y comprobarlo sobre el APK publicado
 
+En releases hasta v1.1.0 incluida el APK se llamaba `daylo-android.apk`; a partir de
+v1.1.1 es `Daylo-android-arm64.apk`. Ajusta el nombre segun el tag que estes comprobando.
+
 ```bash
-gh release download <tag> --pattern 'daylo-android.apk'
-unzip -p daylo-android.apk 'META-INF/*.RSA' > /tmp/sig.rsa
+gh release download <tag> --pattern 'Daylo-android-arm64.apk'
+unzip -p Daylo-android-arm64.apk 'META-INF/*.RSA' > /tmp/sig.rsa
 keytool -printcert -file /tmp/sig.rsa | grep SHA256
 ```
 

@@ -91,7 +91,7 @@ The warning means "unknown publisher", not "unsafe". Every release is built by G
 
 ### Android App
 
-Download `daylo-android.apk` from the [Releases](../../releases) page and open it on your phone. Android will ask you to allow installs from this source the first time.
+Download `Daylo-android-arm64.apk` from the [Releases](../../releases) page and open it on your phone. Android will ask you to allow installs from this source the first time.
 
 - Runs on **arm64 devices** — practically every phone and tablet made since 2017. It will not install on 32-bit devices or on Android Studio emulators.
 - Your data lives in the app's local storage on the device. **Export a JSON backup from inside the app before uninstalling or switching to a different build** — uninstalling deletes the data.

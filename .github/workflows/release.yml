@@ -99,7 +99,7 @@ jobs:
             | Android | `.apk` | Direct install. arm64 devices only (all phones/tablets since ~2017). |
 
             ### Android install
-            1. Download `daylo-android.apk` on your phone
+            1. Download `Daylo-android-arm64.apk` on your phone
             2. Open the file and allow "Install from unknown sources" if prompted
             3. The app does not require any special permissions
           releaseDraft: false
@@ -165,7 +165,7 @@ jobs:
         run: |
           set -euo pipefail
           APK_PATH="src-tauri/gen/android/app/build/outputs/apk/universal/release/app-universal-release-unsigned.apk"
-          ALIGNED_PATH="src-tauri/gen/android/app/build/outputs/apk/universal/release/daylo-android.apk"
+          ALIGNED_PATH="src-tauri/gen/android/app/build/outputs/apk/universal/release/Daylo-android-arm64.apk"
 
           # El keystore TIENE que venir de secrets. Antes se generaba aqui con
           # 'keytool -genkey', lo que producia una llave nueva en cada build que solo
@@ -210,7 +210,7 @@ jobs:
       - name: Upload APK to release
         uses: softprops/action-gh-release@v2
         with:
-          files: src-tauri/gen/android/app/build/outputs/apk/universal/release/daylo-android.apk
+          files: src-tauri/gen/android/app/build/outputs/apk/universal/release/Daylo-android-arm64.apk
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
@@ -218,7 +218,16 @@ jobs:
   release-summary:
     needs: [build, build-android]
     runs-on: ubuntu-latest
-    if: always()
+    # El repositorio tiene default_workflow_permissions en "read", asi que sin declarar
+    # esto 'gh release upload' devuelve 403. Los otros dos jobs ya lo declaran; este no
+    # lo necesitaba hasta que empezo a publicar assets.
+    permissions:
+      contents: write
+    # 'always()' correria tambien cuando se cancela el run, y entonces se publicarian
+    # copias fijas y un SHA256SUMS.txt que solo cubre lo subido hasta ese instante. La
+    # comprobacion de cobertura no protege de eso: los dos conteos verian la misma
+    # release a medias.
+    if: ${{ !cancelled() }}
     steps:
       - name: Check build results
         run: |
@@ -230,47 +239,107 @@ jobs:
             exit 1
           fi
 
+      # 'always()' es imprescindible: el paso anterior hace 'exit 1' si algun build
+      # fallo, y sin esto este paso no correria nunca en ese caso -- con lo que un runner
+      # de macOS caido dejaria sin copia de nombre fijo a Windows, Linux y Android, que
+      # SI compilaron, y romperia sus enlaces. La degradacion por plataforma de
+      # 'preparar' solo sirve si el paso llega a ejecutarse.
       - name: Publicar copias con nombre estable y SHA256SUMS
+        if: ${{ !cancelled() }}
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           set -uo pipefail
           shopt -s nullglob
           TAG="${{ github.ref_name }}"
+          REPO="${{ github.repository }}"
           mkdir -p assets && cd assets
 
-          gh release download "$TAG" --repo "${{ github.repository }}" --clobber || true
+          # El sha256 de cada asset ya lo publica la API, asi que no hay que rehashear
+          # nada. Se lee ANTES de subir las copias para que el mapa contenga solo los
+          # originales; cada copia hereda despues el hash del asset del que sale.
+          # Cuantos assets deberia haber, para detectar un mapa truncado.
+          n_esperados=$(gh api "repos/$REPO/releases/tags/$TAG" --jq '.assets | length') || {
+            echo "::error::No se pudo consultar la lista de assets de $TAG."; exit 1; }
+
+          declare -A digest_de
+          # Se cuenta a mano en vez de usar ${#digest_de[@]}: con 'set -u' un array
+          # ASOCIATIVO declarado y vacio da "unbound variable" al consultar su longitud
+          # (los indexados no), asi que la guarda de abajo no llegaria a evaluarse nunca.
+          n_assets=0
+          # El digest se saca con '// ""' y 'sub' en vez de 'ltrimstr': si un asset trae
+          # digest nulo, 'ltrimstr' aborta jq con "startswith() requires string inputs"
+          # DESPUES de haber emitido las lineas anteriores. Al ir en sustitucion de
+          # procesos, 'pipefail' no ve ese fallo, asi que el mapa quedaria truncado en
+          # silencio y el job saldria verde con un SHA256SUMS.txt incompleto.
+          #
+          # El NOMBRE va primero y el digest despues, no al reves: el tab es whitespace,
+          # asi que 'read' colapsa un primer campo vacio y desplaza los valores -- con el
+          # digest delante, un asset sin digest hacia que el nombre acabara en la variable
+          # del sha y la del nombre quedara vacia. Con el nombre primero, que nunca esta
+          # vacio, un digest ausente se ve como lo que es y se puede nombrar el asset.
+          while IFS=$'\t' read -r nombre sha; do
+            [ -z "${nombre:-}" ] && continue
+            if [ -z "${sha:-}" ]; then
+              echo "::error::La API no trae digest del asset '$nombre'. Sin el no se puede"
+              echo "::error::publicar su hash sin descargarlo y calcularlo a mano."
+              exit 1
+            fi
+            digest_de["$nombre"]="$sha"
+            n_assets=$((n_assets + 1))
+          done < <(gh api "repos/$REPO/releases/tags/$TAG" \
+                     --jq '.assets[] | [.name, ((.digest // "") | sub("^sha256:";""))] | @tsv')
+
+          if [ "$n_assets" -eq 0 ]; then
+            echo "::error::La API no devolvio ningun asset para $TAG. Sin los digest no se"
+            echo "::error::puede publicar SHA256SUMS.txt sin descargar y hashear todo."
+            exit 1
+          fi
+          if [ "$n_assets" -ne "${n_esperados:-0}" ]; then
+            echo "::error::La API devolvio $n_assets digest de $n_esperados assets. Publicar"
+            echo "::error::un SHA256SUMS.txt incompleto es peor que no publicarlo."
+            exit 1
+          fi
+
+          # Solo se descarga lo que hay que renombrar. El AppImage son 81 MB, tres cuartas
+          # partes del peso de la release, y no se copia (duplicarlo no se justifica hasta
+          # que 'strip' lo adelgace), asi que no se baja: su hash sale de la API igual. El
+          # APK ya se publica con su nombre definitivo y tampoco hace falta tocarlo.
+          gh release download "$TAG" --repo "$REPO" --clobber \
+            --pattern '*.exe' --pattern '*.dmg' --pattern '*.deb' || {
+            # 'gh release download' tambien sale 1 cuando simplemente no hay nada que case,
+            # que es lo que pasa si fallaron los cinco builds de escritorio. Eso no es un
+            # fallo de descarga, y decirlo asi manda a mirar al sitio equivocado. Se avisa
+            # y se sigue: 'preparar' informara de cada copia que falte, y el SHA256SUMS
+            # del APK -- que si existe -- se publica igual.
+            echo "::warning::La descarga no trajo ningun instalador de escritorio para $TAG."
+            echo "::warning::O fallaron esos builds, o la release no los tiene todavia."
+          }
 
           # Copias con nombre estable para que la landing pueda enlazar a
           # /releases/latest/download/<nombre> sin la version dentro de la URL. Los
           # nombres versionados se conservan: quien archive instaladores los distingue.
-          # El AppImage queda fuera a proposito -- 81 MB duplicados por release no se
-          # justifican hasta que 'strip' + debug=false lo adelgacen.
           #
-          # Cada copia se trata de forma INDEPENDIENTE y a proposito. Si el runner de
-          # una plataforma falla (ocurre, y no por culpa del codigo), la release existe
-          # sin ese artefacto; abortar aqui dejaria sin copia fija a las plataformas que
-          # SI compilaron, y sus enlaces en la landing darian 404. Un build caido degrada
-          # una fila de la tabla, no todas.
-          # AVISO para quien añada mas jobs de empaquetado a este workflow:
-          # los patrones de abajo ABORTAN si uno casa con mas de un archivo. Si algun
-          # dia un job sube a ESTA MISMA release otro instalador de Windows -- por
-          # ejemplo el paquete de la Microsoft Store, que necesita
-          # webviewInstallMode=offlineInstaller y pesa mas de 100 MB frente a los 2 MB
-          # del NSIS -- tiene que llamarse de forma que NO case con
-          # 'Daylo_*_x64-setup.exe' (p. ej. 'Daylo-store-x64.msix'), o este paso se
-          # cae y ninguna plataforma recibe su copia de nombre fijo.
-          # Y si ese paquete llega a publicarse aqui, hay que añadir su extension a la
-          # lista de 'existentes' mas abajo para que entre en SHA256SUMS.txt.
+          # Cada copia se trata de forma INDEPENDIENTE y a proposito. Si el runner de una
+          # plataforma falla (ocurre, y no por culpa del codigo), la release existe sin ese
+          # artefacto; abortar aqui dejaria sin copia fija a las plataformas que SI
+          # compilaron, y sus enlaces en la landing darian 404. Un build caido degrada una
+          # fila de la tabla, no todas.
+          #
+          # AVISO para quien añada mas jobs de empaquetado: los patrones de abajo ABORTAN si
+          # uno casa con mas de un archivo. Si algun dia un job sube a ESTA MISMA release
+          # otro instalador de Windows -- por ejemplo el paquete de la Microsoft Store, que
+          # necesita webviewInstallMode=offlineInstaller y pesa mas de 100 MB frente a los
+          # 2 MB del NSIS -- tiene que llamarse de forma que NO case con
+          # 'Daylo_*_x64-setup.exe', o este paso se cae y ninguna plataforma recibe su copia.
           subidos=()
           faltantes=()
+          declare -A origen_de
 
           preparar() {
             local patron="$1" destino="$2" candidatos=() f n origen
-            # Se comprueba la existencia real de cada candidato en vez de fiarse del
-            # glob: 'nullglob' solo elimina los patrones CON comodin, asi que un nombre
-            # literal como 'daylo-android.apk' sobrevive a la expansion aunque el
-            # archivo no exista, y se intentaria subir un fantasma.
+            # Se comprueba la existencia real de cada candidato en vez de fiarse del glob:
+            # 'nullglob' solo elimina los patrones CON comodin.
             for f in $patron; do [ -f "$f" ] && candidatos+=("$f"); done
             n=${#candidatos[@]}
             if [ "$n" -eq 0 ]; then
@@ -280,8 +349,8 @@ jobs:
               return 0
             fi
             if [ "$n" -gt 1 ]; then
-              # Ambiguedad real: no hay forma de saber cual es el correcto y elegir mal
-              # publicaria un binario bajo un nombre que promete otra cosa.
+              # Ambiguedad real: elegir mal publicaria un binario bajo un nombre que
+              # promete otra cosa.
               echo "::error::'$patron' casa con $n archivos y no se puede elegir:"
               printf '::error::  %s\n' "${candidatos[@]}"
               exit 1
@@ -292,6 +361,7 @@ jobs:
               exit 1
             fi
             subidos+=("$destino")
+            origen_de["$destino"]="$origen"
             echo "  $origen -> $destino"
           }
 
@@ -300,31 +370,57 @@ jobs:
           preparar 'Daylo_*_aarch64.dmg'      Daylo-macos-apple-silicon.dmg
           preparar 'Daylo_*_x64.dmg'          Daylo-macos-intel.dmg
           preparar 'Daylo_*_amd64.deb'        Daylo-linux-amd64.deb
-          preparar 'daylo-android.apk'        Daylo-android-arm64.apk
 
           if [ ${#subidos[@]} -eq 0 ]; then
-            echo "::error::No se preparo ninguna copia fija: la release no tiene assets."
-            exit 1
+            # No se aborta: puede ser una release donde solo salio el APK. Abortar aqui
+            # tiraria tambien el SHA256SUMS.txt, que cubre los assets que SI existen, y
+            # dejaria la release sin ninguna forma de verificar la descarga.
+            echo "::warning::No se preparo ninguna copia con nombre estable: la release no"
+            echo "::warning::tiene instaladores de escritorio con los nombres esperados."
+            echo "::warning::Todos los enlaces /releases/latest/download/ daran 404 hasta"
+            echo "::warning::la proxima release que los incluya. SHA256SUMS.txt se publica"
+            echo "::warning::igual, con los assets que haya."
           fi
 
-          # Hashes de lo que efectivamente hay, nombres versionados y fijos incluidos.
-          # Los instaladores de escritorio no van firmados, asi que Windows y macOS avisan
-          # de "editor desconocido"; este fichero es lo unico que permite al usuario
-          # comprobar por su cuenta que lo que bajo es lo que construyo el CI.
-          existentes=( *.exe *.dmg *.deb *.AppImage *.apk )
-          if [ ${#existentes[@]} -eq 0 ]; then
-            # Sin esta guarda, 'sha256sum' sin argumentos se pone a leer de stdin y
-            # deja el job colgado esperando una entrada que nunca llega.
-            echo "::error::No hay ningun artefacto que hashear en la release."
-            exit 1
-          fi
-          sha256sum "${existentes[@]}" > SHA256SUMS.txt
+          # SHA256SUMS con todo lo publicado. Los instaladores de escritorio no van
+          # firmados, asi que Windows y macOS avisan de "editor desconocido"; este fichero
+          # es lo unico que permite al usuario comprobar por su cuenta que lo que bajo es
+          # lo que construyo el CI, sin tener que creerse nuestra palabra.
+          #
+          # Se construye ANTES de subir nada, para hacer una sola subida al final.
+          : > SHA256SUMS.txt
+          for nombre in "${!digest_de[@]}"; do
+            # En un re-run la release ya contiene el SHA256SUMS.txt anterior y las copias
+            # fijas de la vez pasada. Sin estos dos saltos, el fichero se referenciaria a
+            # si mismo con su hash viejo -- 'sha256sum -c' daria FAILED sobre el propio
+            # fichero -- y las copias saldrian duplicadas, una por cada bucle.
+            [ "$nombre" = "SHA256SUMS.txt" ] && continue
+            ya_es_copia=0
+            for c in "${subidos[@]}"; do
+              [ "$nombre" = "$c" ] && { ya_es_copia=1; break; }
+            done
+            [ "$ya_es_copia" -eq 1 ] && continue
+            printf '%s  %s\n' "${digest_de[$nombre]}" "$nombre" >> SHA256SUMS.txt
+          done
+          for copia in "${subidos[@]}"; do
+            orig="${origen_de[$copia]}"
+            sha="${digest_de[$orig]:-}"
+            if [ -z "$sha" ]; then
+              # Puede pasar si la API trajo el asset con digest nulo: mejor abortar que
+              # publicar una linea sin hash, que 'sha256sum -c' leeria como formato roto.
+              echo "::error::La API no dio digest de '$orig', asi que no se puede publicar"
+              echo "::error::el hash de su copia '$copia' sin calcularlo a mano."
+              exit 1
+            fi
+            printf '%s  %s\n' "$sha" "$copia" >> SHA256SUMS.txt
+          done
+          sort -k2 -o SHA256SUMS.txt SHA256SUMS.txt
           echo "--- SHA256SUMS.txt ---"; cat SHA256SUMS.txt
 
-          gh release upload "$TAG" --repo "${{ github.repository }}" --clobber \
-            "${subidos[@]}" SHA256SUMS.txt
+          gh release upload "$TAG" --repo "$REPO" --clobber "${subidos[@]}" SHA256SUMS.txt || {
+            echo "::error::Fallo la subida de los assets con nombre estable."; exit 1; }
 
-          # Resumen visible en la pagina del run: un ::warning:: se pierde entre los logs,
+          # Resumen visible en la portada del run: un ::warning:: se pierde entre los logs,
           # y que falte una plataforma tiene que verse sin abrir nada.
           {
             echo "### Assets con nombre estable"
@@ -334,5 +430,6 @@ jobs:
             for a in "${subidos[@]}"; do echo "| \`$a\` | publicada |"; done
             for a in "${faltantes[@]+"${faltantes[@]}"}"; do echo "| \`$a\` | **FALTA** (build no disponible) |"; done
             echo
-            echo "\`SHA256SUMS.txt\` cubre ${#existentes[@]} archivos."
+            echo "\`SHA256SUMS.txt\` cubre $(grep -c . SHA256SUMS.txt) archivos, con los hashes"
+            echo "que publica la propia API de releases."
           } >> "$GITHUB_STEP_SUMMARY"
