@@ -1,0 +1,175 @@
+# Installers to run by hand before a version is tagged, because nothing gets released
+# without somebody using it on a real machine first.
+#
+# WHAT IT CLAIMS: these are the same bundles release.yml would produce for the same five
+# targets, built from the same code with the same release profile.
+# WHAT IT DOES NOT CLAIM: that they are signed the way a release is, or that they work.
+# That is the point: a person downloads them and tries the app.
+#
+# It cannot publish. There is no tag, no tauri-action, no release, and the only thing that
+# leaves the runner is an artifact that expires in a week.
+#
+# On a pull request it runs when the 'build-installers' label is added, not on every push:
+# five release builds with lto are expensive and most pushes do not need them. A label
+# rather than only a manual dispatch because a workflow_dispatch does not appear until the
+# file is on the default branch, which would be too late to test the branch that adds it.
+name: Test build
+
+on:
+  pull_request:
+    types: [labeled]
+  workflow_dispatch:
+
+jobs:
+  # The build matrix below is a copy of the one in release.yml, and a copy that drifts is
+  # worse than no copy at all: this workflow exists so that what gets tested is what gets
+  # shipped, and a target added to one file and not the other would quietly break that
+  # promise while both workflows stayed green.
+  #
+  # The alternative was to make release.yml a reusable workflow and call it with
+  # publish: false. That removes the copy but restructures the only path that publishes,
+  # and the publishing half cannot be exercised without creating a real release, so the
+  # first proof it still worked would arrive at a release. Comparing the two matrices
+  # costs ten seconds and risks nothing.
+  verify-matrix:
+    name: The matrix still matches release.yml
+    # The same condition as the build, so an unrelated label starts nothing at all.
+    if: github.event_name == 'workflow_dispatch' || github.event.label.name == 'build-installers'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Compare the build matrices
+        run: |
+          python3 - <<'PY'
+          import sys, yaml
+
+          def matrix(path, job):
+              with open(path) as handle:
+                  workflow = yaml.safe_load(handle)
+              entries = workflow["jobs"][job]["strategy"]["matrix"]["include"]
+              # Only what decides the artifact: which target, and what gets bundled for
+              # it. The runner label is deliberately not compared, so release.yml can move
+              # to a newer image without failing this.
+              return {(entry["target"], entry["args"]) for entry in entries}
+
+          release = matrix(".github/workflows/release.yml", "build")
+          test = matrix(".github/workflows/test-build.yml", "build")
+
+          if release == test:
+              print(f"both build the same {len(release)} targets")
+              sys.exit(0)
+
+          print("::error::The test build and the release build no longer agree.")
+          for target, args in sorted(release - test):
+              print(f"::error::released but never test built: {target} ({args})")
+              print(f"::error::  add it to test-build.yml, or it ships without being run")
+          for target, args in sorted(test - release):
+              print(f"::error::test built but never released: {target} ({args})")
+              print(f"::error::  remove it from test-build.yml, or drop it from release.yml")
+          sys.exit(1)
+          PY
+
+  build:
+    needs: verify-matrix
+    if: github.event_name == 'workflow_dispatch' || github.event.label.name == 'build-installers'
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # Kept identical to release.yml. The job above fails if it stops being.
+          - platform: windows-latest
+            args: --target x86_64-pc-windows-msvc --bundles nsis
+            target: x86_64-pc-windows-msvc
+            name: windows-x64
+          - platform: windows-latest
+            args: --target aarch64-pc-windows-msvc --bundles nsis
+            target: aarch64-pc-windows-msvc
+            name: windows-arm64
+          - platform: ubuntu-22.04
+            args: --target x86_64-unknown-linux-gnu --bundles deb,appimage
+            target: x86_64-unknown-linux-gnu
+            name: linux-x64
+          - platform: macos-latest
+            args: --target x86_64-apple-darwin --bundles dmg
+            target: x86_64-apple-darwin
+            name: macos-x64
+          - platform: macos-latest
+            args: --target aarch64-apple-darwin --bundles dmg
+            target: aarch64-apple-darwin
+            name: macos-arm64
+
+    runs-on: ${{ matrix.platform }}
+    name: Test build (${{ matrix.name }})
+    timeout-minutes: 60
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install Rust stable
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+
+      - name: Cache Rust dependencies
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: './src-tauri -> target'
+          # The same key release.yml uses, so this shares that cache rather than competing
+          # with it for the repository's quota.
+          shared-key: ${{ matrix.target }}
+          cache-on-failure: true
+
+      - name: Install Linux dependencies
+        if: matrix.platform == 'ubuntu-22.04'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libwebkit2gtk-4.1-dev \
+            librsvg2-dev \
+            patchelf \
+            libgtk-3-dev \
+            libayatana-appindicator3-dev
+
+      - name: Install Node.js dependencies
+        run: npm ci
+
+      # Which commit these installers came from, so a tester can say what they tested. On
+      # a pull request github.sha is the merge commit, and the head is the interesting one.
+      - name: Record the commit being built
+        shell: bash
+        run: |
+          sha="${{ github.event.pull_request.head.sha || github.sha }}"
+          echo "SHORT_SHA=${sha:0:7}" >> "$GITHUB_ENV"
+
+      # The CLI directly rather than tauri-action: with no tagName that action builds
+      # without releasing, but calling the CLI makes it plain at a glance that nothing
+      # here can publish.
+      - name: Build the installers
+        run: npm run tauri:build -- ${{ matrix.args }}
+
+      - name: Upload the installers
+        uses: actions/upload-artifact@v4
+        with:
+          name: daylo-${{ matrix.name }}-${{ env.SHORT_SHA }}
+          path: |
+            src-tauri/target/${{ matrix.target }}/release/bundle/**/*.exe
+            src-tauri/target/${{ matrix.target }}/release/bundle/**/*.dmg
+            src-tauri/target/${{ matrix.target }}/release/bundle/**/*.deb
+            src-tauri/target/${{ matrix.target }}/release/bundle/**/*.AppImage
+          retention-days: 7
+          # An empty upload would look like a build that succeeded with nothing to test,
+          # which is the kind of check that cannot fail and therefore proves nothing.
+          if-no-files-found: error
