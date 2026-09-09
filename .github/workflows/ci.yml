@@ -223,24 +223,26 @@ jobs:
           apk="${apks[0]}"
           echo "APK: $apk ($(stat -c%s "$apk") bytes)"
 
-          # The listing is captured once instead of piping 'unzip -l' into each grep. With
-          # 'pipefail', 'grep -q' exiting the moment it matches sends SIGPIPE to unzip,
-          # unzip returns 141, and the pipeline fails even though the match succeeded: the
-          # check would have failed on every healthy APK. Same trap, and same fix, as the
-          # 'strings | grep' on the localStorage check further up this file.
+          # The listing is matched with bash instead of being piped into grep. Any
+          # 'something | grep -q' is a race under 'pipefail': grep exits the moment it
+          # matches, the writer gets SIGPIPE and returns 141, and the pipeline fails even
+          # though the match succeeded. Whether the writer finishes first depends on how
+          # much fits in the 64 KB pipe buffer, so it passes on one machine and fails on
+          # another. This listing is about 72 KB and it did exactly that: green locally,
+          # red on the runner, on a healthy APK. No pipe, no race.
           listing=$(unzip -l "$apk")
 
-          if ! printf '%s' "$listing" | grep -q 'AndroidManifest.xml'; then
+          if [[ "$listing" != *"AndroidManifest.xml"* ]]; then
             echo "::error::$apk carries no AndroidManifest.xml, so it is not an APK."
-            printf '%s\n' "$listing" | head -20
+            head -20 <<< "$listing"
             exit 1
           fi
-          if ! printf '%s' "$listing" | grep -q 'lib/arm64-v8a/'; then
+          if [[ "$listing" != *"lib/arm64-v8a/"* ]]; then
             echo "::error::No arm64-v8a native library inside the APK: the Rust side did"
             echo "::error::not make it in, and the app would install and fail to start."
             exit 1
           fi
-          printf '%s\n' "$listing" | grep -E 'lib/arm64-v8a/.*\.so' | head -5
+          grep -E 'lib/arm64-v8a/.*\.so' <<< "$listing" | head -5
 
   # Verify Tauri builds (without uploading artifacts)
   build-check:
@@ -554,9 +556,14 @@ jobs:
           # zero code and, with 'pipefail', that would take down the whole pipeline,
           # declaring empty a storage that does hold the state.
           content=$(strings -e l "${files[@]}" 2>/dev/null || true)
-          if printf '%s' "$content" | grep -q '"activities"'; then
+          # Matched with bash rather than piped into 'grep -q', for the same reason as the
+          # APK listing in the Android job: under 'pipefail' the writer gets SIGPIPE when
+          # grep short circuits, and whether that happens depends on the output fitting in
+          # the pipe buffer. This output is small today, so it passes; it would start
+          # failing on a healthy app the day somebody's store grows past 64 KB.
+          if [[ "$content" == *'"activities"'* ]]; then
             echo "The store initialised and persisted its state:"
-            printf '%s' "$content" | grep -o '"selectedYear":[0-9]*' | head -1 || true
+            grep -o '"selectedYear":[0-9]*' <<< "$content" | head -1 || true
           else
             echo "::error::The storage exists but holds no store state:"
             echo "::error::the webview started and the application never initialised."
