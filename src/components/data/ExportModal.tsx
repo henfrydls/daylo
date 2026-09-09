@@ -83,7 +83,7 @@ export function ExportModal({ isOpen, onClose }: ExportModalProps) {
                 </span>
               </div>
               <p className="text-sm text-gray-500 mt-0.5">
-                Best for importing back into the app. Preserves all data structure.
+                Your backup. The only format Daylo can import back.
               </p>
             </div>
           </label>
@@ -100,7 +100,7 @@ export function ExportModal({ isOpen, onClose }: ExportModalProps) {
             <div className="flex-1">
               <span className="font-medium text-gray-900">CSV</span>
               <p className="text-sm text-gray-500 mt-0.5">
-                Compatible with Excel and Google Sheets. Good for analysis.
+                For Excel or Google Sheets. Cannot be imported back into Daylo.
               </p>
             </div>
           </label>
