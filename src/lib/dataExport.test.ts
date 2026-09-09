@@ -901,13 +901,13 @@ describe('dataExport utility functions', () => {
     it('should generate JSON filename with date', () => {
       const filename = generateExportFilename('json')
 
-      expect(filename).toBe('activity-tracker-backup-2024-06-15.json')
+      expect(filename).toBe('daylo-backup-2024-06-15.json')
     })
 
     it('should generate CSV filename with date', () => {
       const filename = generateExportFilename('csv')
 
-      expect(filename).toBe('activity-tracker-backup-2024-06-15.csv')
+      expect(filename).toBe('daylo-export-2024-06-15.csv')
     })
   })
 

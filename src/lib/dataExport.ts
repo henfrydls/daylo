@@ -560,11 +560,15 @@ function sanitizeActivityLog(log: ActivityLog): ActivityLog {
 }
 
 /**
- * Generate export filename with current date
+ * Generate export filename with current date.
+ *
+ * Only JSON can be imported back, so only JSON is called a backup. Naming a CSV
+ * "backup" would invite someone to keep one as their only copy and find out later.
  */
 export function generateExportFilename(format: 'json' | 'csv'): string {
   const date = new Date().toISOString().split('T')[0]
-  return `activity-tracker-backup-${date}.${format}`
+  const kind = format === 'json' ? 'backup' : 'export'
+  return `daylo-${kind}-${date}.${format}`
 }
 
 /** Identidad de negocio de un registro: una actividad en un dia concreto. */
