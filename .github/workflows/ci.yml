@@ -152,25 +152,20 @@ jobs:
       - name: Setup Android SDK
         uses: android-actions/setup-android@v3
 
-      # The NDK is around a gigabyte, and downloading it on every pull request is most of
-      # what this job would cost. The key carries the version so bumping it invalidates the
-      # cache instead of silently building against the old one.
+      # No cache for the NDK: it is already on the ubuntu-latest image, so this resolves in
+      # under a second and there is nothing to cache. Measured, after caching it first and
+      # finding out that the cache was the cost:
       #
-      # Split into restore and save, with the save running even when the job fails.
-      # actions/cache does not save on failure, and the first two runs of this job proved
-      # why that matters: the check at the end failed, nothing was cached, and the next run
-      # downloaded the whole gigabyte again. A red job is exactly when the cycle needs to be
-      # short, and it was exactly when it got long. The download is valid regardless of
-      # whether the build that followed it worked.
-      - name: Restore Android NDK
-        id: ndk-cache
-        uses: actions/cache/restore@v4
-        with:
-          path: ${{ env.ANDROID_HOME }}/ndk/29.0.14206865
-          key: android-ndk-29.0.14206865
-
+      #   no cache at all      restore 0s    sdkmanager 0s
+      #   cache populated      restore 15s   sdkmanager 1.6s   save 7.5s, rejected
+      #
+      # Caching it added about 22 seconds per run to save none, held 708 MB of the
+      # repository's 10 GB cache quota, and could evict the Rust cache, which is the one
+      # that pays: the Rust compile went from 191s cold to 74s warm.
+      #
+      # The step stays because a future image could stop shipping this version, and then
+      # this is what installs it. It costs nothing when it has nothing to do.
       - name: Install Android NDK
-        if: steps.ndk-cache.outputs.cache-hit != 'true'
         run: sdkmanager "ndk;29.0.14206865"
 
       - name: Install Rust stable with Android target
@@ -258,15 +253,10 @@ jobs:
           # through the same SIGPIPE. -m5 stops grep itself, which needs no pipe at all.
           grep -m5 -E 'lib/arm64-v8a/.*\.so' <<< "$listing" || true
 
-      # Saved here, not by a post step, so that 'if: always()' applies. Only on a miss:
-      # saving over an existing key just logs a warning and wastes the upload.
-      - name: Save Android NDK
-        if: always() && steps.ndk-cache.outputs.cache-hit != 'true'
-        uses: actions/cache/save@v4
-        with:
-          path: ${{ env.ANDROID_HOME }}/ndk/29.0.14206865
-          key: android-ndk-29.0.14206865
-
+      # Saved here, not by a post step, so that 'if: always()' applies: actions/cache does
+      # not save when the job fails, and a red job is exactly when the cycle needs to be
+      # short. Only on a miss, because writing over an existing key logs a warning and
+      # wastes the upload.
       - name: Save Gradle
         if: always() && steps.gradle-cache.outputs.cache-hit != 'true'
         uses: actions/cache/save@v4
