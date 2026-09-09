@@ -14,9 +14,10 @@ On Linux this also fixes something that would have been worse: the file could en
 folder that belongs to the app rather than to you, and nobody would have thought to look
 there. A backup you cannot find is not a backup.
 
-**If the save window cannot open, Daylo says so** instead of writing the file somewhere
-you were never told about. On Linux the save window comes from your desktop, so a system
-without one now shows an error. A message you can act on beats a file you cannot locate.
+**If the save window cannot open, Daylo tells you before it starts.** On Linux the save
+window is provided by your desktop, and a few setups do not have one. Daylo checks, and
+says so plainly instead of appearing to save a file that went nowhere. A message you can
+act on beats a backup you cannot locate.
 
 Importing has not changed. Neither has the web version, where your browser keeps handling
 downloads, nor the Android and iOS apps.

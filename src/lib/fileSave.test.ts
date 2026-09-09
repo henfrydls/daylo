@@ -1,7 +1,11 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { isTauriDesktop, formatSavedMessage, saveTextFile } from './fileSave'
+import { chooseSaveTarget, formatSavedMessage, saveTextFile } from './fileSave'
+// Read as text rather than through node:fs: the app's tsconfig limits `types` to
+// vite/client on purpose, so Node's typings are not available here, and ?raw is what
+// vite/client does declare.
+import desktopCapability from '../../src-tauri/capabilities/desktop.json?raw'
 
-// The dialog plugin and the Rust command only exist inside the desktop app, so both are
+// The dialog plugin and the Rust commands only exist inside the desktop app, so both are
 // replaced here. What is asserted is which of them gets called with what, because that is
 // the whole behaviour: on the desktop the user picks the location, on the web the browser
 // keeps deciding it.
@@ -15,17 +19,12 @@ vi.mock('@tauri-apps/api/core', async (importOriginal) => ({
   invoke,
 }))
 
-const DESKTOP_UA =
-  'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Safari/605.1.15'
-const ANDROID_UA =
-  'Mozilla/5.0 (Linux; Android 14; Pixel 7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0 Mobile Safari/537.36'
-
-function pretendTauri(userAgent: string) {
+/** In the desktop app, with a save dialog that can actually open. */
+function pretendDesktop() {
   vi.stubGlobal('isTauri', true)
-  Object.defineProperty(window.navigator, 'userAgent', {
-    value: userAgent,
-    configurable: true,
-  })
+  invoke.mockImplementation((cmd: string) =>
+    cmd === 'save_dialog_available' ? Promise.resolve(true) : Promise.resolve(undefined)
+  )
 }
 
 beforeEach(() => {
@@ -38,26 +37,31 @@ afterEach(() => {
   vi.restoreAllMocks()
 })
 
-describe('isTauriDesktop', () => {
-  it('is false in a plain browser', () => {
-    expect(isTauriDesktop()).toBe(false)
+describe('chooseSaveTarget', () => {
+  it('picks the browser when not running inside Tauri', async () => {
+    await expect(chooseSaveTarget()).resolves.toBe('browser')
+    expect(invoke).not.toHaveBeenCalled()
   })
 
-  it('is true inside the desktop app', () => {
-    pretendTauri(DESKTOP_UA)
-    expect(isTauriDesktop()).toBe(true)
+  it('picks the dialog when the desktop app says one can open', async () => {
+    pretendDesktop()
+    await expect(chooseSaveTarget()).resolves.toBe('dialog')
   })
 
-  // Android keeps the browser download path on purpose: the save dialog plugin is not
-  // registered there, so asking for it would fail rather than help.
-  it('is false inside the Android app', () => {
-    pretendTauri(ANDROID_UA)
-    expect(isTauriDesktop()).toBe(false)
+  // save_dialog_available is registered on desktop only, so a rejected invoke is how the
+  // Android and iOS apps identify themselves. No user agent sniffing: the UA of an iPad
+  // says Macintosh, and the two sides would drift apart the moment either changed.
+  it('picks the browser when the command is not registered', async () => {
+    vi.stubGlobal('isTauri', true)
+    invoke.mockRejectedValue(new Error('Command save_dialog_available not found'))
+    await expect(chooseSaveTarget()).resolves.toBe('browser')
   })
 
-  it('is false inside the iOS app', () => {
-    pretendTauri('Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15')
-    expect(isTauriDesktop()).toBe(false)
+  // A desktop app whose dialog cannot open is the one case that must be told to the user.
+  it('reports no dialog when the desktop app says none can open', async () => {
+    vi.stubGlobal('isTauri', true)
+    invoke.mockResolvedValue(false)
+    await expect(chooseSaveTarget()).resolves.toBe('no-dialog')
   })
 })
 
@@ -72,6 +76,26 @@ describe('formatSavedMessage', () => {
     expect(formatSavedMessage('C:\\Users\\henfry\\Documents\\daylo-backup.json')).toBe(
       'Saved daylo-backup.json in C:\\Users\\henfry\\Documents'
     )
+  })
+
+  // A Linux file name may legally contain a backslash. Choosing the separator by asking
+  // which one appears anywhere gave "my" as the folder and "backup.json" as the name.
+  it('does not treat a backslash in a Linux file name as a folder', () => {
+    expect(formatSavedMessage('/home/misael/my\\backup.json')).toBe(
+      'Saved my\\backup.json in /home/misael'
+    )
+  })
+
+  it('names the drive when the file sits at the root of one', () => {
+    expect(formatSavedMessage('C:\\daylo-backup.json')).toBe('Saved daylo-backup.json in C:')
+  })
+
+  it('gives only the name at the root of a unix filesystem', () => {
+    expect(formatSavedMessage('/daylo-backup.json')).toBe('Saved daylo-backup.json')
+  })
+
+  it('handles a name the user typed without an extension', () => {
+    expect(formatSavedMessage('/home/misael/backup')).toBe('Saved backup in /home/misael')
   })
 
   // Inside a Flatpak the portal hands back a path under its own mount point. Printing it
@@ -111,9 +135,8 @@ describe('saveTextFile in a browser', () => {
 
 describe('saveTextFile in the desktop app', () => {
   it('asks where to save and writes to the chosen path', async () => {
-    pretendTauri(DESKTOP_UA)
+    pretendDesktop()
     save.mockResolvedValue('/home/misael/Documents/daylo-backup.json')
-    invoke.mockResolvedValue(undefined)
 
     const result = await saveTextFile('{"a":1}', 'daylo-backup.json', 'application/json')
 
@@ -130,9 +153,8 @@ describe('saveTextFile in the desktop app', () => {
   })
 
   it('offers the right extension so the dialog does not invent one', async () => {
-    pretendTauri(DESKTOP_UA)
+    pretendDesktop()
     save.mockResolvedValue('/tmp/daylo-export.csv')
-    invoke.mockResolvedValue(undefined)
 
     await saveTextFile('a,b', 'daylo-export.csv', 'text/csv')
 
@@ -144,37 +166,73 @@ describe('saveTextFile in the desktop app', () => {
   })
 
   // Cancelling is not a failure and must not be reported as one, and above all must not
-  // write anything.
+  // write anything. This is only reachable once the dialog is known to open, which is why
+  // a null result can be trusted to mean cancelling.
   it('writes nothing when the user cancels', async () => {
-    pretendTauri(DESKTOP_UA)
+    pretendDesktop()
     save.mockResolvedValue(null)
 
     const result = await saveTextFile('{}', 'daylo-backup.json', 'application/json')
 
-    expect(invoke).not.toHaveBeenCalled()
+    expect(invoke).not.toHaveBeenCalledWith('write_text_file', expect.anything())
     expect(result).toEqual({ saved: false, viaDialog: true })
   })
 
-  // With no portal on the system the dialog cannot open. That has to surface as an error
-  // the caller can show, never as a silent fallback to a file the user cannot find: the
-  // whole point of this change is that a backup nobody can locate is worse than a message.
-  it('rejects when the dialog cannot be opened', async () => {
-    pretendTauri(DESKTOP_UA)
-    save.mockRejectedValue(new Error('no portal'))
+  // The one that matters. save() resolves null when the dialog never opened just as it
+  // does when the user cancelled: the plugin returns Option<FilePath> and has no error
+  // channel, and rfd returns None after the portal and zenity both fail. Without asking
+  // first, an export on a system with no portal would end in a stopped spinner, no file
+  // and no message, which is worse than the bug this change exists to fix.
+  it('refuses to start when no dialog can open, instead of failing silently', async () => {
+    vi.stubGlobal('isTauri', true)
+    invoke.mockResolvedValue(false)
 
     await expect(saveTextFile('{}', 'daylo-backup.json', 'application/json')).rejects.toThrow(
-      /save dialog/i
+      /save window/i
     )
-    expect(invoke).not.toHaveBeenCalled()
+    expect(save).not.toHaveBeenCalled()
+    expect(invoke).not.toHaveBeenCalledWith('write_text_file', expect.anything())
   })
 
-  it('rejects when writing the chosen path fails', async () => {
-    pretendTauri(DESKTOP_UA)
-    save.mockResolvedValue('/read-only/daylo-backup.json')
-    invoke.mockRejectedValue('Permission denied')
+  // Covers the rejection paths the plugin really has: a missing ACL permission, or IPC
+  // failing. Not a missing portal, which never reaches this point.
+  it('rejects when the dialog call itself fails', async () => {
+    pretendDesktop()
+    save.mockRejectedValue(new Error('dialog.save not allowed'))
 
     await expect(saveTextFile('{}', 'daylo-backup.json', 'application/json')).rejects.toThrow(
-      /Permission denied/
+      /dialog\.save not allowed/
     )
+  })
+
+  it('rejects when writing fails, without printing a portal path', async () => {
+    vi.stubGlobal('isTauri', true)
+    invoke.mockImplementation((cmd: string) =>
+      cmd === 'save_dialog_available' ? Promise.resolve(true) : Promise.reject('Permission denied')
+    )
+    save.mockResolvedValue('/run/user/1000/doc/a1b2c3d4/daylo-backup.json')
+
+    let message = ''
+    try {
+      await saveTextFile('{}', 'daylo-backup.json', 'application/json')
+    } catch (error) {
+      message = error instanceof Error ? error.message : String(error)
+    }
+
+    expect(message).toMatch(/daylo-backup\.json/)
+    expect(message).toMatch(/Permission denied/)
+    // The portal's own mount point means nothing to the user and must not be shown,
+    // exactly as the success message already avoids it.
+    expect(message).not.toMatch(/run\/user/)
+  })
+})
+
+// The permission is what makes dialog.save reachable at runtime. Nothing in the build
+// checks it: without that line the dialog would fail only when a user clicks Export.
+describe('the desktop capability', () => {
+  it('grants the save dialog permission for the three desktop platforms', () => {
+    const capability = JSON.parse(desktopCapability)
+    expect(capability.permissions).toContain('dialog:allow-save')
+    expect(capability.platforms).toEqual(['linux', 'macOS', 'windows'])
   })
 })

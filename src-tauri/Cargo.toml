@@ -13,8 +13,14 @@ crate-type = ["lib", "cdylib", "staticlib"]
 tauri-build = { version = "2", features = [] }
 
 [dependencies]
-tauri = { version = "2", features = [] }
+# Held to 2.10 rather than left on a caret. `tauri build` refuses to run when this crate
+# and @tauri-apps/api disagree on major.minor, the npm side is pinned to 2.10.1, and 2.10.2
+# is the newest this crate has: a `cargo update` that moved it to 2.11 would break the
+# build for a reason that looks unrelated to whatever prompted the update. The pair moves
+# together or not at all.
+tauri = { version = "~2.10", features = [] }
 tauri-plugin-shell = "2"
+log = "0.4"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 
@@ -29,7 +35,18 @@ tauri-plugin-opener = "2"
 # portal, so the path that comes back is the user's real one and no --filesystem
 # permission is needed. The cost is that a Linux system with no portal running cannot open
 # the dialog at all, and the app says so instead of hiding the file.
-tauri-plugin-dialog = { version = "2", default-features = false, features = ["xdg-portal"] }
+# Held to 2.7 for the same reason as tauri itself: @tauri-apps/plugin-dialog is pinned to
+# 2.7.0, and 2.7.1 upwards require @tauri-apps/api 2.11, which has no matching tauri crate.
+tauri-plugin-dialog = { version = "~2.7", default-features = false, features = ["xdg-portal"] }
+
+# Both of these are already compiled on Linux as dependencies of the dialog plugin (zbus
+# arrives through ashpd and through tauri-plugin-opener, tokio through rfd), so declaring
+# them adds nothing to the build. They are here to ask the desktop portal directly whether
+# it is running, which is the only way to tell a cancelled dialog from one that never
+# opened. See save_dialog_available in src/lib.rs.
+[target.'cfg(target_os = "linux")'.dependencies]
+zbus = "5"
+tokio = { version = "1", features = ["time"] }
 
 [profile.dev]
 incremental = true
