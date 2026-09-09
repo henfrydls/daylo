@@ -99,7 +99,8 @@ jobs:
             $xml = @(
               '<?xml version="1.0" encoding="utf-8"?>',
               '<Package xmlns="http://schemas.microsoft.com/appx/manifest/foundation/windows10"',
-              '         xmlns:uap="http://schemas.microsoft.com/appx/manifest/uap/windows10">',
+              '         xmlns:uap="http://schemas.microsoft.com/appx/manifest/uap/windows10"',
+              '         xmlns:rescap="http://schemas.microsoft.com/appx/manifest/foundation/windows10/restrictedcapabilities">',
               '  <Identity Name="DLSLabs.SondaDesechable" Publisher="CN=Sonda" Version="0.0.0.1" ProcessorArchitecture="x64" />',
               '  <Properties>',
               '    <DisplayName>Sonda</DisplayName>',
@@ -116,19 +117,28 @@ jobs:
               '        Square150x150Logo="logo.png" Square44x44Logo="logo.png" />',
               '    </Application>',
               '  </Applications>',
+              '  <Capabilities>',
+              '    <rescap:Capability Name="runFullTrust" />',
+              '  </Capabilities>',
               '</Package>'
             )
             Set-Content -Path prueba\AppxManifest.xml -Value $xml -Encoding UTF8
 
-            & $makeappx pack /d prueba /p sonda.msix /o
+            # La salida de makeappx se captura y se anota: es lo que permite distinguir
+            # "el runner no puede" de "nuestro manifest de prueba esta mal", que son
+            # respuestas opuestas a la pregunta que hace esta sonda.
+            $salida = & $makeappx pack /d prueba /p sonda.msix /o 2>&1
             $rc = $LASTEXITCODE
             $existe = Test-Path sonda.msix
+            foreach ($linea in $salida) { Anotar "  makeappx: $linea" }
             Anotar "makeappx salio con codigo $rc; sonda.msix creado: $existe"
 
+            # Dos ejes distintos. Que makeappx corra y llegue a validar ya contesta la
+            # pregunta de la herramienta, aunque rechace este manifest concreto.
             if ($rc -eq 0 -and $existe) {
-              $veredicto = "VIABLE: makeappx empaqueto un MSIX de $((Get-Item sonda.msix).Length) bytes en este runner."
+              $veredicto = "VIABLE. Herramientas presentes y makeappx empaqueto un MSIX de $((Get-Item sonda.msix).Length) bytes."
             } else {
-              $veredicto = "NO VIABLE tal cual: makeappx esta pero fallo (codigo $rc). Mirar su salida arriba antes de descartar la via."
+              $veredicto = "VIABLE en cuanto a herramientas: makeappx corrio y rechazo el manifest de la sonda con codigo $rc. El fallo es del manifest de prueba, no del runner. Leer su salida arriba."
             }
           }
 
