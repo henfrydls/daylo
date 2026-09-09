@@ -123,6 +123,125 @@ jobs:
           scripts/check-no-analytics.sh --text-only package-lock.json dist dist-demo
 
 
+  # Android is the only platform whose build was never checked on a pull request: the APK
+  # was produced solely by release.yml, on tag. That was tolerable while nothing touched
+  # the Android side, and stops being tolerable now that reminders are coming, because
+  # they change the manifest, the permissions and the plugin list. A break there would
+  # have surfaced during a release, which is the worst moment to find out.
+  #
+  # WHAT IT CLAIMS: "the Android side still assembles". The manifest parses, Gradle
+  # configures, the Rust library cross compiles for aarch64 and an APK comes out.
+  # WHAT IT DOES NOT CLAIM: "the app works on a phone". There is no emulator here, and a
+  # notification that arrives after a reboot can only be proven on a real device.
+  build-check-android:
+    needs: test
+    runs-on: ubuntu-latest
+    name: Build Check (Android)
+    timeout-minutes: 45
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v3
+
+      # The NDK is around a gigabyte, and downloading it on every pull request is most of
+      # what this job would cost. The key carries the version so bumping it invalidates the
+      # cache instead of silently building against the old one.
+      - name: Cache Android NDK
+        id: ndk-cache
+        uses: actions/cache@v4
+        with:
+          path: ${{ env.ANDROID_HOME }}/ndk/29.0.14206865
+          key: android-ndk-29.0.14206865
+
+      - name: Install Android NDK
+        if: steps.ndk-cache.outputs.cache-hit != 'true'
+        run: sdkmanager "ndk;29.0.14206865"
+
+      - name: Install Rust stable with Android target
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-linux-android
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+
+      # Same shared-key as the release job on purpose: both cross compile the same crate
+      # for the same target, so a pull request warms the cache the release will use.
+      - name: Cache Rust dependencies
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: './src-tauri -> target'
+          shared-key: android
+
+      - name: Cache Gradle
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+          key: gradle-android-${{ hashFiles('src-tauri/gen/android/**/*.gradle*', 'src-tauri/gen/android/gradle/wrapper/gradle-wrapper.properties') }}
+          restore-keys: gradle-android-
+
+      - name: Install Node.js dependencies
+        run: npm ci
+
+      # --debug on purpose: this job answers whether it assembles, and a debug build skips
+      # minification and signing. The release build is what release.yml does, on tag, with
+      # the real key.
+      - name: Build Android APK (debug, arm64)
+        run: npx tauri android build --apk --target aarch64 --debug
+        env:
+          NDK_HOME: ${{ env.ANDROID_HOME }}/ndk/29.0.14206865
+
+      # The APK is checked for what is inside it, not for existing. A zero byte file, or a
+      # zip without an AndroidManifest.xml, would satisfy a existence test and mean nothing.
+      - name: Verify the APK is a real package
+        run: |
+          set -uo pipefail
+          # globstar as well as nullglob: without it '**' behaves like a single '*' and only
+          # matches one level down. It happens to work today because the output lands in
+          # universal/debug, so the bug would stay hidden until Tauri changed the layout.
+          shopt -s nullglob globstar
+          apks=( src-tauri/gen/android/app/build/outputs/apk/**/debug/*.apk )
+          if [ ${#apks[@]} -eq 0 ]; then
+            echo "::error::The build reported success but produced no APK."
+            find src-tauri/gen/android/app/build/outputs -type f 2>/dev/null | head -20 || true
+            exit 1
+          fi
+          apk="${apks[0]}"
+          echo "APK: $apk ($(stat -c%s "$apk") bytes)"
+
+          # The listing is captured once instead of piping 'unzip -l' into each grep. With
+          # 'pipefail', 'grep -q' exiting the moment it matches sends SIGPIPE to unzip,
+          # unzip returns 141, and the pipeline fails even though the match succeeded: the
+          # check would have failed on every healthy APK. Same trap, and same fix, as the
+          # 'strings | grep' on the localStorage check further up this file.
+          listing=$(unzip -l "$apk")
+
+          if ! printf '%s' "$listing" | grep -q 'AndroidManifest.xml'; then
+            echo "::error::$apk carries no AndroidManifest.xml, so it is not an APK."
+            printf '%s\n' "$listing" | head -20
+            exit 1
+          fi
+          if ! printf '%s' "$listing" | grep -q 'lib/arm64-v8a/'; then
+            echo "::error::No arm64-v8a native library inside the APK: the Rust side did"
+            echo "::error::not make it in, and the app would install and fail to start."
+            exit 1
+          fi
+          printf '%s\n' "$listing" | grep -E 'lib/arm64-v8a/.*\.so' | head -5
+
   # Verify Tauri builds (without uploading artifacts)
   build-check:
     needs: test
