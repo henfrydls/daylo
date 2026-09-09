@@ -1,0 +1,76 @@
+# Sonda desechable: responde si el runner de Windows trae las herramientas para empaquetar
+# un MSIX, sin las cuales la via de Microsoft Store no existe. Tauri no tiene target msix
+# (su lista es deb, rpm, appimage, nsis, msi, app, dmg), asi que el MSIX habria que armarlo
+# con makeappx sobre lo que produce el build. Solo manual: no se dispara con push ni con tags.
+name: Probe MSIX tooling
+
+on:
+  workflow_dispatch:
+
+jobs:
+  probe:
+    runs-on: windows-latest
+    timeout-minutes: 10
+    steps:
+      - name: Buscar makeappx, signtool y las versiones del SDK
+        shell: pwsh
+        run: |
+          $raiz = 'C:\Program Files (x86)\Windows Kits\10\bin'
+          if (-not (Test-Path $raiz)) {
+            Write-Host "No existe $raiz : el SDK de Windows no esta en la imagen"
+            exit 0
+          }
+          Write-Host 'Versiones del SDK presentes:'
+          Get-ChildItem $raiz -Directory | Select-Object -ExpandProperty Name | ForEach-Object { Write-Host "  $_" }
+          Write-Host ''
+          foreach ($herramienta in @('makeappx.exe', 'signtool.exe', 'makepri.exe')) {
+            $hallado = Get-ChildItem $raiz -Filter $herramienta -Recurse -ErrorAction SilentlyContinue |
+                       Sort-Object FullName -Descending | Select-Object -First 1
+            if ($hallado) { Write-Host "$herramienta -> $($hallado.FullName)" }
+            else { Write-Host "$herramienta -> NO ENCONTRADA" }
+          }
+
+      - name: Empaquetar un MSIX de mentira para probar que makeappx corre
+        shell: pwsh
+        run: |
+          $raiz = 'C:\Program Files (x86)\Windows Kits\10\bin'
+          $makeappx = Get-ChildItem $raiz -Filter 'makeappx.exe' -Recurse -ErrorAction SilentlyContinue |
+                      Sort-Object FullName -Descending | Select-Object -First 1
+          if (-not $makeappx) { Write-Host 'makeappx no disponible: nada que probar'; exit 0 }
+
+          New-Item -ItemType Directory -Path prueba -Force | Out-Null
+          Set-Content -Path prueba\hola.txt -Value 'contenido de prueba'
+
+          # El manifest se arma como lista de lineas: un here-string de PowerShell exige
+          # cerrar en la columna 0 y eso rompe la indentacion del bloque YAML.
+          $xml = @(
+            '<?xml version="1.0" encoding="utf-8"?>',
+            '<Package xmlns="http://schemas.microsoft.com/appx/manifest/foundation/windows10"',
+            '         xmlns:uap="http://schemas.microsoft.com/appx/manifest/uap/windows10">',
+            '  <Identity Name="DLSLabs.SondaDesechable" Publisher="CN=Sonda" Version="0.0.0.1" ProcessorArchitecture="x64" />',
+            '  <Properties>',
+            '    <DisplayName>Sonda</DisplayName>',
+            '    <PublisherDisplayName>Sonda</PublisherDisplayName>',
+            '    <Logo>hola.txt</Logo>',
+            '  </Properties>',
+            '  <Dependencies>',
+            '    <TargetDeviceFamily Name="Windows.Desktop" MinVersion="10.0.17763.0" MaxVersionTested="10.0.22621.0" />',
+            '  </Dependencies>',
+            '  <Resources><Resource Language="en-us" /></Resources>',
+            '  <Applications>',
+            '    <Application Id="Sonda" Executable="hola.txt" EntryPoint="Windows.FullTrustApplication">',
+            '      <uap:VisualElements DisplayName="Sonda" Description="Sonda" BackgroundColor="transparent"',
+            '        Square150x150Logo="hola.txt" Square44x44Logo="hola.txt" />',
+            '    </Application>',
+            '  </Applications>',
+            '</Package>'
+          )
+          Set-Content -Path prueba\AppxManifest.xml -Value $xml -Encoding UTF8
+
+          & $makeappx.FullName pack /d prueba /p sonda.msix /o
+          Write-Host "codigo de salida de makeappx: $LASTEXITCODE"
+          if (Test-Path sonda.msix) {
+            Write-Host "sonda.msix creado, $((Get-Item sonda.msix).Length) bytes: empaquetar MSIX en este runner es viable"
+          } else {
+            Write-Host 'makeappx no produjo el paquete: mirar la salida de arriba'
+          }
