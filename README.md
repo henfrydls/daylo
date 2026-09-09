@@ -104,7 +104,7 @@ The warning means "unknown publisher", not "unsafe". Every release is built by G
 
 ### Android App
 
-Download [`Daylo-android-arm64.apk`](../../releases/latest/download/Daylo-android-arm64.apk) and open it on your phone. Android will ask you to allow installs from this source the first time. Google Play Protect may then say it has not seen an app from this developer before: tap **Install anyway**. That message appears for any app installed outside the Play Store until the developer is registered with Google; a Play Store listing is on the roadmap.
+Download [`Daylo-android-arm64.apk`](../../releases/latest/download/Daylo-android-arm64.apk) and open it on your phone. Android will ask you to allow installs from this source the first time. Google Play Protect will then most likely block it with "App blocked to protect your device". **The big button dismisses the install; the small "Install anyway" link below it continues.** Play Protect shows this for any app whose signing key it has not seen before, which is every app installed from outside the Play Store.
 
 - Runs on **arm64 devices**, practically every phone and tablet made since 2017. It will not install on 32-bit devices or on Android Studio emulators.
 - Your data lives in the app's local storage on the device. **Use Export Data inside the app before uninstalling**: uninstalling deletes the data.
