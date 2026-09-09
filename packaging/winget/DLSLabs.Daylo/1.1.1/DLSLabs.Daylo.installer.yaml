@@ -1,4 +1,4 @@
-# yaml-language-server: $schema=https://aka.ms/winget-manifest.installer.1.10.0.schema.json
+# yaml-language-server: $schema=https://aka.ms/winget-manifest.installer.1.12.0.schema.json
 PackageIdentifier: DLSLabs.Daylo
 PackageVersion: 1.1.1
 InstallerType: nullsoft
@@ -29,4 +29,4 @@ Installers:
     InstallerUrl: https://github.com/henfrydls/daylo/releases/download/v1.1.1/Daylo-windows-arm64-setup.exe
     InstallerSha256: 17C56D17704B82CD76E832441618D6196B471AF26BF56822085D36C03BDE8963
 ManifestType: installer
-ManifestVersion: 1.10.0
+ManifestVersion: 1.12.0
