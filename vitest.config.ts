@@ -16,7 +16,9 @@ export default defineConfig({
     environment: 'jsdom',
     setupFiles: ['./src/test/setup.ts'],
     css: true,
-    exclude: ['node_modules', 'e2e'],
+    // Rutas glob, no nombres sueltos: '.claude' guarda copias viejas del repo de
+    // sesiones de agente y vitest las recogia, haciendo fallar tests que aqui pasan.
+    exclude: ['**/node_modules/**', '**/dist/**', '**/.claude/**', 'e2e/**'],
     coverage: {
       provider: 'v8',
       reporter: ['text', 'json', 'html'],
