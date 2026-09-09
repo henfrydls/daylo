@@ -1,0 +1,145 @@
+# Sonda desechable: responde si un runner de Windows puede empaquetar un MSIX, sin lo cual
+# la via de Microsoft Store no existe. Tauri no tiene target msix (su lista es deb, rpm,
+# appimage, nsis, msi, app, dmg), asi que el paquete habria que armarlo con makeappx sobre
+# lo que produce el build. Solo manual: no se dispara con push ni con tags.
+#
+# El veredicto va al resumen del job, no al color del check: un "no viable" es un resultado
+# valido de una sonda, no un fallo de CI. El paso termina en verde salvo que el propio
+# workflow este roto.
+name: Probe MSIX tooling
+
+on:
+  workflow_dispatch:
+
+jobs:
+  probe:
+    runs-on: windows-latest
+    timeout-minutes: 10
+    permissions: {}
+    steps:
+      - name: Buscar el SDK y empaquetar un MSIX de prueba
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Continue'
+          $lineas = @()
+          function Anotar($texto) {
+            Write-Host $texto
+            $script:lineas += $texto
+          }
+
+          # --- 1. Localizar makeappx -------------------------------------------------
+          # Se buscan varias raices porque el SDK no siempre esta en Program Files (x86),
+          # y el App Certification Kit trae su propia copia.
+          $raices = @(
+            "${env:ProgramFiles(x86)}\Windows Kits\10\bin",
+            "$env:ProgramFiles\Windows Kits\10\bin"
+          ) | Where-Object { $_ -and (Test-Path $_) }
+
+          # Ordenar por [version] y no por texto: bajo bin\ tambien hay carpetas 'x86' y 'x64',
+          # y en orden de texto ganan a cualquier '10.0.xxxxx.0'; ademas 10.0.9.0 ganaria a
+          # 10.0.17763.0. La ruta que imprima esta sonda es la que se copiara al workflow real.
+          function Buscar-Herramienta($nombre, $raices) {
+            $hallados = @()
+            foreach ($raiz in $raices) {
+              $versiones = Get-ChildItem $raiz -Directory -ErrorAction SilentlyContinue |
+                           Where-Object { $_.Name -as [version] } |
+                           Sort-Object { [version]$_.Name } -Descending
+              foreach ($v in $versiones) {
+                foreach ($arch in @('x64', 'arm64', 'x86')) {
+                  $ruta = Join-Path $v.FullName "$arch\$nombre"
+                  if (Test-Path $ruta) { $hallados += $ruta }
+                }
+              }
+            }
+            foreach ($ack in @(
+              "${env:ProgramFiles(x86)}\Windows Kits\10\App Certification Kit\$nombre",
+              "$env:ProgramFiles\Windows Kits\10\App Certification Kit\$nombre"
+            )) { if ($ack -and (Test-Path $ack)) { $hallados += $ack } }
+            $enPath = (Get-Command $nombre -ErrorAction SilentlyContinue).Source
+            if ($enPath) { $hallados += $enPath }
+            return $hallados
+          }
+
+          foreach ($raiz in $raices) {
+            Anotar "raiz del SDK: $raiz"
+            Get-ChildItem $raiz -Directory -ErrorAction SilentlyContinue |
+              Where-Object { $_.Name -as [version] } |
+              Sort-Object { [version]$_.Name } -Descending |
+              ForEach-Object { Anotar "  version del SDK: $($_.Name)" }
+          }
+
+          $candidatos = Buscar-Herramienta 'makeappx.exe' $raices
+          $makeappx = $candidatos | Select-Object -First 1
+          if ($makeappx) { Anotar "makeappx: $makeappx  ($($candidatos.Count) copias halladas)" }
+          else { Anotar 'makeappx: NO ENCONTRADA en ninguna raiz conocida ni en el PATH' }
+
+          # Las otras dos se buscan con el mismo orden por version, no por texto: sus rutas
+          # tambien se copiarian al workflow real y el fallo seria el mismo.
+          foreach ($otra in @('signtool.exe', 'makepri.exe')) {
+            $suyos = Buscar-Herramienta $otra $raices
+            if ($suyos.Count -gt 0) { Anotar "$otra : $($suyos[0])" } else { Anotar "$otra : no encontrada" }
+          }
+
+          # --- 2. Empaquetar algo valido --------------------------------------------
+          $veredicto = ''
+          if (-not $makeappx) {
+            $veredicto = 'NO VIABLE en esta imagen: sin makeappx habria que instalar el SDK en el job, o empaquetar con makemsix.'
+          } else {
+            New-Item -ItemType Directory -Path prueba -Force | Out-Null
+
+            # El esquema de AppxManifest exige que Executable termine en .exe y que los
+            # logos sean .png/.jpg/.jpeg. Con un .txt makeappx rechaza el paquete siempre,
+            # y la sonda contestaria "no viable" en un runner perfectamente capaz.
+            Set-Content -Path prueba\hola.exe -Value 'MZ' -NoNewline
+            $png = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg=='
+            [IO.File]::WriteAllBytes((Join-Path $PWD "prueba\logo.png"), [Convert]::FromBase64String($png))
+
+            # El manifest se arma como lista de lineas: un here-string de PowerShell exige
+            # cerrar en la columna 0 y eso rompe la indentacion del bloque YAML.
+            $xml = @(
+              '<?xml version="1.0" encoding="utf-8"?>',
+              '<Package xmlns="http://schemas.microsoft.com/appx/manifest/foundation/windows10"',
+              '         xmlns:uap="http://schemas.microsoft.com/appx/manifest/uap/windows10">',
+              '  <Identity Name="DLSLabs.SondaDesechable" Publisher="CN=Sonda" Version="0.0.0.1" ProcessorArchitecture="x64" />',
+              '  <Properties>',
+              '    <DisplayName>Sonda</DisplayName>',
+              '    <PublisherDisplayName>Sonda</PublisherDisplayName>',
+              '    <Logo>logo.png</Logo>',
+              '  </Properties>',
+              '  <Dependencies>',
+              '    <TargetDeviceFamily Name="Windows.Desktop" MinVersion="10.0.17763.0" MaxVersionTested="10.0.22621.0" />',
+              '  </Dependencies>',
+              '  <Resources><Resource Language="en-us" /></Resources>',
+              '  <Applications>',
+              '    <Application Id="Sonda" Executable="hola.exe" EntryPoint="Windows.FullTrustApplication">',
+              '      <uap:VisualElements DisplayName="Sonda" Description="Sonda" BackgroundColor="transparent"',
+              '        Square150x150Logo="logo.png" Square44x44Logo="logo.png" />',
+              '    </Application>',
+              '  </Applications>',
+              '</Package>'
+            )
+            Set-Content -Path prueba\AppxManifest.xml -Value $xml -Encoding UTF8
+
+            & $makeappx pack /d prueba /p sonda.msix /o
+            $rc = $LASTEXITCODE
+            $existe = Test-Path sonda.msix
+            Anotar "makeappx salio con codigo $rc; sonda.msix creado: $existe"
+
+            if ($rc -eq 0 -and $existe) {
+              $veredicto = "VIABLE: makeappx empaqueto un MSIX de $((Get-Item sonda.msix).Length) bytes en este runner."
+            } else {
+              $veredicto = "NO VIABLE tal cual: makeappx esta pero fallo (codigo $rc). Mirar su salida arriba antes de descartar la via."
+            }
+          }
+
+          Anotar ''
+          Anotar "VEREDICTO: $veredicto"
+
+          if ($env:GITHUB_STEP_SUMMARY) {
+            $lineas | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8
+          }
+
+          # El resultado de la sonda va en el resumen. El color del check solo indicaria
+          # que el workflow en si se rompio, asi que se limpia el codigo de makeappx.
+          $global:LASTEXITCODE = 0
+          exit 0
