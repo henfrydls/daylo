@@ -123,6 +123,159 @@ jobs:
           scripts/check-no-analytics.sh --text-only package-lock.json dist dist-demo
 
 
+  # Android is the only platform whose build was never checked on a pull request: the APK
+  # was produced solely by release.yml, on tag. That was tolerable while nothing touched
+  # the Android side, and stops being tolerable now that reminders are coming, because
+  # they change the manifest, the permissions and the plugin list. A break there would
+  # have surfaced during a release, which is the worst moment to find out.
+  #
+  # WHAT IT CLAIMS: "the Android side still assembles". The manifest parses, Gradle
+  # configures, the Rust library cross compiles for aarch64 and an APK comes out.
+  # WHAT IT DOES NOT CLAIM: "the app works on a phone". There is no emulator here, and a
+  # notification that arrives after a reboot can only be proven on a real device.
+  build-check-android:
+    needs: test
+    runs-on: ubuntu-latest
+    name: Build Check (Android)
+    timeout-minutes: 45
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v3
+
+      # The NDK is around a gigabyte, and downloading it on every pull request is most of
+      # what this job would cost. The key carries the version so bumping it invalidates the
+      # cache instead of silently building against the old one.
+      #
+      # Split into restore and save, with the save running even when the job fails.
+      # actions/cache does not save on failure, and the first two runs of this job proved
+      # why that matters: the check at the end failed, nothing was cached, and the next run
+      # downloaded the whole gigabyte again. A red job is exactly when the cycle needs to be
+      # short, and it was exactly when it got long. The download is valid regardless of
+      # whether the build that followed it worked.
+      - name: Restore Android NDK
+        id: ndk-cache
+        uses: actions/cache/restore@v4
+        with:
+          path: ${{ env.ANDROID_HOME }}/ndk/29.0.14206865
+          key: android-ndk-29.0.14206865
+
+      - name: Install Android NDK
+        if: steps.ndk-cache.outputs.cache-hit != 'true'
+        run: sdkmanager "ndk;29.0.14206865"
+
+      - name: Install Rust stable with Android target
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-linux-android
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+
+      # Same shared-key as the release job on purpose: both cross compile the same crate
+      # for the same target, so a pull request warms the cache the release will use.
+      - name: Cache Rust dependencies
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: './src-tauri -> target'
+          shared-key: android
+          # Same reason as the NDK: a failure after the compile should not throw away the
+          # compile.
+          cache-on-failure: true
+
+      - name: Restore Gradle
+        id: gradle-cache
+        uses: actions/cache/restore@v4
+        with:
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+          key: gradle-android-${{ hashFiles('src-tauri/gen/android/**/*.gradle*', 'src-tauri/gen/android/gradle/wrapper/gradle-wrapper.properties') }}
+          restore-keys: gradle-android-
+
+      - name: Install Node.js dependencies
+        run: npm ci
+
+      # --debug on purpose: this job answers whether it assembles, and a debug build skips
+      # minification and signing. The release build is what release.yml does, on tag, with
+      # the real key.
+      - name: Build Android APK (debug, arm64)
+        run: npx tauri android build --apk --target aarch64 --debug
+        env:
+          NDK_HOME: ${{ env.ANDROID_HOME }}/ndk/29.0.14206865
+
+      # The APK is checked for what is inside it, not for existing. A zero byte file, or a
+      # zip without an AndroidManifest.xml, would satisfy a existence test and mean nothing.
+      - name: Verify the APK is a real package
+        run: |
+          set -uo pipefail
+          # globstar as well as nullglob: without it '**' behaves like a single '*' and only
+          # matches one level down. It happens to work today because the output lands in
+          # universal/debug, so the bug would stay hidden until Tauri changed the layout.
+          shopt -s nullglob globstar
+          apks=( src-tauri/gen/android/app/build/outputs/apk/**/debug/*.apk )
+          if [ ${#apks[@]} -eq 0 ]; then
+            echo "::error::The build reported success but produced no APK."
+            find src-tauri/gen/android/app/build/outputs -type f 2>/dev/null | head -20 || true
+            exit 1
+          fi
+          apk="${apks[0]}"
+          echo "APK: $apk ($(stat -c%s "$apk") bytes)"
+
+          # The listing is matched with bash instead of being piped into grep. Any
+          # 'something | grep -q' is a race under 'pipefail': grep exits the moment it
+          # matches, the writer gets SIGPIPE and returns 141, and the pipeline fails even
+          # though the match succeeded. Whether the writer finishes first depends on how
+          # much fits in the 64 KB pipe buffer, so it passes on one machine and fails on
+          # another. This listing is about 72 KB and it did exactly that: green locally,
+          # red on the runner, on a healthy APK. No pipe, no race.
+          listing=$(unzip -l "$apk")
+
+          if [[ "$listing" != *"AndroidManifest.xml"* ]]; then
+            echo "::error::$apk carries no AndroidManifest.xml, so it is not an APK."
+            head -20 <<< "$listing"
+            exit 1
+          fi
+          if [[ "$listing" != *"lib/arm64-v8a/"* ]]; then
+            echo "::error::No arm64-v8a native library inside the APK: the Rust side did"
+            echo "::error::not make it in, and the app would install and fail to start."
+            exit 1
+          fi
+          # 'grep -m5' rather than 'grep | head -5': head is another consumer that short
+          # circuits, so with more than five libraries it would cut grep and abort the step
+          # through the same SIGPIPE. -m5 stops grep itself, which needs no pipe at all.
+          grep -m5 -E 'lib/arm64-v8a/.*\.so' <<< "$listing" || true
+
+      # Saved here, not by a post step, so that 'if: always()' applies. Only on a miss:
+      # saving over an existing key just logs a warning and wastes the upload.
+      - name: Save Android NDK
+        if: always() && steps.ndk-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: ${{ env.ANDROID_HOME }}/ndk/29.0.14206865
+          key: android-ndk-29.0.14206865
+
+      - name: Save Gradle
+        if: always() && steps.gradle-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+          key: gradle-android-${{ hashFiles('src-tauri/gen/android/**/*.gradle*', 'src-tauri/gen/android/gradle/wrapper/gradle-wrapper.properties') }}
+
   # Verify Tauri builds (without uploading artifacts)
   build-check:
     needs: test
@@ -205,7 +358,7 @@ jobs:
           BIN="src-tauri/target/debug/Daylo"
           if [ ! -x "$BIN" ]; then
             echo "::error::No executable binary found at $BIN"
-            ls -la src-tauri/target/debug/ 2>/dev/null | head -20
+            ls -la src-tauri/target/debug/ 2>/dev/null | head -20 || true
             exit 1
           fi
 
@@ -435,9 +588,14 @@ jobs:
           # zero code and, with 'pipefail', that would take down the whole pipeline,
           # declaring empty a storage that does hold the state.
           content=$(strings -e l "${files[@]}" 2>/dev/null || true)
-          if printf '%s' "$content" | grep -q '"activities"'; then
+          # Matched with bash rather than piped into 'grep -q', for the same reason as the
+          # APK listing in the Android job: under 'pipefail' the writer gets SIGPIPE when
+          # grep short circuits, and whether that happens depends on the output fitting in
+          # the pipe buffer. This output is small today, so it passes; it would start
+          # failing on a healthy app the day somebody's store grows past 64 KB.
+          if [[ "$content" == *'"activities"'* ]]; then
             echo "The store initialised and persisted its state:"
-            printf '%s' "$content" | grep -o '"selectedYear":[0-9]*' | head -1 || true
+            grep -o '"selectedYear":[0-9]*' <<< "$content" | head -1 || true
           else
             echo "::error::The storage exists but holds no store state:"
             echo "::error::the webview started and the application never initialised."
