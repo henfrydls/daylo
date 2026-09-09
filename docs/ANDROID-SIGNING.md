@@ -111,6 +111,28 @@ gh secret set ANDROID_KEY_PASSWORD
 volver a publicar una actualización de Android nunca más, y todos los usuarios instalados
 quedan varados. Los secrets de GitHub no son un backup: no se pueden leer de vuelta.
 
+Y hay una segunda razón, que no se ve hasta que alguien instala el APK en un teléfono.
+
+### La llave también es la reputación ante Play Protect
+
+Al instalar un APK de fuera de Play, Google Play Protect puede bloquearlo con «App blocked
+to protect your device. Play Protect hasn't seen an app from this developer before.» Ese
+aviso se calcula por **certificado de firma**, no por nombre de paquete: «este
+desarrollador» significa literalmente «esta llave». Comprobado en el teléfono de Henfry al
+instalar v1.1.2 el 2026-09-09.
+
+La consecuencia importa al decidir qué hacer si la llave se complica: **rotarla no solo
+rompe las actualizaciones, además reinicia esa reputación a cero** y todo el mundo vuelve a
+ver el diálogo de bloqueo.
+
+Y las dos consecuencias no se recuperan igual. Una actualización rota tiene salida, aunque
+sea mala: exportar los datos, desinstalar, instalar y volver a importar, que es lo que hubo
+que decirle a quien venía de v1.1.0. La reputación no tiene ningún atajo: se recupera con
+tiempo y con instalaciones de otras personas, y no hay nada que hacer para acelerarla.
+
+Lo que sí la quita es registrar al desarrollador con Google, que es una verificación **de la
+cuenta** y tarda en propagarse: abrir Play Console no borra el aviso esa misma tarde.
+
 - Copia en un gestor de contraseñas o en almacenamiento cifrado offline.
 - Junto con ella, la contraseña y el alias.
 - **No commitear el `.jks`.** `.gitignore` ya cubre `*.jks`, `*.keystore`,
