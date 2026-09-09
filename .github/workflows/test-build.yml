@@ -20,6 +20,12 @@ on:
     types: [labeled]
   workflow_dispatch:
 
+# Declared for the whole workflow rather than per job, so a job added later cannot quietly
+# inherit the repository defaults. Nothing here publishes: it reads the code, builds it,
+# and uploads an artifact, which needs no write of any kind.
+permissions:
+  contents: read
+
 jobs:
   # The build matrix below is a copy of the one in release.yml, and a copy that drifts is
   # worse than no copy at all: this workflow exists so that what gets tested is what gets
@@ -36,8 +42,6 @@ jobs:
     # The same condition as the build, so an unrelated label starts nothing at all.
     if: github.event_name == 'workflow_dispatch' || github.event.label.name == 'build-installers'
     runs-on: ubuntu-latest
-    permissions:
-      contents: read
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -76,8 +80,6 @@ jobs:
   build:
     needs: verify-matrix
     if: github.event_name == 'workflow_dispatch' || github.event.label.name == 'build-installers'
-    permissions:
-      contents: read
     strategy:
       fail-fast: false
       matrix:
