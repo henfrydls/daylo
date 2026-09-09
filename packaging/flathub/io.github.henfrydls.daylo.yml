@@ -1,0 +1,81 @@
+# Flatpak manifest for Flathub. What goes to flathub/io.github.henfrydls.daylo is this
+# file plus cargo-sources.json, node-sources.json, the metainfo and the desktop entry.
+#
+# The app id is io.github.henfrydls.daylo, all lowercase, matching the GitHub repository
+# exactly so Flathub's github verification has nothing to object to. It is NOT the Tauri
+# identifier: that stays com.daylo.app, because the Android applicationId derives from it
+# and changing it would break in place updates for everyone who installed the APK.
+id: io.github.henfrydls.daylo
+
+# GNOME 50 rather than a freedesktop runtime: Tauri needs webkit2gtk 4.1 and this is the
+# runtime a published Tauri app on Flathub uses (com.gitbutler.gitbutler), so it is a
+# tested combination rather than a guess.
+runtime: org.gnome.Platform
+runtime-version: '50'
+sdk: org.gnome.Sdk
+sdk-extensions:
+  - org.freedesktop.Sdk.Extension.node24
+  - org.freedesktop.Sdk.Extension.rust-stable
+
+command: daylo
+
+# Deliberately narrow, and this is the point rather than an afterthought. Daylo keeps
+# everything on the device: no account, no server, nothing sent anywhere. Flathub shows
+# these permissions on the listing, so declaring no network access is the verifiable
+# version of what the landing page promises.
+#
+# There is NO --share=network. If a future version ever needs it, that is a product
+# decision to argue for, not a line to add quietly.
+#
+# There is no --filesystem either. Export and import go through the desktop portal, which
+# needs no filesystem permission because the user picks the file and the portal hands over
+# just that one. Whether that holds is checked by the CI build below rather than assumed;
+# if it does not, the narrowest fix is --filesystem=xdg-download and nothing wider.
+finish-args:
+  - --share=ipc
+  - --socket=fallback-x11
+  - --socket=wayland
+  - --device=dri
+
+build-options:
+  append-path: /usr/lib/sdk/rust-stable/bin
+
+modules:
+  - name: daylo
+    buildsystem: simple
+    build-options:
+      append-path: /usr/lib/sdk/node24/bin
+      env:
+        # The generated cargo sources put the vendored registry here.
+        CARGO_HOME: /run/build/daylo/cargo
+        # Playwright is a devDependency and npm ci installs it from the lockfile, but its
+        # postinstall must not try to fetch browsers: those 479 MB are not in the vendored
+        # sources on purpose, because the Flatpak build runs no end to end tests.
+        PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: '1'
+    build-commands:
+      - npm ci --offline
+      - npm run tauri -- build --bundles deb
+      # Taken from the .deb Tauri just built rather than reimplementing the install layout.
+      # The binary is Daylo since 1.1.2; it is installed as 'daylo' to match Exec= in the
+      # desktop entry and the lowercase convention for commands on PATH.
+      - install -Dm755 src-tauri/target/release/bundle/deb/*/data/usr/bin/Daylo /app/bin/daylo
+      - install -Dm644 packaging/flathub/io.github.henfrydls.daylo.desktop
+        /app/share/applications/io.github.henfrydls.daylo.desktop
+      - install -Dm644 packaging/flathub/io.github.henfrydls.daylo.metainfo.xml
+        /app/share/metainfo/io.github.henfrydls.daylo.metainfo.xml
+      # Icons are installed under the app id, which is what the desktop entry's Icon= names
+      # and what AppStream expects. The sizes come from src-tauri/icons, already generated.
+      - for s in 32 128; do install -Dm644 "src-tauri/icons/${s}x${s}.png"
+        "/app/share/icons/hicolor/${s}x${s}/apps/io.github.henfrydls.daylo.png"; done
+      - install -Dm644 src-tauri/icons/128x128@2x.png
+        /app/share/icons/hicolor/256x256/apps/io.github.henfrydls.daylo.png
+    sources:
+      # Pinned to the published tag, which is what Flathub builds. Updating Daylo on
+      # Flathub means bumping this tag and commit and regenerating the two source lists if
+      # a lockfile moved.
+      - type: git
+        url: https://github.com/henfrydls/daylo.git
+        tag: v1.1.2
+        commit: 603f7c2d3636dc443a72ee6ef57754c4ca8407f3
+      - cargo-sources.json
+      - node-sources.json

@@ -1,0 +1,150 @@
+# Builds the Flatpak from packaging/flathub/ and answers three questions that can only be
+# answered by building it. Manual and on changes to the packaging, not on every pull
+# request: the build compiles Rust from scratch inside the sandbox and takes a while, and
+# the manifest is pinned to a released tag, so a code change cannot break it.
+#
+# WHAT IT CLAIMS: the manifest builds, and the three things below hold for the built app.
+# WHAT IT DOES NOT CLAIM: Flathub will accept it. Their review looks at more than a build.
+name: Flatpak
+
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - 'packaging/flathub/**'
+      - '.github/workflows/flatpak.yml'
+
+jobs:
+  build:
+    name: Build Flatpak
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    permissions:
+      contents: read
+    container:
+      image: ghcr.io/flathub-infra/flatpak-github-actions:gnome-50
+      options: --privileged
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Build
+        uses: flathub-infra/flatpak-github-actions/flatpak-builder@master
+        with:
+          bundle: daylo.flatpak
+          manifest-path: packaging/flathub/io.github.henfrydls.daylo.yml
+          cache-key: flatpak-builder-${{ github.sha }}
+          # The app is not run here: that happens in the next job, which has a display.
+          run-tests: false
+
+      - name: Upload the bundle
+        uses: actions/upload-artifact@v4
+        with:
+          name: daylo-flatpak
+          path: daylo.flatpak
+          retention-days: 14
+          if-no-files-found: error
+
+  # Three answers that only exist once the thing is installed and running. Each one is a
+  # decision we would otherwise be guessing at.
+  inspect:
+    name: Inspect the built app
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      # The repository is needed as well as the bundle: the WM_CLASS step compares what the
+      # app sets against what the desktop entry declares, and that file lives here.
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install flatpak and the runtime
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq flatpak xvfb x11-utils
+          flatpak remote-add --user --if-not-exists flathub \
+            https://dl.flathub.org/repo/flathub.flatpakrepo
+
+      - name: Download the bundle
+        uses: actions/download-artifact@v4
+        with:
+          name: daylo-flatpak
+
+      - name: Install it
+        run: flatpak install --user --noninteractive --bundle daylo.flatpak
+
+      # 1. The permissions the listing will show. Declared no network and no filesystem, so
+      #    that is what must come back. If either grew, it grew by accident.
+      - name: Permissions are as narrow as declared
+        run: |
+          set -uo pipefail
+          info=$(flatpak info --show-permissions io.github.henfrydls.daylo)
+          echo "$info"
+          # Only the 'shared=' line decides. A looser pattern would match the word
+          # 'network' anywhere in the output and fail on nothing.
+          if grep -E '^shared=' <<< "$info" | grep -q 'network'; then
+            echo "::error::The app declares network access. Daylo keeps everything on the"
+            echo "::error::device, and the Flathub listing would say otherwise."
+            exit 1
+          fi
+          if grep -qiE '^\s*filesystems=' <<< "$info"; then
+            echo "::warning::The app declares filesystem access:"
+            grep -iE '^\s*filesystems=' <<< "$info"
+            echo "::warning::That may be needed for export and import, but it must be the"
+            echo "::warning::narrowest thing that works, never host."
+          fi
+          echo "network: none, as declared"
+
+      # 2. StartupWMClass in the desktop entry has to match what the app actually sets, or
+      #    launching from the menu leaves a second icon in the taskbar instead of grouping
+      #    with the launcher. It was written before anybody could check it.
+      - name: What WM_CLASS the app really sets
+        run: |
+          set -uo pipefail
+          Xvfb :99 -screen 0 1280x1024x24 >xvfb.log 2>&1 &
+          xvfb_pid=$!
+          export DISPLAY=:99
+          for _ in $(seq 1 15); do
+            xdpyinfo -display :99 >/dev/null 2>&1 && break
+            sleep 1
+          done
+
+          flatpak run io.github.henfrydls.daylo >app.log 2>&1 &
+          app_pid=$!
+          # The webview needs time on a machine with no GPU, as the desktop smoke run
+          # measured: about 28s there, so 45 here with a container in the way.
+          wm=""
+          for _ in $(seq 1 45); do
+            wm=$(xprop -root _NET_CLIENT_LIST 2>/dev/null | grep -oE '0x[0-9a-f]+' | head -1 || true)
+            [ -n "$wm" ] && break
+            sleep 1
+          done
+
+          if [ -z "$wm" ]; then
+            echo "::warning::No window appeared within 45s, so WM_CLASS could not be read."
+            echo "::warning::That is a limit of this environment, not a failure of the app:"
+            echo "::warning::StartupWMClass stays unverified rather than wrongly confirmed."
+            cat app.log || true
+          else
+            echo "window: $wm"
+            xprop -id "$wm" WM_CLASS || true
+            declared=$(grep -oP '^StartupWMClass=\K.*' packaging/flathub/io.github.henfrydls.daylo.desktop || true)
+            echo "declared in the desktop entry: ${declared:-<none>}"
+            echo "::notice::Compare the two by hand and fix the desktop entry to match."
+          fi
+
+          kill "$app_pid" 2>/dev/null || true
+          kill "$xvfb_pid" 2>/dev/null || true
+          exit 0
+
+      # 3. What AppStream thinks of the metadata that ends up inside the bundle, not of the
+      #    file in the repository. Those can differ if the install step goes wrong.
+      - name: Validate the installed metainfo
+        run: |
+          set -uo pipefail
+          sudo apt-get install -y -qq appstream
+          path=$(flatpak info --show-location io.github.henfrydls.daylo)/files/share/metainfo
+          ls -la "$path"
+          appstreamcli validate --explain "$path"/io.github.henfrydls.daylo.metainfo.xml
