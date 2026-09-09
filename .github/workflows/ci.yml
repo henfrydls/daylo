@@ -242,7 +242,10 @@ jobs:
             echo "::error::not make it in, and the app would install and fail to start."
             exit 1
           fi
-          grep -E 'lib/arm64-v8a/.*\.so' <<< "$listing" | head -5
+          # 'grep -m5' rather than 'grep | head -5': head is another consumer that short
+          # circuits, so with more than five libraries it would cut grep and abort the step
+          # through the same SIGPIPE. -m5 stops grep itself, which needs no pipe at all.
+          grep -m5 -E 'lib/arm64-v8a/.*\.so' <<< "$listing" || true
 
   # Verify Tauri builds (without uploading artifacts)
   build-check:
@@ -326,7 +329,7 @@ jobs:
           BIN="src-tauri/target/debug/Daylo"
           if [ ! -x "$BIN" ]; then
             echo "::error::No executable binary found at $BIN"
-            ls -la src-tauri/target/debug/ 2>/dev/null | head -20
+            ls -la src-tauri/target/debug/ 2>/dev/null | head -20 || true
             exit 1
           fi
 
