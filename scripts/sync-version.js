@@ -15,24 +15,26 @@ writeFileSync(cargoTomlPath, cargoToml)
 
 console.log(`Synced Cargo.toml to v${version}`)
 
-// Cargo.lock tambien declara la version del paquete raiz, y quedarse atras no rompe nada
-// mientras nadie compile con --locked: cargo reescribe esa entrada al compilar. Pero en
-// cuanto alguien anada --locked al CI por reproducibilidad, la release falla con "lock
-// file needs to be updated" sin que el fallo tenga nada que ver con el codigo. Estuvo
-// desincronizado desde v1.0.1 justamente por eso: nadie lo notaba.
+// Cargo.lock also declares the root package's version, and falling behind breaks nothing
+// as long as nobody builds with --locked: cargo rewrites that entry when compiling. But as
+// soon as somebody adds --locked to the CI for reproducibility, the release fails with
+// "lock file needs to be updated" without the failure having anything to do with the code.
+// It had been out of sync since v1.0.1 for exactly that reason: nobody noticed.
 //
-// El reemplazo se ancla en el nombre del paquete a proposito: la linea 3 del lock es
-// 'version = 4', que es la version del FORMATO del fichero y no se debe tocar.
+// The replacement is anchored on the package name on purpose: line 3 of the lock is
+// 'version = 4', which is the version of the file FORMAT and must not be touched. Note
+// that this is the crate name, not the binary name, so renaming the executable to Daylo
+// left this working.
 const cargoLockPath = join(root, 'src-tauri', 'Cargo.lock')
 let cargoLock = readFileSync(cargoLockPath, 'utf8')
-const antes = cargoLock
+const before = cargoLock
 cargoLock = cargoLock.replace(
   /(name = "activity-tracker"\nversion = )"[^"]*"/,
   `$1"${version}"`
 )
-if (cargoLock === antes) {
+if (cargoLock === before) {
   console.error(
-    'No se encontro la entrada de activity-tracker en Cargo.lock: revisa el nombre del paquete.'
+    'The activity-tracker entry was not found in Cargo.lock: check the package name.'
   )
   process.exit(1)
 }

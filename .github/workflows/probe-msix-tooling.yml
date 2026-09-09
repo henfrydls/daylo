@@ -1,11 +1,11 @@
-# Sonda desechable: responde si un runner de Windows puede empaquetar un MSIX, sin lo cual
-# la via de Microsoft Store no existe. Tauri no tiene target msix (su lista es deb, rpm,
-# appimage, nsis, msi, app, dmg), asi que el paquete habria que armarlo con makeappx sobre
-# lo que produce el build. Solo manual: no se dispara con push ni con tags.
+# Throwaway probe: answers whether a Windows runner can package an MSIX, without which
+# the Microsoft Store route does not exist. Tauri has no msix target (its list is deb,
+# rpm, appimage, nsis, msi, app, dmg), so the package would have to be assembled with
+# makeappx over what the build produces. Manual only: no push or tag triggers it.
 #
-# El veredicto va al resumen del job, no al color del check: un "no viable" es un resultado
-# valido de una sonda, no un fallo de CI. El paso termina en verde salvo que el propio
-# workflow este roto.
+# The verdict goes to the job summary, not to the colour of the check: "not viable" is a
+# valid result for a probe, not a CI failure. The step ends green unless the workflow
+# itself is broken.
 name: Probe MSIX tooling
 
 on:
@@ -17,94 +17,95 @@ jobs:
     timeout-minutes: 10
     permissions: {}
     steps:
-      - name: Buscar el SDK y empaquetar un MSIX de prueba
+      - name: Find the SDK and pack a test MSIX
         shell: pwsh
         run: |
           $ErrorActionPreference = 'Continue'
-          $lineas = @()
-          function Anotar($texto) {
-            Write-Host $texto
-            $script:lineas += $texto
+          $notes = @()
+          function Note($text) {
+            Write-Host $text
+            $script:notes += $text
           }
 
-          # --- 1. Localizar makeappx -------------------------------------------------
-          # Se buscan varias raices porque el SDK no siempre esta en Program Files (x86),
-          # y el App Certification Kit trae su propia copia.
-          $raices = @(
+          # --- 1. Locate makeappx ----------------------------------------------------
+          # Several roots are searched because the SDK is not always under
+          # Program Files (x86), and the App Certification Kit ships its own copy.
+          $roots = @(
             "${env:ProgramFiles(x86)}\Windows Kits\10\bin",
             "$env:ProgramFiles\Windows Kits\10\bin"
           ) | Where-Object { $_ -and (Test-Path $_) }
 
-          # Ordenar por [version] y no por texto: bajo bin\ tambien hay carpetas 'x86' y 'x64',
-          # y en orden de texto ganan a cualquier '10.0.xxxxx.0'; ademas 10.0.9.0 ganaria a
-          # 10.0.17763.0. La ruta que imprima esta sonda es la que se copiara al workflow real.
-          function Buscar-Herramienta($nombre, $raices) {
-            $hallados = @()
-            foreach ($raiz in $raices) {
-              $versiones = Get-ChildItem $raiz -Directory -ErrorAction SilentlyContinue |
-                           Where-Object { $_.Name -as [version] } |
-                           Sort-Object { [version]$_.Name } -Descending
-              foreach ($v in $versiones) {
+          # Sort by [version] rather than by text: bin\ also holds 'x86' and 'x64'
+          # folders, and in text order they beat any '10.0.xxxxx.0'; 10.0.9.0 would also
+          # beat 10.0.17763.0. The path this probe prints is the one that gets copied
+          # into the real workflow.
+          function Find-Tool($name, $roots) {
+            $found = @()
+            foreach ($root in $roots) {
+              $versions = Get-ChildItem $root -Directory -ErrorAction SilentlyContinue |
+                          Where-Object { $_.Name -as [version] } |
+                          Sort-Object { [version]$_.Name } -Descending
+              foreach ($v in $versions) {
                 foreach ($arch in @('x64', 'arm64', 'x86')) {
-                  $ruta = Join-Path $v.FullName "$arch\$nombre"
-                  if (Test-Path $ruta) { $hallados += $ruta }
+                  $path = Join-Path $v.FullName "$arch\$name"
+                  if (Test-Path $path) { $found += $path }
                 }
               }
             }
             foreach ($ack in @(
-              "${env:ProgramFiles(x86)}\Windows Kits\10\App Certification Kit\$nombre",
-              "$env:ProgramFiles\Windows Kits\10\App Certification Kit\$nombre"
-            )) { if ($ack -and (Test-Path $ack)) { $hallados += $ack } }
-            $enPath = (Get-Command $nombre -ErrorAction SilentlyContinue).Source
-            if ($enPath) { $hallados += $enPath }
-            return $hallados
+              "${env:ProgramFiles(x86)}\Windows Kits\10\App Certification Kit\$name",
+              "$env:ProgramFiles\Windows Kits\10\App Certification Kit\$name"
+            )) { if ($ack -and (Test-Path $ack)) { $found += $ack } }
+            $onPath = (Get-Command $name -ErrorAction SilentlyContinue).Source
+            if ($onPath) { $found += $onPath }
+            return $found
           }
 
-          foreach ($raiz in $raices) {
-            Anotar "raiz del SDK: $raiz"
-            Get-ChildItem $raiz -Directory -ErrorAction SilentlyContinue |
+          foreach ($root in $roots) {
+            Note "SDK root: $root"
+            Get-ChildItem $root -Directory -ErrorAction SilentlyContinue |
               Where-Object { $_.Name -as [version] } |
               Sort-Object { [version]$_.Name } -Descending |
-              ForEach-Object { Anotar "  version del SDK: $($_.Name)" }
+              ForEach-Object { Note "  SDK version: $($_.Name)" }
           }
 
-          $candidatos = Buscar-Herramienta 'makeappx.exe' $raices
-          $makeappx = $candidatos | Select-Object -First 1
-          if ($makeappx) { Anotar "makeappx: $makeappx  ($($candidatos.Count) copias halladas)" }
-          else { Anotar 'makeappx: NO ENCONTRADA en ninguna raiz conocida ni en el PATH' }
+          $candidates = Find-Tool 'makeappx.exe' $roots
+          $makeappx = $candidates | Select-Object -First 1
+          if ($makeappx) { Note "makeappx: $makeappx  ($($candidates.Count) copies found)" }
+          else { Note 'makeappx: NOT FOUND in any known root or on PATH' }
 
-          # Las otras dos se buscan con el mismo orden por version, no por texto: sus rutas
-          # tambien se copiarian al workflow real y el fallo seria el mismo.
-          foreach ($otra in @('signtool.exe', 'makepri.exe')) {
-            $suyos = Buscar-Herramienta $otra $raices
-            if ($suyos.Count -gt 0) { Anotar "$otra : $($suyos[0])" } else { Anotar "$otra : no encontrada" }
+          # The other two are looked up the same way, by version and not by text: their
+          # paths would get copied into the real workflow as well.
+          foreach ($other in @('signtool.exe', 'makepri.exe')) {
+            $theirs = Find-Tool $other $roots
+            if ($theirs.Count -gt 0) { Note "$other : $($theirs[0])" } else { Note "$other : not found" }
           }
 
-          # --- 2. Empaquetar algo valido --------------------------------------------
-          $veredicto = ''
+          # --- 2. Pack something valid ----------------------------------------------
+          $verdict = ''
           if (-not $makeappx) {
-            $veredicto = 'NO VIABLE en esta imagen: sin makeappx habria que instalar el SDK en el job, o empaquetar con makemsix.'
+            $verdict = 'NOT VIABLE on this image: without makeappx the SDK would have to be installed in the job, or the package built with makemsix.'
           } else {
-            New-Item -ItemType Directory -Path prueba -Force | Out-Null
+            New-Item -ItemType Directory -Path probe -Force | Out-Null
 
-            # El esquema de AppxManifest exige que Executable termine en .exe y que los
-            # logos sean .png/.jpg/.jpeg. Con un .txt makeappx rechaza el paquete siempre,
-            # y la sonda contestaria "no viable" en un runner perfectamente capaz.
-            Set-Content -Path prueba\hola.exe -Value 'MZ' -NoNewline
+            # The AppxManifest schema requires Executable to end in .exe and the logos to
+            # be .png/.jpg/.jpeg. With a .txt makeappx rejects the package every time, and
+            # the probe would answer "not viable" on a perfectly capable runner.
+            Set-Content -Path probe\hello.exe -Value 'MZ' -NoNewline
             $png = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg=='
-            [IO.File]::WriteAllBytes((Join-Path $PWD "prueba\logo.png"), [Convert]::FromBase64String($png))
+            [IO.File]::WriteAllBytes((Join-Path $PWD "probe\logo.png"), [Convert]::FromBase64String($png))
 
-            # El manifest se arma como lista de lineas: un here-string de PowerShell exige
-            # cerrar en la columna 0 y eso rompe la indentacion del bloque YAML.
+            # The manifest is built as a list of lines: a PowerShell here-string must be
+            # closed at column 0 and that breaks the indentation of the YAML block.
             $xml = @(
               '<?xml version="1.0" encoding="utf-8"?>',
               '<Package xmlns="http://schemas.microsoft.com/appx/manifest/foundation/windows10"',
               '         xmlns:uap="http://schemas.microsoft.com/appx/manifest/uap/windows10"',
               '         xmlns:rescap="http://schemas.microsoft.com/appx/manifest/foundation/windows10/restrictedcapabilities">',
-              '  <Identity Name="DLSLabs.SondaDesechable" Publisher="CN=Sonda" Version="0.0.0.1" ProcessorArchitecture="x64" />',
+              '  <Identity Name="DLSLabs.ThrowawayProbe" Publisher="CN=Probe" Version="0.0.0.1" ProcessorArchitecture="x64" />',
               '  <Properties>',
-              '    <DisplayName>Sonda</DisplayName>',
-              '    <PublisherDisplayName>Sonda</PublisherDisplayName>',
+              '    <DisplayName>Probe</DisplayName>',
+              '    <PublisherDisplayName>Probe</PublisherDisplayName>',
               '    <Logo>logo.png</Logo>',
               '  </Properties>',
               '  <Dependencies>',
@@ -112,8 +113,8 @@ jobs:
               '  </Dependencies>',
               '  <Resources><Resource Language="en-us" /></Resources>',
               '  <Applications>',
-              '    <Application Id="Sonda" Executable="hola.exe" EntryPoint="Windows.FullTrustApplication">',
-              '      <uap:VisualElements DisplayName="Sonda" Description="Sonda" BackgroundColor="transparent"',
+              '    <Application Id="Probe" Executable="hello.exe" EntryPoint="Windows.FullTrustApplication">',
+              '      <uap:VisualElements DisplayName="Probe" Description="Probe" BackgroundColor="transparent"',
               '        Square150x150Logo="logo.png" Square44x44Logo="logo.png" />',
               '    </Application>',
               '  </Applications>',
@@ -122,34 +123,34 @@ jobs:
               '  </Capabilities>',
               '</Package>'
             )
-            Set-Content -Path prueba\AppxManifest.xml -Value $xml -Encoding UTF8
+            Set-Content -Path probe\AppxManifest.xml -Value $xml -Encoding UTF8
 
-            # La salida de makeappx se captura y se anota: es lo que permite distinguir
-            # "el runner no puede" de "nuestro manifest de prueba esta mal", que son
-            # respuestas opuestas a la pregunta que hace esta sonda.
-            $salida = & $makeappx pack /d prueba /p sonda.msix /o 2>&1
+            # makeappx's own output is captured and noted: it is what tells apart "the
+            # runner cannot do this" from "our test manifest is wrong", which are
+            # opposite answers to the question this probe asks.
+            $output = & $makeappx pack /d probe /p probe.msix /o 2>&1
             $rc = $LASTEXITCODE
-            $existe = Test-Path sonda.msix
-            foreach ($linea in $salida) { Anotar "  makeappx: $linea" }
-            Anotar "makeappx salio con codigo $rc; sonda.msix creado: $existe"
+            $exists = Test-Path probe.msix
+            foreach ($line in $output) { Note "  makeappx: $line" }
+            Note "makeappx exited with code $rc; probe.msix created: $exists"
 
-            # Dos ejes distintos. Que makeappx corra y llegue a validar ya contesta la
-            # pregunta de la herramienta, aunque rechace este manifest concreto.
-            if ($rc -eq 0 -and $existe) {
-              $veredicto = "VIABLE. Herramientas presentes y makeappx empaqueto un MSIX de $((Get-Item sonda.msix).Length) bytes."
+            # Two separate axes. makeappx running and getting as far as validation already
+            # answers the tooling question, even if it rejects this particular manifest.
+            if ($rc -eq 0 -and $exists) {
+              $verdict = "VIABLE. Tooling present and makeappx packed an MSIX of $((Get-Item probe.msix).Length) bytes."
             } else {
-              $veredicto = "VIABLE en cuanto a herramientas: makeappx corrio y rechazo el manifest de la sonda con codigo $rc. El fallo es del manifest de prueba, no del runner. Leer su salida arriba."
+              $verdict = "VIABLE as far as tooling goes: makeappx ran and rejected the probe's manifest with code $rc. The failure is in the test manifest, not the runner. Read its output above."
             }
           }
 
-          Anotar ''
-          Anotar "VEREDICTO: $veredicto"
+          Note ''
+          Note "VERDICT: $verdict"
 
           if ($env:GITHUB_STEP_SUMMARY) {
-            $lineas | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8
+            $notes | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8
           }
 
-          # El resultado de la sonda va en el resumen. El color del check solo indicaria
-          # que el workflow en si se rompio, asi que se limpia el codigo de makeappx.
+          # The probe's result lives in the summary. The colour of the check would only
+          # mean the workflow itself broke, so makeappx's code is cleared.
           $global:LASTEXITCODE = 0
           exit 0
