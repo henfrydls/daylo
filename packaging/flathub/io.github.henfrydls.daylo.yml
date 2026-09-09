@@ -1,0 +1,118 @@
+# Flatpak manifest for Flathub. What goes to flathub/io.github.henfrydls.daylo is this
+# file plus cargo-sources.json, node-sources.json, the metainfo and the desktop entry.
+#
+# The app id is io.github.henfrydls.daylo, all lowercase, matching the GitHub repository
+# exactly so Flathub's github verification has nothing to object to. It is NOT the Tauri
+# identifier: that stays com.daylo.app, because the Android applicationId derives from it
+# and changing it would break in place updates for everyone who installed the APK.
+id: io.github.henfrydls.daylo
+
+# GNOME 50 rather than a freedesktop runtime: Tauri needs webkit2gtk 4.1 and this is the
+# runtime a published Tauri app on Flathub uses (com.gitbutler.gitbutler), so it is a
+# tested combination rather than a guess.
+runtime: org.gnome.Platform
+runtime-version: '50'
+sdk: org.gnome.Sdk
+sdk-extensions:
+  - org.freedesktop.Sdk.Extension.node24
+  - org.freedesktop.Sdk.Extension.rust-stable
+
+command: daylo
+
+# Deliberately narrow, and this is the point rather than an afterthought. Daylo keeps
+# everything on the device: no account, no server, nothing sent anywhere. Flathub shows
+# these permissions on the listing, so declaring no network access is the verifiable
+# version of what the landing page promises.
+#
+# There is NO --share=network. If a future version ever needs it, that is a product
+# decision to argue for, not a line to add quietly.
+#
+# There is no --filesystem either, and as of 1.1.2 that is measured rather than hoped for.
+#
+# Import goes through the webview's file chooser, which the portal serves, so it needs no
+# permission. Export did not: it is a plain <a download>, so with no download handler
+# registered the destination is picked by WebKitGTK's own default, which uses the XDG
+# download directory and falls back to $HOME when user-dirs.dirs is absent. That was
+# measured against WebKitGTK 4.1 directly. Inside the sandbox there is no user-dirs.dirs,
+# so the backup would be written to the app's own home and reported as a success, and the
+# user would never be told where it went.
+#
+# A filesystem permission is NOT the fix. Granting --filesystem=xdg-download in the CI
+# inspection changed nothing at all, because the permission does not create the
+# user-dirs.dirs the default handler reads. (That runner has no user-dirs.dirs of its own
+# to pass through either, so it does not settle what a real desktop would expose; it does
+# settle that the permission is not sufficient.) It would widen the sandbox and leave the
+# backup just as lost. The fix belongs in the app, and 1.1.3 makes Export ask where to
+# save through the same portal-backed chooser import already uses, which needs no
+# permission here. This stays empty.
+finish-args:
+  - --share=ipc
+  - --socket=fallback-x11
+  - --socket=wayland
+  - --device=dri
+
+build-options:
+  append-path: /usr/lib/sdk/rust-stable/bin
+
+modules:
+  - name: daylo
+    buildsystem: simple
+    build-options:
+      append-path: /usr/lib/sdk/node24/bin
+      # Nothing here may touch the network: the sandbox has none during a build. Every
+      # variable below points a tool at the offline copy the generated source lists
+      # populate, or tells it plainly that it is offline instead of letting it wait for a
+      # timeout it will blame on something else.
+      env:
+        # Where the generated cargo sources put the vendored registry. cargo/config says
+        # directory = "cargo/vendor" in relative form, and cargo resolves that against the
+        # directory containing CARGO_HOME rather than the working directory, so it still
+        # points at the right place when tauri runs cargo from src-tauri/.
+        CARGO_HOME: /run/build/daylo/cargo
+        CARGO_NET_OFFLINE: 'true'
+        # npm ci has to be told where the cache is. The node sources unpack every tarball
+        # into flatpak-node/npm-cache; without this npm looks in ~/.npm, finds an empty
+        # cache and goes to the registry.
+        npm_config_cache: /run/build/daylo/flatpak-node/npm-cache
+        npm_config_offline: 'true'
+        # esbuild, node-gyp and playwright each look under XDG_CACHE_HOME, and the node
+        # sources pre-populate exactly those three directories under flatpak-node/cache.
+        XDG_CACHE_HOME: /run/build/daylo/flatpak-node/cache
+        # Playwright is a devDependency and npm ci installs it from the lockfile, but its
+        # postinstall must not try to fetch browsers: those 479 MB are not in the vendored
+        # sources on purpose, because the Flatpak build runs no end to end tests.
+        PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: '1'
+    build-commands:
+      - npm ci --offline
+      - npm run tauri -- build --bundles deb
+      # Taken from the .deb Tauri just built rather than reimplementing the install layout.
+      # The binary is Daylo since 1.1.2; it is installed as 'daylo' to match Exec= in the
+      # desktop entry and the lowercase convention for commands on PATH.
+      - install -Dm755 src-tauri/target/release/bundle/deb/*/data/usr/bin/Daylo /app/bin/daylo
+      # The desktop entry and the metainfo come from the sources below, not from the git
+      # checkout: packaging/flathub/ does not exist in tag v1.1.2, and on Flathub these two
+      # files live in the packaging repository next to this manifest anyway.
+      - install -Dm644 io.github.henfrydls.daylo.desktop
+        /app/share/applications/io.github.henfrydls.daylo.desktop
+      - install -Dm644 io.github.henfrydls.daylo.metainfo.xml
+        /app/share/metainfo/io.github.henfrydls.daylo.metainfo.xml
+      # Icons are installed under the app id, which is what the desktop entry's Icon= names
+      # and what AppStream expects. The sizes come from src-tauri/icons, already generated.
+      - for s in 32 128; do install -Dm644 "src-tauri/icons/${s}x${s}.png"
+        "/app/share/icons/hicolor/${s}x${s}/apps/io.github.henfrydls.daylo.png"; done
+      - install -Dm644 src-tauri/icons/128x128@2x.png
+        /app/share/icons/hicolor/256x256/apps/io.github.henfrydls.daylo.png
+    sources:
+      # Pinned to the published tag, which is what Flathub builds. Updating Daylo on
+      # Flathub means bumping this tag and commit and regenerating the two source lists if
+      # a lockfile moved.
+      - type: git
+        url: https://github.com/henfrydls/daylo.git
+        tag: v1.1.2
+        commit: 603f7c2d3636dc443a72ee6ef57754c4ca8407f3
+      - type: file
+        path: io.github.henfrydls.daylo.desktop
+      - type: file
+        path: io.github.henfrydls.daylo.metainfo.xml
+      - cargo-sources.json
+      - node-sources.json
