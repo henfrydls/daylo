@@ -155,9 +155,16 @@ jobs:
       # The NDK is around a gigabyte, and downloading it on every pull request is most of
       # what this job would cost. The key carries the version so bumping it invalidates the
       # cache instead of silently building against the old one.
-      - name: Cache Android NDK
+      #
+      # Split into restore and save, with the save running even when the job fails.
+      # actions/cache does not save on failure, and the first two runs of this job proved
+      # why that matters: the check at the end failed, nothing was cached, and the next run
+      # downloaded the whole gigabyte again. A red job is exactly when the cycle needs to be
+      # short, and it was exactly when it got long. The download is valid regardless of
+      # whether the build that followed it worked.
+      - name: Restore Android NDK
         id: ndk-cache
-        uses: actions/cache@v4
+        uses: actions/cache/restore@v4
         with:
           path: ${{ env.ANDROID_HOME }}/ndk/29.0.14206865
           key: android-ndk-29.0.14206865
@@ -184,9 +191,13 @@ jobs:
         with:
           workspaces: './src-tauri -> target'
           shared-key: android
+          # Same reason as the NDK: a failure after the compile should not throw away the
+          # compile.
+          cache-on-failure: true
 
-      - name: Cache Gradle
-        uses: actions/cache@v4
+      - name: Restore Gradle
+        id: gradle-cache
+        uses: actions/cache/restore@v4
         with:
           path: |
             ~/.gradle/caches
@@ -246,6 +257,24 @@ jobs:
           # circuits, so with more than five libraries it would cut grep and abort the step
           # through the same SIGPIPE. -m5 stops grep itself, which needs no pipe at all.
           grep -m5 -E 'lib/arm64-v8a/.*\.so' <<< "$listing" || true
+
+      # Saved here, not by a post step, so that 'if: always()' applies. Only on a miss:
+      # saving over an existing key just logs a warning and wastes the upload.
+      - name: Save Android NDK
+        if: always() && steps.ndk-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: ${{ env.ANDROID_HOME }}/ndk/29.0.14206865
+          key: android-ndk-29.0.14206865
+
+      - name: Save Gradle
+        if: always() && steps.gradle-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+          key: gradle-android-${{ hashFiles('src-tauri/gen/android/**/*.gradle*', 'src-tauri/gen/android/gradle/wrapper/gradle-wrapper.properties') }}
 
   # Verify Tauri builds (without uploading artifacts)
   build-check:
