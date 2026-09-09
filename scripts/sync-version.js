@@ -8,10 +8,19 @@ const root = join(__dirname, '..')
 const packageJson = JSON.parse(readFileSync(join(root, 'package.json'), 'utf8'))
 const version = packageJson.version
 
+// Both replacements test their pattern before applying it, rather than comparing the
+// string before and after. Comparing cannot tell "the pattern did not match" from "it
+// matched and the value was already right", and the two need opposite reactions: the
+// first is a broken script, the second is a no-op. Getting that wrong in either
+// direction is bad in its own way, and this file had one of each.
 const cargoTomlPath = join(root, 'src-tauri', 'Cargo.toml')
+const tomlVersion = /^version = ".*"$/m
 let cargoToml = readFileSync(cargoTomlPath, 'utf8')
-cargoToml = cargoToml.replace(/^version = ".*"$/m, `version = "${version}"`)
-writeFileSync(cargoTomlPath, cargoToml)
+if (!tomlVersion.test(cargoToml)) {
+  console.error('No version line found in Cargo.toml: the file layout changed.')
+  process.exit(1)
+}
+writeFileSync(cargoTomlPath, cargoToml.replace(tomlVersion, `version = "${version}"`))
 
 console.log(`Synced Cargo.toml to v${version}`)
 
@@ -26,18 +35,14 @@ console.log(`Synced Cargo.toml to v${version}`)
 // that this is the crate name, not the binary name, so renaming the executable to Daylo
 // left this working.
 const cargoLockPath = join(root, 'src-tauri', 'Cargo.lock')
-let cargoLock = readFileSync(cargoLockPath, 'utf8')
-const before = cargoLock
-cargoLock = cargoLock.replace(
-  /(name = "activity-tracker"\nversion = )"[^"]*"/,
-  `$1"${version}"`
-)
-if (cargoLock === before) {
+const lockEntry = /(name = "activity-tracker"\nversion = )"[^"]*"/
+const cargoLock = readFileSync(cargoLockPath, 'utf8')
+if (!lockEntry.test(cargoLock)) {
   console.error(
     'The activity-tracker entry was not found in Cargo.lock: check the package name.'
   )
   process.exit(1)
 }
-writeFileSync(cargoLockPath, cargoLock)
+writeFileSync(cargoLockPath, cargoLock.replace(lockEntry, `$1"${version}"`))
 
 console.log(`Synced Cargo.lock to v${version}`)
