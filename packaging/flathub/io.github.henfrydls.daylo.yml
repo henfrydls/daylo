@@ -27,10 +27,24 @@ command: daylo
 # There is NO --share=network. If a future version ever needs it, that is a product
 # decision to argue for, not a line to add quietly.
 #
-# There is no --filesystem either. Export and import go through the desktop portal, which
-# needs no filesystem permission because the user picks the file and the portal hands over
-# just that one. Whether that holds is checked by the CI build below rather than assumed;
-# if it does not, the narrowest fix is --filesystem=xdg-download and nothing wider.
+# There is no --filesystem either, and as of 1.1.2 that is measured rather than hoped for.
+#
+# Import goes through the webview's file chooser, which the portal serves, so it needs no
+# permission. Export did not: it is a plain <a download>, so with no download handler
+# registered the destination is picked by WebKitGTK's own default, which uses the XDG
+# download directory and falls back to $HOME when user-dirs.dirs is absent. That was
+# measured against WebKitGTK 4.1 directly. Inside the sandbox there is no user-dirs.dirs,
+# so the backup would be written to the app's own home and reported as a success, and the
+# user would never be told where it went.
+#
+# A filesystem permission is NOT the fix. Granting --filesystem=xdg-download in the CI
+# inspection changed nothing at all, because the permission does not create the
+# user-dirs.dirs the default handler reads. (That runner has no user-dirs.dirs of its own
+# to pass through either, so it does not settle what a real desktop would expose; it does
+# settle that the permission is not sufficient.) It would widen the sandbox and leave the
+# backup just as lost. The fix belongs in the app, and 1.1.3 makes Export ask where to
+# save through the same portal-backed chooser import already uses, which needs no
+# permission here. This stays empty.
 finish-args:
   - --share=ipc
   - --socket=fallback-x11
