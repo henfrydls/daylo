@@ -564,7 +564,7 @@ function sanitizeActivityLog(log: ActivityLog): ActivityLog {
  */
 export function generateExportFilename(format: 'json' | 'csv'): string {
   const date = new Date().toISOString().split('T')[0]
-  return `activity-tracker-backup-${date}.${format}`
+  return `daylo-backup-${date}.${format}`
 }
 
 /** Identidad de negocio de un registro: una actividad en un dia concreto. */
