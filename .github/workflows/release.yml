@@ -4,24 +4,24 @@ on:
   push:
     tags:
       - 'v*.*.*'
-  # Relanzar a mano SOLO reconstruye la demo. Los artefactos de Actions caducan a los 90
-  # dias, y pasado ese plazo no habria de donde bajar la demo para redesplegarla sin
-  # volver a taguear -- que crearia una release nueva por un motivo que no lo es.
+  # A manual re-run ONLY rebuilds the demo. Actions artifacts expire after 90 days, and
+  # past that there would be nowhere to download the demo from to redeploy it without
+  # tagging again, which would create a new release for a reason that is not one.
   #
-  # Los jobs que PUBLICAN llevan una guarda de tag: sin ella, un dispatch desde una rama
-  # haria que tauri-action creara una release llamada como la rama, porque el nombre sale
-  # de github.ref_name.
+  # The jobs that PUBLISH carry a tag guard: without it, a dispatch from a branch would
+  # have tauri-action create a release named after the branch, because the name comes from
+  # github.ref_name.
   workflow_dispatch:
     inputs:
       ref:
-        description: 'Tag o rama de la que construir la demo (vacio = la rama actual)'
+        description: 'Tag or branch to build the demo from (empty = the current branch)'
         required: false
         type: string
 
 jobs:
   build:
-    # Solo en tags: un dispatch manual no debe publicar una release, porque el nombre
-    # sale de github.ref_name y desde una rama crearia una release llamada como ella.
+    # Tags only: a manual dispatch must not publish a release, because the name comes
+    # from github.ref_name and from a branch it would create a release named after it.
     if: startsWith(github.ref, 'refs/tags/')
     permissions:
       contents: write
@@ -124,8 +124,8 @@ jobs:
           args: ${{ matrix.args }}
 
   build-android:
-    # Solo en tags: un dispatch manual no debe publicar una release, porque el nombre
-    # sale de github.ref_name y desde una rama crearia una release llamada como ella.
+    # Tags only: a manual dispatch must not publish a release, because the name comes
+    # from github.ref_name and from a branch it would create a release named after it.
     if: startsWith(github.ref, 'refs/tags/')
     permissions:
       contents: write
@@ -187,24 +187,24 @@ jobs:
           APK_PATH="src-tauri/gen/android/app/build/outputs/apk/universal/release/app-universal-release-unsigned.apk"
           ALIGNED_PATH="src-tauri/gen/android/app/build/outputs/apk/universal/release/Daylo-android-arm64.apk"
 
-          # El keystore TIENE que venir de secrets. Antes se generaba aqui con
-          # 'keytool -genkey', lo que producia una llave nueva en cada build que solo
-          # existia en este runner. Android exige firma identica para actualizar, asi
-          # que cada APK publicado asi queda incapaz de recibir actualizaciones: el
-          # usuario tiene que desinstalar, y siendo la app local-first, eso le borra
-          # los datos. Preferimos que el build falle antes que publicar eso otra vez.
+          # The keystore HAS to come from secrets. It used to be generated here with
+          # 'keytool -genkey', which produced a new key on every build that existed only on
+          # that runner. Android requires an identical signature to update, so every APK
+          # published that way is unable to receive updates: the user has to uninstall, and
+          # for a local-first app that erases their data. We would rather the build fail
+          # than publish that again.
           if [ -z "${ANDROID_KEYSTORE_BASE64:-}" ]; then
-            echo "::error::No hay ANDROID_KEYSTORE_BASE64 en secrets. Se aborta en vez de"
-            echo "::error::generar una llave efimera: un APK firmado con llave distinta a la"
-            echo "::error::de la version anterior no se puede instalar encima, y desinstalar"
-            echo "::error::borra los datos locales del usuario."
-            echo "::error::Configura ANDROID_KEYSTORE_BASE64, ANDROID_KEYSTORE_PASSWORD,"
-            echo "::error::ANDROID_KEY_ALIAS y ANDROID_KEY_PASSWORD en los secrets del repo."
+            echo "::error::ANDROID_KEYSTORE_BASE64 is not in secrets. Aborting instead of"
+            echo "::error::generating an ephemeral key: an APK signed with a key different"
+            echo "::error::from the previous version's cannot be installed over it, and"
+            echo "::error::uninstalling erases the user's local data."
+            echo "::error::Set ANDROID_KEYSTORE_BASE64, ANDROID_KEYSTORE_PASSWORD,"
+            echo "::error::ANDROID_KEY_ALIAS and ANDROID_KEY_PASSWORD in the repo secrets."
             exit 1
           fi
           for v in ANDROID_KEYSTORE_PASSWORD ANDROID_KEY_ALIAS ANDROID_KEY_PASSWORD; do
             if [ -z "$(eval echo "\${$v:-}")" ]; then
-              echo "::error::Falta el secret $v"; exit 1
+              echo "::error::Missing secret $v"; exit 1
             fi
           done
 
@@ -222,9 +222,9 @@ jobs:
             --ks-key-alias "$ANDROID_KEY_ALIAS" \
             "$ALIGNED_PATH"
 
-          # Dejar el fingerprint en el log del build. Si algun dia la llave vuelve a
-          # cambiar, se ve aqui y no seis meses despues en el APK publicado.
-          echo "--- firma del APK que se va a publicar ---"
+          # Leave the fingerprint in the build log. If the key ever changes again, it shows
+          # up here and not six months later in a published APK.
+          echo "--- signature of the APK about to be published ---"
           "$BT/apksigner" verify --print-certs "$ALIGNED_PATH" | grep -iE 'SHA-256|Subject'
 
       - name: Upload APK to release
@@ -234,14 +234,14 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-  # La demo web de la landing. La aplicacion es 100% web -- Tauri solo la envuelve --
-  # asi que un 'vite build' con base '/demo/' produce un sitio estatico que funciona bajo
-  # esa ruta, sin contenedor ni servidor. Verificado en un navegador real: renderiza, no da
-  # 404 y el ciclo de crear, marcar y recargar conserva los datos.
+  # The landing page's web demo. The application is entirely web based, with Tauri only
+  # wrapping it, so a 'vite build' with base '/demo/' produces a static site that works
+  # under that path, with no container and no server. Verified in a real browser: it
+  # renders, gives no 404s, and the create, tick and reload cycle keeps the data.
   #
-  # El artefacto sale LIMPIO, sin analitica: el script de la landing lo inyecta el
-  # despliegue del sitio web sobre este mismo artefacto. Asi el repositorio de la
-  # aplicacion no contiene nada que exista solo para la web.
+  # The artifact comes out CLEAN, with no analytics: the landing page's script is injected
+  # by the website deployment over this same artifact. That way the application repository
+  # holds nothing that exists only for the web.
   build-demo:
     name: Build web demo
     runs-on: ubuntu-latest
@@ -251,8 +251,8 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
         with:
-          # En un dispatch se puede pedir un tag concreto, para reconstruir la demo de una
-          # version publicada tal como era.
+          # A dispatch can ask for a specific tag, to rebuild the demo of a published
+          # version exactly as it was.
           ref: ${{ inputs.ref || github.ref }}
 
       - name: Setup Node.js
@@ -267,20 +267,20 @@ jobs:
       - name: Build demo with /demo/ base
         run: npx vite build --base=/demo/ --outDir dist-demo
 
-      - name: Ajustar el manifest de la PWA a /demo/
+      - name: Point the PWA manifest at /demo/
         run: node scripts/fix-demo-manifest.mjs dist-demo /demo/
 
-      - name: Comprobar que el artefacto sale sin analitica
+      - name: Check the artifact ships without analytics
         run: |
-          # Defensa en profundidad con la MISMA lista que el CI, no con una copia
-          # recortada: comprueba lo que de verdad se va a desplegar. Si algun dia el
-          # script de la landing acabara aqui por error, el deploy publicaria una demo que
-          # llama a casa con el mismo bundle que empaqueta la aplicacion de escritorio.
+          # Defence in depth with the SAME list as the CI, not a trimmed copy: it checks
+          # what is actually going to be deployed. If the landing page's script ever ended
+          # up here by mistake, the deploy would publish a demo that phones home, built
+          # from the same bundle that ships inside the desktop application.
           #
-          # '--solo-textos' porque es un bundle: los nombres de paquete desaparecen al
-          # minificar y las cadenas de URL no.
-          scripts/check-no-analytics.sh --solo-textos dist-demo
-          echo "index.html: $(wc -c < dist-demo/index.html) bytes, rutas con base /demo/"
+          # '--text-only' because this is a bundle: package names disappear on minification
+          # and URL strings do not.
+          scripts/check-no-analytics.sh --text-only dist-demo
+          echo "index.html: $(wc -c < dist-demo/index.html) bytes, paths based at /demo/"
 
       - name: Upload demo artifact
         uses: actions/upload-artifact@v4
@@ -294,15 +294,15 @@ jobs:
   release-summary:
     needs: [build, build-android, build-demo]
     runs-on: ubuntu-latest
-    # El repositorio tiene default_workflow_permissions en "read", asi que sin declarar
-    # esto 'gh release upload' devuelve 403. Los otros dos jobs ya lo declaran; este no
-    # lo necesitaba hasta que empezo a publicar assets.
+    # The repository has default_workflow_permissions set to "read", so without declaring
+    # this 'gh release upload' returns 403. The other two jobs already declare it; this one
+    # did not need it until it started publishing assets.
     permissions:
       contents: write
-    # 'always()' correria tambien cuando se cancela el run, y entonces se publicarian
-    # copias fijas y un SHA256SUMS.txt que solo cubre lo subido hasta ese instante. La
-    # comprobacion de cobertura no protege de eso: los dos conteos verian la misma
-    # release a medias.
+    # 'always()' would also run when the run is cancelled, and then stable copies and a
+    # SHA256SUMS.txt covering only what was uploaded up to that instant would get published.
+    # The coverage check does not protect against that: both counts would see the same
+    # half finished release.
     if: ${{ !cancelled() && startsWith(github.ref, 'refs/tags/') }}
     steps:
       - name: Check build results
@@ -315,12 +315,12 @@ jobs:
             exit 1
           fi
 
-      # 'always()' es imprescindible: el paso anterior hace 'exit 1' si algun build
-      # fallo, y sin esto este paso no correria nunca en ese caso -- con lo que un runner
-      # de macOS caido dejaria sin copia de nombre fijo a Windows, Linux y Android, que
-      # SI compilaron, y romperia sus enlaces. La degradacion por plataforma de
-      # 'preparar' solo sirve si el paso llega a ejecutarse.
-      - name: Publicar copias con nombre estable y SHA256SUMS
+      # 'always()' is essential: the previous step does 'exit 1' if any build failed, and
+      # without this this step would never run in that case, which would leave Windows,
+      # Linux and Android without a stable named copy even though they DID build, breaking
+      # their links. The per platform degradation inside 'stage' only helps if the step
+      # gets to run at all.
+      - name: Publish stable named copies and SHA256SUMS
         if: ${{ !cancelled() }}
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -331,181 +331,182 @@ jobs:
           REPO="${{ github.repository }}"
           mkdir -p assets && cd assets
 
-          # El sha256 de cada asset ya lo publica la API, asi que no hay que rehashear
-          # nada. Se lee ANTES de subir las copias para que el mapa contenga solo los
-          # originales; cada copia hereda despues el hash del asset del que sale.
-          # Cuantos assets deberia haber, para detectar un mapa truncado.
-          n_esperados=$(gh api "repos/$REPO/releases/tags/$TAG" --jq '.assets | length') || {
-            echo "::error::No se pudo consultar la lista de assets de $TAG."; exit 1; }
+          # The API already publishes the sha256 of each asset, so nothing needs rehashing.
+          # It is read BEFORE uploading the copies so the map holds only the originals; each
+          # copy then inherits the hash of the asset it comes from.
+          # How many assets there should be, to detect a truncated map.
+          n_expected=$(gh api "repos/$REPO/releases/tags/$TAG" --jq '.assets | length') || {
+            echo "::error::Could not query the asset list of $TAG."; exit 1; }
 
-          declare -A digest_de
-          # Se cuenta a mano en vez de usar ${#digest_de[@]}: con 'set -u' un array
-          # ASOCIATIVO declarado y vacio da "unbound variable" al consultar su longitud
-          # (los indexados no), asi que la guarda de abajo no llegaria a evaluarse nunca.
+          declare -A digest_of
+          # Counted by hand rather than with ${#digest_of[@]}: under 'set -u' an ASSOCIATIVE
+          # array that is declared and empty gives "unbound variable" when its length is
+          # queried (indexed ones do not), so the guard below would never be evaluated.
           n_assets=0
-          # El digest se saca con '// ""' y 'sub' en vez de 'ltrimstr': si un asset trae
-          # digest nulo, 'ltrimstr' aborta jq con "startswith() requires string inputs"
-          # DESPUES de haber emitido las lineas anteriores. Al ir en sustitucion de
-          # procesos, 'pipefail' no ve ese fallo, asi que el mapa quedaria truncado en
-          # silencio y el job saldria verde con un SHA256SUMS.txt incompleto.
+          # The digest is extracted with '// ""' and 'sub' rather than 'ltrimstr': if an
+          # asset carries a null digest, 'ltrimstr' aborts jq with "startswith() requires
+          # string inputs" AFTER having emitted the previous lines. Being inside a process
+          # substitution, 'pipefail' does not see that failure, so the map would be silently
+          # truncated and the job would go green with an incomplete SHA256SUMS.txt.
           #
-          # El NOMBRE va primero y el digest despues, no al reves: el tab es whitespace,
-          # asi que 'read' colapsa un primer campo vacio y desplaza los valores -- con el
-          # digest delante, un asset sin digest hacia que el nombre acabara en la variable
-          # del sha y la del nombre quedara vacia. Con el nombre primero, que nunca esta
-          # vacio, un digest ausente se ve como lo que es y se puede nombrar el asset.
-          while IFS=$'\t' read -r nombre sha; do
-            [ -z "${nombre:-}" ] && continue
+          # The NAME comes first and the digest second, not the other way round: a tab is
+          # whitespace, so 'read' collapses an empty first field and shifts the values. With
+          # the digest first, an asset with no digest put the name into the sha variable and
+          # left the name variable empty. With the name first, which is never empty, a
+          # missing digest looks like what it is and the asset can be named.
+          while IFS=$'\t' read -r name sha; do
+            [ -z "${name:-}" ] && continue
             if [ -z "${sha:-}" ]; then
-              echo "::error::La API no trae digest del asset '$nombre'. Sin el no se puede"
-              echo "::error::publicar su hash sin descargarlo y calcularlo a mano."
+              echo "::error::The API carries no digest for asset '$name'. Without it its"
+              echo "::error::hash cannot be published without downloading and computing it."
               exit 1
             fi
-            digest_de["$nombre"]="$sha"
+            digest_of["$name"]="$sha"
             n_assets=$((n_assets + 1))
           done < <(gh api "repos/$REPO/releases/tags/$TAG" \
                      --jq '.assets[] | [.name, ((.digest // "") | sub("^sha256:";""))] | @tsv')
 
           if [ "$n_assets" -eq 0 ]; then
-            echo "::error::La API no devolvio ningun asset para $TAG. Sin los digest no se"
-            echo "::error::puede publicar SHA256SUMS.txt sin descargar y hashear todo."
+            echo "::error::The API returned no assets for $TAG. Without the digests"
+            echo "::error::SHA256SUMS.txt cannot be published without downloading everything."
             exit 1
           fi
-          if [ "$n_assets" -ne "${n_esperados:-0}" ]; then
-            echo "::error::La API devolvio $n_assets digest de $n_esperados assets. Publicar"
-            echo "::error::un SHA256SUMS.txt incompleto es peor que no publicarlo."
+          if [ "$n_assets" -ne "${n_expected:-0}" ]; then
+            echo "::error::The API returned $n_assets digests out of $n_expected assets."
+            echo "::error::Publishing an incomplete SHA256SUMS.txt is worse than not doing it."
             exit 1
           fi
 
-          # Solo se descarga lo que hay que renombrar. El AppImage son 81 MB, tres cuartas
-          # partes del peso de la release, y no se copia (duplicarlo no se justifica hasta
-          # que 'strip' lo adelgace), asi que no se baja: su hash sale de la API igual. El
-          # APK ya se publica con su nombre definitivo y tampoco hace falta tocarlo.
+          # Only what needs renaming gets downloaded. The AppImage is 81 MB, three quarters
+          # of the release's weight, and is not copied (duplicating it is not justified until
+          # 'strip' slims it down), so it is not fetched: its hash comes from the API anyway.
+          # The APK is already published under its final name and needs no touching either.
           gh release download "$TAG" --repo "$REPO" --clobber \
             --pattern '*.exe' --pattern '*.dmg' --pattern '*.deb' || {
-            # 'gh release download' tambien sale 1 cuando simplemente no hay nada que case,
-            # que es lo que pasa si fallaron los cinco builds de escritorio. Eso no es un
-            # fallo de descarga, y decirlo asi manda a mirar al sitio equivocado. Se avisa
-            # y se sigue: 'preparar' informara de cada copia que falte, y el SHA256SUMS
-            # del APK -- que si existe -- se publica igual.
-            echo "::warning::La descarga no trajo ningun instalador de escritorio para $TAG."
-            echo "::warning::O fallaron esos builds, o la release no los tiene todavia."
+            # 'gh release download' also exits 1 when simply nothing matches, which is what
+            # happens if all five desktop builds failed. That is not a download failure, and
+            # saying so sends people looking in the wrong place. Warn and carry on: 'stage'
+            # will report every copy that is missing, and the SHA256SUMS of the APK, which
+            # does exist, gets published anyway.
+            echo "::warning::The download brought no desktop installer for $TAG."
+            echo "::warning::Either those builds failed, or the release does not have them yet."
           }
 
-          # Copias con nombre estable para que la landing pueda enlazar a
-          # /releases/latest/download/<nombre> sin la version dentro de la URL. Los
-          # nombres versionados se conservan: quien archive instaladores los distingue.
+          # Stable named copies so the landing page can link to
+          # /releases/latest/download/<name> without the version inside the URL. The
+          # versioned names are kept: whoever archives installers can tell them apart.
           #
-          # Cada copia se trata de forma INDEPENDIENTE y a proposito. Si el runner de una
-          # plataforma falla (ocurre, y no por culpa del codigo), la release existe sin ese
-          # artefacto; abortar aqui dejaria sin copia fija a las plataformas que SI
-          # compilaron, y sus enlaces en la landing darian 404. Un build caido degrada una
-          # fila de la tabla, no todas.
+          # Each copy is handled INDEPENDENTLY and on purpose. If one platform's runner
+          # fails (it happens, and not because of the code), the release exists without that
+          # artifact; aborting here would leave the platforms that DID build without a
+          # stable copy, and their links on the landing page would 404. One failed build
+          # degrades one row of the table, not all of them.
           #
-          # AVISO para quien añada mas jobs de empaquetado: los patrones de abajo ABORTAN si
-          # uno casa con mas de un archivo. Si algun dia un job sube a ESTA MISMA release
-          # otro instalador de Windows -- por ejemplo el paquete de la Microsoft Store, que
-          # necesita webviewInstallMode=offlineInstaller y pesa mas de 100 MB frente a los
-          # 2 MB del NSIS -- tiene que llamarse de forma que NO case con
-          # 'Daylo_*_x64-setup.exe', o este paso se cae y ninguna plataforma recibe su copia.
-          subidos=()
-          faltantes=()
-          declare -A origen_de
+          # NOTE for whoever adds more packaging jobs: the patterns below ABORT if one
+          # matches more than a single file. If some day a job uploads another Windows
+          # installer to THIS SAME release, for example the Microsoft Store package, which
+          # needs webviewInstallMode=offlineInstaller and weighs over 100 MB against the
+          # 2 MB of the NSIS one, it has to be named so that it does NOT match
+          # 'Daylo_*_x64-setup.exe', or this step falls over and no platform gets its copy.
+          staged=()
+          missing=()
+          declare -A source_of
 
-          preparar() {
-            local patron="$1" destino="$2" candidatos=() f n origen
-            # Se comprueba la existencia real de cada candidato en vez de fiarse del glob:
-            # 'nullglob' solo elimina los patrones CON comodin.
-            for f in $patron; do [ -f "$f" ] && candidatos+=("$f"); done
-            n=${#candidatos[@]}
+          stage() {
+            local pattern="$1" target="$2" candidates=() f n source
+            # The real existence of each candidate is checked rather than trusting the glob:
+            # 'nullglob' only removes patterns WITH a wildcard.
+            for f in $pattern; do [ -f "$f" ] && candidates+=("$f"); done
+            n=${#candidates[@]}
             if [ "$n" -eq 0 ]; then
-              echo "::warning::Ningun asset casa con '$patron'; se omite $destino. Su enlace"
-              echo "::warning::en la landing dara 404 hasta la proxima release que lo incluya."
-              faltantes+=("$destino")
+              echo "::warning::No asset matches '$pattern'; skipping $target. Its link on"
+              echo "::warning::the landing page will 404 until the next release includes it."
+              missing+=("$target")
               return 0
             fi
             if [ "$n" -gt 1 ]; then
-              # Ambiguedad real: elegir mal publicaria un binario bajo un nombre que
-              # promete otra cosa.
-              echo "::error::'$patron' casa con $n archivos y no se puede elegir:"
-              printf '::error::  %s\n' "${candidatos[@]}"
+              # Real ambiguity: choosing wrong would publish a binary under a name that
+              # promises something else.
+              echo "::error::'$pattern' matches $n files and cannot be resolved:"
+              printf '::error::  %s\n' "${candidates[@]}"
               exit 1
             fi
-            origen="${candidatos[0]}"
-            if ! cp "$origen" "$destino"; then
-              echo "::error::No se pudo copiar '$origen' a '$destino'"
+            source="${candidates[0]}"
+            if ! cp "$source" "$target"; then
+              echo "::error::Could not copy '$source' to '$target'"
               exit 1
             fi
-            subidos+=("$destino")
-            origen_de["$destino"]="$origen"
-            echo "  $origen -> $destino"
+            staged+=("$target")
+            source_of["$target"]="$source"
+            echo "  $source -> $target"
           }
 
-          preparar 'Daylo_*_x64-setup.exe'    Daylo-windows-x64-setup.exe
-          preparar 'Daylo_*_arm64-setup.exe'  Daylo-windows-arm64-setup.exe
-          preparar 'Daylo_*_aarch64.dmg'      Daylo-macos-apple-silicon.dmg
-          preparar 'Daylo_*_x64.dmg'          Daylo-macos-intel.dmg
-          preparar 'Daylo_*_amd64.deb'        Daylo-linux-amd64.deb
+          stage 'Daylo_*_x64-setup.exe'    Daylo-windows-x64-setup.exe
+          stage 'Daylo_*_arm64-setup.exe'  Daylo-windows-arm64-setup.exe
+          stage 'Daylo_*_aarch64.dmg'      Daylo-macos-apple-silicon.dmg
+          stage 'Daylo_*_x64.dmg'          Daylo-macos-intel.dmg
+          stage 'Daylo_*_amd64.deb'        Daylo-linux-amd64.deb
 
-          if [ ${#subidos[@]} -eq 0 ]; then
-            # No se aborta: puede ser una release donde solo salio el APK. Abortar aqui
-            # tiraria tambien el SHA256SUMS.txt, que cubre los assets que SI existen, y
-            # dejaria la release sin ninguna forma de verificar la descarga.
-            echo "::warning::No se preparo ninguna copia con nombre estable: la release no"
-            echo "::warning::tiene instaladores de escritorio con los nombres esperados."
-            echo "::warning::Todos los enlaces /releases/latest/download/ daran 404 hasta"
-            echo "::warning::la proxima release que los incluya. SHA256SUMS.txt se publica"
-            echo "::warning::igual, con los assets que haya."
+          if [ ${#staged[@]} -eq 0 ]; then
+            # No abort: this could be a release where only the APK came out. Aborting here
+            # would also take down SHA256SUMS.txt, which covers the assets that DO exist,
+            # and would leave the release with no way to verify a download at all.
+            echo "::warning::No stable named copy was staged: the release has no desktop"
+            echo "::warning::installers under the expected names."
+            echo "::warning::Every /releases/latest/download/ link will 404 until the next"
+            echo "::warning::release includes them. SHA256SUMS.txt is published anyway,"
+            echo "::warning::with whatever assets exist."
           fi
 
-          # SHA256SUMS con todo lo publicado. Los instaladores de escritorio no van
-          # firmados, asi que Windows y macOS avisan de "editor desconocido"; este fichero
-          # es lo unico que permite al usuario comprobar por su cuenta que lo que bajo es
-          # lo que construyo el CI, sin tener que creerse nuestra palabra.
+          # SHA256SUMS covering everything published. The desktop installers are not
+          # signed, so Windows and macOS warn about an "unknown publisher"; this file is the
+          # only thing that lets someone check for themselves that what they downloaded is
+          # what the CI built, without having to take our word for it.
           #
-          # Se construye ANTES de subir nada, para hacer una sola subida al final.
+          # Built BEFORE uploading anything, so there is a single upload at the end.
           : > SHA256SUMS.txt
-          for nombre in "${!digest_de[@]}"; do
-            # En un re-run la release ya contiene el SHA256SUMS.txt anterior y las copias
-            # fijas de la vez pasada. Sin estos dos saltos, el fichero se referenciaria a
-            # si mismo con su hash viejo -- 'sha256sum -c' daria FAILED sobre el propio
-            # fichero -- y las copias saldrian duplicadas, una por cada bucle.
-            [ "$nombre" = "SHA256SUMS.txt" ] && continue
-            ya_es_copia=0
-            for c in "${subidos[@]}"; do
-              [ "$nombre" = "$c" ] && { ya_es_copia=1; break; }
+          for name in "${!digest_of[@]}"; do
+            # On a re-run the release already holds the previous SHA256SUMS.txt and last
+            # time's stable copies. Without these two skips, the file would reference itself
+            # with its old hash, so 'sha256sum -c' would report FAILED on the file itself,
+            # and the copies would come out duplicated, once per loop.
+            [ "$name" = "SHA256SUMS.txt" ] && continue
+            already_a_copy=0
+            for c in "${staged[@]}"; do
+              [ "$name" = "$c" ] && { already_a_copy=1; break; }
             done
-            [ "$ya_es_copia" -eq 1 ] && continue
-            printf '%s  %s\n' "${digest_de[$nombre]}" "$nombre" >> SHA256SUMS.txt
+            [ "$already_a_copy" -eq 1 ] && continue
+            printf '%s  %s\n' "${digest_of[$name]}" "$name" >> SHA256SUMS.txt
           done
-          for copia in "${subidos[@]}"; do
-            orig="${origen_de[$copia]}"
-            sha="${digest_de[$orig]:-}"
+          for copy in "${staged[@]}"; do
+            orig="${source_of[$copy]}"
+            sha="${digest_of[$orig]:-}"
             if [ -z "$sha" ]; then
-              # Puede pasar si la API trajo el asset con digest nulo: mejor abortar que
-              # publicar una linea sin hash, que 'sha256sum -c' leeria como formato roto.
-              echo "::error::La API no dio digest de '$orig', asi que no se puede publicar"
-              echo "::error::el hash de su copia '$copia' sin calcularlo a mano."
+              # Can happen if the API brought the asset with a null digest: better to abort
+              # than publish a line with no hash, which 'sha256sum -c' would read as a
+              # broken format.
+              echo "::error::The API gave no digest for '$orig', so the hash of its copy"
+              echo "::error::'$copy' cannot be published without computing it by hand."
               exit 1
             fi
-            printf '%s  %s\n' "$sha" "$copia" >> SHA256SUMS.txt
+            printf '%s  %s\n' "$sha" "$copy" >> SHA256SUMS.txt
           done
           sort -k2 -o SHA256SUMS.txt SHA256SUMS.txt
           echo "--- SHA256SUMS.txt ---"; cat SHA256SUMS.txt
 
-          gh release upload "$TAG" --repo "$REPO" --clobber "${subidos[@]}" SHA256SUMS.txt || {
-            echo "::error::Fallo la subida de los assets con nombre estable."; exit 1; }
+          gh release upload "$TAG" --repo "$REPO" --clobber "${staged[@]}" SHA256SUMS.txt || {
+            echo "::error::Uploading the stable named assets failed."; exit 1; }
 
-          # Resumen visible en la portada del run: un ::warning:: se pierde entre los logs,
-          # y que falte una plataforma tiene que verse sin abrir nada.
+          # Summary visible on the run's front page: a ::warning:: gets lost among the logs,
+          # and a missing platform has to be visible without opening anything.
           {
-            echo "### Assets con nombre estable"
+            echo "### Stable named assets"
             echo
             echo "| Copia | Estado |"
             echo "|---|---|"
-            for a in "${subidos[@]}"; do echo "| \`$a\` | publicada |"; done
-            for a in "${faltantes[@]+"${faltantes[@]}"}"; do echo "| \`$a\` | **FALTA** (build no disponible) |"; done
+            for a in "${staged[@]}"; do echo "| \`$a\` | published |"; done
+            for a in "${missing[@]+"${missing[@]}"}"; do echo "| \`$a\` | **MISSING** (build unavailable) |"; done
             echo
-            echo "\`SHA256SUMS.txt\` cubre $(grep -c . SHA256SUMS.txt) archivos, con los hashes"
-            echo "que publica la propia API de releases."
+            echo "\`SHA256SUMS.txt\` covers $(grep -c . SHA256SUMS.txt) files, with the hashes"
+            echo "the releases API publishes itself."
           } >> "$GITHUB_STEP_SUMMARY"

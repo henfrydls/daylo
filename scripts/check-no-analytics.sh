@@ -1,106 +1,111 @@
 #!/usr/bin/env bash
 #
-# Comprueba que no hay codigo de analitica ni telemetria en lo que se le pase.
+# Checks that whatever it is pointed at contains no analytics or telemetry code.
 #
-# Daylo promete que los datos del usuario no salen de su dispositivo, y esa promesa se
-# sostiene enteramente sobre que este repositorio no contenga nada que llame a casa. Este
-# script es el que convierte la promesa en algo que se verifica en cada cambio, en vez de
-# depender de que alguien se acuerde de mirarlo en la revision.
+# Daylo promises that the user's data never leaves their device, and that promise rests
+# entirely on this repository containing nothing that phones home. This script is what
+# turns the promise into something verified on every change, instead of depending on
+# somebody remembering to look for it during review.
 #
-# Vive en un solo sitio a proposito: lo llaman el CI de cada PR y el job que construye la
-# demo, y si la lista estuviera duplicada en los dos workflows derivarian, con lo que uno
-# de los dos daria una garantia mas debil de lo que promete.
+# It lives in one place on purpose: both the CI of every pull request and the job that
+# builds the demo call it, and if the pattern list were duplicated across the two
+# workflows they would drift, leaving one of them guaranteeing less than it claims.
 #
-# Uso: scripts/check-no-analytics.sh <ruta> [ruta...]
+# Usage: scripts/check-no-analytics.sh [--text-only] <path> [path...]
 
 set -uo pipefail
 
-# Hosts a los que se enviarian datos. 'analytics' va acotado a contexto de host: sin eso,
-# un comentario que diga "no analytics" en el codigo rompe el build, y en este repositorio
-# esa frase es probable justamente por lo que estamos defendiendo.
+# Hosts data would be sent to. 'analytics' is scoped to a host context: without that, a
+# comment saying "no analytics" anywhere in the code breaks the build, and in this
+# repository that sentence is likely precisely because of what we are defending.
 #
-# Los nombres sueltos van con \b por la misma razon, y no es teorico: 'rollbar' sin limites
-# casa dentro de 'scrollbar', asi que un 'scrollbar-width: thin' en cualquier hoja de estilos
-# ponia todos los PR en rojo diciendo que la app tiene telemetria. Los que llevan dominio
-# (plausible\.io, sentry\.io, amplitude\.com, segment\.(com|io)) ya estan anclados por el punto.
-# Nuestro propio host va explicito: 'analytics.henfrydls.com' NO casa con el patron
-# generico de abajo, porque ahi 'analytics' es un subdominio y el TLD viene despues de otra
-# etiqueta. Sin esta linea, pegar el script de Umami de la landing en la app pasaba el check
-# limpio: el guardian era ciego justo al unico proveedor que usamos. deploy/build.sh del
-# sitio si lo listaba, y esa asimetria entre dos listas con el mismo proposito era la pista.
+# The bare names carry \b for the same reason, and it is not theoretical: 'rollbar' with no
+# boundaries matches inside 'scrollbar', so a 'scrollbar-width: thin' in any stylesheet
+# turned every pull request red claiming the app has telemetry. The ones carrying a domain
+# (plausible\.io, sentry\.io, amplitude\.com, segment\.(com|io)) are already anchored by the dot.
+#
+# Our own host is listed explicitly: 'analytics.henfrydls.com' does NOT match the generic
+# pattern below, because there 'analytics' is a subdomain and the TLD comes after another
+# label. Without this line, pasting the landing page's Umami tag into the app passed the
+# check clean: the guard was blind to the one provider we actually use. deploy/build.sh in
+# the website repository did list it, and that asymmetry between two lists written for the
+# same purpose was the clue.
 HOSTS='analytics\.henfrydls\.com'
 HOSTS="$HOSTS"'|[a-z0-9-]*analytics\.(com|io|js|net)|\bumami\b|\bgoogle-analytics\b|\bgoogletagmanager\b'
 HOSTS="$HOSTS"'|plausible\.io|\bmatomo\b|\bmixpanel\b|segment\.(com|io)|amplitude\.com|sentry\.io'
 HOSTS="$HOSTS"'|\bposthog\b|\bhotjar\b|\bfullstory\b|\bdatadoghq\b|\bbugsnag\b|\brollbar\b|\bnewrelic\b'
 
-# APIs de pagina que solo existen para medir. Con limites de palabra, para que no casen
-# dentro de identificadores mas largos.
+# Page APIs that exist only to measure. Word-bounded, so they do not match inside longer
+# identifiers.
 APIS='\bgtag\(|\bdataLayer\b|\b_paq\b|\bnavigator\.sendBeacon\b'
 
-# Nombres de paquete npm: un SDK declarado como dependencia no menciona su propio host en
-# package.json, y los nombres desaparecen del bundle minificado porque los import se
-# resuelven. Sin esto, un SDK entrado como dependencia transitiva no aparece en ningun
-# sitio.
-PAQUETES='@sentry/|posthog-js|mixpanel-browser|amplitude-js|@amplitude/|plausible-tracker'
-PAQUETES="$PAQUETES"'|react-ga|@vercel/analytics|@datadog/|logrocket|@microsoft/clarity'
-PAQUETES="$PAQUETES"'|web-vitals'
+# npm package names: an SDK declared as a dependency does not mention its own host in
+# package.json, and the names disappear from a minified bundle because imports get
+# resolved. Without this, an SDK arriving as a transitive dependency would show up
+# nowhere.
+PACKAGES='@sentry/|posthog-js|mixpanel-browser|amplitude-js|@amplitude/|plausible-tracker'
+PACKAGES="$PACKAGES"'|react-ga|@vercel/analytics|@datadog/|logrocket|@microsoft/clarity'
+PACKAGES="$PACKAGES"'|web-vitals'
 
-# Crates de Rust. Anadir src-tauri/ a los objetivos no basta por si solo: los nombres de
-# los paquetes npm no casan con los de cargo -- un SDK de Rust se declara como 'sentry' y
-# no como '@sentry/' -- asi que sin esta lista la puerta al binario empaquetado, que es
-# justo lo que la promesa protege, quedaba abierta. Con limites de palabra para no casar
-# dentro de identificadores mas largos.
+# Rust crates. Adding src-tauri/ to the targets is not enough on its own: npm package names
+# do not match cargo ones, since a Rust SDK is declared as 'sentry' and not as '@sentry/',
+# so without this list the door to the bundled binary, which is exactly what the promise
+# protects, was left open. Word-bounded so they do not match inside longer identifiers.
 CRATES='\bsentry\b|\bsentry-core\b|\bopentelemetry\b|\baptabase\b|\bposthog-rs\b'
 CRATES="$CRATES"'|\btauri-plugin-aptabase\b|\bmixpanel\b|\bsegment-rs\b'
 
-# Dos modos, y la distincion importa:
+# Two modes, and the distinction matters:
 #
-#   (por defecto)     hosts + APIs + nombres de paquete y de crate
-#   --solo-textos     solo hosts + APIs
+#   (default)      hosts + APIs + package and crate names
+#   --text-only    hosts + APIs only
 #
-# El segundo existe por package-lock.json y por dist/. El lock contiene el arbol COMPLETO
-# de dependencias, devDependencies incluidas y con sus peers opcionales: '@opentelemetry/api'
-# aparece ahi como peer de vitest, no esta instalado y no llega al bundle. Buscar nombres de
-# paquete en el lock da ese falso positivo el primer dia.
+# The second exists for package-lock.json and for dist/. The lock file holds the COMPLETE
+# dependency tree, devDependencies included and with their optional peers:
+# '@opentelemetry/api' appears there as a peer of vitest, is not installed and never reaches
+# the bundle. Searching for package names in the lock gives that false positive on day one.
 #
-# Lo que de verdad cubre el riesgo de un SDK entrado como dependencia transitiva es buscar
-# sus HOSTS en dist/: los nombres de paquete desaparecen al minificar porque los import se
-# resuelven, pero las cadenas de URL no se minifican. Si el SDK se usa, su host esta en el
-# bundle; si no se usa, no hay riesgo que cubrir.
-if [ "${1:-}" = "--solo-textos" ]; then
-  PATRONES="$HOSTS|$APIS"
+# What actually covers the risk of an SDK arriving as a transitive dependency is searching
+# for its HOSTS in dist/: package names disappear on minification because imports get
+# resolved, but URL strings do not get minified. If the SDK is used, its host is in the
+# bundle; if it is not used, there is no risk to cover.
+if [ "${1:-}" = "--text-only" ]; then
+  PATTERNS="$HOSTS|$APIS"
   shift
 else
-  PATRONES="$HOSTS|$APIS|$PAQUETES|$CRATES"
+  PATTERNS="$HOSTS|$APIS|$PACKAGES|$CRATES"
 fi
 
 if [ "$#" -eq 0 ]; then
-  echo "Uso: $0 [--solo-textos] <ruta> [ruta...]" >&2
+  echo "Usage: $0 [--text-only] <path> [path...]" >&2
   exit 2
 fi
 
-encontrado=0
-for objetivo in "$@"; do
-  [ -e "$objetivo" ] || continue
-  # -I salta los binarios: sin eso, un fichero binario en dist/ imprime "Binary file
-  # matches" sin numero de linea, que no sirve para diagnosticar nada.
-  grep -rInE "$PATRONES" "$objetivo"
-  estado=$?
-  case $estado in
-    0) encontrado=1 ;;
-    1) ;;  # sin coincidencias: el unico resultado aceptable
-    *) echo "::error::grep no pudo leer $objetivo (codigo $estado); no se puede afirmar que este limpio" >&2
+found=0
+for target in "$@"; do
+  [ -e "$target" ] || continue
+  # -I skips binaries: without it, a binary file under dist/ prints "Binary file matches"
+  # with no line number, which diagnoses nothing.
+  #
+  # grep's exit code is checked explicitly rather than with `if grep ...`: 0 means found,
+  # 1 means nothing found, and anything else means grep could not do its job. Folding that
+  # third case into "nothing found" is how a guard reports clean on a file it never read.
+  grep -rInE "$PATTERNS" "$target"
+  status=$?
+  case $status in
+    0) found=1 ;;
+    1) ;;  # nothing found: the only acceptable outcome
+    *) echo "::error::grep could not read $target (exit $status); cannot claim it is clean" >&2
        exit 2 ;;
   esac
 done
 
-if [ "$encontrado" -eq 1 ]; then
-  echo "::error::Se encontro codigo de analitica o telemetria en la aplicacion."
-  echo "::error::Daylo promete que los datos del usuario no salen de su dispositivo, y"
-  echo "::error::eso solo se sostiene si este repositorio no contiene nada de esto."
-  echo "::error::El script de analitica de la landing se inyecta en el despliegue del"
-  echo "::error::sitio web, sobre el artefacto ya construido, no aqui."
+if [ "$found" -eq 1 ]; then
+  echo "::error::Analytics or telemetry code was found in the application."
+  echo "::error::Daylo promises that the user's data never leaves their device, and that"
+  echo "::error::only holds if this repository contains none of this."
+  echo "::error::The landing page's analytics script is injected when the website is"
+  echo "::error::deployed, over the already built artifact, not here."
   exit 1
 fi
 
-echo "Sin analitica ni telemetria en: $*"
+echo "No analytics or telemetry in: $*"
