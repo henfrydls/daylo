@@ -125,7 +125,7 @@ La consecuencia importa al decidir qué hacer si la llave se complica: **rotarla
 rompe las actualizaciones, además reinicia esa reputación a cero** y todo el mundo vuelve a
 ver el diálogo de bloqueo.
 
-Y las dos consecuencias no se recuperan igual. Una actualización roto tiene salida, aunque
+Y las dos consecuencias no se recuperan igual. Una actualización rota tiene salida, aunque
 sea mala: exportar los datos, desinstalar, instalar y volver a importar, que es lo que hubo
 que decirle a quien venía de v1.1.0. La reputación no tiene ningún atajo: se recupera con
 tiempo y con instalaciones de otras personas, y no hay nada que hacer para acelerarla.
