@@ -502,7 +502,7 @@ jobs:
           {
             echo "### Stable named assets"
             echo
-            echo "| Copia | Estado |"
+            echo "| Copy | Status |"
             echo "|---|---|"
             for a in "${staged[@]}"; do echo "| \`$a\` | published |"; done
             for a in "${missing[@]+"${missing[@]}"}"; do echo "| \`$a\` | **MISSING** (build unavailable) |"; done

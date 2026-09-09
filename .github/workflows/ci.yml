@@ -418,10 +418,10 @@ jobs:
               | awk '{print $2, $3}' || true
             command -v xdg-dbus-proxy >/dev/null 2>&1 \
               && echo "xdg-dbus-proxy: $(command -v xdg-dbus-proxy)" \
-              || echo "xdg-dbus-proxy: NO ESTA (el sandbox de WebKit lo necesita)"
-            echo "imagen del runner: ${ImageOS:-desconocida} ${ImageVersion:-}"
-            echo "XDG_RUNTIME_DIR en uso: ${XDG_RUNTIME_DIR:-<sin definir>}"
-            echo "DBUS_SESSION_BUS_ADDRESS en uso: ${DBUS_SESSION_BUS_ADDRESS:-<sin definir>}"
+              || echo "xdg-dbus-proxy: MISSING (the WebKit sandbox needs it)"
+            echo "runner image: ${ImageOS:-unknown} ${ImageVersion:-}"
+            echo "XDG_RUNTIME_DIR in use: ${XDG_RUNTIME_DIR:-<unset>}"
+            echo "DBUS_SESSION_BUS_ADDRESS in use: ${DBUS_SESSION_BUS_ADDRESS:-<unset>}"
             exit 1
           fi
           # WebKit stores the value as UTF-16LE, hence 'strings -e l'. The shape of the
