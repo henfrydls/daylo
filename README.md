@@ -100,15 +100,15 @@ The desktop installers are not code-signed yet, so your operating system will wa
 - **Windows** shows "Windows protected your PC". Click **More info**, then **Run anyway**. On a work-managed PC that button can be hidden by policy; ask your administrator.
 - **macOS** may refuse to open the app. Go to **System Settings → Privacy & Security**, scroll down and click **Open Anyway** next to Daylo, then enter your password. The button appears for about an hour after your first attempt to open the app; if it's gone, try opening Daylo again first. On macOS 15 and later, right-click → Open no longer bypasses this.
 
-The warning means "unknown publisher", not "unsafe". Every release is built by GitHub Actions from this repository; the [Actions](../../actions) tab shows the run that produced it, and `SHA256SUMS.txt` lets you confirm the file you downloaded is the one it built. A signed Microsoft Store build is on the roadmap.
+The warning means "unknown publisher", not "unsafe". Every release is built by GitHub Actions from this repository; the [Actions](../../actions) tab shows the run that produced it, and `SHA256SUMS.txt` lets you confirm the file you downloaded is the one it built.
 
 ### Android App
 
-Download [`Daylo-android-arm64.apk`](../../releases/latest/download/Daylo-android-arm64.apk) and open it on your phone. Android will ask you to allow installs from this source the first time.
+Download [`Daylo-android-arm64.apk`](../../releases/latest/download/Daylo-android-arm64.apk) and open it on your phone. Android will ask you to allow installs from this source the first time. Google Play Protect will then most likely block it with "App blocked to protect your device". **The big button dismisses the install; the small "Install anyway" link below it continues.** Play Protect shows this for any app whose signing key it has not seen before, which is every app installed from outside the Play Store.
 
 - Runs on **arm64 devices**, practically every phone and tablet made since 2017. It will not install on 32-bit devices or on Android Studio emulators.
 - Your data lives in the app's local storage on the device. **Use Export Data inside the app before uninstalling**: uninstalling deletes the data.
-- **Updating from v1.1.0:** that build was signed with a key that no longer exists, so v1.1.1 cannot install over it. One-time step: Export Data, uninstall v1.1.0, install v1.1.1, Import Data. From v1.1.1 onward, updates install in place.
+- **Updating from v1.1.0:** that build was signed with a key that no longer exists, so newer versions cannot install over it. One-time step: Export Data, uninstall v1.1.0, install the current release, Import Data. Every version after v1.1.0 updates in place.
 
 ### Docker
 
