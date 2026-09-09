@@ -1,4 +1,4 @@
-# Builds the Flatpak from packaging/flathub/ and answers three questions that can only be
+# Builds the Flatpak from packaging/flathub/ and answers four questions that can only be
 # answered by building it. Manual and on changes to the packaging, not on every pull
 # request: the build compiles Rust from scratch inside the sandbox and takes a while, and
 # the manifest is pinned to a released tag, so a code change cannot break it.
@@ -46,7 +46,7 @@ jobs:
           retention-days: 14
           if-no-files-found: error
 
-  # Three answers that only exist once the thing is installed and running. Each one is a
+  # Four answers that only exist once the thing is installed and running. Each one is a
   # decision we would otherwise be guessing at.
   inspect:
     name: Inspect the built app
@@ -97,9 +97,40 @@ jobs:
           fi
           echo "network: none, as declared"
 
-      # 2. StartupWMClass in the desktop entry has to match what the app actually sets, or
+      # 2. Where an exported backup would actually land. Daylo has no dialog plugin and no
+      #    Tauri download handler, so a click on Export is a plain <a download> and the
+      #    destination is decided by WebKitGTK's own default handler. That handler was
+      #    measured against WebKitGTK 4.1 directly: it uses the XDG download directory, and
+      #    when user-dirs.dirs is absent it falls back to $HOME. Inside the sandbox $HOME is
+      #    the app's private directory, so the export would succeed and the file would be
+      #    somewhere the user will not find. What is left to establish is what the sandbox
+      #    actually shows the app, and whether a filesystem permission would change it.
+      - name: Where an exported backup would land
+        run: |
+          set -uo pipefail
+          probe='echo "HOME=$HOME"; printf -- "--- user-dirs.dirs: "; cat "$HOME/.config/user-dirs.dirs" 2>/dev/null || echo "(absent, so the default falls back to HOME)"; echo "--- HOME contains:"; ls -a "$HOME"'
+          echo "### as declared, with no filesystem permission"
+          flatpak run --command=sh io.github.henfrydls.daylo -c "$probe"
+          echo
+          echo "### with --filesystem=xdg-download, to see whether it would change anything"
+          flatpak run --filesystem=xdg-download --command=sh io.github.henfrydls.daylo -c "$probe"
+
+      # 3. What AppStream thinks of the metadata that ends up inside the bundle, not of the
+      #    file in the repository. Those can differ if the install step goes wrong.
+      - name: Validate the installed metainfo
+        run: |
+          set -uo pipefail
+          sudo apt-get install -y -qq appstream
+          path=$(flatpak info --show-location io.github.henfrydls.daylo)/files/share/metainfo
+          ls -la "$path"
+          appstreamcli validate --explain "$path"/io.github.henfrydls.daylo.metainfo.xml
+
+      # 4. StartupWMClass in the desktop entry has to match what the app actually sets, or
       #    launching from the menu leaves a second icon in the taskbar instead of grouping
       #    with the launcher. It was written before anybody could check it.
+      #
+      #    Last on purpose: a mismatch is worth failing the job over, and a
+      #    failure here must not stop the three answers above from being printed.
       - name: What WM_CLASS the app really sets
         run: |
           set -uo pipefail
@@ -111,40 +142,73 @@ jobs:
             sleep 1
           done
 
-          flatpak run io.github.henfrydls.daylo >app.log 2>&1 &
+          # The first attempt got 'DRI3 error: Could not get DRI3 device' and no window.
+          # WebKitGTK's dmabuf renderer needs a real GPU, so it is turned off here and
+          # rendering forced to software. This is about this runner, not about the app.
+          flatpak run \
+            --env=WEBKIT_DISABLE_DMABUF_RENDERER=1 \
+            --env=WEBKIT_DISABLE_COMPOSITING_MODE=1 \
+            --env=LIBGL_ALWAYS_SOFTWARE=1 \
+            --env=GDK_BACKEND=x11 \
+            io.github.henfrydls.daylo >app.log 2>&1 &
           app_pid=$!
+
+          # _NET_CLIENT_LIST is set by a window manager and there is none here, so the
+          # first version of this check could not have succeeded even against a healthy
+          # app. Root's children are enumerated instead, and the one carrying a WM_CLASS is
+          # the toplevel: WebKit creates several X windows and only that one has it.
+          #
+          # Nothing is piped into a consumer that exits early. Under pipefail a grep -q
+          # that stops reading makes xprop die of SIGPIPE and the whole pipeline report
+          # 141, which reads as 'no window' forever. That mistake has been paid for twice
+          # already in this repository.
+          #
           # The webview needs time on a machine with no GPU, as the desktop smoke run
-          # measured: about 28s there, so 45 here with a container in the way.
+          # measured: about 28s there, so 90 here with software rendering on top.
           wm=""
-          for _ in $(seq 1 45); do
-            wm=$(xprop -root _NET_CLIENT_LIST 2>/dev/null | grep -oE '0x[0-9a-f]+' | head -1 || true)
+          class=""
+          for _ in $(seq 1 90); do
+            children=$(xwininfo -root -children 2>/dev/null || true)
+            for id in $(grep -oE '0x[0-9a-f]+' <<< "$children"); do
+              props=$(xprop -id "$id" WM_CLASS 2>/dev/null || true)
+              # 'WM_CLASS:  not found.' is what xprop prints when the property is absent,
+              # and it starts with WM_CLASS, so matching on that prefix latches onto the
+              # first child of root and reports nonsense. Only a real value has the type.
+              case "$props" in
+                'WM_CLASS(STRING)'*) wm="$id"; class="$props"; break ;;
+              esac
+            done
             [ -n "$wm" ] && break
             sleep 1
           done
 
+          declared=$(grep -oP '^StartupWMClass=\K.*' packaging/flathub/io.github.henfrydls.daylo.desktop || true)
           if [ -z "$wm" ]; then
-            echo "::warning::No window appeared within 45s, so WM_CLASS could not be read."
-            echo "::warning::That is a limit of this environment, not a failure of the app:"
-            echo "::warning::StartupWMClass stays unverified rather than wrongly confirmed."
+            echo "::warning::No window with a WM_CLASS appeared within 90s, so it could not"
+            echo "::warning::be read. StartupWMClass stays unverified rather than wrongly"
+            echo "::warning::confirmed. The app log follows."
             cat app.log || true
+            xwininfo -root -children 2>/dev/null || true
           else
             echo "window: $wm"
-            xprop -id "$wm" WM_CLASS || true
-            declared=$(grep -oP '^StartupWMClass=\K.*' packaging/flathub/io.github.henfrydls.daylo.desktop || true)
-            echo "declared in the desktop entry: ${declared:-<none>}"
-            echo "::notice::Compare the two by hand and fix the desktop entry to match."
+            echo "actual:   $class"
+            echo "declared: StartupWMClass=${declared:-<none>}"
+            # The class is the second string in WM_CLASS. StartupWMClass is matched against
+            # either of the two, so a mismatch with both is what actually breaks grouping.
+            actual_class=$(sed -E 's/.*"[^"]*", "([^"]*)".*/\1/' <<< "$class")
+            actual_inst=$(sed -E 's/.*= "([^"]*)".*/\1/' <<< "$class")
+            if [ "$declared" = "$actual_class" ] || [ "$declared" = "$actual_inst" ]; then
+              echo "::notice::StartupWMClass matches what the app sets."
+            else
+              echo "::error::StartupWMClass=$declared matches neither \"$actual_inst\" nor"
+              echo "::error::\"$actual_class\". Launching from the menu would leave a second"
+              echo "::error::icon in the taskbar. Fix the desktop entry to the value above."
+              kill "$app_pid" 2>/dev/null || true
+              kill "$xvfb_pid" 2>/dev/null || true
+              exit 1
+            fi
           fi
 
           kill "$app_pid" 2>/dev/null || true
           kill "$xvfb_pid" 2>/dev/null || true
           exit 0
-
-      # 3. What AppStream thinks of the metadata that ends up inside the bundle, not of the
-      #    file in the repository. Those can differ if the install step goes wrong.
-      - name: Validate the installed metainfo
-        run: |
-          set -uo pipefail
-          sudo apt-get install -y -qq appstream
-          path=$(flatpak info --show-location io.github.henfrydls.daylo)/files/share/metainfo
-          ls -la "$path"
-          appstreamcli validate --explain "$path"/io.github.henfrydls.daylo.metainfo.xml
