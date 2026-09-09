@@ -45,9 +45,25 @@ modules:
     buildsystem: simple
     build-options:
       append-path: /usr/lib/sdk/node24/bin
+      # Nothing here may touch the network: the sandbox has none during a build. Every
+      # variable below points a tool at the offline copy the generated source lists
+      # populate, or tells it plainly that it is offline instead of letting it wait for a
+      # timeout it will blame on something else.
       env:
-        # The generated cargo sources put the vendored registry here.
+        # Where the generated cargo sources put the vendored registry. cargo/config says
+        # directory = "cargo/vendor" in relative form, and cargo resolves that against the
+        # directory containing CARGO_HOME rather than the working directory, so it still
+        # points at the right place when tauri runs cargo from src-tauri/.
         CARGO_HOME: /run/build/daylo/cargo
+        CARGO_NET_OFFLINE: 'true'
+        # npm ci has to be told where the cache is. The node sources unpack every tarball
+        # into flatpak-node/npm-cache; without this npm looks in ~/.npm, finds an empty
+        # cache and goes to the registry.
+        npm_config_cache: /run/build/daylo/flatpak-node/npm-cache
+        npm_config_offline: 'true'
+        # esbuild, node-gyp and playwright each look under XDG_CACHE_HOME, and the node
+        # sources pre-populate exactly those three directories under flatpak-node/cache.
+        XDG_CACHE_HOME: /run/build/daylo/flatpak-node/cache
         # Playwright is a devDependency and npm ci installs it from the lockfile, but its
         # postinstall must not try to fetch browsers: those 479 MB are not in the vendored
         # sources on purpose, because the Flatpak build runs no end to end tests.
@@ -59,9 +75,12 @@ modules:
       # The binary is Daylo since 1.1.2; it is installed as 'daylo' to match Exec= in the
       # desktop entry and the lowercase convention for commands on PATH.
       - install -Dm755 src-tauri/target/release/bundle/deb/*/data/usr/bin/Daylo /app/bin/daylo
-      - install -Dm644 packaging/flathub/io.github.henfrydls.daylo.desktop
+      # The desktop entry and the metainfo come from the sources below, not from the git
+      # checkout: packaging/flathub/ does not exist in tag v1.1.2, and on Flathub these two
+      # files live in the packaging repository next to this manifest anyway.
+      - install -Dm644 io.github.henfrydls.daylo.desktop
         /app/share/applications/io.github.henfrydls.daylo.desktop
-      - install -Dm644 packaging/flathub/io.github.henfrydls.daylo.metainfo.xml
+      - install -Dm644 io.github.henfrydls.daylo.metainfo.xml
         /app/share/metainfo/io.github.henfrydls.daylo.metainfo.xml
       # Icons are installed under the app id, which is what the desktop entry's Icon= names
       # and what AppStream expects. The sizes come from src-tauri/icons, already generated.
@@ -77,5 +96,9 @@ modules:
         url: https://github.com/henfrydls/daylo.git
         tag: v1.1.2
         commit: 603f7c2d3636dc443a72ee6ef57754c4ca8407f3
+      - type: file
+        path: io.github.henfrydls.daylo.desktop
+      - type: file
+        path: io.github.henfrydls.daylo.metainfo.xml
       - cargo-sources.json
       - node-sources.json
