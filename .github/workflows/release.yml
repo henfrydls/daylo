@@ -106,6 +106,7 @@ jobs:
           releaseName: '${{ github.ref_name }}'
           releaseBody: |
             Download the installer for your platform below.
+            What changed in this version: [CHANGELOG](https://github.com/henfrydls/daylo/blob/main/CHANGELOG.md).
 
             | Platform | File | Notes |
             |----------|------|-------|
