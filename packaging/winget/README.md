@@ -3,7 +3,9 @@
 Fuente de verdad de los manifests que se copian al fork de `microsoft/winget-pkgs`.
 Una carpeta por version, con los tres archivos que pide el esquema.
 
-Antes de abrir el PR externo, comprobar por ejecucion y no por lectura:
+Antes de abrir el PR externo, comprobar por ejecucion y no por lectura. Los dos bloques se
+corren **desde la raiz del repo** y necesitan `pyyaml` y `jsonschema`
+(`python3 -m pip install pyyaml jsonschema` si no estan):
 
 ```bash
 # 1) validez de esquema (1.10.0)
