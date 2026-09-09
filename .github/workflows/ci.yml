@@ -202,7 +202,7 @@ jobs:
         run: |
           set -uo pipefail
           shopt -s nullglob
-          BIN="src-tauri/target/debug/activity-tracker"
+          BIN="src-tauri/target/debug/Daylo"
           if [ ! -x "$BIN" ]; then
             echo "::error::No se encontro el binario ejecutable en $BIN"
             ls -la src-tauri/target/debug/ 2>/dev/null | head -20
@@ -316,11 +316,11 @@ jobs:
           # indiagnosticable desde el log, que es lo que paso en el primer run real.
           echo "--- arbol de procesos, mientras la aplicacion vive ---"
           if [ "$RUNNER_OS" = "Linux" ]; then
-            ps -ef --forest 2>/dev/null | grep -iE 'activity-tracker|webkit|bwrap|Xvfb' \
+            ps -ef --forest 2>/dev/null | grep -iE 'Daylo|webkit|bwrap|Xvfb' \
               | grep -v grep || true
             echo "hijos directos del binario: $(pgrep -P "$APP_PID" 2>/dev/null | wc -l || true)"
           else
-            ps -ef 2>/dev/null | grep -iE 'activity-tracker|WebKit' | grep -v grep || true
+            ps -ef 2>/dev/null | grep -iE 'Daylo|WebKit' | grep -v grep || true
             echo "En macOS no se juzga el webview por el arbol: sus procesos son servicios"
             echo "XPC de launchd, no hijos del binario. Aqui solo se verifica que el"
             echo "proceso no muere."
@@ -450,7 +450,7 @@ jobs:
         shell: pwsh
         run: |
           $ErrorActionPreference = 'Stop'
-          $rel = 'src-tauri/target/debug/activity-tracker.exe'
+          $rel = 'src-tauri/target/debug/Daylo.exe'
           if (-not (Test-Path $rel)) {
             Write-Output "::error::No se encontro el binario en $rel"
             Get-ChildItem src-tauri/target/debug | Select-Object -First 20 | Format-Table Name
