@@ -8,9 +8,9 @@ corren **desde la raiz del repo** y necesitan `pyyaml` y `jsonschema`
 (`python3 -m pip install pyyaml jsonschema` si no estan):
 
 ```bash
-# 1) validez de esquema (1.10.0)
+# 1) validez de esquema (1.12.0)
 for s in version installer defaultLocale; do
-  curl -sSLo /tmp/winget-$s.json "https://aka.ms/winget-manifest.$s.1.10.0.schema.json"
+  curl -sSLo /tmp/winget-$s.json "https://aka.ms/winget-manifest.$s.1.12.0.schema.json"
 done
 python3 - <<'PY'
 import json, yaml, glob
