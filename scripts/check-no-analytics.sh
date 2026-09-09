@@ -18,9 +18,20 @@ set -uo pipefail
 # Hosts a los que se enviarian datos. 'analytics' va acotado a contexto de host: sin eso,
 # un comentario que diga "no analytics" en el codigo rompe el build, y en este repositorio
 # esa frase es probable justamente por lo que estamos defendiendo.
-HOSTS='[a-z0-9-]*analytics\.(com|io|js|net)|umami|google-analytics|googletagmanager'
-HOSTS="$HOSTS"'|plausible\.io|matomo|mixpanel|segment\.(com|io)|amplitude\.com|sentry\.io'
-HOSTS="$HOSTS"'|posthog|hotjar|fullstory|datadoghq|bugsnag|rollbar|newrelic'
+#
+# Los nombres sueltos van con \b por la misma razon, y no es teorico: 'rollbar' sin limites
+# casa dentro de 'scrollbar', asi que un 'scrollbar-width: thin' en cualquier hoja de estilos
+# ponia todos los PR en rojo diciendo que la app tiene telemetria. Los que llevan dominio
+# (plausible\.io, sentry\.io, amplitude\.com, segment\.(com|io)) ya estan anclados por el punto.
+# Nuestro propio host va explicito: 'analytics.henfrydls.com' NO casa con el patron
+# generico de abajo, porque ahi 'analytics' es un subdominio y el TLD viene despues de otra
+# etiqueta. Sin esta linea, pegar el script de Umami de la landing en la app pasaba el check
+# limpio: el guardian era ciego justo al unico proveedor que usamos. deploy/build.sh del
+# sitio si lo listaba, y esa asimetria entre dos listas con el mismo proposito era la pista.
+HOSTS='analytics\.henfrydls\.com'
+HOSTS="$HOSTS"'|[a-z0-9-]*analytics\.(com|io|js|net)|\bumami\b|\bgoogle-analytics\b|\bgoogletagmanager\b'
+HOSTS="$HOSTS"'|plausible\.io|\bmatomo\b|\bmixpanel\b|segment\.(com|io)|amplitude\.com|sentry\.io'
+HOSTS="$HOSTS"'|\bposthog\b|\bhotjar\b|\bfullstory\b|\bdatadoghq\b|\bbugsnag\b|\brollbar\b|\bnewrelic\b'
 
 # APIs de pagina que solo existen para medir. Con limites de palabra, para que no casen
 # dentro de identificadores mas largos.
@@ -73,9 +84,14 @@ for objetivo in "$@"; do
   [ -e "$objetivo" ] || continue
   # -I salta los binarios: sin eso, un fichero binario en dist/ imprime "Binary file
   # matches" sin numero de linea, que no sirve para diagnosticar nada.
-  if grep -rInE "$PATRONES" "$objetivo" 2>/dev/null; then
-    encontrado=1
-  fi
+  grep -rInE "$PATRONES" "$objetivo"
+  estado=$?
+  case $estado in
+    0) encontrado=1 ;;
+    1) ;;  # sin coincidencias: el unico resultado aceptable
+    *) echo "::error::grep no pudo leer $objetivo (codigo $estado); no se puede afirmar que este limpio" >&2
+       exit 2 ;;
+  esac
 done
 
 if [ "$encontrado" -eq 1 ]; then
