@@ -21,6 +21,16 @@ serde_json = "1"
 [target.'cfg(not(any(target_os = "android", target_os = "ios")))'.dependencies]
 tauri-plugin-opener = "2"
 
+# default-features = false drops this plugin's default "gtk3" backend, and that is the
+# whole point of the line. With gtk3 the save dialog is a GTK dialog running inside the
+# Flatpak sandbox: it would show the sandbox's own filesystem, the user would pick a
+# location, and the file would land in the app's private directory again, which is exactly
+# the bug the dialog is here to fix. xdg-portal routes the dialog through the desktop
+# portal, so the path that comes back is the user's real one and no --filesystem
+# permission is needed. The cost is that a Linux system with no portal running cannot open
+# the dialog at all, and the app says so instead of hiding the file.
+tauri-plugin-dialog = { version = "2", default-features = false, features = ["xdg-portal"] }
+
 [profile.dev]
 incremental = true
 

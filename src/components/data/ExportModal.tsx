@@ -1,12 +1,8 @@
 import { useState } from 'react'
-import { Modal, Button } from '../ui'
+import { Modal, Button, useToast } from '../ui'
 import { useCalendarStore } from '../../store'
-import {
-  exportToJSON,
-  exportToCSV,
-  downloadFile,
-  generateExportFilename,
-} from '../../lib/dataExport'
+import { exportToJSON, exportToCSV, generateExportFilename } from '../../lib/dataExport'
+import { saveTextFile, formatSavedMessage } from '../../lib/fileSave'
 
 interface ExportModalProps {
   isOpen: boolean
@@ -19,22 +15,34 @@ export function ExportModal({ isOpen, onClose }: ExportModalProps) {
   const [format, setFormat] = useState<ExportFormat>('json')
   const [isExporting, setIsExporting] = useState(false)
   const { activities, logs } = useCalendarStore()
+  const { showToast } = useToast()
 
-  const handleExport = () => {
+  const handleExport = async () => {
     setIsExporting(true)
 
     try {
       const filename = generateExportFilename(format)
+      const content =
+        format === 'json' ? exportToJSON(activities, logs) : exportToCSV(activities, logs)
+      const mimeType = format === 'json' ? 'application/json' : 'text/csv'
 
-      if (format === 'json') {
-        const content = exportToJSON(activities, logs)
-        downloadFile(content, filename, 'application/json')
-      } else {
-        const content = exportToCSV(activities, logs)
-        downloadFile(content, filename, 'text/csv')
+      const result = await saveTextFile(content, filename, mimeType)
+
+      // Closing the dialog without choosing is not a failure. Nothing is announced and the
+      // modal stays open, so choosing again does not mean reopening it.
+      if (!result.saved) {
+        return
+      }
+
+      // Only a dialog knows where the file really went. When the browser decided, naming a
+      // folder would be a guess, and a wrong location is worse than no location.
+      if (result.path) {
+        showToast(formatSavedMessage(result.path), 'success')
       }
 
       onClose()
+    } catch (error) {
+      showToast(error instanceof Error ? error.message : String(error), 'error')
     } finally {
       setIsExporting(false)
     }
@@ -111,7 +119,11 @@ export function ExportModal({ isOpen, onClose }: ExportModalProps) {
           <Button variant="secondary" onClick={onClose} className="flex-1">
             Cancel
           </Button>
-          <Button onClick={handleExport} disabled={!hasData || isExporting} className="flex-1">
+          <Button
+            onClick={() => void handleExport()}
+            disabled={!hasData || isExporting}
+            className="flex-1"
+          >
             {isExporting ? (
               <span className="flex items-center gap-2">
                 <svg className="animate-spin h-4 w-4" viewBox="0 0 24 24">

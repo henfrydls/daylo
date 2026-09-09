@@ -39,6 +39,7 @@
     "version": "node scripts/sync-version.js && git add src-tauri/Cargo.toml"
   },
   "dependencies": {
+    "@tauri-apps/plugin-dialog": "^2.7.3",
     "date-fns": "^4.1.0",
     "react": "^19.2.0",
     "react-dom": "^19.2.0",
