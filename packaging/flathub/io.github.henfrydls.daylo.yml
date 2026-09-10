@@ -27,24 +27,27 @@ command: daylo
 # There is NO --share=network. If a future version ever needs it, that is a product
 # decision to argue for, not a line to add quietly.
 #
-# There is no --filesystem either, and as of 1.1.2 that is measured rather than hoped for.
+# There is no --filesystem either, and by 1.1.3 that is a property of the app rather than
+# a hope about the sandbox.
 #
-# Import goes through the webview's file chooser, which the portal serves, so it needs no
-# permission. Export did not: it is a plain <a download>, so with no download handler
-# registered the destination is picked by WebKitGTK's own default, which uses the XDG
-# download directory and falls back to $HOME when user-dirs.dirs is absent. That was
-# measured against WebKitGTK 4.1 directly. Inside the sandbox there is no user-dirs.dirs,
-# so the backup would be written to the app's own home and reported as a success, and the
-# user would never be told where it went.
+# Both directions go through the desktop portal, so neither needs a filesystem permission:
+# the user picks the file, and the portal hands over that one file and nothing else.
+# Import uses the webview's own file chooser, which the portal serves. Export opens the
+# portal's save dialog, which is what the xdg-portal feature on tauri-plugin-dialog buys
+# (see src-tauri/Cargo.toml, where the reason is written down at length).
 #
-# A filesystem permission is NOT the fix. Granting --filesystem=xdg-download in the CI
-# inspection changed nothing at all, because the permission does not create the
-# user-dirs.dirs the default handler reads. (That runner has no user-dirs.dirs of its own
-# to pass through either, so it does not settle what a real desktop would expose; it does
-# settle that the permission is not sufficient.) It would widen the sandbox and leave the
-# backup just as lost. The fix belongs in the app, and 1.1.3 makes Export ask where to
-# save through the same portal-backed chooser import already uses, which needs no
-# permission here. This stays empty.
+# It was not always so, and the history is worth keeping because it is what a filesystem
+# permission would have papered over. Until 1.1.3 export was a plain <a download> with no
+# download handler, so the destination came from WebKitGTK's own default: the XDG download
+# directory, falling back to $HOME when user-dirs.dirs is absent. Measured against
+# WebKitGTK 4.1. There is no user-dirs.dirs inside the sandbox, so a backup was written
+# into the app's private home and reported as saved, and the person was never told where
+# it went.
+#
+# Granting --filesystem=xdg-download would not have fixed that. It was tried in the CI
+# inspection and changed nothing, because the permission does not create the
+# user-dirs.dirs that the default handler reads. It would have widened the sandbox and
+# left the backup just as lost. The fix belonged in the app. This stays empty.
 finish-args:
   - --share=ipc
   - --socket=fallback-x11
@@ -108,8 +111,8 @@ modules:
       # a lockfile moved.
       - type: git
         url: https://github.com/henfrydls/daylo.git
-        tag: v1.1.2
-        commit: 603f7c2d3636dc443a72ee6ef57754c4ca8407f3
+        tag: v1.1.3
+        commit: 8e16d42850bbd4f98818cc3e15c7c594559ecf52
       - type: file
         path: io.github.henfrydls.daylo.desktop
       - type: file
