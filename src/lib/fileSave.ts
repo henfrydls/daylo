@@ -1,4 +1,5 @@
 import { save } from '@tauri-apps/plugin-dialog'
+import { writeTextFile } from '@tauri-apps/plugin-fs'
 import { invoke, isTauri } from '@tauri-apps/api/core'
 import { downloadFile } from './dataExport'
 
@@ -30,6 +31,22 @@ export type SaveTarget = 'dialog' | 'browser' | 'no-dialog'
 const DOCUMENT_PORTAL_PATH = /^\/run\/(user\/\d+|flatpak)\/doc\//
 
 /**
+ * What Android's document picker hands back. It is a handle, not a path: the last segment
+ * is an opaque document id, so there is no folder to name and no file name to read out of
+ * it. std::fs cannot open one either, which is why writing goes elsewhere on Android.
+ */
+const CONTENT_URI = /^content:\/\//
+
+/**
+ * What the Android picker says when the person backs out of it. The desktop resolves null
+ * for the same act; Android rejects, because DialogPlugin.kt calls invoke.reject on
+ * RESULT_CANCELED. There is no error code to match on, only this string, so this is a
+ * string comparison on purpose. A test pins it so that a change upstream shows up as a
+ * failing test rather than as an error toast every time someone closes the picker.
+ */
+const ANDROID_CANCELLED = /file picker cancelled/i
+
+/**
  * Ask the app itself whether a save dialog can open, rather than guessing from the user
  * agent. Two sides guessing the same thing is two places to drift; and the guess would be
  * wrong anyway, since an iPad reports itself as a Macintosh.
@@ -52,8 +69,20 @@ export async function chooseSaveTarget(): Promise<SaveTarget> {
   return available ? 'dialog' : 'no-dialog'
 }
 
-/** The file, and the folder it is in when that is a place the user would recognise. */
-function describeLocation(path: string): string {
+/**
+ * The file, and the folder it is in when that is a place the user would recognise.
+ *
+ * `suggestedName` is the name the save dialog was opened with, and it is the only thing
+ * worth saying about an Android document URI, which carries no readable name. If the
+ * person renamed the file in the picker, this shows the name they were offered rather
+ * than the one they typed; the alternative is saying nothing at all, and the platform
+ * gives us no third option without querying the content resolver.
+ */
+function describeLocation(path: string, suggestedName?: string): string {
+  if (CONTENT_URI.test(path)) {
+    return suggestedName ?? 'the file'
+  }
+
   // The separator comes from the shape of the path, not from which character appears in
   // it. A Linux file name may legally contain a backslash, so both "the one that appears"
   // and "the last one of either" report the folder of "/home/misael/my\backup.json" as
@@ -71,8 +100,8 @@ function describeLocation(path: string): string {
 }
 
 /** What to tell the user after a successful save. */
-export function formatSavedMessage(path: string): string {
-  return `Saved ${describeLocation(path)}`
+export function formatSavedMessage(path: string, suggestedName?: string): string {
+  return `Saved ${describeLocation(path, suggestedName)}`
 }
 
 function describeError(error: unknown): string {
@@ -121,6 +150,11 @@ export async function saveTextFile(
       filters: [{ name: extension.toUpperCase(), extensions: [extension] }],
     })
   } catch (error) {
+    // Backing out of the Android picker arrives here rather than as a null, and it is not
+    // a failure.
+    if (ANDROID_CANCELLED.test(describeError(error))) {
+      return { saved: false, viaDialog: true }
+    }
     throw new Error(`Could not open the save window: ${describeError(error)}`)
   }
 
@@ -129,11 +163,19 @@ export async function saveTextFile(
   }
 
   try {
-    await invoke('write_text_file', { path, contents: content })
+    if (CONTENT_URI.test(path)) {
+      // Android. The picker returns a document handle, and only the platform knows how to
+      // open it, so this goes through the filesystem plugin instead of the app's own
+      // command. It needs no path scope: for a URI the plugin skips that check and hands
+      // the write to Android.
+      await writeTextFile(path, content)
+    } else {
+      await invoke('write_text_file', { path, contents: content })
+    }
   } catch (error) {
-    // Described the same way as a success, so a document portal path does not leak into
-    // the message the user reads.
-    throw new Error(`Could not write ${describeLocation(path)}: ${describeError(error)}`)
+    // Described the same way as a success, so neither a document portal path nor an
+    // Android document URI leaks into the message the user reads.
+    throw new Error(`Could not write ${describeLocation(path, filename)}: ${describeError(error)}`)
   }
 
   return { saved: true, viaDialog: true, path }

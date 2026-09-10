@@ -37,7 +37,7 @@ export function ExportModal({ isOpen, onClose }: ExportModalProps) {
       // Only a dialog knows where the file really went. When the browser decided, naming a
       // folder would be a guess, and a wrong location is worse than no location.
       if (result.path) {
-        showToast(formatSavedMessage(result.path), 'success')
+        showToast(formatSavedMessage(result.path, filename), 'success')
       }
 
       onClose()

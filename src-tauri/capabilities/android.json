@@ -1,0 +1,11 @@
+{
+  "$schema": "https://schema.tauri.app/config/2/capability",
+  "identifier": "android",
+  "description": "Android-only: the system document picker, and writing to the file it returns",
+  "windows": ["main"],
+  "platforms": ["android"],
+  "permissions": [
+    "dialog:allow-save",
+    "fs:allow-write-text-file"
+  ]
+}

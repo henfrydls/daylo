@@ -35,8 +35,13 @@ the same app showed a blue square on one computer and a green one on another, ne
 Daylo's green. Daylo draws it now, so it looks the same everywhere. The extra tick that
 sat at the end of a completed row is gone with it: the checkbox already says so.
 
-Importing has not changed. Neither has the web version, where your browser keeps handling
-downloads, nor the Android and iOS apps.
+**On Android, exporting now saves a file at all.** Before, tapping Export looked like it
+worked and wrote nothing: the button went away and no file was ever created anywhere. If
+you exported a backup before changing phones, you had nothing to restore from. Now
+Android's own save window opens, you choose where the file goes, and Daylo confirms it.
+
+Importing has not changed, and neither has the web version, where your browser keeps
+handling downloads.
 
 ## 1.1.2
 
