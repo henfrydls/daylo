@@ -12,10 +12,10 @@ InstallModes:
   - silentWithProgress
 UpgradeBehavior: install
 ReleaseDate: "2026-09-07"
-# Valores que el NSIS de tauri-bundler escribe en el registro de Agregar o quitar programas:
-# UNINSTKEY es Software\Microsoft\Windows\CurrentVersion\Uninstall\${PRODUCTNAME}, y ahi deja
-# DisplayName=${PRODUCTNAME}, Publisher=${MANUFACTURER} y DisplayVersion=${VERSION}. Declararlos
-# permite que winget upgrade y uninstall correlacionen por registro y no por parecido de nombre.
+# Values that tauri-bundler's NSIS writes to the Add or Remove Programs registry key:
+# UNINSTKEY is Software\Microsoft\Windows\CurrentVersion\Uninstall\${PRODUCTNAME}, and it stores
+# DisplayName=${PRODUCTNAME}, Publisher=${MANUFACTURER} and DisplayVersion=${VERSION}. Declaring them
+# lets winget upgrade and uninstall match by registry entry instead of by name similarity.
 AppsAndFeaturesEntries:
   - DisplayName: Daylo
     Publisher: DLSLabs
