@@ -566,7 +566,16 @@ function sanitizeActivityLog(log: ActivityLog): ActivityLog {
  * "backup" would invite someone to keep one as their only copy and find out later.
  */
 export function generateExportFilename(format: 'json' | 'csv'): string {
-  const date = new Date().toISOString().split('T')[0]
+  // The date the person is living in, not the one in UTC. toISOString() was naming
+  // backups after tomorrow every evening west of Greenwich: at 23:02 in Santo Domingo it
+  // produced 2026-09-10, and the file the user saved tonight looked like it came from a
+  // day that had not happened yet.
+  const now = new Date()
+  const date = [
+    now.getFullYear(),
+    String(now.getMonth() + 1).padStart(2, '0'),
+    String(now.getDate()).padStart(2, '0'),
+  ].join('-')
   const kind = format === 'json' ? 'backup' : 'export'
   return `daylo-${kind}-${date}.${format}`
 }

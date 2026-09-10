@@ -889,25 +889,39 @@ describe('dataExport utility functions', () => {
   })
 
   describe('generateExportFilename', () => {
-    beforeEach(() => {
-      vi.useFakeTimers()
-      vi.setSystemTime(new Date('2024-06-15T12:00:00.000Z'))
-    })
-
     afterEach(() => {
       vi.useRealTimers()
     })
 
-    it('should generate JSON filename with date', () => {
-      const filename = generateExportFilename('json')
+    // Local components on purpose: 23:30 on the 15th wherever the test happens to run.
+    function atHalfPastElevenOn(year: number, month: number, day: number) {
+      vi.useFakeTimers()
+      vi.setSystemTime(new Date(year, month, day, 23, 30))
+    }
 
-      expect(filename).toBe('daylo-backup-2024-06-15.json')
+    it('should generate JSON filename with date', () => {
+      atHalfPastElevenOn(2024, 5, 15)
+
+      expect(generateExportFilename('json')).toBe('daylo-backup-2024-06-15.json')
     })
 
     it('should generate CSV filename with date', () => {
-      const filename = generateExportFilename('csv')
+      atHalfPastElevenOn(2024, 5, 15)
 
-      expect(filename).toBe('daylo-export-2024-06-15.csv')
+      expect(generateExportFilename('csv')).toBe('daylo-export-2024-06-15.csv')
+    })
+
+    // The name must say the day the person is living in. Late in the evening anywhere
+    // west of Greenwich, UTC has already turned over, and toISOString() named the file
+    // after tomorrow: at 23:02 in Santo Domingo it produced 2026-09-10.
+    //
+    // Honest limit: on a runner whose zone is UTC, which is where CI runs, both the old
+    // and the new implementation give the same answer, so this passes either way there.
+    // It bites on any machine in a real timezone, which is where the bug was found.
+    it('uses the local date, not the UTC one, late in the evening', () => {
+      atHalfPastElevenOn(2026, 8, 9)
+
+      expect(generateExportFilename('json')).toBe('daylo-backup-2026-09-09.json')
     })
   })
 
