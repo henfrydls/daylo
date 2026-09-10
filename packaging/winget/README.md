@@ -1,41 +1,42 @@
-# Manifests de winget
+# winget manifests
 
-Fuente de verdad de los manifests que se copian al fork de `microsoft/winget-pkgs`.
-Una carpeta por version, con los tres archivos que pide el esquema.
+Source of truth for the manifests that are copied to the `microsoft/winget-pkgs` fork.
+One folder per version, with the three files the schema requires.
 
-Antes de abrir el PR externo, comprobar por ejecucion y no por lectura. Los dos bloques se
-corren **desde la raiz del repo** y necesitan `pyyaml` y `jsonschema`
-(`python3 -m pip install pyyaml jsonschema` si no estan):
+Before opening the external PR, check by running, not by reading. The two blocks are run
+**from the repo root** and need `pyyaml` and `jsonschema`
+(`python3 -m pip install pyyaml jsonschema` if they are not installed):
 
 ```bash
-# 1) validez de esquema (1.12.0)
+# 1) schema validity (1.12.0)
 for s in version installer defaultLocale; do
   curl -sSLo /tmp/winget-$s.json "https://aka.ms/winget-manifest.$s.1.12.0.schema.json"
 done
 python3 - <<'PY'
 import json, yaml, glob
 from jsonschema import Draft7Validator
-mapa = {'installer': 'installer', 'locale.en-US': 'defaultLocale'}
+schema_for = {'installer': 'installer', 'locale.en-US': 'defaultLocale'}
 for f in sorted(glob.glob('packaging/winget/*/*/*.yaml')):
-    clave = next((v for k, v in mapa.items() if f.endswith(k + '.yaml')), 'version')
+    schema = next((v for k, v in schema_for.items() if f.endswith(k + '.yaml')), 'version')
     doc = yaml.safe_load(open(f, encoding='utf-8'))
-    sch = json.load(open(f'/tmp/winget-{clave}.json', encoding='utf-8'))
+    sch = json.load(open(f'/tmp/winget-{schema}.json', encoding='utf-8'))
     errs = list(Draft7Validator(sch).iter_errors(doc))
-    print(f.split('/')[-1], 'valido' if not errs else errs[0].message)
+    print(f.split('/')[-1], 'valid' if not errs else errs[0].message)
 PY
 
-# 2) que los SHA256 sean los de los bytes publicados, no los de SHA256SUMS.txt
+# 2) the SHA256 values must be those of the published bytes, not the ones in SHA256SUMS.txt
 python3 - <<'PY'
-import yaml, hashlib, urllib.request
-d = yaml.safe_load(open('packaging/winget/DLSLabs.Daylo/1.1.1/DLSLabs.Daylo.installer.yaml'))
-for i in d['Installers']:
-    b = urllib.request.urlopen(i['InstallerUrl']).read()
-    real = hashlib.sha256(b).hexdigest().upper()
-    print(i['Architecture'], 'coincide' if real == i['InstallerSha256'] else f"NO COINCIDE {real}")
+import yaml, hashlib, urllib.request, glob
+for f in sorted(glob.glob('packaging/winget/*/*/*.installer.yaml')):
+    d = yaml.safe_load(open(f, encoding='utf-8'))
+    for i in d['Installers']:
+        b = urllib.request.urlopen(i['InstallerUrl']).read()
+        real = hashlib.sha256(b).hexdigest().upper()
+        print(d['PackageVersion'], i['Architecture'], 'matches' if real == i['InstallerSha256'] else f"MISMATCH {real}")
 PY
 ```
 
-`ReleaseDate` va entre comillas: sin ellas, YAML lo convierte a fecha y el esquema pide cadena.
+`ReleaseDate` goes in quotes: without them, YAML converts it to a date and the schema requires a string.
 
-`Scope: user` porque el NSIS se genera con `installMode: currentUser` en `tauri.conf.json`.
-Si eso cambia, cambia el `Scope`.
+`Scope: user` because the NSIS is generated with `installMode: currentUser` in `tauri.conf.json`.
+If that changes, the `Scope` changes too.

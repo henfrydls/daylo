@@ -1,53 +1,54 @@
-# QA de la release publicada v1.1.0
+# QA of the published release v1.1.0
 
-**Fecha:** 2026-09-07 · **Ejecutado desde:** Ubuntu 25.10, x86-64, Wayland
-**Qué se probó:** los 7 artefactos **descargados de GitHub Releases**, no el working tree.
-Descargados con `gh release download v1.1.0` a un directorio limpio fuera del repo.
+**Date:** 2026-09-07 · **Run from:** Ubuntu 25.10, x86-64, Wayland
+**What was tested:** the 7 artifacts **downloaded from GitHub Releases**, not the working tree.
+Downloaded with `gh release download v1.1.0` into a clean directory outside the repo.
 
-## Por qué esta forma
+## Why this approach
 
-Un visitante nuevo no tiene el checkout: se descarga un binario. Probar el código local
-habría verificado algo que nadie usa. Lo que sigue mide el artefacto publicado.
+A new visitor does not have the checkout: they download a binary. Testing the local code
+would have verified something nobody uses. What follows measures the published artifact.
 
-## Condición de refutación (escrita antes de ver resultados)
+## Refutation condition (written before seeing results)
 
-- **"No arranca"** exige fallo reproducible en ≥3 intentos, con datos limpios y **causa raíz
-  nombrada**. Sin causa raíz → "no concluyente", nunca "roto".
-- **"Arranca"** no es que se abra una ventana. Exige el ciclo: dato creado → app cerrada →
-  app reabierta → dato presente.
-- **Tres cajones, nunca dos:** VERDE (ejecutado), ROJO (falla con causa), **GRIS (no
-  verificable con el equipo disponible)**. Gris no se colapsa en ninguno de los otros dos.
-- Una compilación que no termina es **gris por presupuesto**, jamás roja.
+- **"Does not start"** requires a reproducible failure in ≥3 attempts, with clean data and a
+  **named root cause**. No root cause → "inconclusive", never "broken".
+- **"Starts"** does not mean a window opens. It requires the cycle: data created → app closed →
+  app reopened → data present.
+- **Three buckets, never two:** GREEN (executed), RED (fails with a cause), **GRAY (not
+  verifiable with the available equipment)**. Gray does not collapse into either of the other two.
+- A build that does not finish is **gray due to budget**, never red.
 
-Controles aplicados para separar "el paquete está roto" de "es el entorno de pruebas":
-`A` compilar desde fuente si el publicado falla · `B` identificar la dependencia exacta y
-compararla con `Depends` del paquete · `C` ciclo de persistencia · `D` HOME limpio en cada
-intento, sin tocar los datos reales del usuario.
+Controls applied to separate "the package is broken" from "it is the test environment":
+`A` build from source if the published one fails · `B` identify the exact dependency and
+compare it with the package's `Depends` · `C` persistence cycle · `D` clean HOME on every
+attempt, without touching the user's real data.
 
-**El control B evitó una conclusión falsa.** La primera captura de la ventana salió negra.
-Antes de anotarlo como fallo se comprobó el entorno: `LockedHint=yes` y
-`org.gnome.ScreenSaver.GetActive` → `true`. La sesión de escritorio estaba bloqueada y el
-negro era la pantalla de bloqueo. Queda como gris, no como rojo.
+**Control B prevented a false conclusion.** The first screenshot of the window came out black.
+Before recording it as a failure, the environment was checked: `LockedHint=yes` and
+`org.gnome.ScreenSaver.GetActive` → `true`. The desktop session was locked and the black was
+the lock screen. It stays as gray, not red.
 
-## VERDE: ejecutado y verificado
+## GREEN: executed and verified
 
-| Artefacto | Resultado |
+| Artifact | Result |
 |---|---|
-| `Daylo_1.1.0_amd64.AppImage` | Arranca, sobrevive >15 s, crea ventana `Daylo` (clase `activity-tracker`, 2400x1600), inicializa almacenamiento |
-| `Daylo_1.1.0_amd64.deb` | Extraído sin instalar; binario arranca, **todas las libs se resuelven**, crea almacenamiento |
-| Dependencias en distro actual | `Depends: libwebkit2gtk-4.1-0, libgtk-3-0`; Ubuntu 25.10 los tiene. **No sufre el fallo clásico de Tauri con webkit 4.0** |
-| **Persistencia** | Estado con 1 actividad + 2 logs inyectado en `localStorage`; tras reiniciar la app los datos siguen **intactos y sin corromper** |
-| Estado inicial | Store Zustand `simple-calendar-storage` con la fecha actual correcta (`selectedYear:2026`, `selectedMonth:8`) |
+| `Daylo_1.1.0_amd64.AppImage` | Starts, survives >15 s, creates a `Daylo` window (class `activity-tracker`, 2400x1600), initializes storage |
+| `Daylo_1.1.0_amd64.deb` | Extracted without installing; binary starts, **all libs resolve**, creates storage |
+| Dependencies on current distro | `Depends: libwebkit2gtk-4.1-0, libgtk-3-0`; Ubuntu 25.10 has them. **Does not suffer the classic Tauri failure with webkit 4.0** |
+| **Persistence** | State with 1 activity + 2 logs injected into `localStorage`; after restarting the app the data remains **intact and uncorrupted** |
+| Initial state | Zustand store `simple-calendar-storage` with the correct current date (`selectedYear:2026`, `selectedMonth:8`) |
 
-El primer arranque con datos vacíos **no falla**, y el arranque con datos preexistentes
-tampoco. Era la hipótesis heredada de actual-mcp y aquí no se reproduce.
+The first start with empty data **does not fail**, and neither does starting with
+pre-existing data. That was the hypothesis inherited from actual-mcp and it does not
+reproduce here.
 
-## ROJO: defectos reales encontrados
+## RED: real defects found
 
-### 1. La llave que firmó el APK es efímera: pérdida de datos en la primera actualización
+### 1. The key that signed the APK is ephemeral: data loss on the first update
 
-**El defecto más grave del proyecto.** `release.yml:165-167` genera una llave nueva dentro
-del job en cada build:
+**The most serious defect in the project.** `release.yml:165-167` generates a new key inside
+the job on every build:
 
 ```
 keytool -genkey -v -keystore release.jks -keyalg RSA -keysize 2048 \
@@ -55,195 +56,198 @@ keytool -genkey -v -keystore release.jks -keyalg RSA -keysize 2048 \
   -dname "CN=Daylo,O=DLSLabs,C=US"
 ```
 
-Los únicos `secrets.*` del workflow son dos usos de `GITHUB_TOKEN`. No hay keystore
-persistente, y `release.yml` **no sube `release.jks` como artifact** en ningún paso, así que
-la parte privada existió sólo en aquel runner y no quedó copia en ninguna parte.
+The only `secrets.*` in the workflow are two uses of `GITHUB_TOKEN`. There is no persistent
+keystore, and `release.yml` **does not upload `release.jks` as an artifact** in any step, so
+the private part existed only on that runner and no copy was left anywhere.
 
-Verificado en el binario publicado, no deducido del workflow. Certificado de
-`META-INF/RELEASE.RSA` del APK descargado:
+Verified on the published binary, not deduced from the workflow. Certificate from
+`META-INF/RELEASE.RSA` of the downloaded APK:
 
 ```
-Owner/Issuer: CN=Daylo, O=DLSLabs, C=US        ← el -dname del workflow
-Valid from:   2026-03-19 03:13:49 UTC          ← la release se publicó a las 03:11:47
+Owner/Issuer: CN=Daylo, O=DLSLabs, C=US        ← the workflow's -dname
+Valid from:   2026-03-19 03:13:49 UTC          ← the release was published at 03:11:47
 SHA256: 2C:D5:A0:EB:D7:A5:F6:0C:24:D1:6D:8B:99:6D:42:EB:69:DC:6D:5B:1F:5A:3D:DE:05:AC:DC:7D:84:E9:4F:2A
 ```
 
-El certificado nació **dos minutos después** de publicarse la release: se generó durante el
-build. Hallazgo original de la revisión de distribución, verificado de forma independiente en
-este QA.
+The certificate was born **two minutes after** the release was published: it was generated
+during the build. Original finding from the distribution review, independently verified in
+this QA.
 
-**Consecuencia.** Android exige firma idéntica para actualizar. Cualquier v1.2 firmada con
-otra llave falla con "App not installed" sobre una v1.1.0 instalada. La única salida del
-usuario es desinstalar, y siendo Daylo local-first, desinstalar **destruye sus datos**. Para
-una app cuyo argumento es "tus datos son tuyos y no salen de tu dispositivo", el primer
-update los borra. Irreparable para quien ya tiene v1.1.0; reparable de aquí en adelante.
+**Consequence.** Android requires an identical signature to update. Any v1.2 signed with
+another key fails with "App not installed" over an installed v1.1.0. The user's only way out
+is to uninstall, and since Daylo is local-first, uninstalling **destroys their data**. For an
+app whose pitch is "your data is yours and never leaves your device", the first update wipes
+it. Irreparable for anyone who already has v1.1.0; fixable from here on.
 
-**Y la llave no debería reutilizarse aunque apareciera.** Su contraseña es `android`,
-escrita en claro en `release.yml:166` y en el historial público desde `9fa82d3`. Una llave
-de firma de por vida con contraseña pública no es una llave de firma. Así que la pregunta no
-es sólo "¿se puede recuperar?" sino "¿se debe?", y la respuesta a la segunda es no.
+**And the key should not be reused even if it turned up.** Its password is `android`,
+written in plain text in `release.yml:166` and in the public history since `9fa82d3`. A
+lifetime signing key with a public password is not a signing key. So the question is not
+only "can it be recovered?" but "should it be?", and the answer to the second one is no.
 
-**Pendiente de comprobar por quien tenga la contraseña del keystore:** si
-`src-tauri/gen/android/daylo-release.keystore` resultara tener este mismo SHA256, la
-continuidad estaría salvada. Abrir el keystore quedó fuera del alcance de este QA. El
-comando es
-`keytool -list -v -keystore src-tauri/gen/android/daylo-release.keystore` y hay que comparar
-el SHA256 con el de arriba. **Hasta que eso se comprueba, esto sigue siendo el rojo número 1.**
+**Pending a check by whoever has the keystore password:** if
+`src-tauri/gen/android/daylo-release.keystore` turned out to have this same SHA256,
+continuity would be saved. Opening the keystore was outside the scope of this QA. The
+command is
+`keytool -list -v -keystore src-tauri/gen/android/daylo-release.keystore` and the SHA256 must
+be compared with the one above. **Until that is checked, this remains red number 1.**
 
-### 2. Ningún artefacto de escritorio está firmado
+### 2. No desktop artifact is signed
 
-- **Windows** (`x64` y `arm64`): tabla de certificados Authenticode con `size=0` en ambos.
-- **macOS** (`x64` y `aarch64`): no existe `Daylo.app/Contents/_CodeSignature`.
+- **Windows** (`x64` and `arm64`): Authenticode certificate table with `size=0` in both.
+- **macOS** (`x64` and `aarch64`): `Daylo.app/Contents/_CodeSignature` does not exist.
 
-Windows muestra "Windows protegió tu PC" (SmartScreen) con el botón de continuar escondido
-tras "Más información"; macOS reciente **se niega a abrir** un `.app` sin firmar ni
-notarizar por doble clic, y obliga a pasar por Ajustes del Sistema → Privacidad y Seguridad.
+Windows shows "Windows protected your PC" (SmartScreen) with the continue button hidden
+behind "More info"; recent macOS **refuses to open** an unsigned, un-notarized `.app` by
+double-click, and forces the user to go through System Settings → Privacy & Security.
 
-No es "no arranca" en sentido técnico, y por eso no lo llamo así. Es una barrera del sistema
-operativo entre el visitante y la app, sobre el **64% de las descargas (Windows) y el 100% de
-macOS**. Es el equivalente del "primer arranque falla siempre" de actual-mcp: sólo se ve
-probando el paquete publicado.
+It is not "does not start" in the technical sense, and that is why I do not call it that. It
+is an operating system barrier between the visitor and the app, on **64% of downloads
+(Windows) and 100% of macOS**. It is the equivalent of actual-mcp's "first start always
+fails": it only shows up when testing the published package.
 
-**No fue un descuido.** `dbacaed` (2026-02-08, "Remove signing env vars from release
-workflow") quitó `APPLE_CERTIFICATE`, `APPLE_ID`, `APPLE_TEAM_ID` y compañía con el mensaje
-"Signing keys are not configured yet; empty env vars cause tauri-action to fail". Es deuda
-técnica asumida a conciencia para que el build no fallara, no un error.
+**It was not an oversight.** `dbacaed` (2026-02-08, "Remove signing env vars from release
+workflow") removed `APPLE_CERTIFICATE`, `APPLE_ID`, `APPLE_TEAM_ID` and company with the
+message "Signing keys are not configured yet; empty env vars cause tauri-action to fail". It
+is technical debt taken on knowingly so the build would not fail, not a mistake.
 
-### 3. No hay canal de actualización en escritorio
+### 3. There is no update channel on desktop
 
-`tauri.conf.json` no declara `updater` y `Cargo.toml` no incluye `tauri-plugin-updater`
-(sólo `shell` y `opener`). Quien instaló v1.1.0 en Windows, macOS o Linux **no tiene forma de
-enterarse de que existe una v1.2**: tiene que volver al repo por su cuenta.
+`tauri.conf.json` does not declare `updater` and `Cargo.toml` does not include
+`tauri-plugin-updater` (only `shell` and `opener`). Anyone who installed v1.1.0 on Windows,
+macOS or Linux **has no way of finding out that a v1.2 exists**: they have to come back to
+the repo on their own.
 
-Eso hace que la llave de updater retirada en `dbacaed` no rompiera nada, porque no había updater
-que firmar. Pero explica por qué todo el tráfico entra frío desde fuera: no hay base
-instalada a la que avisar.
+That is why the updater key removed in `dbacaed` did not break anything, because there was no
+updater to sign. But it explains why all traffic comes in cold from outside: there is no
+installed base to notify.
 
-### 4. El APK sólo trae `arm64-v8a`
+### 4. The APK only ships `arm64-v8a`
 
-Sin `armeabi-v7a` ni `x86_64` (`release.yml:134,155` instalan y compilan sólo
-`aarch64-linux-android`). No se ejecuta en los emuladores por defecto de Android Studio
-(x86_64) ni en dispositivos de 32 bits. Afecta al QA pendiente de S5-07: hace falta un
-dispositivo arm64 físico, un emulador no sirve.
+No `armeabi-v7a` or `x86_64` (`release.yml:134,155` install and build only
+`aarch64-linux-android`). It does not run on Android Studio's default emulators (x86_64) or
+on 32-bit devices. This affects the pending S5-07 QA: a physical arm64 device is needed, an
+emulator will not do.
 
-**Matiz sobre la documentación:** la plantilla de notas de release del propio workflow
-(`release.yml:99`) **sí** avisa "arm64 devices only (all phones/tablets since ~2017)". El
-que no lo menciona, ni menciona el APK, es el README. Es una inconsistencia entre los dos
-textos, no una ausencia total de aviso.
+**Nuance about the documentation:** the workflow's own release notes template
+(`release.yml:99`) **does** warn "arm64 devices only (all phones/tablets since ~2017)". The
+one that does not mention it, nor the APK, is the README. It is an inconsistency between the
+two texts, not a total absence of warning.
 
-### 5. `Categories=` vacío en el `.desktop`
+### 5. Empty `Categories=` in the `.desktop`
 
-`/usr/share/applications/Daylo.desktop` instala con `Categories=` sin valor, así que la app
-no se clasifica en el menú de aplicaciones de Linux. Arreglo de una línea.
+`/usr/share/applications/Daylo.desktop` installs with `Categories=` with no value, so the app
+is not classified in the Linux application menu. One-line fix.
 
-### 6. El binario se llama `activity-tracker`, no `daylo`
+### 6. The binary is called `activity-tracker`, not `daylo`
 
-Nombre viejo del proyecto, en las tres plataformas de escritorio:
+Old project name, on all three desktop platforms:
 `/usr/bin/activity-tracker` (Linux), `activity-tracker.exe` (Windows),
-`CFBundleExecutable: activity-tracker` (macOS, aunque el bundle sí es `Daylo.app`).
-Quien instale el `.deb` y teclee `daylo` no encuentra nada; en Windows aparece como
-`activity-tracker.exe` en el Administrador de tareas.
+`CFBundleExecutable: activity-tracker` (macOS, although the bundle is indeed `Daylo.app`).
+Anyone who installs the `.deb` and types `daylo` finds nothing; on Windows it shows up as
+`activity-tracker.exe` in Task Manager.
 
-### 7. Binario sin `strip`, con `debug_info`
+### 7. Binary without `strip`, with `debug_info`
 
-10,7 MB el ELF de Linux. Es parte de por qué el AppImage pesa **81,5 MB frente a 4,0 MB del
-`.deb`**, 20 veces más para la misma app.
+The Linux ELF is 10.7 MB. It is part of why the AppImage weighs **81.5 MB versus 4.0 MB for
+the `.deb`**, 20 times more for the same app.
 
-## GRIS: no verificable con el equipo disponible
+## GRAY: not verifiable with the available equipment
 
-No hubo acceso a Windows, macOS ni a un dispositivo Android físico. De estos artefactos se
-puede demostrar que están **bien construidos**, no que arranquen:
+There was no access to Windows, macOS or a physical Android device. For these artifacts it
+can be shown that they are **well built**, not that they start:
 
-| Artefacto | Verificado | **No** verificado |
+| Artifact | Verified | **Not** verified |
 |---|---|---|
-| `x64-setup.exe` | NSIS válido → contiene `activity-tracker.exe` **PE32+ x86-64** correcto | Que instale y abra |
-| `arm64-setup.exe` | NSIS válido → contiene **PE32+ ARM64** real, sin etiquetado cruzado | Que instale y abra |
-| `x64.dmg` | UDIF `koly` válido → `Daylo.app` con **Mach-O x86_64**, `CFBundleShortVersionString 1.1.0`, mínimo macOS 10.13 | Que Gatekeeper lo deje abrir |
-| `aarch64.dmg` | UDIF válido → `Daylo.app` con **Mach-O arm64** | Ídem |
-| `daylo-android.apk` | Firmado (`RELEASE.RSA`), 920 entradas, `classes.dex`, manifest `com.daylo` + `1.1.0` | Que instale y abra en un teléfono |
+| `x64-setup.exe` | Valid NSIS → contains a correct **PE32+ x86-64** `activity-tracker.exe` | That it installs and opens |
+| `arm64-setup.exe` | Valid NSIS → contains a real **PE32+ ARM64**, no cross-labeling | That it installs and opens |
+| `x64.dmg` | Valid UDIF `koly` → `Daylo.app` with **Mach-O x86_64**, `CFBundleShortVersionString 1.1.0`, minimum macOS 10.13 | That Gatekeeper lets it open |
+| `aarch64.dmg` | Valid UDIF → `Daylo.app` with **Mach-O arm64** | Same |
+| `daylo-android.apk` | Signed (`RELEASE.RSA`), 920 entries, `classes.dex`, manifest `com.daylo` + `1.1.0` | That it installs and opens on a phone |
 
-### Render e interacción: cerrados el 2026-09-07
+### Rendering and interaction: closed on 2026-09-07
 
-Estaban en gris porque la sesión de escritorio estaba bloqueada. Se cerraron sirviendo el
-build web (`npm run build`,
-452 KB, JS de 297 KB) en `127.0.0.1` y conduciéndolo con un navegador real:
+They were gray because the desktop session was locked. They were closed by serving the web
+build (`npm run build`,
+452 KB, 297 KB of JS) on `127.0.0.1` and driving it with a real browser:
 
-1. La interfaz **renderiza correctamente**: vista anual 2026 con los doce meses, leyenda del
-   heatmap de cinco niveles, panel de actividades y estadísticas.
-2. Ciclo completo **con clics de verdad**, no por inyección: crear la actividad "QA
-   Persistencia" → abrir el día 7 de septiembre → marcar su casilla → recargar. Tras la
-   recarga la actividad sigue ahí, **el día aparece verde en el heatmap** y las estadísticas
-   marcan 1 día activo, racha actual 1 y 14% del mes.
-3. Sin errores ni advertencias en consola. El `import()` dinámico de `@tauri-apps/api` en
-   `useAppVersion.ts` cae en su fallback fuera de Tauri sin romper nada.
+1. The interface **renders correctly**: 2026 annual view with all twelve months, five-level
+   heatmap legend, activities panel and statistics.
+2. Full cycle **with real clicks**, not by injection: create the activity "QA
+   Persistencia" → open September 7 → tick its checkbox → reload. After the reload the
+   activity is still there, **the day shows green in the heatmap** and the statistics show
+   1 active day, current streak 1 and 14% of the month.
+3. No errors or warnings in the console. The dynamic `import()` of `@tauri-apps/api` in
+   `useAppVersion.ts` falls back outside Tauri without breaking anything.
 
-**Precisión sobre qué cubre esto.** Se verificó el **build web del código actual**, que es el
-mismo bundle que empaqueta Tauri, no el binario v1.1.0 publicado. Para el AppImage publicado
-lo verificado sigue siendo: arranca, crea ventana real y conserva los datos entre reinicios.
-Que la interfaz renderice y el ciclo de clics funcione es evidencia fuerte para el paquete,
-no idéntica.
+**Precision about what this covers.** What was verified is the **web build of the current
+code**, which is the same bundle Tauri packages, not the published v1.1.0 binary. For the
+published AppImage, what is verified remains: it starts, creates a real window and keeps the
+data across restarts. That the interface renders and the click cycle works is strong evidence
+for the package, not identical evidence.
 
-De rebote queda demostrado que **la demo web de la landing es viable hoy**: la app funciona
-completa en el navegador sin Tauri.
+As a side effect, it is shown that **the landing page web demo is viable today**: the app
+works fully in the browser without Tauri.
 
-**Cobertura honesta: 2 de 7 artefactos ejecutados. 1 de 5 plataformas verificada en
-ejecución (Linux). 4 de 5 en gris (Windows, macOS, Android, iOS).**
-Ningún artefacto está roto de construcción: los 7 son del formato y arquitectura que declaran.
+**Honest coverage: 2 of 7 artifacts executed. 1 of 5 platforms verified at runtime (Linux).
+4 of 5 gray (Windows, macOS, Android, iOS).**
+No artifact is broken at build level: all 7 are of the format and architecture they declare.
 
-## Qué haría falta para una v1.2 (propuesta, no ejecutada)
+## What a v1.2 would need (proposal, not executed)
 
-Ordenado por daño que evita, no por esfuerzo.
+Ordered by the damage it prevents, not by effort.
 
-1. **Bloquear la publicación de otro APK hasta arreglar la firma.** Es lo único de esta
-   lista que destruye datos de usuario. Hay que meter un keystore en `secrets` y que
-   `release.yml` lo use en vez de generar uno con `keytool -genkey`. Antes de eso hay una
-   decisión que **no es técnica y le toca a Henfry**: qué llave se consagra como firma de
-   Daylo para siempre, porque la que entre en `secrets` ya no se puede cambiar sin repetir
-   este mismo problema. La del CI no sirve: su contraseña es pública. Primer paso, comprobar
-   si el keystore del working tree es el que firmó v1.1.0 (ver rojo #1).
-2. **Nota de migración en la próxima release de Android.** Daylo tiene export/import JSON, y
-   es lo único que salva los datos de los 2 usuarios que ya tienen el APK: exportar →
-   desinstalar → instalar → importar. Sin esa línea, el update les borra todo. Corresponde a
-   la documentación de release; queda anotado aquí porque el defecto es de CI.
-3. **Firmar y notarizar el escritorio, o documentar el bypass.** macOS necesita cuenta de
-   Apple Developer (99 USD/año) más notarización; Windows, un certificado de firma (los OV
-   rondan 200-400 USD/año, y SmartScreen sigue avisando hasta acumular reputación). Si el
-   coste no cabe ahora: **documentar en el README los pasos exactos para saltarse el aviso
-   en cada sistema es gratis** y recupera parte del daño. La barrera seguirá ahí, pero
-   deja de ser un callejón sin salida.
-4. **Decidir si Daylo quiere updater.** Hoy no lo tiene, así que no hay base instalada a la
-   que avisar de nada. Añadir `tauri-plugin-updater` exige a su vez firma de updater
-   (`TAURI_SIGNING_PRIVATE_KEY`, la que se quitó en `dbacaed`) y un endpoint donde publicar
-   el manifiesto. Es una decisión de producto con coste real, no un arreglo.
-5. **`Categories=Utility;Office;`** en el `.desktop`. Una línea.
-6. **Renombrar el binario** de `activity-tracker` a `daylo` en las tres plataformas. Ojo:
-   **no tocar** el `identifier`/`applicationId` `com.daylo.app`, porque cambiarlo rompe la
-   actualización de las instalaciones existentes y en Android exige la misma llave de firma,
-   con lo que se sumaría al problema del rojo #1.
-7. **`strip` + `debug = false`** en el perfil release de Cargo, y revisar el AppImage: 81 MB
-   para una app cuyo `.deb` pesa 4 MB.
-8. **Añadir `armeabi-v7a` y `x86_64` al APK**, o dejar constancia de que es arm64-only.
-   Sin `x86_64` no hay QA por emulador, lo que encarece todo el testing de Android.
-9. **Alinear el README con las notas de release**: el README no menciona el APK ni el
-   instalador arm64 de Windows, que sí están publicados y recibiendo descargas.
-10. **Cerrar S5-06b (iOS)**, que sigue necesitando un Mac con Xcode.
+1. **Block the publication of another APK until the signing is fixed.** It is the only item
+   on this list that destroys user data. A keystore has to go into `secrets` and
+   `release.yml` has to use it instead of generating one with `keytool -genkey`. Before that
+   there is a decision that **is not technical and falls to Henfry**: which key is
+   consecrated as Daylo's signature forever, because the one that goes into `secrets` can no
+   longer be changed without repeating this same problem. The CI one will not do: its
+   password is public. First step, check whether the working tree keystore is the one that
+   signed v1.1.0 (see red #1).
+2. **Migration note in the next Android release.** Daylo has JSON export/import, and it is
+   the only thing that saves the data of the 2 users who already have the APK: export →
+   uninstall → install → import. Without that line, the update wipes everything for them. It
+   belongs to the release documentation; it is noted here because the defect is in CI.
+3. **Sign and notarize the desktop builds, or document the bypass.** macOS needs an Apple
+   Developer account (99 USD/year) plus notarization; Windows, a code signing certificate
+   (OV ones run around 200-400 USD/year, and SmartScreen keeps warning until reputation
+   builds up). If the cost does not fit right now: **documenting in the README the exact
+   steps to get past the warning on each system is free** and recovers part of the damage.
+   The barrier will still be there, but it stops being a dead end.
+4. **Decide whether Daylo wants an updater.** Today it does not have one, so there is no
+   installed base to notify about anything. Adding `tauri-plugin-updater` in turn requires an
+   updater signature (`TAURI_SIGNING_PRIVATE_KEY`, the one removed in `dbacaed`) and an
+   endpoint where the manifest is published. It is a product decision with real cost, not a
+   fix.
+5. **`Categories=Utility;Office;`** in the `.desktop`. One line.
+6. **Rename the binary** from `activity-tracker` to `daylo` on all three platforms. Careful:
+   **do not touch** the `identifier`/`applicationId` `com.daylo.app`, because changing it
+   breaks updates for existing installs and on Android it requires the same signing key,
+   which would add to the red #1 problem.
+7. **`strip` + `debug = false`** in the Cargo release profile, and review the AppImage: 81 MB
+   for an app whose `.deb` weighs 4 MB.
+8. **Add `armeabi-v7a` and `x86_64` to the APK**, or put on record that it is arm64-only.
+   Without `x86_64` there is no emulator QA, which makes all Android testing more expensive.
+9. **Align the README with the release notes**: the README does not mention the APK or the
+   Windows arm64 installer, which are published and receiving downloads.
+10. **Close S5-06b (iOS)**, which still needs a Mac with Xcode.
 
-## Cómo cerrar el gris (para quien siga esto)
+## How to close the gray (for whoever picks this up)
 
-- **Windows y macOS:** o una máquina real, o CI que arranque el instalador en un runner
-  `windows-latest` / `macos-latest` y compruebe que el proceso vive. GitHub Actions ya se usa
-  para construir; verificar el arranque es una extensión pequeña.
-- **Android:** dispositivo arm64 físico. El emulador x86_64 **no puede** con este APK.
-- **Render e interacción en Linux:** con la sesión de escritorio desbloqueada, capturar la
-  ventana y
-  automatizar clics (hay `ffmpeg` y `python-xlib`; falta `xdotool`).
+- **Windows and macOS:** either a real machine, or CI that launches the installer on a
+  `windows-latest` / `macos-latest` runner and checks that the process is alive. GitHub
+  Actions is already used to build; verifying startup is a small extension.
+- **Android:** physical arm64 device. The x86_64 emulator **cannot** handle this APK.
+- **Rendering and interaction on Linux:** with the desktop session unlocked, capture the
+  window and
+  automate clicks (`ffmpeg` and `python-xlib` are available; `xdotool` is missing).
 
-## Nota de seguridad resuelta durante este trabajo
+## Security note resolved during this work
 
-Los dos keystores de firma Android del working tree (`src-tauri/keystore.jks`,
-`src-tauri/gen/android/daylo-release.keystore`) **no estaban en `.gitignore`**, verificado
-con `git check-ignore`, no supuesto. Un `git add -A` los habría publicado. Añadidos los
-patrones `*.jks`, `*.keystore`, `keystore.properties`, `*.p12`, `*.mobileprovision`.
+The two Android signing keystores in the working tree (`src-tauri/keystore.jks`,
+`src-tauri/gen/android/daylo-release.keystore`) **were not in `.gitignore`**, verified with
+`git check-ignore`, not assumed. A `git add -A` would have published them. Added the patterns
+`*.jks`, `*.keystore`, `keystore.properties`, `*.p12`, `*.mobileprovision`.
 
-`git log --all --diff-filter=A` sobre esos patrones sale **vacío**: ninguna llave entró nunca
-al historial, en ninguna rama. Era prevención, no filtración. No hay que rotar nada.
+`git log --all --diff-filter=A` on those patterns comes back **empty**: no key ever entered
+the history, on any branch. It was prevention, not a leak. Nothing needs to be rotated.
