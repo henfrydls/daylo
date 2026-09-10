@@ -56,8 +56,12 @@ tokio = { version = "1", features = ["time"] }
 # Android only. The document picker hands back a content:// URI rather than a path, and
 # std::fs cannot write to one; this plugin resolves it through the platform. The desktop
 # writes with the app's own command and has no use for this.
+#
+# Held to 2.5 like the others. The version check covers every plugin pair, not only tauri
+# and @tauri-apps/api: this crate arrives on every platform anyway as a dependency of the
+# dialog plugin, so a 2.4 npm package against a 2.5 crate failed the desktop builds too.
 [target.'cfg(target_os = "android")'.dependencies]
-tauri-plugin-fs = "2"
+tauri-plugin-fs = "~2.5"
 
 [profile.dev]
 incremental = true
