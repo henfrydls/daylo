@@ -128,7 +128,7 @@ export const ActivityForm = memo(function ActivityForm({
                 type="checkbox"
                 checked={logForDate}
                 onChange={(e) => setLogForDate(e.target.checked)}
-                className="w-5 h-5 sm:w-4 sm:h-4 rounded border-gray-300 text-emerald-500 focus:ring-emerald-500"
+                className="w-5 h-5 sm:w-4 sm:h-4 accent-emerald-500 focus:ring-emerald-500"
                 data-testid="log-for-date-checkbox"
               />
               <label htmlFor="log-for-date" className="text-sm font-medium text-gray-700">

@@ -91,19 +91,30 @@
   }
 }
 
-/* Checkbox bounce */
+/* Checkbox bounce: the control itself, not the row it sits in. A row that jumps 20%
+   moves the name, the colour dot and the tick along with it, which is what people
+   noticed. */
 @keyframes check-bounce {
   0% {
     transform: scale(1);
   }
-  35% {
-    transform: scale(1.2);
-  }
-  65% {
-    transform: scale(0.95);
+  40% {
+    transform: scale(1.15);
   }
   100% {
     transform: scale(1);
+  }
+}
+
+.checkbox-bounce {
+  animation: check-bounce 150ms var(--ease-standard);
+}
+
+/* Someone who asked their system for less movement gets the colour change and nothing
+   else. The class stays on the element; only the movement goes. */
+@media (prefers-reduced-motion: reduce) {
+  .checkbox-bounce {
+    animation: none;
   }
 }
 
