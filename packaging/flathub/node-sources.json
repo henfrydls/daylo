@@ -979,6 +979,20 @@
     },
     {
         "type": "file",
+        "url": "https://registry.npmjs.org/@tauri-apps/plugin-dialog/-/plugin-dialog-2.7.0.tgz",
+        "sha512": "e274bf85f18c1825e2012dcbb558c7f4082c4803c9786ffb47eabc6a04c5ab2b639cc6b866af7906af16cd50e4724a5a9d7fb2c911d79d1b6b29790034a0c7bf",
+        "dest-filename": "bf85f18c1825e2012dcbb558c7f4082c4803c9786ffb47eabc6a04c5ab2b639cc6b866af7906af16cd50e4724a5a9d7fb2c911d79d1b6b29790034a0c7bf",
+        "dest": "flatpak-node/npm-cache/_cacache/content-v2/sha512/e2/74"
+    },
+    {
+        "type": "file",
+        "url": "https://registry.npmjs.org/@tauri-apps/plugin-fs/-/plugin-fs-2.5.0.tgz",
+        "sha512": "73cde46f3eb500afab2a3852fa37bdfacb483b6ee75e3ee9f5ca9e837e93c24214b71a42153b6d9471edaa89fa87a14de787178f202394c3ce25c5b79b01395d",
+        "dest-filename": "e46f3eb500afab2a3852fa37bdfacb483b6ee75e3ee9f5ca9e837e93c24214b71a42153b6d9471edaa89fa87a14de787178f202394c3ce25c5b79b01395d",
+        "dest": "flatpak-node/npm-cache/_cacache/content-v2/sha512/73/cd"
+    },
+    {
+        "type": "file",
         "url": "https://registry.npmjs.org/@testing-library/dom/-/dom-10.4.1.tgz",
         "sha512": "a383d725089da8997cd9c90569751ea005be5f2b0f2dab98238dc06e48b984005df39de23218ada2873ace73a773381b4d89843fa53aff2d59c8a008b2f30a1a",
         "dest-filename": "d725089da8997cd9c90569751ea005be5f2b0f2dab98238dc06e48b984005df39de23218ada2873ace73a773381b4d89843fa53aff2d59c8a008b2f30a1a",
@@ -2978,6 +2992,12 @@
     },
     {
         "type": "inline",
+        "contents": "1e25f491221aa7a840688a0bd8267d364c9b33e8\t{\"key\": \"make-fetch-happen:request-cache:https://registry.npmjs.org/@tauri-apps/plugin-dialog/-/plugin-dialog-2.7.0.tgz\", \"integrity\": \"sha512-4nS/hfGMGCXiAS3LtVjH9AgsSAPJeG/7R+q8agTFqytjnMa4Zq95Bq8WzVDkckpanX+yyRHXnRtrKXkANKDHvw==\", \"time\": 0, \"size\": 6659, \"metadata\": {\"url\": \"https://registry.npmjs.org/@tauri-apps/plugin-dialog/-/plugin-dialog-2.7.0.tgz\", \"reqHeaders\": {}, \"resHeaders\": {}}}",
+        "dest-filename": "bf41bbb3bd412081ea1f20f5632f22ef5b0347585f3d6c52a1753bd7b089",
+        "dest": "flatpak-node/npm-cache/_cacache/index-v5/05/f3"
+    },
+    {
+        "type": "inline",
         "contents": "1e92e8d661258263ebc6904121da4358b3f3733c\t{\"key\": \"make-fetch-happen:request-cache:https://registry.npmjs.org/@esbuild/android-arm/-/android-arm-0.27.3.tgz\", \"integrity\": \"sha512-i5D1hPY7GIQmXlXhs2w8AWHhenb00+GxjxRncS2ZM7YNVGNfaMxgzSGuO8o8SJzRc/oZwU2bcScvVERk03QhzA==\", \"time\": 0, \"size\": 3647095, \"metadata\": {\"url\": \"https://registry.npmjs.org/@esbuild/android-arm/-/android-arm-0.27.3.tgz\", \"reqHeaders\": {}, \"resHeaders\": {}}}",
         "dest-filename": "6f22961005ab915dff7bc14f6f6370d4d0d8edc5750007891b860a1eb92e",
         "dest": "flatpak-node/npm-cache/_cacache/index-v5/aa/c3"
@@ -4529,6 +4549,12 @@
         "contents": "cda515208cceaab2c621efb28d7570d13dbcd4a6\t{\"key\": \"make-fetch-happen:request-cache:https://registry.npmjs.org/minimatch/-/minimatch-9.0.5.tgz\", \"integrity\": \"sha512-G6T0ZX48xgozx7587koeX9Ys2NYy6Gmv//P89sEte9V9whIapMNF4idKxnW2QtCcLiTWlb/wfCabAtAFWhhBow==\", \"time\": 0, \"size\": 96471, \"metadata\": {\"url\": \"https://registry.npmjs.org/minimatch/-/minimatch-9.0.5.tgz\", \"reqHeaders\": {}, \"resHeaders\": {}}}",
         "dest-filename": "741347bd7ef970d697d9f40bfef4975857c6fb7a05b9daea18a30c3aa9af",
         "dest": "flatpak-node/npm-cache/_cacache/index-v5/20/34"
+    },
+    {
+        "type": "inline",
+        "contents": "cddfd57dcdf853146171fcb8c484a30511bb21d5\t{\"key\": \"make-fetch-happen:request-cache:https://registry.npmjs.org/@tauri-apps/plugin-fs/-/plugin-fs-2.5.0.tgz\", \"integrity\": \"sha512-c83kbz61AK+rKjhS+je9+stIO27nXj7p9cqeg36TwkIUtxpCFTttlHHtqon6h6FN54cXjyAjlMPOJcW3mwE5XQ==\", \"time\": 0, \"size\": 21539, \"metadata\": {\"url\": \"https://registry.npmjs.org/@tauri-apps/plugin-fs/-/plugin-fs-2.5.0.tgz\", \"reqHeaders\": {}, \"resHeaders\": {}}}",
+        "dest-filename": "d31bb4bcf19752b9c15156536170dd289d8f3435ba327d04841ef2bad9b8",
+        "dest": "flatpak-node/npm-cache/_cacache/index-v5/61/74"
     },
     {
         "type": "inline",
