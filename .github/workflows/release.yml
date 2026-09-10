@@ -112,7 +112,7 @@ jobs:
             |----------|------|-------|
             | Windows | `.exe` | Installer. Pick x64 unless you know your PC is ARM. |
             | macOS | `.dmg` | Disk image. Apple Silicon (M1 and later) or Intel. |
-            | Linux | `.deb`, `.AppImage` | Debian package or portable AppImage. |
+            | Linux | `.deb`, `.AppImage` | Debian package or portable AppImage, for Intel and AMD computers. |
             | Android | `.apk` | Direct install. Works on phones and tablets from about 2017 onwards. |
 
             ### First time opening Daylo
