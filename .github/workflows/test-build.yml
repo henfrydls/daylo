@@ -272,7 +272,7 @@ jobs:
           EXPECTED="D6:2D:F3:2D:72:B1:54:87:C4:19:89:81:A7:35:0B:1D:74:F0:E6:60:71:A4:F8:95:88:86:AD:88:0C:45:F7:BD"
 
           for v in ANDROID_KEYSTORE_BASE64 ANDROID_KEYSTORE_PASSWORD ANDROID_KEY_ALIAS ANDROID_KEY_PASSWORD; do
-            if [ -z "$(eval echo "\${$v:-}")" ]; then
+            if [ -z "${!v:-}" ]; then
               echo "::error::Missing secret $v. Not falling back to a generated key: an APK"
               echo "::error::signed with a different key cannot install over the one people"
               echo "::error::already have, and uninstalling erases their data."
@@ -292,11 +292,13 @@ jobs:
             --ks-key-alias "$ANDROID_KEY_ALIAS" \
             "$SIGNED"
 
+          # apksigner's output is captured first so it can be both printed and parsed.
+          # That also means the parsing below reads from a here-string, which has no
+          # writer process, so an early-exiting consumer cannot kill anything with SIGPIPE
+          # the way it would if apksigner were piped straight in.
           certs=$("$BT/apksigner" verify --print-certs "$SIGNED")
           echo "$certs"
-          # grep -o rather than a pipeline that stops early: under pipefail a consumer that
-          # exits first kills apksigner with SIGPIPE and the whole thing reports 141.
-          actual=$(grep -oE 'SHA-256 digest: [0-9a-f]+' <<< "$certs" | head -1 | awk '{print $NF}' \
+          actual=$(grep -m1 -oE 'SHA-256 digest: [0-9a-f]+' <<< "$certs" | awk '{print $NF}' \
             | tr 'a-f' 'A-F' | sed 's/../&:/g;s/:$//')
 
           if [ "$actual" != "$EXPECTED" ]; then

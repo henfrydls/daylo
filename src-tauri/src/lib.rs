@@ -94,13 +94,14 @@ pub fn run() {
     let builder = builder.plugin(tauri_plugin_dialog::init());
 
     #[cfg(not(any(target_os = "android", target_os = "ios")))]
-    let builder = builder
-        .plugin(tauri_plugin_opener::init())
-        .invoke_handler(tauri::generate_handler![
-            greet,
-            write_text_file,
-            save_dialog_available
-        ]);
+    let builder =
+        builder
+            .plugin(tauri_plugin_opener::init())
+            .invoke_handler(tauri::generate_handler![
+                greet,
+                write_text_file,
+                save_dialog_available
+            ]);
 
     // Android writes through the filesystem plugin rather than through write_text_file:
     // the picker returns a content:// URI and std::fs cannot open one.
