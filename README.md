@@ -98,7 +98,7 @@ Just install and open: no setup, no accounts, no internet required.
 The desktop installers are not code-signed yet, so your operating system will warn you the first time you open Daylo:
 
 - **Windows** shows "Windows protected your PC". Click **More info**, then **Run anyway**. On a work-managed PC that button can be hidden by policy; ask your administrator.
-- **macOS** may refuse to open the app. Go to **System Settings → Privacy & Security**, scroll down and click **Open Anyway** next to Daylo, then enter your password. The button appears for about an hour after your first attempt to open the app; if it's gone, try opening Daylo again first. On macOS 15 and later, right-click → Open no longer bypasses this.
+- **macOS** will say it could not verify the app the first time. Click **Done** (not Move to Trash), then go to **System Settings → Privacy & Security**, scroll down and click **Open Anyway** next to Daylo, then enter your password. The button appears for about an hour after your first attempt to open the app; if it's gone, try opening Daylo again first. On macOS 15 and later, right-click → Open no longer bypasses this.
 
 The warning means "unknown publisher", not "unsafe". Every release is built by GitHub Actions from this repository; the [Actions](../../actions) tab shows the run that produced it, and `SHA256SUMS.txt` lets you confirm the file you downloaded is the one it built.
 

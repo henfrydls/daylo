@@ -16,8 +16,8 @@ export default defineConfig({
     environment: 'jsdom',
     setupFiles: ['./src/test/setup.ts'],
     css: true,
-    // Rutas glob, no nombres sueltos: '.claude' guarda copias viejas del repo de
-    // sesiones de agente y vitest las recogia, haciendo fallar tests que aqui pasan.
+    // Glob paths, not bare names: '.claude' keeps old copies of the repo from
+    // agent sessions and vitest was picking them up, failing tests that pass here.
     exclude: ['**/node_modules/**', '**/dist/**', '**/.claude/**', 'e2e/**'],
     coverage: {
       provider: 'v8',
@@ -27,11 +27,11 @@ export default defineConfig({
         'src/test/',
         '**/*.d.ts',
         '**/*.config.*',
-        // Barrels de re-exportacion: no tienen logica que cubrir.
-        // Antes habia un '**/index.ts' generico que tambien excluia
-        // src/store/index.ts, o sea el store completo: el archivo con mas logica
-        // del proyecto quedaba fuera del umbral de cobertura. El defecto de
-        // durabilidad del storage vivia justo ahi, sin medir.
+        // Re-export barrels: they have no logic to cover.
+        // There used to be a generic '**/index.ts' that also excluded
+        // src/store/index.ts, that is, the whole store: the file with the most
+        // logic in the project was left out of the coverage threshold. The
+        // storage durability defect lived right there, unmeasured.
         'src/components/**/index.ts',
         'src/hooks/index.ts',
         'src/types/index.ts',
