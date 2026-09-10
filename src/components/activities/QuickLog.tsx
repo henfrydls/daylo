@@ -2,7 +2,7 @@ import { useState, useRef, useEffect, useCallback, useMemo, memo } from 'react'
 import { useCalendarStore } from '../../store'
 import { formatDisplayDate, parseDateString } from '../../lib/dates'
 import { ACTIVITY_COLORS } from '../../lib/colors'
-import { Button, CheckIcon, ColorPicker, PlusIcon, XIcon } from '../ui'
+import { Button, Checkbox, ColorPicker, PlusIcon, XIcon } from '../ui'
 import { useFocusTrap, useAnimatedPresence } from '../../hooks'
 import { useShallow } from 'zustand/react/shallow'
 
@@ -180,13 +180,10 @@ export const QuickLog = memo(function QuickLog() {
               if (bouncingId === activity.id) setBouncingId(null)
             }}
           >
-            <input
-              type="checkbox"
+            <Checkbox
               checked={isCompleted}
               onChange={() => handleToggleLog(activity.id)}
-              className={`w-5 h-5 sm:w-5 sm:h-5 accent-emerald-500 focus:ring-emerald-500 focus:ring-offset-0 ${
-                bouncingId === activity.id ? 'checkbox-bounce' : ''
-              }`}
+              className={bouncingId === activity.id ? 'checkbox-bounce' : ''}
               aria-label={`Mark ${activity.name} as ${isCompleted ? 'incomplete' : 'complete'}`}
               data-testid="quicklog-activity-checkbox"
             />
@@ -200,9 +197,6 @@ export const QuickLog = memo(function QuickLog() {
             >
               {activity.name}
             </span>
-            {isCompleted && (
-              <CheckIcon className="w-5 h-5 text-emerald-500 ml-auto flex-shrink-0" />
-            )}
           </label>
         )
       })}
