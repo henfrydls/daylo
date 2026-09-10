@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, memo } from 'react'
-import { Button, Modal, ColorPicker } from '../ui'
+import { Button, Checkbox, ColorPicker, Modal } from '../ui'
 import { ACTIVITY_COLORS } from '../../lib/colors'
 import { useCalendarStore } from '../../store'
 import { formatDate } from '../../lib/dates'
@@ -123,12 +123,10 @@ export const ActivityForm = memo(function ActivityForm({
         {!isEditing && (
           <div className="mb-4">
             <div className="flex items-center gap-2 mb-2 min-h-[44px] sm:min-h-0">
-              <input
+              <Checkbox
                 id="log-for-date"
-                type="checkbox"
                 checked={logForDate}
                 onChange={(e) => setLogForDate(e.target.checked)}
-                className="w-5 h-5 sm:w-4 sm:h-4 accent-emerald-500 focus:ring-emerald-500"
                 data-testid="log-for-date-checkbox"
               />
               <label htmlFor="log-for-date" className="text-sm font-medium text-gray-700">

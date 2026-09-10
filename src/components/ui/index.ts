@@ -33,6 +33,7 @@ export {
 } from './Icons'
 export type { IconProps } from './Icons'
 export { Modal } from './Modal'
+export { Checkbox } from './Checkbox'
 export { ToastContainer, useToast } from './Toast'
 export { Tooltip } from './Tooltip'
 export { Skeleton } from './Skeleton'

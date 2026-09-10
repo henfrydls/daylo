@@ -612,15 +612,22 @@ describe('QuickLog', () => {
       expect(exerciseLabel).toHaveClass('bg-emerald-50')
     })
 
-    it('should show check icon for completed activity', () => {
+    // The row used to carry a separate tick at its right edge, on top of the green
+    // background, the green text and the checkbox's own tick. The checkbox is the app's
+    // own drawing now and says "checked" clearly by itself, so the extra one went.
+    //
+    // Removing it does not leave colour as the only signal, which is what WCAG 1.4.1
+    // forbids: the tick inside the control is not a colour, and the state reaches
+    // assistive technology through the input itself.
+    it('says a completed activity is completed through its checkbox, not a second tick', () => {
       setupStoreWithLogs()
       render(<QuickLog />)
 
-      // The completed activity should have a check icon
-      // Exercise is completed, so it should have the CheckIcon
       const exerciseLabel = screen.getByText('Exercise').closest('label')
-      const checkIcon = exerciseLabel?.querySelector('svg')
-      expect(checkIcon).toBeInTheDocument()
+      const checkbox = exerciseLabel?.querySelector('input[type="checkbox"]')
+
+      expect(checkbox).toBeChecked()
+      expect(exerciseLabel?.querySelector('svg')).toBeNull()
     })
   })
 })
