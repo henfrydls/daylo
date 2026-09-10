@@ -38,6 +38,12 @@
   </branding>
   <content_rating type="oars-1.1" />
   <releases>
+    <release version="1.1.3" date="2026-09-10">
+      <url>https://github.com/henfrydls/daylo/releases/tag/v1.1.3</url>
+      <description>
+        <p>Exporting now asks where to save the file and says where it went. Days in the year view no longer stretch when the pointer is over them, and the checkbox is drawn by Daylo rather than by the desktop theme. A backup is named after the local date rather than the one in UTC.</p>
+      </description>
+    </release>
     <release version="1.1.2" date="2026-09-09">
       <url>https://github.com/henfrydls/daylo/releases/tag/v1.1.2</url>
       <description>
