@@ -1,85 +1,84 @@
-# Firma del APK de Android
+# Android APK signing
 
-## El problema que esto arregla
+## The problem this fixes
 
-Hasta ahora `release.yml` generaba la llave de firma **dentro del runner** con
-`keytool -genkey` en cada build. Esa llave existía sólo durante el job y nunca se guardaba
-en ninguna parte: `release.yml` no la subía como artifact, y los artifacts de Actions
-caducan a los 90 días de todas formas.
+Until now, `release.yml` generated the signing key **inside the runner** with
+`keytool -genkey` on every build. That key existed only for the duration of the job and was
+never saved anywhere: `release.yml` did not upload it as an artifact, and Actions artifacts
+expire after 90 days anyway.
 
-Android exige que una actualización esté firmada con **la misma llave** que la versión
-instalada. Un APK firmado con una llave distinta falla al instalarse encima con
-"App not installed", y la única salida del usuario es desinstalar. Daylo guarda los datos en
-el dispositivo, así que desinstalar **le borra todo**.
+Android requires an update to be signed with **the same key** as the installed version. An
+APK signed with a different key fails to install on top of it with "App not installed", and
+the user's only way out is to uninstall. Daylo stores its data on the device, so uninstalling
+**wipes everything**.
 
-El APK de v1.1.0 está firmado con una de esas llaves perdidas:
+The v1.1.0 APK is signed with one of those lost keys:
 
 ```
 Owner/Issuer: CN=Daylo, O=DLSLabs, C=US
-Valid from:   2026-03-19 03:13:49 UTC   (la release se publicó a las 03:11:47)
+Valid from:   2026-03-19 03:13:49 UTC   (the release was published at 03:11:47)
 SHA256: 2C:D5:A0:EB:D7:A5:F6:0C:24:D1:6D:8B:99:6D:42:EB:69:DC:6D:5B:1F:5A:3D:DE:05:AC:DC:7D:84:E9:4F:2A
 ```
 
-El workflow ya no genera llaves: ahora exige un keystore en `secrets` y **aborta el build**
-si no lo encuentra, en vez de publicar otro APK sin ruta de actualización.
+The workflow no longer generates keys: it now requires a keystore in `secrets` and **aborts
+the build** if it does not find one, instead of publishing another APK with no update path.
 
-## Lo que hace falta para que una actualizacion se instale encima
+## What it takes for an update to install on top
 
-Android exige **dos** cosas, y la firma es solo una:
+Android requires **two** things, and the signature is only one of them:
 
-1. **La misma firma.** Un APK firmado con otra llave no puede instalarse sobre el
-   instalado: falla con "App not installed" y la unica salida del usuario es desinstalar,
-   lo que borra sus datos.
-2. **Un `versionCode` mayor.** Aunque la firma coincida, un `versionCode` que no crezca
-   impide la actualizacion.
+1. **The same signature.** An APK signed with another key cannot be installed over the
+   installed one: it fails with "App not installed" and the user's only way out is to
+   uninstall, which wipes their data.
+2. **A higher `versionCode`.** Even if the signature matches, a `versionCode` that does not
+   increase blocks the update.
 
-El segundo es facil de olvidar porque no lo escribe nadie a mano: `build.gradle.kts` lo lee
-de `tauri.properties`, que Tauri genera al construir y **no esta en el repositorio**. Su
-valor por defecto en el gradle es `1`, asi que si esa propiedad faltara, todos los APK
-saldrian con el mismo numero y ninguna actualizacion se instalaria, con la firma
-correcta y sin ningun error visible en el build.
+The second one is easy to forget because nobody writes it by hand: `build.gradle.kts` reads
+it from `tauri.properties`, which Tauri generates at build time and which **is not in the
+repository**. Its default value in the gradle file is `1`, so if that property were missing,
+every APK would come out with the same number and no update would install, with the correct
+signature and no visible error in the build.
 
-Comprobado en los APK publicados, parseando su `AndroidManifest.xml`:
+Checked on the published APKs by parsing their `AndroidManifest.xml`:
 
 | Version | `versionCode` |
 |---|---|
 | v1.1.0 | 1001000 |
 | v1.1.1 | 1001001 |
 
-Tauri lo deriva de la version (`major * 1000000 + minor * 1000 + patch`), asi que progresa
-solo con cada bump. No hay nada que mantener a mano, pero si algun dia una actualizacion no
-se instala y la firma coincide, **este es el segundo sitio donde mirar**.
+Tauri derives it from the version (`major * 1000000 + minor * 1000 + patch`), so it advances
+on its own with every bump. There is nothing to maintain by hand, but if some day an update
+does not install and the signature matches, **this is the second place to look**.
 
-Para comprobarlo en un APK sin el SDK de Android instalado, basta parsear el manifest
-binario: el `versionCode` es un atributo de tipo entero del elemento `manifest`.
+To check it on an APK without the Android SDK installed, it is enough to parse the binary
+manifest: `versionCode` is an integer-typed attribute of the `manifest` element.
 
-## Paso 0: comprobar antes de generar nada
+## Step 0: check before generating anything
 
-Puede que la llave no esté perdida. Hay un keystore en el working tree que quizá sea el que
-firmó v1.1.0. **Comprobar esto primero**, porque si coincide se conserva la continuidad con
-los usuarios que ya tienen la app instalada:
+The key may not be lost. There is a keystore in the working tree that might be the one that
+signed v1.1.0. **Check this first**, because if it matches, continuity is preserved for the
+users who already have the app installed:
 
 ```bash
 keytool -list -v -keystore src-tauri/gen/android/daylo-release.keystore
 ```
 
-Comparar el `SHA256` con el de arriba.
+Compare the `SHA256` with the one above.
 
-- **Coincide** → usar ese keystore en los pasos siguientes. Los usuarios de v1.1.0 podrán
-  actualizar sin perder datos.
-- **No coincide** → generar uno nuevo (paso 1). v1.1.0 se queda sin ruta de actualización;
-  quien ya la tenga instalada tendrá que exportar sus datos, desinstalar, instalar y
-  reimportar.
+- **It matches** → use that keystore in the following steps. v1.1.0 users will be able to
+  update without losing data.
+- **It does not match** → generate a new one (step 1). v1.1.0 is left with no update path;
+  anyone who already has it installed will have to export their data, uninstall, install and
+  re-import.
 
-**Lo que no vale es la llave del CI**, ni siquiera si apareciera: su contraseña era `android`,
-en claro en `release.yml` y en el historial público desde `9fa82d3`. Con esa contraseña
-pública, cualquiera podría firmar un APK que Android aceptaría como actualización legítima de
-Daylo.
+**What is not acceptable is the CI key**, even if it turned up: its password was `android`,
+in plain text in `release.yml` and in the public history since `9fa82d3`. With that public
+password, anyone could sign an APK that Android would accept as a legitimate Daylo update.
 
-## Paso 1: generar el keystore (sólo si el paso 0 no dio coincidencia)
+## Step 1: generate the keystore (only if step 0 found no match)
 
-En local, **nunca en CI**. `keytool` pedirá la contraseña de forma interactiva; no la pases
-por línea de comandos, porque queda en el historial del shell.
+Locally, **never in CI**. `keytool` will ask for the password interactively; do not pass it
+on the command line, because it ends up in the shell history.
 
 ```bash
 keytool -genkey -v -keystore daylo-release.jks \
@@ -87,73 +86,76 @@ keytool -genkey -v -keystore daylo-release.jks \
   -alias daylo -dname "CN=Daylo, O=DLSLabs, C=DO"
 ```
 
-`-validity 10000` son unos 27 años. Es deliberado: la Play Store exige que el certificado
-siga válido bastante más allá de 2033, y renovarlo no es posible sin perder la continuidad.
+`-validity 10000` is about 27 years. This is deliberate: the Play Store requires the
+certificate to remain valid well beyond 2033, and renewing it is not possible without losing
+continuity.
 
-Anotar el `SHA256` resultante (`keytool -list -v -keystore daylo-release.jks`) en un sitio
-seguro. Sirve para verificar en el futuro que un APK publicado se firmó con la llave correcta.
+Write down the resulting `SHA256` (`keytool -list -v -keystore daylo-release.jks`) in a safe
+place. It is used to verify in the future that a published APK was signed with the correct key.
 
-## Paso 2: cargar los cuatro secrets
+## Step 2: upload the four secrets
 
 ```bash
 base64 -w0 daylo-release.jks > /tmp/ks.b64
 gh secret set ANDROID_KEYSTORE_BASE64 < /tmp/ks.b64
-shred -u /tmp/ks.b64          # o rm, pero que no quede rondando
+shred -u /tmp/ks.b64          # or rm, but do not leave it lying around
 
-gh secret set ANDROID_KEYSTORE_PASSWORD   # las pide por stdin, no quedan en el historial
-gh secret set ANDROID_KEY_ALIAS           # 'daylo' si se siguió el paso 1
+gh secret set ANDROID_KEYSTORE_PASSWORD   # prompts for them on stdin, they do not end up in the history
+gh secret set ANDROID_KEY_ALIAS           # 'daylo' if step 1 was followed
 gh secret set ANDROID_KEY_PASSWORD
 ```
 
-## Paso 3: guardar la llave donde no se pierda
+## Step 3: store the key where it will not get lost
 
-**Esto es lo que de verdad importa a largo plazo.** Si el `.jks` se pierde, Daylo no puede
-volver a publicar una actualización de Android nunca más, y todos los usuarios instalados
-quedan varados. Los secrets de GitHub no son un backup: no se pueden leer de vuelta.
+**This is what really matters in the long run.** If the `.jks` is lost, Daylo can never
+publish an Android update again, and every installed user is stranded. GitHub secrets are not
+a backup: they cannot be read back.
 
-Y hay una segunda razón, que no se ve hasta que alguien instala el APK en un teléfono.
+And there is a second reason, one that does not show up until someone installs the APK on a
+phone.
 
-### La llave también es la reputación ante Play Protect
+### The key is also the reputation with Play Protect
 
-Al instalar un APK de fuera de Play, Google Play Protect puede bloquearlo con «App blocked
-to protect your device. Play Protect hasn't seen an app from this developer before.» Ese
-aviso se calcula por **certificado de firma**, no por nombre de paquete: «este
-desarrollador» significa literalmente «esta llave». Comprobado en el teléfono de Henfry al
-instalar v1.1.2 el 2026-09-09.
+When installing an APK from outside Play, Google Play Protect can block it with "App blocked
+to protect your device. Play Protect hasn't seen an app from this developer before." That
+warning is computed per **signing certificate**, not per package name: "this developer"
+literally means "this key". Confirmed on Henfry's phone when installing v1.1.2 on
+2026-09-09.
 
-La consecuencia importa al decidir qué hacer si la llave se complica: **rotarla no solo
-rompe las actualizaciones, además reinicia esa reputación a cero** y todo el mundo vuelve a
-ver el diálogo de bloqueo.
+The consequence matters when deciding what to do if the key runs into trouble: **rotating it
+not only breaks updates, it also resets that reputation to zero** and everyone sees the block
+dialog again.
 
-Y las dos consecuencias no se recuperan igual. Una actualización rota tiene salida, aunque
-sea mala: exportar los datos, desinstalar, instalar y volver a importar, que es lo que hubo
-que decirle a quien venía de v1.1.0. La reputación no tiene ningún atajo: se recupera con
-tiempo y con instalaciones de otras personas, y no hay nada que hacer para acelerarla.
+And the two consequences do not recover the same way. A broken update has a way out, even if
+a bad one: export the data, uninstall, install and import again, which is what had to be told
+to anyone coming from v1.1.0. Reputation has no shortcut: it recovers with time and with
+installs by other people, and there is nothing to do to speed it up.
 
-Lo que sí la quita es registrar al desarrollador con Google, que es una verificación **de la
-cuenta** y tarda en propagarse: abrir Play Console no borra el aviso esa misma tarde.
+What does remove it is registering the developer with Google, which is an **account**
+verification and takes time to propagate: opening Play Console does not clear the warning
+that same afternoon.
 
-- Copia en un gestor de contraseñas o en almacenamiento cifrado offline.
-- Junto con ella, la contraseña y el alias.
-- **No commitear el `.jks`.** `.gitignore` ya cubre `*.jks`, `*.keystore`,
-  `keystore.properties`, `*.p12` y `*.mobileprovision`.
+- A copy in a password manager or in encrypted offline storage.
+- Along with it, the password and the alias.
+- **Do not commit the `.jks`.** `.gitignore` already covers `*.jks`, `*.keystore`,
+  `keystore.properties`, `*.p12` and `*.mobileprovision`.
 
-## Verificar que funcionó
+## Verify that it worked
 
-El paso `Sign APK` imprime el fingerprint de la llave con la que firmó, al final de su log:
+The `Sign APK` step prints the fingerprint of the key it signed with, at the end of its log:
 
 ```
---- firma del APK que se va a publicar ---
+--- signature of the APK about to be published ---
 Signer #1 certificate SHA-256 digest: ...
 ```
 
-Ese valor tiene que ser idéntico en todas las releases. Si cambia, la siguiente
-actualización romperá las instalaciones existentes.
+That value has to be identical across all releases. If it changes, the next update will
+break existing installs.
 
-## Y comprobarlo sobre el APK publicado
+## And check it on the published APK
 
-En releases hasta v1.1.0 incluida el APK se llamaba `daylo-android.apk`; a partir de
-v1.1.1 es `Daylo-android-arm64.apk`. Ajusta el nombre segun el tag que estes comprobando.
+In releases up to and including v1.1.0 the APK was called `daylo-android.apk`; from v1.1.1 on
+it is `Daylo-android-arm64.apk`. Adjust the name according to the tag you are checking.
 
 ```bash
 gh release download <tag> --pattern 'Daylo-android-arm64.apk'
@@ -161,5 +163,5 @@ unzip -p Daylo-android-arm64.apk 'META-INF/*.RSA' > /tmp/sig.rsa
 keytool -printcert -file /tmp/sig.rsa | grep SHA256
 ```
 
-Es así como se detectó este problema: leyendo el certificado del binario publicado, no el
-workflow. El workflow decía lo que hacía; el certificado decía cuándo había nacido la llave.
+This is how the problem was detected: by reading the certificate of the published binary,
+not the workflow. The workflow said what it did; the certificate said when the key was born.
