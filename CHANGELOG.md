@@ -19,6 +19,22 @@ window is provided by your desktop, and a few setups do not have one. Daylo chec
 says so plainly instead of appearing to save a file that went nowhere. A message you can
 act on beats a backup you cannot locate.
 
+**On a Mac, Daylo now opens.** Before, macOS said the app was damaged and offered only to
+move it to the Trash, with no way around it. It was never damaged: the app was not signed
+in the way macOS expects, and that is what a Mac reports when the signature does not match
+the app. The first time you open this version, macOS will still ask: choose Done, then
+open System Settings, go to Privacy & Security, and press Open Anyway.
+
+**Days in the year view no longer grow when you point at them.** On Mac and on Linux,
+hovering a day made its square stretch and push the rest of the year out of the way. It
+had been doing that since 1.1.0 and never showed up in our checks, because the checks ran
+in a different browser engine to the one those apps use.
+
+**The checkbox looks like part of Daylo.** It used to be your desktop's own checkbox, so
+the same app showed a blue square on one computer and a green one on another, next to
+Daylo's green. Daylo draws it now, so it looks the same everywhere. The extra tick that
+sat at the end of a completed row is gone with it: the checkbox already says so.
+
 Importing has not changed. Neither has the web version, where your browser keeps handling
 downloads, nor the Android and iOS apps.
 

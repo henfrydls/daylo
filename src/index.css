@@ -106,6 +106,66 @@
   }
 }
 
+/* The app's own checkbox.
+ *
+ * It used to be the platform control, which is drawn by the desktop theme: the same app
+ * showed a blue GTK square on one machine and an olive one on another, next to an
+ * emerald row and an emerald tick. accent-color fixed the colour and kept the platform's
+ * shape, which still read as borrowed. So the whole thing is drawn here.
+ *
+ * Drawing it ourselves makes the contrast ours too, which it was not while the platform
+ * owned the control. WCAG 1.4.11 asks 3:1 for graphical objects, and the obvious palette
+ * does not reach it: a white tick on emerald-500 is 2.54:1 and a gray-300 border is
+ * 1.47:1 on white, near invisible. These colours were measured, not chosen by eye:
+ *
+ *   white tick on emerald-600      3.77:1
+ *   gray-500 border on white       4.83:1
+ *   gray-500 border on emerald-50  4.59:1
+ *   emerald-600 box on emerald-50  3.58:1
+ *
+ * That last one matters because the checked row is emerald-50: with an emerald-500 fill
+ * the box would nearly vanish into the row it is meant to mark.
+ */
+.app-checkbox {
+  appearance: none;
+  -webkit-appearance: none;
+  width: 20px;
+  height: 20px;
+  flex-shrink: 0;
+  border: 1.5px solid var(--color-gray-500);
+  border-radius: 4px;
+  background-color: #fff;
+  cursor: pointer;
+  transition:
+    background-color 120ms var(--ease-standard),
+    border-color 120ms var(--ease-standard);
+}
+
+/* Only where a pointer can actually hover. On a touch screen the hover state sticks to
+   whatever was tapped last, so without this the border stays emerald after tapping and
+   unticking, on a box that is no longer checked. */
+@media (hover: hover) {
+  .app-checkbox:hover:not(:checked) {
+    border-color: var(--color-emerald-600);
+  }
+}
+
+.app-checkbox:checked {
+  background-color: var(--color-emerald-600);
+  border-color: var(--color-emerald-600);
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='%23fff' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M3 8.5l3.5 3.5L13 5'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: center;
+  background-size: 74%;
+}
+
+/* Keyboard only: a pointer user clicking the row should not light up a ring. outline
+   rather than a box-shadow ring so nothing can clip it. */
+.app-checkbox:focus-visible {
+  outline: 2px solid var(--color-emerald-600);
+  outline-offset: 2px;
+}
+
 .checkbox-bounce {
   animation: check-bounce 150ms var(--ease-standard);
 }
