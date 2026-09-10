@@ -19,8 +19,13 @@ window is provided by your desktop, and a few setups do not have one. Daylo chec
 says so plainly instead of appearing to save a file that went nowhere. A message you can
 act on beats a backup you cannot locate.
 
-Importing has not changed. Neither has the web version, where your browser keeps handling
-downloads, nor the Android and iOS apps.
+**On Android, exporting now saves a file at all.** Before, tapping Export looked like it
+worked and wrote nothing: the button went away and no file was ever created anywhere. If
+you exported a backup before changing phones, you had nothing to restore from. Now
+Android's own save window opens, you choose where the file goes, and Daylo confirms it.
+
+Importing has not changed, and neither has the web version, where your browser keeps
+handling downloads.
 
 ## 1.1.2
 

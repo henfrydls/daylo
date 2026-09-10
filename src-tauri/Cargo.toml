@@ -24,9 +24,9 @@ log = "0.4"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 
-[target.'cfg(not(any(target_os = "android", target_os = "ios")))'.dependencies]
-tauri-plugin-opener = "2"
-
+# Every platform, not just the desktop: Android needs the same save dialog, where it is
+# the system document picker instead of a portal.
+#
 # default-features = false drops this plugin's default "gtk3" backend, and that is the
 # whole point of the line. With gtk3 the save dialog is a GTK dialog running inside the
 # Flatpak sandbox: it would show the sandbox's own filesystem, the user would pick a
@@ -34,10 +34,15 @@ tauri-plugin-opener = "2"
 # the bug the dialog is here to fix. xdg-portal routes the dialog through the desktop
 # portal, so the path that comes back is the user's real one and no --filesystem
 # permission is needed. The cost is that a Linux system with no portal running cannot open
-# the dialog at all, and the app says so instead of hiding the file.
+# the dialog at all, and the app says so instead of hiding the file. The feature is inert
+# off Linux, because rfd is not built for Windows dialogs, Android or iOS.
+#
 # Held to 2.7 for the same reason as tauri itself: @tauri-apps/plugin-dialog is pinned to
 # 2.7.0, and 2.7.1 upwards require @tauri-apps/api 2.11, which has no matching tauri crate.
 tauri-plugin-dialog = { version = "~2.7", default-features = false, features = ["xdg-portal"] }
+
+[target.'cfg(not(any(target_os = "android", target_os = "ios")))'.dependencies]
+tauri-plugin-opener = "2"
 
 # Both of these are already compiled on Linux as dependencies of the dialog plugin (zbus
 # arrives through ashpd and through tauri-plugin-opener, tokio through rfd), so declaring
@@ -47,6 +52,12 @@ tauri-plugin-dialog = { version = "~2.7", default-features = false, features = [
 [target.'cfg(target_os = "linux")'.dependencies]
 zbus = "5"
 tokio = { version = "1", features = ["time"] }
+
+# Android only. The document picker hands back a content:// URI rather than a path, and
+# std::fs cannot write to one; this plugin resolves it through the platform. The desktop
+# writes with the app's own command and has no use for this.
+[target.'cfg(target_os = "android")'.dependencies]
+tauri-plugin-fs = "2"
 
 [profile.dev]
 incremental = true

@@ -11,7 +11,9 @@ import desktopCapability from '../../src-tauri/capabilities/desktop.json?raw'
 // keeps deciding it.
 const save = vi.hoisted(() => vi.fn())
 const invoke = vi.hoisted(() => vi.fn())
+const writeTextFile = vi.hoisted(() => vi.fn())
 vi.mock('@tauri-apps/plugin-dialog', () => ({ save }))
+vi.mock('@tauri-apps/plugin-fs', () => ({ writeTextFile }))
 // Only invoke is replaced: isTauri() stays the real one so the detection under test is
 // the library's, driven by the same global Tauri injects.
 vi.mock('@tauri-apps/api/core', async (importOriginal) => ({
@@ -30,6 +32,7 @@ function pretendDesktop() {
 beforeEach(() => {
   save.mockReset()
   invoke.mockReset()
+  writeTextFile.mockReset()
 })
 
 afterEach(() => {
@@ -111,6 +114,85 @@ describe('formatSavedMessage', () => {
     expect(formatSavedMessage('/run/flatpak/doc/ff01/daylo-backup.json')).toBe(
       'Saved daylo-backup.json'
     )
+  })
+
+  // Android's picker returns a document handle whose last segment is an opaque id. There
+  // is no folder in it and no readable name, so the name the dialog was opened with is
+  // the only true thing left to say.
+  it('names the file we offered when Android returns a document handle', () => {
+    expect(
+      formatSavedMessage(
+        'content://com.android.providers.downloads.documents/document/1234',
+        'daylo-backup-2026-09-10.json'
+      )
+    ).toBe('Saved daylo-backup-2026-09-10.json')
+  })
+
+  it('says something rather than a URI when no name was offered', () => {
+    expect(formatSavedMessage('content://whatever/document/9')).toBe('Saved the file')
+  })
+})
+
+describe('saveTextFile on Android', () => {
+  function pretendAndroid() {
+    vi.stubGlobal('isTauri', true)
+    invoke.mockImplementation((cmd: string) =>
+      cmd === 'save_dialog_available' ? Promise.resolve(true) : Promise.resolve(undefined)
+    )
+  }
+
+  // std::fs cannot open a content:// handle, so the write has to go through the
+  // filesystem plugin, which hands it to the platform.
+  it('writes a document handle through the filesystem plugin', async () => {
+    pretendAndroid()
+    const uri = 'content://com.android.providers.downloads.documents/document/1234'
+    save.mockResolvedValue(uri)
+    writeTextFile.mockResolvedValue(undefined)
+
+    const result = await saveTextFile('{"a":1}', 'daylo-backup.json', 'application/json')
+
+    expect(writeTextFile).toHaveBeenCalledWith(uri, '{"a":1}')
+    expect(invoke).not.toHaveBeenCalledWith('write_text_file', expect.anything())
+    expect(result).toEqual({ saved: true, viaDialog: true, path: uri })
+  })
+
+  // Backing out of the Android picker rejects, where the desktop resolves null. Both are
+  // the same act and neither is a failure. Without this the person would get an error
+  // toast every time they closed the picker.
+  it('treats the picker being cancelled as a cancellation, not a failure', async () => {
+    pretendAndroid()
+    save.mockRejectedValue(new Error('File picker cancelled'))
+
+    const result = await saveTextFile('{}', 'daylo-backup.json', 'application/json')
+
+    expect(result).toEqual({ saved: false, viaDialog: true })
+    expect(writeTextFile).not.toHaveBeenCalled()
+  })
+
+  it('still reports a dialog that genuinely failed', async () => {
+    pretendAndroid()
+    save.mockRejectedValue(new Error('Failed to pick save file'))
+
+    await expect(saveTextFile('{}', 'daylo-backup.json', 'application/json')).rejects.toThrow(
+      /Failed to pick save file/
+    )
+  })
+
+  it('does not put the document handle in a failure message', async () => {
+    pretendAndroid()
+    save.mockResolvedValue('content://com.android.providers.downloads.documents/document/1234')
+    writeTextFile.mockRejectedValue(new Error('No space left on device'))
+
+    let message = ''
+    try {
+      await saveTextFile('{}', 'daylo-backup.json', 'application/json')
+    } catch (error) {
+      message = error instanceof Error ? error.message : String(error)
+    }
+
+    expect(message).toMatch(/daylo-backup\.json/)
+    expect(message).toMatch(/No space left/)
+    expect(message).not.toMatch(/content:/)
   })
 })
 

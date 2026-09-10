@@ -2,9 +2,14 @@
 # without somebody using it on a real machine first.
 #
 # WHAT IT CLAIMS: these are the same bundles release.yml would produce for the same five
-# targets, built from the same code with the same release profile.
-# WHAT IT DOES NOT CLAIM: that they are signed the way a release is, or that they work.
-# That is the point: a person downloads them and tries the app.
+# desktop targets plus the Android APK, built from the same code with the same release
+# profile. The APK is signed with the release key, the same one release.yml uses, and the
+# job refuses to upload it unless the certificate matches the one already on people's
+# phones, so it installs over an existing Daylo instead of asking to uninstall it. The
+# desktop bundles are not signed the way a release is: on macOS they carry the same ad hoc
+# signature a release has, and nothing is notarized here or there.
+# WHAT IT DOES NOT CLAIM: that any of it works. That is the point: a person installs it
+# and tries the app.
 #
 # It cannot publish. There is no tag, no tauri-action, no release, and the only thing that
 # leaves the runner is an artifact that expires in a week.
@@ -174,4 +179,139 @@ jobs:
           retention-days: 7
           # An empty upload would look like a build that succeeded with nothing to test,
           # which is the kind of check that cannot fail and therefore proves nothing.
+          if-no-files-found: error
+
+  # The APK, so the phone can be tested before a tag rather than after one. Signed with
+  # the release key: Android refuses to install an update signed by a different key, and
+  # uninstalling to get around that erases the data of a local-first app. An unsigned or
+  # debug-signed test APK would therefore be untestable by anyone who already has Daylo.
+  #
+  # The key is no more exposed than it was. This workflow runs on a label or a manual
+  # dispatch, both of which need write access to the repository, and anyone with write
+  # access can already push a tag and run release.yml with the same key. Pull requests
+  # from forks receive no secrets at all, which is why the job skips itself there rather
+  # than failing on an empty secret. There is no pull_request_target here and there must
+  # never be.
+  android:
+    name: Test build (android-apk)
+    needs: verify-matrix
+    if: >-
+      (github.event_name == 'workflow_dispatch' || github.event.label.name == 'build-installers')
+      && (github.event_name == 'workflow_dispatch'
+          || github.event.pull_request.head.repo.full_name == github.repository)
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Install Android NDK
+        run: sdkmanager "ndk;29.0.14206865"
+
+      - name: Install Rust stable with Android target
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-linux-android
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+
+      - name: Cache Rust dependencies
+        uses: Swatinem/rust-cache@v2
+        with:
+          # The same key release.yml uses for Android, so this shares that cache.
+          workspaces: './src-tauri -> target'
+          shared-key: android
+          cache-on-failure: true
+
+      - name: Install Node.js dependencies
+        run: npm ci
+
+      - name: Install Tauri CLI
+        run: npm install --save-dev @tauri-apps/cli
+
+      - name: Record the commit being built
+        shell: bash
+        run: |
+          sha="${{ github.event.pull_request.head.sha || github.sha }}"
+          echo "SHORT_SHA=${sha:0:7}" >> "$GITHUB_ENV"
+
+      - name: Build the APK
+        run: npx tauri android build --apk --target aarch64
+        env:
+          NDK_HOME: ${{ env.ANDROID_HOME }}/ndk/29.0.14206865
+
+      - name: Sign it with the release key and check the certificate
+        env:
+          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          set -euo pipefail
+          UNSIGNED="src-tauri/gen/android/app/build/outputs/apk/universal/release/app-universal-release-unsigned.apk"
+          SIGNED="src-tauri/gen/android/app/build/outputs/apk/universal/release/Daylo-android-arm64.apk"
+
+          # The certificate every published Daylo carries, read off the 1.1.2 installed on
+          # a real phone. It is not a secret: it travels inside every APK. It is here so
+          # that a test build signed with the wrong key is caught by this job instead of by
+          # a person whose phone refuses the install.
+          EXPECTED="D6:2D:F3:2D:72:B1:54:87:C4:19:89:81:A7:35:0B:1D:74:F0:E6:60:71:A4:F8:95:88:86:AD:88:0C:45:F7:BD"
+
+          for v in ANDROID_KEYSTORE_BASE64 ANDROID_KEYSTORE_PASSWORD ANDROID_KEY_ALIAS ANDROID_KEY_PASSWORD; do
+            if [ -z "$(eval echo "\${$v:-}")" ]; then
+              echo "::error::Missing secret $v. Not falling back to a generated key: an APK"
+              echo "::error::signed with a different key cannot install over the one people"
+              echo "::error::already have, and uninstalling erases their data."
+              exit 1
+            fi
+          done
+
+          echo "$ANDROID_KEYSTORE_BASE64" | base64 -d > release.jks
+          trap 'rm -f release.jks' EXIT
+
+          BT="${ANDROID_HOME}/build-tools/$(ls ${ANDROID_HOME}/build-tools/ | tail -1)"
+          "$BT/zipalign" -f 4 "$UNSIGNED" "$SIGNED"
+          "$BT/apksigner" sign \
+            --ks release.jks \
+            --ks-pass "env:ANDROID_KEYSTORE_PASSWORD" \
+            --key-pass "env:ANDROID_KEY_PASSWORD" \
+            --ks-key-alias "$ANDROID_KEY_ALIAS" \
+            "$SIGNED"
+
+          certs=$("$BT/apksigner" verify --print-certs "$SIGNED")
+          echo "$certs"
+          # grep -o rather than a pipeline that stops early: under pipefail a consumer that
+          # exits first kills apksigner with SIGPIPE and the whole thing reports 141.
+          actual=$(grep -oE 'SHA-256 digest: [0-9a-f]+' <<< "$certs" | head -1 | awk '{print $NF}' \
+            | tr 'a-f' 'A-F' | sed 's/../&:/g;s/:$//')
+
+          if [ "$actual" != "$EXPECTED" ]; then
+            echo "::error::This APK is signed with a different certificate than the one"
+            echo "::error::people already have, so it cannot be installed over their Daylo."
+            echo "::error::expected $EXPECTED"
+            echo "::error::got      $actual"
+            exit 1
+          fi
+          echo "certificate matches the one on published Daylo installs"
+
+      - name: Upload the APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: daylo-android-arm64-${{ env.SHORT_SHA || github.sha }}
+          path: src-tauri/gen/android/app/build/outputs/apk/universal/release/Daylo-android-arm64.apk
+          retention-days: 7
           if-no-files-found: error

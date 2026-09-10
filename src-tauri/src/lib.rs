@@ -28,24 +28,26 @@ fn write_text_file(path: String, contents: String) -> Result<(), String> {
 
 /// Whether a native save dialog can actually be opened.
 ///
-/// Registered on desktop only, so a rejected call means this is not the desktop app and
-/// the caller should use the browser download. A `false` means the opposite: this IS the
-/// desktop app and no dialog would open, which has to be said out loud.
+/// Registered everywhere the dialog plugin can open one, which is the desktop and
+/// Android. It is deliberately NOT registered on iOS, so a rejected call still means
+/// "nothing here can open a dialog, use the browser download". A `false` means something
+/// else entirely: a dialog exists in principle and would not open, which has to be said
+/// out loud rather than discovered.
 ///
 /// It has to be asked before the dialog rather than inferred from its result. The plugin's
 /// `blocking_save_file` returns `Option<FilePath>` and has no error channel, and on Linux
 /// rfd logs the portal failure, tries zenity, and then returns `None`, which is exactly
 /// what a user cancelling looks like. Guessing afterwards would mean ending an export with
 /// a stopped spinner, no file and no message.
-#[cfg(not(any(target_os = "android", target_os = "ios")))]
+#[cfg(not(target_os = "ios"))]
 #[tauri::command]
 async fn save_dialog_available() -> bool {
     #[cfg(target_os = "linux")]
     {
         file_portal_answers().await
     }
-    // Windows and macOS open their own dialogs, which are part of the system rather than
-    // a service that can be absent.
+    // Windows, macOS and Android open their own, which are part of the system rather
+    // than a service that can be absent.
     #[cfg(not(target_os = "linux"))]
     {
         true
@@ -86,22 +88,30 @@ async fn file_portal_answers() -> bool {
 pub fn run() {
     let builder = tauri::Builder::default().plugin(tauri_plugin_shell::init());
 
-    // Desktop only, and deliberately: on Android and iOS the export keeps the browser
-    // download path, so shipping a dialog plugin that nothing calls would only grow the
-    // app. The commands are gated the same way, and that gating is also what tells the
-    // frontend which one it is running in, so the two sides cannot drift: see
-    // chooseSaveTarget() in src/lib/fileSave.ts.
+    // The dialog goes everywhere it can open: the desktop and Android. What each platform
+    // registers is also what tells the frontend where it is running, so the two sides
+    // cannot drift. See chooseSaveTarget() in src/lib/fileSave.ts.
+    let builder = builder.plugin(tauri_plugin_dialog::init());
+
     #[cfg(not(any(target_os = "android", target_os = "ios")))]
     let builder = builder
         .plugin(tauri_plugin_opener::init())
-        .plugin(tauri_plugin_dialog::init())
         .invoke_handler(tauri::generate_handler![
             greet,
             write_text_file,
             save_dialog_available
         ]);
 
-    #[cfg(any(target_os = "android", target_os = "ios"))]
+    // Android writes through the filesystem plugin rather than through write_text_file:
+    // the picker returns a content:// URI and std::fs cannot open one.
+    #[cfg(target_os = "android")]
+    let builder = builder
+        .plugin(tauri_plugin_fs::init())
+        .invoke_handler(tauri::generate_handler![greet, save_dialog_available]);
+
+    // iOS registers neither, so the frontend falls back to the browser download, which is
+    // what it has always done there. Nothing about iOS has been tested.
+    #[cfg(target_os = "ios")]
     let builder = builder.invoke_handler(tauri::generate_handler![greet]);
 
     builder
