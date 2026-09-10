@@ -188,7 +188,7 @@ export const QuickLog = memo(function QuickLog() {
               type="checkbox"
               checked={isCompleted}
               onChange={() => handleToggleLog(activity.id)}
-              className="w-5 h-5 sm:w-5 sm:h-5 rounded border-gray-300 text-emerald-500 focus:ring-emerald-500 focus:ring-offset-0"
+              className="w-5 h-5 sm:w-5 sm:h-5 accent-emerald-500 focus:ring-emerald-500 focus:ring-offset-0"
               aria-label={`Mark ${activity.name} as ${isCompleted ? 'incomplete' : 'complete'}`}
               data-testid="quicklog-activity-checkbox"
             />
