@@ -141,8 +141,13 @@
     border-color 120ms var(--ease-standard);
 }
 
-.app-checkbox:hover:not(:checked) {
-  border-color: var(--color-emerald-600);
+/* Only where a pointer can actually hover. On a touch screen the hover state sticks to
+   whatever was tapped last, so without this the border stays emerald after tapping and
+   unticking, on a box that is no longer checked. */
+@media (hover: hover) {
+  .app-checkbox:hover:not(:checked) {
+    border-color: var(--color-emerald-600);
+  }
 }
 
 .app-checkbox:checked {
