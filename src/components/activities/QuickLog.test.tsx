@@ -145,6 +145,21 @@ describe('QuickLog', () => {
       expect(checkboxes).toHaveLength(3)
     })
 
+    // The bounce used to be on the row, so ticking one activity made its name, its colour
+    // dot and its tick jump 20% along with it. It belongs to the control that was
+    // clicked, and the row must not move.
+    it('bounces the checkbox and not the row it sits in', async () => {
+      setupStoreWithActivities()
+      render(<QuickLog />)
+
+      const checkbox = screen.getAllByTestId('quicklog-activity-checkbox')[0]
+      await userEvent.click(checkbox)
+
+      await waitFor(() => expect(checkbox.className).toContain('checkbox-bounce'))
+      expect(checkbox.closest('label')?.className).not.toContain('checkbox-bounce')
+      expect(checkbox.closest('label')?.getAttribute('style')).toBeNull()
+    })
+
     it('should show completed activity as checked', () => {
       setupStoreWithLogs()
       render(<QuickLog />)

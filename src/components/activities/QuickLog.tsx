@@ -175,11 +175,7 @@ export const QuickLog = memo(function QuickLog() {
             className={`flex items-center gap-3 p-3 sm:p-3 rounded-lg cursor-pointer transition-colors focus-within:ring-2 focus-within:ring-emerald-500 min-h-[48px] ${
               isCompleted ? 'bg-emerald-50' : 'hover:bg-gray-50'
             }`}
-            style={
-              bouncingId === activity.id
-                ? { animation: 'check-bounce 300ms var(--ease-standard)' }
-                : undefined
-            }
+            // The animation event comes from the checkbox and bubbles to here.
             onAnimationEnd={() => {
               if (bouncingId === activity.id) setBouncingId(null)
             }}
@@ -188,7 +184,9 @@ export const QuickLog = memo(function QuickLog() {
               type="checkbox"
               checked={isCompleted}
               onChange={() => handleToggleLog(activity.id)}
-              className="w-5 h-5 sm:w-5 sm:h-5 accent-emerald-500 focus:ring-emerald-500 focus:ring-offset-0"
+              className={`w-5 h-5 sm:w-5 sm:h-5 accent-emerald-500 focus:ring-emerald-500 focus:ring-offset-0 ${
+                bouncingId === activity.id ? 'checkbox-bounce' : ''
+              }`}
               aria-label={`Mark ${activity.name} as ${isCompleted ? 'incomplete' : 'complete'}`}
               data-testid="quicklog-activity-checkbox"
             />
