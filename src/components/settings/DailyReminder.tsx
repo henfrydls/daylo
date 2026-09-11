@@ -12,10 +12,10 @@ import {
 /**
  * Keeps the daily reminder in step with whether there is anything to be reminded about.
  *
- * Two things follow from the same count. The offer is put once, and only after a first
- * habit exists, because asking on an empty app is asking about nothing; and the reminder
+ * Everything here follows from the same count. The offer is put once, and only after a
+ * first habit exists, because asking on an empty app is asking about nothing; the alarm
  * comes down when the last habit goes, because a notification that outlives what it
- * reminds about is how an app gets uninstalled.
+ * reminds about is how an app gets uninstalled; and it comes back when a habit does.
  *
  * Both the accepted and the declined answer are recorded, so the question is never put
  * again. The setting in the menu is what somebody uses to change their mind.
@@ -30,16 +30,24 @@ export function DailyReminder() {
   const available = useRemindersAvailable()
   const { showToast } = useToast()
 
-  useEffect(() => {
-    void reconcileReminder(activityCount)
-  }, [activityCount])
-
-  // Once, when the app opens and the answer about the platform has arrived. The state is
-  // read here rather than watched, because this is about how things stood on opening: a
-  // reminder switched on later in the session has just been scheduled by the switch
+  // One rule, applied when the app opens and again whenever the number of activities
+  // changes: something is scheduled exactly when the reminder is on and there is anything
+  // to be reminded about.
+  //
+  // The switch itself is a wish, not a schedule, which is why deleting the last habit
+  // takes the alarm down and leaves the switch alone: nobody changed their mind about
+  // evenings, and adding a habit back brings the reminder back with it.
+  //
+  // The stored state is read here rather than watched, so that turning the switch on
+  // mid-session does not run this as well; that path has just scheduled the reminder
   // itself. See refreshReminder for what the re-arming is for.
   useEffect(() => {
     if (!available) return
+    if (activityCount === 0) {
+      void reconcileReminder(activityCount)
+      return
+    }
+
     const { reminderEnabled, reminderHour, reminderMinute } = useCalendarStore.getState()
     if (!reminderEnabled) return
 
@@ -48,7 +56,7 @@ export function DailyReminder() {
         setReminder(false, reminderHour, reminderMinute)
       }
     })
-  }, [available, setReminder])
+  }, [available, activityCount, setReminder])
 
   const accept = async () => {
     const outcome = await enableReminder(hour, minute)

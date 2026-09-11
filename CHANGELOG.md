@@ -17,7 +17,9 @@ time you choose, so a day does not go by unlogged. It is off until you ask for i
 you create your first habit Daylo offers it once, and if you say no it does not ask again.
 You can turn it on, move the time or turn it off from the menu at any time, and it stays
 on after you restart your phone. Android decides the exact minute, so it may arrive a few
-minutes either side of the time you picked.
+minutes either side of the time you picked. If the phone has been sitting unused for days,
+Android can hold it back further while it sleeps; opening Daylo puts the next one back on
+time.
 
 The reminder is only on Android. On a computer a notification could only arrive while
 Daylo was already open, which is not a reminder.

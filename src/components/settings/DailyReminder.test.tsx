@@ -167,7 +167,7 @@ describe('when the activities go', () => {
     firstHabitOnAndroid()
     useCalendarStore.setState({ reminderOffered: true, reminderEnabled: true })
     render(<DailyReminder />)
-    await waitFor(() => expect(reconcileReminder).toHaveBeenCalledWith(1))
+    await settle()
 
     act(() => useCalendarStore.setState({ activities: [] }))
 
@@ -193,6 +193,32 @@ describe('opening the app', () => {
 
     await settle()
     expect(refreshReminder).not.toHaveBeenCalled()
+  })
+
+  // The switch is a wish, not a schedule. Somebody who deletes every habit has not
+  // changed their mind about evenings, so the switch stays where they left it and only
+  // the alarm goes. Arming one anyway would put a notification on a phone with nothing
+  // to be reminded about.
+  it('arms nothing while there is nothing to be reminded about', async () => {
+    remindersAvailable.mockResolvedValue(true)
+    useCalendarStore.setState({ activities: [], reminderEnabled: true, reminderOffered: true })
+
+    render(<DailyReminder />)
+
+    await settle()
+    expect(refreshReminder).not.toHaveBeenCalled()
+    expect(reconcileReminder).toHaveBeenCalledWith(0)
+  })
+
+  it('arms again when a habit comes back', async () => {
+    remindersAvailable.mockResolvedValue(true)
+    useCalendarStore.setState({ activities: [], reminderEnabled: true, reminderOffered: true })
+    render(<DailyReminder />)
+    await settle()
+
+    act(() => useCalendarStore.setState({ activities: [anActivity('a')] }))
+
+    await waitFor(() => expect(refreshReminder).toHaveBeenCalledWith(21, 0))
   })
 
   // The permission can be taken away in the phone's own settings, and nothing tells the
