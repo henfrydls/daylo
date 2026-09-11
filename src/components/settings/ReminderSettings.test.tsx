@@ -83,6 +83,25 @@ describe('the time', () => {
     expect(screen.getByText(/7:05/)).toBeInTheDocument()
   })
 
+  // Nothing is scheduled while the switch is off, so the note cannot speak as though
+  // something were coming.
+  it('does not describe a reminder that is not coming', () => {
+    open()
+
+    expect(screen.getByTestId('reminder-time-note')).toHaveTextContent(
+      /turn it on and it will arrive/i
+    )
+  })
+
+  it('describes the one that is', () => {
+    useCalendarStore.setState({ reminderEnabled: true })
+    open()
+
+    expect(screen.getByTestId('reminder-time-note')).toHaveTextContent(
+      /^Around 9:00 PM\. Android may shift it a few minutes\.$/
+    )
+  })
+
   // Moving the time has to re-schedule, not just store a number: the alarm already on the
   // phone is at the old hour and nothing else will move it.
   it('re-schedules an enabled reminder when it changes', async () => {
@@ -113,4 +132,11 @@ it('closes on Done', async () => {
   await userEvent.click(screen.getByText('Done'))
 
   expect(onClose).toHaveBeenCalled()
+})
+
+// Below the scrolling body, where every other modal in the app puts its actions.
+it('keeps Done out of the scrolling body', () => {
+  open()
+
+  expect(screen.getByTestId('modal-footer')).toContainElement(screen.getByText('Done'))
 })

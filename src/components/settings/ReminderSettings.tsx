@@ -43,17 +43,27 @@ export function ReminderSettings({ isOpen, onClose }: ReminderSettingsProps) {
   }
 
   return (
-    <Modal isOpen={isOpen} onClose={onClose} title="Daily reminder" data-testid="reminder-settings">
+    <Modal
+      isOpen={isOpen}
+      onClose={onClose}
+      title="Daily reminder"
+      data-testid="reminder-settings"
+      footer={
+        <div className="flex justify-end">
+          <Button onClick={onClose}>Done</Button>
+        </div>
+      }
+    >
       <div className="space-y-4">
         <label className="flex items-center gap-3 p-3 rounded-lg cursor-pointer min-h-[48px] has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-emerald-500">
           <Checkbox
             checked={enabled}
             disabled={busy}
             onChange={(e) => void apply(e.target.checked, hour, minute)}
-            aria-label="Daily reminder"
+            aria-label="Remind me each evening"
             data-testid="reminder-toggle"
           />
-          <span className="font-medium text-sm text-gray-900">Daily reminder</span>
+          <span className="font-medium text-sm text-gray-900">Remind me each evening</span>
         </label>
 
         <div className="px-3">
@@ -73,16 +83,13 @@ export function ReminderSettings({ isOpen, onClose }: ReminderSettingsProps) {
             className="px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 min-h-[44px]"
             data-testid="reminder-time"
           />
-          <p className="text-sm text-gray-500 mt-2">
-            Around {formatReminderTime(hour, minute)}. Android may shift it a few minutes.
+          {/* Nothing is scheduled while the switch is off, so the text does not describe a
+              reminder that is not coming. */}
+          <p className="text-sm text-gray-500 mt-2" data-testid="reminder-time-note">
+            {enabled
+              ? `Around ${formatReminderTime(hour, minute)}. Android may shift it a few minutes.`
+              : `Turn it on and it will arrive around ${formatReminderTime(hour, minute)}.`}
           </p>
-        </div>
-
-        {/* In the body rather than the modal's pinned footer: this dialog holds a switch
-            and a time, it has nothing to scroll, and using the footer would tie this to a
-            change that has not landed yet. */}
-        <div className="flex justify-end pt-2">
-          <Button onClick={onClose}>Done</Button>
         </div>
       </div>
     </Modal>
