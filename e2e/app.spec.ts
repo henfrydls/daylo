@@ -436,3 +436,71 @@ test.describe('Activity Tracker App', () => {
     await expect(page.getByText('More')).toBeVisible()
   })
 })
+
+// ── Modal actions stay reachable ──────────────────────────
+
+// A modal's buttons used to live inside its scrolling body, so on a short window the
+// button that finishes the job scrolled out of sight. Measured before the fix, at
+// 1024x600: the Import button sat at 698px with the modal ending at 570 and the viewport
+// at 600. It was reachable, but only by discovering that the body scrolled.
+//
+// These check the property that replaced it: the footer is pinned, so the button's
+// distance from the bottom of the window does not depend on how much content the modal
+// has. Asserting a margin rather than "is it inside" is deliberate: at 1366x768 the old
+// layout left 62px, so a yes/no check would have passed while the thing was one small
+// metric difference away from breaking, which is exactly how it reached a user.
+const SAMPLE_BACKUP = JSON.stringify({
+  version: '1.1.3',
+  exportedAt: '2026-09-10T00:00:00.000Z',
+  activities: Array.from({ length: 8 }, (_, i) => ({
+    id: `a${i}`,
+    name: `Habit ${i}`,
+    color: '#10B981',
+    createdAt: '2026-01-01T00:00:00.000Z',
+    updatedAt: '2026-01-01T00:00:00.000Z',
+  })),
+  logs: Array.from({ length: 30 }, (_, i) => ({
+    id: `l${i}`,
+    activityId: 'a0',
+    date: `2026-09-${String((i % 28) + 1).padStart(2, '0')}`,
+    completed: true,
+    createdAt: '2026-09-01T00:00:00.000Z',
+  })),
+})
+
+async function openImportWithFile(page: import('@playwright/test').Page) {
+  await page.getByLabel('More options').filter({ visible: true }).first().click()
+  await page.getByRole('menu').getByText('Import Data', { exact: true }).click()
+  await page.setInputFiles('input[type="file"]', {
+    name: 'daylo-backup-2026-09-10.json',
+    mimeType: 'application/json',
+    buffer: Buffer.from(SAMPLE_BACKUP),
+  })
+  await expect(page.getByTestId('modal-footer')).toBeVisible()
+}
+
+test.describe('modal actions', () => {
+  test('the import button is on screen on a short window', async ({ page }) => {
+    await page.setViewportSize({ width: 1024, height: 600 })
+    await page.goto('/')
+    await openImportWithFile(page)
+
+    const button = page.getByTestId('modal-footer').getByRole('button', { name: /import data/i })
+    await expect(button).toBeInViewport()
+
+    const box = await button.boundingBox()
+    const viewport = page.viewportSize()!
+    expect(viewport.height - (box!.y + box!.height)).toBeGreaterThanOrEqual(24)
+  })
+
+  test('the import button keeps its margin on a laptop window', async ({ page }) => {
+    await page.setViewportSize({ width: 1366, height: 768 })
+    await page.goto('/')
+    await openImportWithFile(page)
+
+    const button = page.getByTestId('modal-footer').getByRole('button', { name: /import data/i })
+    const box = await button.boundingBox()
+    const viewport = page.viewportSize()!
+    expect(viewport.height - (box!.y + box!.height)).toBeGreaterThanOrEqual(24)
+  })
+})

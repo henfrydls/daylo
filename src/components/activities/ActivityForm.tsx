@@ -11,6 +11,13 @@ interface ActivityFormProps {
   activity?: Activity
 }
 
+/**
+ * The submit button lives in the modal's pinned footer, which is outside the form
+ * element, so it is tied back to it with the form attribute. Without this the button
+ * renders fine and does nothing, which is how four tests caught it.
+ */
+const FORM_ID = 'activity-form'
+
 export const ActivityForm = memo(function ActivityForm({
   isOpen,
   onClose,
@@ -91,8 +98,23 @@ export const ActivityForm = memo(function ActivityForm({
       onClose={handleClose}
       title={activity ? 'Edit Activity' : 'New Activity'}
       data-testid="activity-form-modal"
+      footer={
+        <div className="flex justify-end gap-3">
+          <Button type="button" variant="ghost" onClick={handleClose}>
+            Cancel
+          </Button>
+          <Button
+            type="submit"
+            form={FORM_ID}
+            disabled={!name.trim()}
+            data-testid="activity-form-submit"
+          >
+            {isEditing ? 'Save Changes' : logForDate ? 'Create & Log' : 'Create Activity'}
+          </Button>
+        </div>
+      }
     >
-      <form onSubmit={handleSubmit}>
+      <form id={FORM_ID} onSubmit={handleSubmit}>
         <div className="mb-4">
           <label htmlFor="activity-name" className="block text-sm font-medium text-gray-700 mb-1">
             Activity Name
@@ -154,15 +176,6 @@ export const ActivityForm = memo(function ActivityForm({
             )}
           </div>
         )}
-
-        <div className="flex justify-end gap-3 pt-3">
-          <Button type="button" variant="ghost" onClick={handleClose}>
-            Cancel
-          </Button>
-          <Button type="submit" disabled={!name.trim()} data-testid="activity-form-submit">
-            {isEditing ? 'Save Changes' : logForDate ? 'Create & Log' : 'Create Activity'}
-          </Button>
-        </div>
       </form>
     </Modal>
   )
