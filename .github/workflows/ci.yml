@@ -267,6 +267,51 @@ jobs:
           key: gradle-android-${{ hashFiles('src-tauri/gen/android/**/*.gradle*', 'src-tauri/gen/android/gradle/wrapper/gradle-wrapper.properties') }}
 
   # Verify Tauri builds (without uploading artifacts)
+  # The end to end suite, which until now existed and ran nowhere. Six of its tests had
+  # rotted unnoticed: three waited thirty seconds for a control that is only rendered for
+  # the other breakpoint, one matched two buttons at once, and two asserted against the
+  # brand heading instead of the month title. A suite nothing executes is not a safety
+  # net, it is a file.
+  #
+  # Its own job so that Test & Lint stays quick: that one is what everybody waits for.
+  e2e:
+    name: End to end
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+
+      - name: Install Node.js dependencies
+        run: npm ci
+
+      # Chromium and WebKit. WebKit is the engine the desktop and mobile apps really run,
+      # and the one whose layout differences have cost this project two releases, so it is
+      # worth the extra install time. --with-deps pulls the system libraries it needs,
+      # which is why this cannot be done on a developer machine without root.
+      - name: Install the browsers
+        run: npx playwright install --with-deps chromium webkit
+
+      - name: Run the suite
+        run: npx playwright test
+
+      - name: Keep the report when something fails
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: playwright-report/
+          retention-days: 7
+
   build-check:
     needs: test
     runs-on: ${{ matrix.platform }}
