@@ -177,7 +177,7 @@ export const QuickLog = memo(function QuickLog() {
         return (
           <label
             key={activity.id}
-            className={`flex items-center gap-3 p-3 sm:p-3 rounded-lg cursor-pointer transition-colors focus-within:ring-2 focus-within:ring-emerald-500 min-h-[48px] ${
+            className={`flex items-center gap-3 p-3 sm:p-3 rounded-lg cursor-pointer transition-colors has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-emerald-500 min-h-[48px] ${
               isCompleted ? 'bg-emerald-50' : 'hover:bg-gray-50'
             }`}
             // The animation event comes from the checkbox and bubbles to here.

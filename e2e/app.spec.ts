@@ -1,5 +1,15 @@
 import { test, expect } from '@playwright/test'
 
+/**
+ * The app renders a mobile and a desktop variant of several controls at once, and only
+ * one of them is visible at a given width. Three tests used .first() and spent thirty
+ * seconds waiting for a span that is never going to be visible, which is how this suite
+ * rotted without anyone noticing: nothing runs it.
+ */
+function visibleMenuTrigger(page: import('@playwright/test').Page) {
+  return page.getByLabel('More options').filter({ visible: true }).first()
+}
+
 // Helper: create an activity via the sidebar form
 async function createActivity(page: import('@playwright/test').Page, name: string) {
   const addButton = page.getByTestId('add-activity-button')
@@ -217,14 +227,14 @@ test.describe('Activity Tracker App', () => {
 
   test('should switch between Year and Month views', async ({ page }) => {
     // Default is Year view
-    const monthButton = page.getByRole('button', { name: 'Month' })
+    const monthButton = page.getByRole('button', { name: 'Month', exact: true })
     await monthButton.click()
 
     // Should see month view with day-of-week headers
     await expect(page.getByText('Sun')).toBeVisible()
 
     // Switch back to Year
-    const yearButton = page.getByRole('button', { name: 'Year' })
+    const yearButton = page.getByRole('button', { name: 'Year', exact: true })
     await yearButton.click()
 
     // Should see year navigation (the year number heading)
@@ -236,11 +246,11 @@ test.describe('Activity Tracker App', () => {
 
   test('should navigate months with prev/next buttons', async ({ page }) => {
     // Switch to month view
-    const monthButton = page.getByRole('button', { name: 'Month' })
+    const monthButton = page.getByRole('button', { name: 'Month', exact: true })
     await monthButton.click()
 
     // Get the current month heading text
-    const heading = page.locator('h1').first()
+    const heading = page.getByTestId('month-title-button')
     const initialMonth = await heading.textContent()
 
     // Click previous month
@@ -260,7 +270,7 @@ test.describe('Activity Tracker App', () => {
   })
 
   test('should navigate to today from month view', async ({ page }) => {
-    const monthButton = page.getByRole('button', { name: 'Month' })
+    const monthButton = page.getByRole('button', { name: 'Month', exact: true })
     await monthButton.click()
 
     // Navigate away
@@ -273,7 +283,7 @@ test.describe('Activity Tracker App', () => {
     await todayButton.click()
 
     // Heading should contain current month
-    const heading = page.locator('h1').first()
+    const heading = page.getByTestId('month-title-button')
     const monthName = new Date().toLocaleString('en-US', { month: 'long' })
     await expect(heading).toContainText(monthName)
   })
@@ -281,7 +291,7 @@ test.describe('Activity Tracker App', () => {
   test('should open QuickLog from month view day click', async ({ page }) => {
     await createActivity(page, 'Test')
 
-    const monthButton = page.getByRole('button', { name: 'Month' })
+    const monthButton = page.getByRole('button', { name: 'Month', exact: true })
     await monthButton.click()
 
     // Click a day in the month grid
@@ -384,7 +394,7 @@ test.describe('Activity Tracker App', () => {
 
   test('should open export modal from dropdown menu', async ({ page }) => {
     // Open the dropdown menu (desktop version)
-    const menuTrigger = page.getByLabel('More options').first()
+    const menuTrigger = visibleMenuTrigger(page)
     await menuTrigger.click()
 
     // Click Export Data
@@ -392,12 +402,14 @@ test.describe('Activity Tracker App', () => {
 
     // Export modal should be visible
     await expect(page.getByText('Export Your Data')).toBeVisible()
-    await expect(page.getByText('JSON')).toBeVisible()
-    await expect(page.getByText('CSV')).toBeVisible()
+    // By role, not by text: 'JSON' also matches the Export JSON button, and what this
+    // test means to assert is that both formats are offered.
+    await expect(page.getByRole('radio', { name: /json/i })).toBeVisible()
+    await expect(page.getByRole('radio', { name: /csv/i })).toBeVisible()
   })
 
   test('should show empty data warning in export modal', async ({ page }) => {
-    const menuTrigger = page.getByLabel('More options').first()
+    const menuTrigger = visibleMenuTrigger(page)
     await menuTrigger.click()
 
     await page.getByText('Export Data').click()
@@ -408,7 +420,7 @@ test.describe('Activity Tracker App', () => {
   // ── Import ────────────────────────────────────────────────
 
   test('should open import modal from dropdown menu', async ({ page }) => {
-    const menuTrigger = page.getByLabel('More options').first()
+    const menuTrigger = visibleMenuTrigger(page)
     await menuTrigger.click()
 
     await page.getByText('Import Data').click()
@@ -434,5 +446,113 @@ test.describe('Activity Tracker App', () => {
   test('should have legend for activity levels', async ({ page }) => {
     await expect(page.getByText('Less')).toBeVisible()
     await expect(page.getByText('More')).toBeVisible()
+  })
+})
+
+// ── The engine the app actually runs on ───────────────────
+
+// Tagged @webkit so it runs in that project too. It is here rather than among the
+// Chromium tests because the bug it guards against does not exist in Chromium: a day
+// cell asked to be the height of its grid row while the row was sized from its content,
+// and WebKit fed the hovered cell's scaled box back into that row. Measured in WebKitGTK
+// 4.1 before the fix: the cell went from 18x24 to 19x158 and its week column from 18x170
+// to 18x1032, filling the window and pushing the rest of the year behind it.
+//
+// The column is what is asserted. The cell itself is supposed to change size on hover,
+// because hover:scale-110 scales it; what must never change is the layout around it.
+test.describe('year view under the pointer @webkit', () => {
+  test('hovering a day does not resize its week column', async ({ page }) => {
+    await page.goto('/')
+    await createActivity(page, 'Read')
+
+    const cell = page.getByTestId('day-cell').nth(20)
+    await expect(cell).toBeVisible()
+
+    const column = cell.locator('xpath=../..')
+    const before = await column.boundingBox()
+
+    await cell.hover()
+    await page.waitForTimeout(600)
+    const after = await column.boundingBox()
+
+    expect(Math.abs(after!.height - before!.height)).toBeLessThanOrEqual(2)
+    expect(Math.abs(after!.width - before!.width)).toBeLessThanOrEqual(2)
+  })
+})
+
+// ── Modal actions stay reachable ──────────────────────────
+
+// A modal's buttons used to live inside its scrolling body, so on a short window the
+// button that finishes the job scrolled out of sight. Measured before the fix, at
+// 1024x600: the Import button sat at 698px with the modal ending at 570 and the viewport
+// at 600. It was reachable, but only by discovering that the body scrolled.
+//
+// These check the property that replaced it: the footer is pinned, so the button's
+// distance from the bottom of the window does not depend on how much content the modal
+// has. Asserting a margin rather than "is it inside" is deliberate: at 1366x768 the old
+// layout left 62px, so a yes/no check would have passed while the thing was one small
+// metric difference away from breaking, which is exactly how it reached a user.
+const SAMPLE_BACKUP = JSON.stringify({
+  version: '1.1.3',
+  exportedAt: '2026-09-10T00:00:00.000Z',
+  activities: Array.from({ length: 8 }, (_, i) => ({
+    id: `a${i}`,
+    name: `Habit ${i}`,
+    color: '#10B981',
+    createdAt: '2026-01-01T00:00:00.000Z',
+    updatedAt: '2026-01-01T00:00:00.000Z',
+  })),
+  logs: Array.from({ length: 30 }, (_, i) => ({
+    id: `l${i}`,
+    activityId: 'a0',
+    date: `2026-09-${String((i % 28) + 1).padStart(2, '0')}`,
+    completed: true,
+    createdAt: '2026-09-01T00:00:00.000Z',
+  })),
+})
+
+async function openImportWithFile(page: import('@playwright/test').Page) {
+  await page.getByLabel('More options').filter({ visible: true }).first().click()
+  await page.getByRole('menu').getByText('Import Data', { exact: true }).click()
+  await page.setInputFiles('input[type="file"]', {
+    name: 'daylo-backup-2026-09-10.json',
+    mimeType: 'application/json',
+    buffer: Buffer.from(SAMPLE_BACKUP),
+  })
+  // Waits for the button itself, not for the footer's test id. Waiting for the footer
+  // made these fail against the old layout because the element did not exist, which
+  // looks like the guard working and is not: it would have passed a broken layout that
+  // happened to keep the test id. The button exists either way; where it sits is the
+  // thing under test.
+  await expect(importButton(page)).toBeAttached()
+}
+
+function importButton(page: import('@playwright/test').Page) {
+  return page.getByRole('dialog').getByRole('button', { name: /import data/i })
+}
+
+test.describe('modal actions', () => {
+  test('the import button is on screen on a short window', async ({ page }) => {
+    await page.setViewportSize({ width: 1024, height: 600 })
+    await page.goto('/')
+    await openImportWithFile(page)
+
+    const button = importButton(page)
+    await expect(button).toBeInViewport()
+
+    const box = await button.boundingBox()
+    const viewport = page.viewportSize()!
+    expect(viewport.height - (box!.y + box!.height)).toBeGreaterThanOrEqual(24)
+  })
+
+  test('the import button keeps its margin on a laptop window', async ({ page }) => {
+    await page.setViewportSize({ width: 1366, height: 768 })
+    await page.goto('/')
+    await openImportWithFile(page)
+
+    const button = importButton(page)
+    const box = await button.boundingBox()
+    const viewport = page.viewportSize()!
+    expect(viewport.height - (box!.y + box!.height)).toBeGreaterThanOrEqual(24)
   })
 })

@@ -9,10 +9,24 @@ interface ModalProps {
   onClose: () => void
   title: string
   children: ReactNode
+  /**
+   * The actions. They live outside the scrolling area on purpose: put in with the rest of
+   * the content they scroll away with it, and on a short window the button that finishes
+   * the job ends up below the fold, where it has to be discovered. Measured at 1024x600
+   * before this existed: the Import button sat at 698px with the modal ending at 570.
+   */
+  footer?: ReactNode
   'data-testid'?: string
 }
 
-export function Modal({ isOpen, onClose, title, children, 'data-testid': testId }: ModalProps) {
+export function Modal({
+  isOpen,
+  onClose,
+  title,
+  children,
+  footer,
+  'data-testid': testId,
+}: ModalProps) {
   const modalRef = useRef<HTMLDivElement>(null)
   const { shouldRender, isVisible } = useAnimatedPresence(isOpen, 150)
 
@@ -52,6 +66,11 @@ export function Modal({ isOpen, onClose, title, children, 'data-testid': testId 
           </button>
         </div>
         <div className="flex-1 overflow-y-auto min-h-0 -mx-1 px-1">{children}</div>
+        {footer && (
+          <div className="shrink-0 pt-4 mt-2 border-t border-gray-100" data-testid="modal-footer">
+            {footer}
+          </div>
+        )}
       </div>
     </div>,
     document.body

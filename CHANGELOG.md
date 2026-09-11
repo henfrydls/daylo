@@ -5,6 +5,13 @@ listed: this file starts at 1.1.2, when the first change worth warning about arr
 
 ## Unreleased
 
+**Daylo opens on the month.** It used to open on the year on anything wider than a phone,
+so the same person met a different first screen on their laptop than on their phone. The
+month is where you tick today off, which is what most people open Daylo to do.
+
+This only changes where Daylo starts for someone installing it now. If you have used
+Daylo before, it remembers the view you were last on, and that does not change.
+
 **Colors another activity is already using are dimmed.** When you create or rename an
 activity, the colors your other activities wear are faded and say "already in use" when
 you point at them. They can still be picked: two activities can share a color, it is just
