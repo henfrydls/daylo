@@ -12,6 +12,22 @@ describe('useCalendarStore', () => {
     })
   })
 
+  // Read through getInitialState so it does not depend on what other tests left behind,
+  // and so it describes what a fresh install gets rather than what the store happens to
+  // hold right now.
+  //
+  // There was a second test here asserting the value does not depend on the window width,
+  // which it used to: below 640px it was 'month' and above it 'year'. It was removed
+  // because it could not fail. getInitialState returns what was captured when the module
+  // loaded, so resizing the window afterwards re-evaluates nothing, and the test passed
+  // against the old code too.
+  describe('the first screen', () => {
+    it('starts on the month view', () => {
+      expect(useCalendarStore.getInitialState().currentView).toBe('month')
+    })
+
+  })
+
   describe('activities', () => {
     it('should add activity', () => {
       const { addActivity } = useCalendarStore.getState()
