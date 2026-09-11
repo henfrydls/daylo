@@ -160,9 +160,17 @@ export const useCalendarStore = create<CalendarState>()(
       logs: [],
       selectedYear: new Date().getFullYear(),
       selectedDate: null,
-      currentView: (typeof window !== 'undefined' && window.innerWidth < 640
-        ? 'month'
-        : 'year') as ViewType,
+      // Month, everywhere. The year view answers "how did the year go"; the month view is
+      // where a person ticks today off, which is what they open the app to do. This used
+      // to depend on the window being narrower than 640px, so the same person got a
+      // different first screen on their phone and on their laptop.
+      //
+      // Only a fresh install sees it. currentView is persisted, and anything that touches
+      // the store writes the whole persisted slice, so anyone who has ever used Daylo
+      // already has a view stored and keeps it. That is deliberate: changing it for them
+      // would overrule a choice some of them made on purpose, and there is no way to tell
+      // those apart from the ones who never touched the toggle.
+      currentView: 'month' as ViewType,
       selectedMonth: new Date().getMonth(),
       _hasHydrated: false,
       _viewTransitionDirection: null as ViewTransitionDirection,

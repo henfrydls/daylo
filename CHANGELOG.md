@@ -3,6 +3,15 @@
 What changed in each release, for the people who use Daylo. Earlier versions are not
 listed: this file starts at 1.1.2, when the first change worth warning about arrived.
 
+## Unreleased
+
+**Daylo opens on the month.** It used to open on the year on anything wider than a phone,
+so the same person met a different first screen on their laptop than on their phone. The
+month is where you tick today off, which is what most people open Daylo to do.
+
+This only changes where Daylo starts for someone installing it now. If you have used
+Daylo before, it remembers the view you were last on, and that does not change.
+
 ## 1.1.3
 
 **Exporting now asks you where to save.** Before, Daylo handed the file to the system and
