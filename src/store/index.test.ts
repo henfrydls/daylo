@@ -25,7 +25,6 @@ describe('useCalendarStore', () => {
     it('starts on the month view', () => {
       expect(useCalendarStore.getInitialState().currentView).toBe('month')
     })
-
   })
 
   describe('activities', () => {
