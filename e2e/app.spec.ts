@@ -476,7 +476,16 @@ async function openImportWithFile(page: import('@playwright/test').Page) {
     mimeType: 'application/json',
     buffer: Buffer.from(SAMPLE_BACKUP),
   })
-  await expect(page.getByTestId('modal-footer')).toBeVisible()
+  // Waits for the button itself, not for the footer's test id. Waiting for the footer
+  // made these fail against the old layout because the element did not exist, which
+  // looks like the guard working and is not: it would have passed a broken layout that
+  // happened to keep the test id. The button exists either way; where it sits is the
+  // thing under test.
+  await expect(importButton(page)).toBeAttached()
+}
+
+function importButton(page: import('@playwright/test').Page) {
+  return page.getByRole('dialog').getByRole('button', { name: /import data/i })
 }
 
 test.describe('modal actions', () => {
@@ -485,7 +494,7 @@ test.describe('modal actions', () => {
     await page.goto('/')
     await openImportWithFile(page)
 
-    const button = page.getByTestId('modal-footer').getByRole('button', { name: /import data/i })
+    const button = importButton(page)
     await expect(button).toBeInViewport()
 
     const box = await button.boundingBox()
@@ -498,7 +507,7 @@ test.describe('modal actions', () => {
     await page.goto('/')
     await openImportWithFile(page)
 
-    const button = page.getByTestId('modal-footer').getByRole('button', { name: /import data/i })
+    const button = importButton(page)
     const box = await button.boundingBox()
     const viewport = page.viewportSize()!
     expect(viewport.height - (box!.y + box!.height)).toBeGreaterThanOrEqual(24)
