@@ -3,6 +3,14 @@
 What changed in each release, for the people who use Daylo. Earlier versions are not
 listed: this file starts at 1.1.2, when the first change worth warning about arrived.
 
+## Unreleased
+
+**Colors another activity is already using are dimmed.** When you create or rename an
+activity, the colors your other activities wear are faded and say "already in use" when
+you point at them. They can still be picked: two activities can share a color, it is just
+harder to tell them apart. If you have used every color, nothing is dimmed, because at
+that point it would only make the palette look broken.
+
 ## 1.1.3
 
 **Exporting now asks you where to save.** Before, Daylo handed the file to the system and

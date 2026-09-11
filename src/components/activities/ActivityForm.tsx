@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, memo } from 'react'
+import { useState, useEffect, useCallback, useMemo, memo } from 'react'
 import { Button, Checkbox, ColorPicker, Modal } from '../ui'
 import { ACTIVITY_COLORS } from '../../lib/colors'
 import { useCalendarStore } from '../../store'
@@ -35,6 +35,7 @@ export const ActivityForm = memo(function ActivityForm({
   }, [isOpen, activity])
 
   // Use individual selectors to prevent over-subscription
+  const activities = useCalendarStore((state) => state.activities)
   const addActivity = useCalendarStore((state) => state.addActivity)
   const updateActivity = useCalendarStore((state) => state.updateActivity)
   const toggleLog = useCalendarStore((state) => state.toggleLog)
@@ -80,6 +81,13 @@ export const ActivityForm = memo(function ActivityForm({
     ]
   )
 
+  // The colors other activities already wear. The one being edited is left out, so its
+  // own color is not reported back to it as taken.
+  const colorsInUse = useMemo(
+    () => activities.filter((a) => a.id !== activity?.id).map((a) => a.color),
+    [activities, activity?.id]
+  )
+
   const handleClose = useCallback((): void => {
     // Don't reset state here — the useEffect on isOpen handles it when modal reopens
     onClose()
@@ -113,6 +121,7 @@ export const ActivityForm = memo(function ActivityForm({
           value={color}
           onChange={setColor}
           colors={ACTIVITY_COLORS}
+          colorsInUse={colorsInUse}
           label="Color"
           size="md"
           className="mb-4"
