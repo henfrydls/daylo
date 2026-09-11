@@ -5,8 +5,9 @@ import { StatsPanel } from './components/stats'
 import { BottomSheet, DropdownMenu, ErrorBoundary, ToastContainer } from './components/ui'
 import type { DropdownMenuItem } from './components/ui'
 import { AppSkeleton } from './components/skeletons'
+import { DailyReminder, ReminderSettings } from './components/settings'
 import { useCalendarStore } from './store'
-import { useAppVersion, useSwipeGesture } from './hooks'
+import { useAppVersion, useRemindersAvailable, useSwipeGesture } from './hooks'
 
 // Lazy load modals - they are rarely used
 const ExportModal = lazy(() =>
@@ -71,7 +72,11 @@ function App() {
   const [isExportOpen, setIsExportOpen] = useState(false)
   const [isImportOpen, setIsImportOpen] = useState(false)
   const [isBottomSheetOpen, setIsBottomSheetOpen] = useState(false)
+  const [isReminderOpen, setIsReminderOpen] = useState(false)
   const appVersion = useAppVersion()
+  // Android only: nowhere else can a notification arrive with the app closed, so nowhere
+  // else is there a setting to show.
+  const hasReminders = useRemindersAvailable()
   const swipeRef = useSwipeGesture<HTMLDivElement>({
     onSwipeLeft: () =>
       setCurrentView(
@@ -130,6 +135,30 @@ function App() {
       ),
       onClick: () => setIsImportOpen(true),
     },
+    ...(hasReminders
+      ? [
+          {
+            label: 'Daily reminder',
+            icon: (
+              <svg
+                className="w-4 h-4"
+                fill="none"
+                viewBox="0 0 24 24"
+                stroke="currentColor"
+                aria-hidden="true"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9"
+                />
+              </svg>
+            ),
+            onClick: () => setIsReminderOpen(true),
+          } satisfies DropdownMenuItem,
+        ]
+      : []),
     { type: 'divider' },
     {
       type: 'info',
@@ -312,6 +341,12 @@ function App() {
             <ImportModal isOpen={isImportOpen} onClose={() => setIsImportOpen(false)} />
           )}
         </Suspense>
+
+        {/* Daily reminder: the one-time offer, and the setting behind the menu */}
+        <DailyReminder />
+        {isReminderOpen && (
+          <ReminderSettings isOpen={isReminderOpen} onClose={() => setIsReminderOpen(false)} />
+        )}
 
         {/* Toast Notifications */}
         <ToastContainer />

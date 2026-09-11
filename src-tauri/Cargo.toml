@@ -62,6 +62,10 @@ tokio = { version = "1", features = ["time"] }
 # dialog plugin, so a 2.4 npm package against a 2.5 crate failed the desktop builds too.
 [target.'cfg(target_os = "android")'.dependencies]
 tauri-plugin-fs = "~2.5"
+# Held to 2.3 and not left to resolve: the crate's 2.4.0 is fine against tauri 2.10, but
+# its npm counterpart wants @tauri-apps/api 2.11, which has no matching tauri crate. 2.3.3
+# on npm asks for ^2.8.0 and the pair lines up.
+tauri-plugin-notification = "~2.3"
 
 [profile.dev]
 incremental = true

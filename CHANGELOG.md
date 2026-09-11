@@ -3,6 +3,18 @@
 What changed in each release, for the people who use Daylo. Earlier versions are not
 listed: this file starts at 1.1.2, when the first change worth warning about arrived.
 
+## Unreleased
+
+**Android can remind you each evening.** A daily notification asks how the day went, at a
+time you choose, so a day does not go by unlogged. It is off until you ask for it: after
+you create your first habit Daylo offers it once, and if you say no it does not ask again.
+You can turn it on, move the time or turn it off from the menu at any time, and it stays
+on after you restart your phone. Android decides the exact minute, so it may arrive a few
+minutes either side of the time you picked.
+
+The reminder is only on Android. On a computer a notification could only arrive while
+Daylo was already open, which is not a reminder.
+
 ## 1.1.3
 
 **Exporting now asks you where to save.** Before, Daylo handed the file to the system and
