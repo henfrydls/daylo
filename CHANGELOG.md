@@ -5,6 +5,13 @@ listed: this file starts at 1.1.2, when the first change worth warning about arr
 
 ## Unreleased
 
+**Daylo opens on the month.** It used to open on the year on anything wider than a phone,
+so the same person met a different first screen on their laptop than on their phone. The
+month is where you tick today off, which is what most people open Daylo to do.
+
+This only changes where Daylo starts for someone installing it now. If you have used
+Daylo before, it remembers the view you were last on, and that does not change.
+
 **Android can remind you each evening.** A daily notification asks how the day went, at a
 time you choose, so a day does not go by unlogged. It is off until you ask for it: after
 you create your first habit Daylo offers it once, and if you say no it does not ask again.
