@@ -80,7 +80,7 @@ export function DailyReminder() {
       onClose={markReminderOffered}
       onConfirm={() => void accept()}
       title="Remind me each evening?"
-      message={`A notification around ${formatReminderTime(hour, minute)} so the day does not go unlogged. You can change the time or turn it off from the menu.`}
+      message={`A notification around ${formatReminderTime(hour, minute)} so the day does not go unlogged. Android picks the exact moment. You can change the time or turn it off from the menu.`}
       confirmText="Turn on"
       cancelText="Not now"
       data-testid="reminder-offer"

@@ -131,7 +131,7 @@ describe('the time', () => {
     open()
 
     expect(screen.getByTestId('reminder-time-note')).toHaveTextContent(
-      /^Around 9:00 PM\. Android may shift it a few minutes\.$/
+      /^Around 9:00 PM\. Android picks the exact moment and may be up to an hour late\.$/
     )
   })
 
