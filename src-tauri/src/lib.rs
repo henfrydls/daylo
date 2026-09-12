@@ -137,3 +137,99 @@ pub fn run() {
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }
+
+/// What `plugins` in tauri.conf.json is checked against, and why getting it wrong is a
+/// crash rather than a warning.
+///
+/// Tauri hands each plugin its own block while the app starts and deserializes it into
+/// that plugin's config type: `config.0.get(plugin.name()).cloned().unwrap_or_default()`
+/// in tauri's plugin store, then `serde_json::from_value` in the plugin builder. A block
+/// the type does not fit is an error, `run()` returns it, the `.expect` above turns it
+/// into a panic, and `panic = "abort"` in the release profile turns that into SIGABRT.
+/// The app never draws a frame.
+///
+/// That is not hypothetical. A `plugins.notification` block with an icon in it looked
+/// reasonable — the plugin's Android half really does read a config by that name — but
+/// its Rust half builds with `Builder::new("notification")`, whose config type is the
+/// unit `()`. A phone died twice on "invalid type: map, expected unit" before this
+/// existed, and every build check was green, because they all compile and none of them
+/// start the app.
+#[cfg(test)]
+mod plugin_config {
+    use serde::de::DeserializeOwned;
+    use serde_json::Value;
+    use tauri::plugin::TauriPlugin;
+    use tauri::Wry;
+
+    /// Every plugin this app registers, on any platform. The list is here so that a block
+    /// for something we do not register cannot sit in the config being ignored until the
+    /// day somebody registers it.
+    const REGISTERED: [&str; 5] = ["shell", "dialog", "opener", "fs", "notification"];
+
+    fn conf() -> Value {
+        serde_json::from_str(include_str!("../tauri.conf.json"))
+            .expect("tauri.conf.json is not valid JSON")
+    }
+
+    /// The block Tauri would pass this plugin. Absent means `Value::Null`, which is what
+    /// `unwrap_or_default` produces and what a unit config accepts.
+    fn block(name: &str) -> Value {
+        conf()
+            .get("plugins")
+            .and_then(|plugins| plugins.get(name))
+            .cloned()
+            .unwrap_or(Value::Null)
+    }
+
+    /// Ask the plugin, not a table in this file: `C` is inferred from the `TauriPlugin`
+    /// its own `init()` returns, so if a plugin gains or drops a config in some later
+    /// version this follows it without being edited. That is the whole point — the block
+    /// that crashed the app was written from the documentation of the half that reads it.
+    fn accepts<C: DeserializeOwned>(
+        _plugin: &TauriPlugin<Wry, C>,
+        name: &str,
+    ) -> Result<(), String> {
+        serde_json::from_value::<C>(block(name))
+            .map(|_| ())
+            .map_err(|e| format!("plugins.{name} in tauri.conf.json: {e}"))
+    }
+
+    #[test]
+    fn every_block_is_one_its_plugin_accepts() {
+        let mut refused = Vec::new();
+        for result in [
+            accepts(&tauri_plugin_shell::init::<Wry>(), "shell"),
+            accepts(&tauri_plugin_dialog::init::<Wry>(), "dialog"),
+            accepts(&tauri_plugin_opener::init::<Wry>(), "opener"),
+            accepts(&tauri_plugin_fs::init::<Wry>(), "fs"),
+            accepts(&tauri_plugin_notification::init::<Wry>(), "notification"),
+        ] {
+            if let Err(why) = result {
+                refused.push(why);
+            }
+        }
+        assert!(
+            refused.is_empty(),
+            "the app would abort on the first frame:\n  {}",
+            refused.join("\n  ")
+        );
+    }
+
+    /// A block for a plugin nobody registers is dead text today and a crash the day
+    /// somebody adds the plugin, which is the worst possible moment to find out.
+    #[test]
+    fn no_block_belongs_to_a_plugin_the_app_does_not_register() {
+        let conf = conf();
+        let plugins = conf.get("plugins").and_then(Value::as_object);
+        let strangers: Vec<&String> = plugins
+            .into_iter()
+            .flatten()
+            .map(|(name, _)| name)
+            .filter(|name| !REGISTERED.contains(&name.as_str()))
+            .collect();
+        assert!(
+            strangers.is_empty(),
+            "tauri.conf.json configures plugins this app never registers: {strangers:?}"
+        );
+    }
+}

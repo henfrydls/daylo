@@ -18,6 +18,23 @@ export const REMINDER_ID = 1
 const TITLE = 'Daylo'
 const BODY = 'How did today go? Tap to log it.'
 
+/**
+ * The status-bar icon, named per notification rather than configured.
+ *
+ * The obvious place for this is `plugins.notification.icon` in tauri.conf.json, and the
+ * plugin's Kotlin half does read a config block by that name. Its Rust half does not: it
+ * builds with `Builder::new("notification")`, whose config type is the unit `()`, and
+ * Tauri deserializes `plugins.notification` into that type while the app starts. A map
+ * against a unit is an error, `.run()` turns it into an abort, and the app dies on the
+ * first frame with "invalid type: map, expected unit" — which is what a phone did, twice.
+ *
+ * The per-notification field has no such problem: it goes through the same options object
+ * as the title and the schedule, and Android resolves it against res/drawable. A bare
+ * resource name is the only form that resolves; a path or an extension silently falls
+ * back to the system's ic_dialog_info.
+ */
+export const REMINDER_ICON = 'ic_notification'
+
 /** 21:00 as the person's own clock would write it, so the text matches what they set. */
 export function formatReminderTime(hour: number, minute: number): string {
   return new Date(2026, 0, 1, hour, minute).toLocaleTimeString(undefined, {
@@ -84,6 +101,7 @@ async function putOnTheQueue(hour: number, minute: number): Promise<string | nul
         id: REMINDER_ID,
         title: TITLE,
         body: BODY,
+        icon: REMINDER_ICON,
         schedule: Schedule.interval({ hour, minute }, true),
       },
     })

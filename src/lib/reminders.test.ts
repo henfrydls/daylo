@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import {
+  REMINDER_ICON,
   REMINDER_ID,
   disableReminder,
   enableReminder,
@@ -87,6 +88,20 @@ describe('turning the reminder on', () => {
         // 21:00 would repeat hourly.
         schedule: { interval: { hour: 21, minute: 0 }, allowWhileIdle: true },
       }),
+    })
+  })
+
+  // The small icon rides with the notification. It cannot be set in tauri.conf.json: the
+  // plugin's Rust half builds with a unit config and a `plugins.notification` block aborts
+  // the app at startup. See reminderNotificationIcon.test.ts.
+  it('names the drawable Android should put in the status bar', async () => {
+    pretendAndroid()
+    isPermissionGranted.mockResolvedValue(true)
+
+    await enableReminder(21, 0)
+
+    expect(scheduled()).toEqual({
+      options: expect.objectContaining({ icon: REMINDER_ICON }),
     })
   })
 

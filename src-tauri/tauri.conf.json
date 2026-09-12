@@ -58,10 +58,5 @@
         "installMode": "currentUser"
       }
     }
-  },
-  "plugins": {
-    "notification": {
-      "icon": "ic_notification"
-    }
   }
 }
