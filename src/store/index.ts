@@ -134,6 +134,16 @@ interface CalendarState {
   _hasHydrated: boolean
   _viewTransitionDirection: ViewTransitionDirection
 
+  /**
+   * The daily reminder. Off until asked for, and only ever on Android: the setting is
+   * hidden everywhere else. reminderOffered records that the one-time question has been
+   * put, so that saying "not now" is not re-asked on the next activity, or the one after.
+   */
+  reminderEnabled: boolean
+  reminderHour: number
+  reminderMinute: number
+  reminderOffered: boolean
+
   // Activity actions
   addActivity: (name: string, color: string) => void
   updateActivity: (id: string, updates: Partial<Pick<Activity, 'name' | 'color'>>) => void
@@ -150,6 +160,10 @@ interface CalendarState {
   setYearMode: (mode: 'all' | 'byActivity') => void
   setSelectedMonth: (month: number) => void
   navigateToMonth: (year: number, month: number) => void
+
+  // Reminder
+  setReminder: (enabled: boolean, hour?: number, minute?: number) => void
+  markReminderOffered: () => void
 
   // Hydration
   setHasHydrated: (value: boolean) => void
@@ -181,6 +195,22 @@ export const useCalendarStore = create<CalendarState>()(
       selectedMonth: new Date().getMonth(),
       _hasHydrated: false,
       _viewTransitionDirection: null as ViewTransitionDirection,
+
+      reminderEnabled: false,
+      // Nine in the evening: late enough that the day has happened, early enough not to
+      // land after somebody has gone to sleep.
+      reminderHour: 21,
+      reminderMinute: 0,
+      reminderOffered: false,
+
+      setReminder: (enabled, hour, minute) =>
+        set((state) => ({
+          reminderEnabled: enabled,
+          reminderHour: hour ?? state.reminderHour,
+          reminderMinute: minute ?? state.reminderMinute,
+        })),
+
+      markReminderOffered: () => set({ reminderOffered: true }),
 
       setHasHydrated: (value: boolean) => set({ _hasHydrated: value }),
 
@@ -304,6 +334,10 @@ export const useCalendarStore = create<CalendarState>()(
         currentView: state.currentView,
         yearMode: state.yearMode,
         selectedMonth: state.selectedMonth,
+        reminderEnabled: state.reminderEnabled,
+        reminderHour: state.reminderHour,
+        reminderMinute: state.reminderMinute,
+        reminderOffered: state.reminderOffered,
       }),
       onRehydrateStorage: () => (state) => {
         state?.setHasHydrated(true)

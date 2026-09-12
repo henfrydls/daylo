@@ -32,6 +32,10 @@ which is as much as a phone can show a week at a time and still be worth looking
 
 Daylo remembers which of the two you were reading.
 
+**The year can be walked with the arrow keys.** Tab once to reach the calendar, then move
+a day at a time up and down or a week at a time left and right. It says the date and what
+you did that day as you go, which it never did before.
+
 **Your streak no longer resets on the first of January.** Daylo worked out your current
 streak from the year you happened to be looking at, so on New Year's Day everybody's run
 started again at one, whatever they had done in December. It counts across years now,
@@ -52,9 +56,17 @@ are this year's, your current streak is today's, and your longest is the best of
 You may see these numbers change the first time you open this version. Nothing happened to
 your data; only the counting changed.
 
-**The year can be walked with the arrow keys.** Tab once to reach the calendar, then move
-a day at a time up and down or a week at a time left and right. It says the date and what
-you did that day as you go, which it never did before.
+**Android can remind you each evening.** A daily notification asks how the day went, at a
+time you choose, so a day does not go by unlogged. It is off until you ask for it: after
+you create your first habit Daylo offers it once, and if you say no it does not ask again.
+You can turn it on, move the time or turn it off from the menu at any time, and it stays
+on after you restart your phone. Android decides the exact minute, so it may arrive a few
+minutes either side of the time you picked. If the phone has been sitting unused for days,
+Android can hold it back further while it sleeps; opening Daylo puts the next one back on
+time.
+
+The reminder is only on Android. On a computer a notification could only arrive while
+Daylo was already open, which is not a reminder.
 
 ## 1.1.3
 
