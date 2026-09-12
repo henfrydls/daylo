@@ -9,7 +9,21 @@ The app version lives in **one source of truth**: `package.json`.
 
 ## Release Workflow
 
-### 1. Bump the version
+### 1. Gather the changelog
+
+```bash
+node scripts/collect-changelog.js 1.3.0
+```
+
+Joins the fragments in `changelog.d/` into a new section of `CHANGELOG.md`, in the order
+their pull requests landed, and empties the directory. It refuses to run with no fragments
+or with a version the changelog already has, so a release cannot quietly ship with nothing
+written about it.
+
+See `changelog.d/README.md` for what belongs in a fragment. Anything that arrived before
+this was introduced is already written straight into `CHANGELOG.md`; leave it there.
+
+### 2. Bump the version
 
 ```bash
 npm version patch   # 1.0.0 → 1.0.1 (bug fixes)
@@ -23,13 +37,13 @@ This single command:
 - Creates a git commit with message `v1.0.1`
 - Creates a git tag `v1.0.1`
 
-### 2. Push the tag
+### 3. Push the tag
 
 ```bash
 git push --follow-tags
 ```
 
-### 3. CI builds and publishes
+### 4. CI builds and publishes
 
 GitHub Actions (`.github/workflows/release.yml`) automatically:
 - Builds for Windows (x64, ARM64), macOS (Intel, Apple Silicon), and Linux (x64)
