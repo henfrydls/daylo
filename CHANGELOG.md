@@ -18,6 +18,24 @@ you point at them. They can still be picked: two activities can share a color, i
 harder to tell them apart. If you have used every color, nothing is dimmed, because at
 that point it would only make the palette look broken.
 
+**The year is one calendar now, instead of twelve small ones.** On a computer the year
+used to be twelve separate month blocks, and a run that crossed the end of a month looked
+like two shorter runs. It is now a single strip, a column per week, so a long run reads as
+a long run. Underneath it you get the days you were active, how many things you completed,
+and how much of each month you finished, and any of those months takes you into it.
+
+**You can also read the year one activity at a time.** A new switch in the year view, All
+activities or By activity, draws the same year once per activity in its own colour, with
+the days it has behind it and the run it is on. On a phone each activity gets the last
+twenty six weeks instead, one block per week, darker the more days of that week you did,
+which is as much as a phone can show a week at a time and still be worth looking at.
+
+Daylo remembers which of the two you were reading.
+
+**The year can be walked with the arrow keys.** Tab once to reach the calendar, then move
+a day at a time up and down or a week at a time left and right. It says the date and what
+you did that day as you go, which it never did before.
+
 ## 1.1.3
 
 **Exporting now asks you where to save.** Before, Daylo handed the file to the system and
