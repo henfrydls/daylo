@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Daylo's mark for the status bar: the clipboard with its tick knocked out.
+
+  Android masks a small icon by its alpha and paints the result white, so this is one
+  filled silhouette with the tick as a hole (evenOdd), not a drawing with colours in it.
+  Anything coloured here would come out as a white blob.
+
+  Without this the notification plugin falls back to android.R.drawable.ic_dialog_info,
+  which is the generic system "i" and tells nobody whose reminder arrived.
+-->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+    <path
+        android:fillColor="#FFFFFFFF"
+        android:fillType="evenOdd"
+        android:pathData="M10,2 H14 A1,1 0 0 1 15,3 V5 H9 V3 A1,1 0 0 1 10,2 Z M6,5 H18 A2,2 0 0 1 20,7 V19 A2,2 0 0 1 18,21 H6 A2,2 0 0 1 4,19 V7 A2,2 0 0 1 6,5 Z M8.6,12.4 L11,14.8 L15.4,10.4 L16.6,11.6 L11,17.2 L7.4,13.6 Z" />
+</vector>

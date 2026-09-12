@@ -60,8 +60,8 @@ your data; only the counting changed.
 time you choose, so a day does not go by unlogged. It is off until you ask for it: after
 you create your first habit Daylo offers it once, and if you say no it does not ask again.
 You can turn it on, move the time or turn it off from the menu at any time, and it stays
-on after you restart your phone. Android picks the exact moment and may deliver it up to an
-hour late; it does not need the app open. If the phone has been sitting unused for days,
+on after you restart your phone. Android picks the exact moment and may deliver it an hour
+or more later; it does not need the app open. If the phone has been sitting unused for days,
 Android can hold it back further while it sleeps; opening Daylo puts the next one back on
 time.
 

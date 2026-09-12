@@ -104,7 +104,7 @@ export function ReminderSettings({ isOpen, onClose }: ReminderSettingsProps) {
               reminder that is not coming. */}
           <p className="text-sm text-gray-500 mt-2" data-testid="reminder-time-note">
             {enabled
-              ? `Around ${formatReminderTime(hour, minute)}. Android picks the exact moment and may be up to an hour late.`
+              ? `Around ${formatReminderTime(hour, minute)}. Android picks the exact moment and may deliver it an hour or more later.`
               : `Turn it on and it will arrive around ${formatReminderTime(hour, minute)}.`}
           </p>
         </div>
