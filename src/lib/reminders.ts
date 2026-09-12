@@ -26,6 +26,16 @@ export function formatReminderTime(hour: number, minute: number): string {
   })
 }
 
+export interface ReminderResult {
+  outcome: ReminderOutcome
+  /**
+   * What the phone said when it refused, in its own words. Shown to the person rather
+   * than only written to the console: on a release build nothing written to the console
+   * leaves the device, because Tauri and wry gate every log line behind BuildConfig.DEBUG.
+   */
+  reason?: string
+}
+
 export type ReminderOutcome =
   /** Scheduled, and the platform said so. */
   | 'on'
@@ -67,7 +77,7 @@ export async function remindersAvailable(): Promise<boolean> {
  * The same id every time, so scheduling again replaces rather than stacks and changing the
  * time cannot leave yesterday's reminder behind.
  */
-async function putOnTheQueue(hour: number, minute: number): Promise<boolean> {
+async function putOnTheQueue(hour: number, minute: number): Promise<string | null> {
   try {
     await invoke('plugin:notification|notify', {
       options: {
@@ -77,12 +87,13 @@ async function putOnTheQueue(hour: number, minute: number): Promise<boolean> {
         schedule: Schedule.interval({ hour, minute }, true),
       },
     })
-    return true
+    return null
   } catch (error) {
-    // Written down rather than swallowed: on Android this reaches logcat, which is where
-    // somebody will be looking when a reminder does not arrive.
+    // Both: the console for a debug build, and the returned text for a release one, where
+    // the console goes nowhere. A Tauri command rejects with a string, so this is already
+    // readable.
     console.error('[Daylo] the reminder could not be scheduled', error)
-    return false
+    return typeof error === 'string' ? error : ((error as Error)?.message ?? String(error))
   }
 }
 
@@ -99,9 +110,9 @@ async function putOnTheQueue(hour: number, minute: number): Promise<boolean> {
  * person who does not open Daylo for three days stops being reminded on the days they
  * most need it. The wording is neutral for that reason.
  */
-export async function enableReminder(hour: number, minute: number): Promise<ReminderOutcome> {
+export async function enableReminder(hour: number, minute: number): Promise<ReminderResult> {
   if (!(await remindersAvailable())) {
-    return 'unavailable'
+    return { outcome: 'unavailable' }
   }
 
   let granted = await isPermissionGranted()
@@ -109,10 +120,11 @@ export async function enableReminder(hour: number, minute: number): Promise<Remi
     granted = (await requestPermission()) === 'granted'
   }
   if (!granted) {
-    return 'permission-denied'
+    return { outcome: 'permission-denied' }
   }
 
-  return (await putOnTheQueue(hour, minute)) ? 'on' : 'failed'
+  const reason = await putOnTheQueue(hour, minute)
+  return reason === null ? { outcome: 'on' } : { outcome: 'failed', reason }
 }
 
 /**
@@ -138,7 +150,7 @@ export async function refreshReminder(hour: number, minute: number): Promise<boo
     return false
   }
 
-  return putOnTheQueue(hour, minute)
+  return (await putOnTheQueue(hour, minute)) === null
 }
 
 /** Turn it off. Silent if it was never on. */

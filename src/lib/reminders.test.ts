@@ -76,7 +76,7 @@ describe('turning the reminder on', () => {
     pretendAndroid()
     isPermissionGranted.mockResolvedValue(true)
 
-    await expect(enableReminder(21, 0)).resolves.toBe('on')
+    await expect(enableReminder(21, 0)).resolves.toMatchObject({ outcome: 'on' })
 
     expect(scheduled()).toEqual({
       options: expect.objectContaining({
@@ -106,7 +106,7 @@ describe('turning the reminder on', () => {
     isPermissionGranted.mockResolvedValue(false)
     requestPermission.mockResolvedValue('denied')
 
-    await expect(enableReminder(21, 0)).resolves.toBe('permission-denied')
+    await expect(enableReminder(21, 0)).resolves.toMatchObject({ outcome: 'permission-denied' })
     expect(scheduled()).toBeUndefined()
   })
 
@@ -123,7 +123,7 @@ describe('turning the reminder on', () => {
     )
     const complaint = vi.spyOn(console, 'error').mockImplementation(() => {})
 
-    await expect(enableReminder(21, 0)).resolves.toBe('failed')
+    await expect(enableReminder(21, 0)).resolves.toMatchObject({ outcome: 'failed' })
 
     // Written down rather than swallowed: on Android this line reaches logcat, which is
     // where somebody looks when a reminder does not arrive.
@@ -134,7 +134,7 @@ describe('turning the reminder on', () => {
   })
 
   it('does nothing at all off Android', async () => {
-    await expect(enableReminder(21, 0)).resolves.toBe('unavailable')
+    await expect(enableReminder(21, 0)).resolves.toMatchObject({ outcome: 'unavailable' })
     expect(isPermissionGranted).not.toHaveBeenCalled()
     expect(scheduled()).toBeUndefined()
   })

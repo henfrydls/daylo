@@ -124,7 +124,7 @@ describe('the one-time offer', () => {
 describe('answering the offer', () => {
   it('turns the reminder on at the stored time', async () => {
     firstHabitOnAndroid()
-    enableReminder.mockResolvedValue('on')
+    enableReminder.mockResolvedValue({ outcome: 'on' })
     render(<DailyReminder />)
     await theOffer()
 
@@ -150,7 +150,7 @@ describe('answering the offer', () => {
 
   it('leaves the reminder off when the permission is refused', async () => {
     firstHabitOnAndroid()
-    enableReminder.mockResolvedValue('permission-denied')
+    enableReminder.mockResolvedValue({ outcome: 'permission-denied' })
     render(<DailyReminder />)
     await theOffer()
 
@@ -225,7 +225,7 @@ describe('opening the app', () => {
   // would sit there claiming a reminder the phone never took.
   it('says so when the phone refuses the schedule', async () => {
     firstHabitOnAndroid()
-    enableReminder.mockResolvedValue('failed')
+    enableReminder.mockResolvedValue({ outcome: 'failed', reason: 'the phone said no' })
     render(<DailyReminder />)
     await theOffer()
 

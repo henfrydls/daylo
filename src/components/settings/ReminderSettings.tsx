@@ -15,6 +15,7 @@ export function ReminderSettings({ isOpen, onClose }: ReminderSettingsProps) {
   const setReminder = useCalendarStore((s) => s.setReminder)
   const { showToast } = useToast()
   const [busy, setBusy] = useState(false)
+  const [failure, setFailure] = useState<string | null>(null)
 
   // Changes take effect as they are made, the way a phone's own settings behave. The
   // store is only written once the platform has agreed, so a refused permission cannot
@@ -28,8 +29,9 @@ export function ReminderSettings({ isOpen, onClose }: ReminderSettingsProps) {
         return
       }
 
-      const outcome = await enableReminder(nextHour, nextMinute)
+      const { outcome, reason } = await enableReminder(nextHour, nextMinute)
       if (outcome === 'on') {
+        setFailure(null)
         setReminder(true, nextHour, nextMinute)
         return
       }
@@ -37,9 +39,11 @@ export function ReminderSettings({ isOpen, onClose }: ReminderSettingsProps) {
         showToast('Daylo needs permission to send notifications', 'error')
       }
       // The phone had the permission and still would not take it. Saying nothing would
-      // leave a switch that looks on over a reminder that will never arrive.
+      // leave a switch that looks on over a reminder that will never arrive, and the
+      // phone's own words are kept because on a release build they appear nowhere else.
       if (outcome === 'failed') {
         showToast('Daylo could not set the reminder on this phone', 'error')
+        setFailure(reason ?? 'the phone did not say why')
       }
       setReminder(false, nextHour, nextMinute)
     } finally {
@@ -70,6 +74,14 @@ export function ReminderSettings({ isOpen, onClose }: ReminderSettingsProps) {
           />
           <span className="font-medium text-sm text-gray-900">Remind me each evening</span>
         </label>
+
+        {/* The phone's own words, untranslated. A release build writes nothing to any log
+            that leaves the device, so if this is not on screen it is nowhere. */}
+        {failure ? (
+          <p className="px-3 text-xs break-words text-red-600" data-testid="reminder-failure">
+            Could not set the reminder: {failure}
+          </p>
+        ) : null}
 
         <div className="px-3">
           <label htmlFor="reminder-time" className="block text-sm font-medium text-gray-700 mb-1">

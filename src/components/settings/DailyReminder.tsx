@@ -59,7 +59,7 @@ export function DailyReminder() {
   }, [available, activityCount, setReminder])
 
   const accept = async () => {
-    const outcome = await enableReminder(hour, minute)
+    const { outcome } = await enableReminder(hour, minute)
     if (outcome === 'on') {
       setReminder(true, hour, minute)
       return
