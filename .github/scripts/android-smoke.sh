@@ -92,6 +92,35 @@ fi
 adb shell screencap -p /data/local/tmp/smoke.png
 adb pull /data/local/tmp/smoke.png "$SHOT"
 
+# But first, whose browser is this? An emulator image carries a WebView baked in and has
+# no Play Store to update it, so the image decides the engine — and on a real phone
+# WebView comes from the Play Store and is current. The first run of this job was on an
+# image with WebView 83, from 2020, and Daylo's stylesheet opens with `@layer`, which
+# Chromium learned in 99: every rule was skipped and the app painted an unstyled page
+# that sailed through the check below. So: if the engine is older than the stylesheet
+# needs, the screenshot is not evidence about anything and this says so instead of
+# scoring it. The floor is 111, which is where oklch() and color-mix() arrived; the
+# stylesheet uses both, and @layer at 99 is already covered by it.
+MIN_CHROMIUM=111
+webview=$(adb shell dumpsys webviewupdate 2>/dev/null \
+  | grep -m1 "Current WebView package" || true)
+engine=$(grep -oE "[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+" <<< "$webview" | head -1)
+echo "WebView: ${webview:-(could not be read)}"
+
+if [ -z "$engine" ]; then
+  # The check below still runs: a blank screen is a blank screen on any engine. What is
+  # lost is knowing whether a screen that is not blank was drawn by a browser anyone has.
+  echo "::warning::Could not read the emulator's WebView version. The screenshot check"
+  echo "::warning::below still runs, but it cannot tell an unstyled page from a styled one."
+elif [ "${engine%%.*}" -lt "$MIN_CHROMIUM" ]; then
+  echo "::warning::This image ships Chromium ${engine%%.*}, older than the $MIN_CHROMIUM"
+  echo "::warning::Daylo's stylesheet needs, so it renders unstyled here and the"
+  echo "::warning::screenshot says nothing about the app. No phone runs this engine."
+  echo "::warning::Raise api-level in the workflow rather than trusting this."
+  echo "Skipping the screenshot check. The app started, stayed up, and did not crash."
+  exit 0
+fi
+
 # The status bar has content of its own, so it is cut off before counting: without that,
 # a completely blank app still scores a few dozen colours and this check says nothing.
 # ImageMagick 7 renamed the command and keeps `convert` only as a compatibility shim,

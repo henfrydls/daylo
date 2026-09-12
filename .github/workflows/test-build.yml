@@ -18,6 +18,23 @@
 # five release builds with lto are expensive and most pushes do not need them. A label
 # rather than only a manual dispatch because a workflow_dispatch does not appear until the
 # file is on the default branch, which would be too late to test the branch that adds it.
+#
+# HOW TO RUN IT AGAIN. The trigger is the 'labeled' event, which fires on the transition
+# and not on the state: adding a label the pull request already carries does nothing at
+# all, silently. Take it off, check it is off, put it back:
+#
+#   gh pr edit <number> --remove-label build-installers
+#   gh pr view <number> --json labels   # confirm it is gone before adding it again
+#   gh pr edit <number> --add-label build-installers
+#
+# Once this file is on the default branch the label stops being the only way in, and the
+# better one is:
+#
+#   gh workflow run "Test build" --ref <branch>
+#
+# --ref both picks the branch to build and decides which copy of this file runs, so there
+# is nothing for an input to add. The label exists for the case --ref cannot serve: a
+# branch whose own changes to this workflow are what need testing, before it is merged.
 name: Test build
 
 on:
@@ -431,13 +448,22 @@ jobs:
       - name: Make sure ImageMagick is here
         run: command -v identify >/dev/null || (sudo apt-get update -qq && sudo apt-get install -y -qq imagemagick)
 
-      # API 30 is the oldest that has `dumpsys activity exit-info`, which is the only way
-      # to ask Android why a process died after the fact rather than guessing from logs.
+      # API 34, and the level is load bearing for a reason that is not the Android
+      # version. An emulator image carries a WebView baked in and no Play Store to update
+      # it, so the image decides which browser the app runs in. The first green run of
+      # this job was on API 30, whose AOSP image ships WebView 83.0.4103.120 — Chromium
+      # 83, from 2020 — and Daylo's stylesheet opens with `@layer`, which Chromium
+      # learned in 99. The whole block was skipped and the app painted a page with no
+      # styling at all. It passed every check here and told us nothing, because no real
+      # phone runs that WebView: on a device WebView comes from the Play Store.
+      #
+      # API 30 was chosen for `dumpsys activity exit-info`, which arrived in 30 and is
+      # still here.
       - name: Start it and see whether it stays up
         uses: reactivecircus/android-emulator-runner@v2
         with:
-          api-level: 30
-          target: default
+          api-level: 34
+          target: google_apis
           arch: x86_64
           profile: pixel_2
           force-avd-creation: false
