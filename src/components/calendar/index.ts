@@ -1,6 +1,6 @@
 export { YearView } from './YearView'
 export { MonthView } from './MonthView'
-export { DayCell } from './DayCell'
+export { YearHeatmap } from './YearHeatmap'
 export { MiniHeatmap } from './MiniHeatmap'
 export { MonthHeatmapDetail } from './MonthHeatmapDetail'
 export { MonthCard } from './MonthCard'

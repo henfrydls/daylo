@@ -3,8 +3,13 @@ name: CI
 on:
   push:
     branches: [main, develop]
+  # Also for pull requests aimed at another product branch, not only at main. A PR built
+  # on top of an open one is the only honest way to review a second change without
+  # showing the first one's diff again, and until now those arrived with no checks at
+  # all: the branch filter matches the pull request's base, so a stack was invisible to
+  # CI and could not be approved on the rule that everything must be green.
   pull_request:
-    branches: [main, develop]
+    branches: [main, develop, 'product/**']
 
 env:
   CARGO_TERM_COLOR: always

@@ -355,9 +355,12 @@ test.describe('Activity Tracker App', () => {
     const doneButton = page.getByTestId('quicklog-done-button')
     await doneButton.click()
 
-    // Stats panel should now be visible
-    await expect(page.getByText('Statistics')).toBeVisible()
-    await expect(page.getByText('Active Days')).toBeVisible()
+    // Stats panel should now be visible. Scoped to the sidebar: the year summary under
+    // the calendar also counts active days, and getByText matches case-insensitively, so
+    // an unscoped query now finds both and fails on strict mode rather than on the panel.
+    const stats = page.getByTestId('stats-panel')
+    await expect(stats.getByText('Statistics')).toBeVisible()
+    await expect(stats.getByText('Active Days')).toBeVisible()
     await expect(page.getByText('Current Streak')).toBeVisible()
     await expect(page.getByText('Longest Streak')).toBeVisible()
     await expect(page.getByText('This Month')).toBeVisible()
@@ -473,48 +476,73 @@ test.describe('Activity Tracker App', () => {
 
 // ── The engine the app actually runs on ───────────────────
 
-// Tagged @webkit so it runs in that project too. It is here rather than among the
-// Chromium tests because the bug it guards against does not exist in Chromium: a day
+// Tagged @webkit so it runs in that project too. These are here rather than among the
+// Chromium tests because what they guard does not show up in Chromium: in 1.1.3 a day
 // cell asked to be the height of its grid row while the row was sized from its content,
 // and WebKit fed the hovered cell's scaled box back into that row. Measured in WebKitGTK
-// 4.1 before the fix: the cell went from 18x24 to 19x158 and its week column from 18x170
-// to 18x1032, filling the window and pushing the rest of the year behind it.
+// 4.1 at the time: the cell went from 18x24 to 19x158 and its week column from 18x170 to
+// 18x1032, filling the window and pushing the rest of the year behind it.
 //
-// The column is what is asserted. The cell itself is supposed to change size on hover,
-// because hover:scale-110 scales it; what must never change is the layout around it.
+// The grid is what is asserted now. The old test measured the cell's grandparent, which
+// was the week column of a layout that no longer exists; the continuous heatmap has no
+// element per week, because the columns are grid tracks. What must never change is the
+// geometry around the cell, and the last cell of the year is where any of it would show.
 test.describe('year view under the pointer @webkit', () => {
-  test('hovering a day does not resize its week column', async ({ page }) => {
+  test('hovering a day moves nothing', async ({ page }) => {
     await page.goto('/')
     await createActivity(page, 'Read')
-
     await openYearView(page)
-    const cell = page.getByTestId('day-cell').nth(20)
-    await expect(cell).toBeVisible()
 
-    const column = cell.locator('xpath=../..')
-    const before = await column.boundingBox()
+    const cells = page.getByTestId('day-cell')
+    const grid = page.getByRole('group', { name: /activity calendar/i })
+    const last = cells.last()
+    await expect(last).toBeVisible()
 
-    await cell.hover()
-    await page.waitForTimeout(600)
-    const after = await column.boundingBox()
+    const [gridBefore, lastBefore] = [await grid.boundingBox(), await last.boundingBox()]
 
-    expect(Math.abs(after!.height - before!.height)).toBeLessThanOrEqual(2)
-    expect(Math.abs(after!.width - before!.width)).toBeLessThanOrEqual(2)
+    await cells.nth(100).hover()
+    await expect(page.getByTestId('heatmap-tooltip')).toBeVisible()
+
+    const [gridAfter, lastAfter] = [await grid.boundingBox(), await last.boundingBox()]
+    expect(gridAfter).toEqual(gridBefore)
+    expect(lastAfter).toEqual(lastBefore)
+  })
+
+  // A keyboard user has to be able to see where they are. This could not be measured in
+  // the PyGObject harness: a GTK window that the window manager never focuses reports
+  // document.hasFocus() false, and then no focus selector can match, so the question was
+  // moved here where the browser really has focus.
+  test('arrowing through the year draws a ring and says the day', async ({ page }) => {
+    await page.goto('/')
+    await createActivity(page, 'Read')
+    await openYearView(page)
+
+    const first = page.getByTestId('day-cell').first()
+    await first.focus()
+    await page.keyboard.press('ArrowDown')
+
+    const focused = page.locator('[data-testid="day-cell"]:focus')
+    await expect(focused).toHaveCount(1)
+
+    // The ring is a box-shadow rather than an outline or a transform, so that is what is
+    // asked for. "none" would mean a keyboard user sees nothing at all.
+    const shadow = await focused.evaluate((el) => getComputedStyle(el).boxShadow)
+    expect(shadow).not.toBe('none')
+
+    // And the same tooltip the pointer gets, or the grid says nothing to them.
+    await expect(page.getByTestId('heatmap-tooltip')).toBeVisible()
+  })
+
+  test('the grid is a single tab stop', async ({ page }) => {
+    await page.goto('/')
+    await createActivity(page, 'Read')
+    await openYearView(page)
+
+    const stops = page.locator('[data-testid="day-cell"][tabindex="0"]')
+    await expect(stops).toHaveCount(1)
   })
 })
 
-// ── Modal actions stay reachable ──────────────────────────
-
-// A modal's buttons used to live inside its scrolling body, so on a short window the
-// button that finishes the job scrolled out of sight. Measured before the fix, at
-// 1024x600: the Import button sat at 698px with the modal ending at 570 and the viewport
-// at 600. It was reachable, but only by discovering that the body scrolled.
-//
-// These check the property that replaced it: the footer is pinned, so the button's
-// distance from the bottom of the window does not depend on how much content the modal
-// has. Asserting a margin rather than "is it inside" is deliberate: at 1366x768 the old
-// layout left 62px, so a yes/no check would have passed while the thing was one small
-// metric difference away from breaking, which is exactly how it reached a user.
 const SAMPLE_BACKUP = JSON.stringify({
   version: '1.1.3',
   exportedAt: '2026-09-10T00:00:00.000Z',
@@ -578,4 +606,81 @@ test.describe('modal actions', () => {
     const viewport = page.viewportSize()!
     expect(viewport.height - (box!.y + box!.height)).toBeGreaterThanOrEqual(24)
   })
+})
+
+// ── Month cards on a narrow phone ─────────────────────────
+
+/**
+ * A year whose numbers are as wide as they ever get: a fully completed month reads
+ * "28/28 · 100%", which is the widest the header has to hold. Seeding beats clicking here
+ * because the test is about a width, not about the flow that produces it.
+ */
+async function seedFullYear(page: import('@playwright/test').Page) {
+  // addInitScript, not evaluate-then-reload: the store persists through a deferred write,
+  // so its own empty state can land on top of a seed written after the app has started.
+  // This runs before any app code does, and the app finds the data already there.
+  await page.addInitScript(() => {
+    const logs = []
+    for (let day = 1; day <= 28; day++) {
+      const date = `2026-02-${String(day).padStart(2, '0')}`
+      logs.push({ id: `l${day}`, activityId: 'a1', date, completed: true, createdAt: date })
+    }
+    localStorage.setItem(
+      'simple-calendar-storage',
+      JSON.stringify({
+        state: {
+          activities: [
+            {
+              id: 'a1',
+              name: 'Read',
+              color: '#10B981',
+              createdAt: '2026-01-01T00:00:00.000Z',
+              updatedAt: '2026-01-01T00:00:00.000Z',
+            },
+          ],
+          logs,
+          selectedYear: 2026,
+          selectedDate: null,
+          currentView: 'year',
+          selectedMonth: 1,
+        },
+        version: 0,
+      })
+    )
+  })
+  await page.goto('/')
+  await page.waitForSelector('[data-testid="month-card"]')
+}
+
+test.describe('month cards on a narrow phone', () => {
+  // 360 is the narrowest phone Daylo is expected on, and the one where this broke: the
+  // figures wrapped to a second line and ran into the month name, which reads as two
+  // overlapping labels rather than one heading.
+  //
+  // Every card is checked, not the first: the first is January, which in this seed reads
+  // "0/31 · 0%" and fits anywhere. The card that breaks is the full one, and asserting on
+  // all twelve means the test does not depend on knowing which that is.
+  for (const width of [360, 390]) {
+    test(`month card headers stay on one line at ${width}`, async ({ page }) => {
+      await page.setViewportSize({ width, height: 800 })
+      await seedFullYear(page)
+
+      const headers = page.getByTestId('month-card-header')
+      await expect(headers).toHaveCount(12)
+
+      for (let i = 0; i < 12; i++) {
+        const header = headers.nth(i)
+        const nameBox = await header.getByTestId('month-card-name').boundingBox()
+        const statsBox = await header.getByTestId('month-card-stats').boundingBox()
+        const label = await header.getByTestId('month-card-name').textContent()
+
+        // A wrap shows up as a taller box, a collision as two different centres.
+        expect(statsBox!.height, `${label} wrapped`).toBeLessThan(20)
+        expect(
+          Math.abs(nameBox!.y + nameBox!.height / 2 - (statsBox!.y + statsBox!.height / 2)),
+          `${label} is off the line`
+        ).toBeLessThanOrEqual(2)
+      }
+    })
+  }
 })

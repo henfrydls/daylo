@@ -1,5 +1,6 @@
 import { useMemo, useCallback, memo } from 'react'
-import { DayCell } from './DayCell'
+import { YearHeatmap } from './YearHeatmap'
+import { YearByActivity } from './YearByActivity'
 import { MonthCard } from './MonthCard'
 import { YearProgressBar } from './YearProgressBar'
 import { HeatmapLegend } from './HeatmapLegend'
@@ -10,16 +11,6 @@ import { useMediaQuery } from '../../hooks/useMediaQuery'
 import { useShallow } from 'zustand/react/shallow'
 
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
-const DAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
-
-// Fixed number of weeks per month for consistent layout
-const WEEKS_PER_MONTH = 6
-
-interface MonthData {
-  month: number
-  weeks: (Date | null)[][]
-}
-
 export const YearView = memo(function YearView() {
   // Use individual selectors to prevent over-subscription
   const selectedYear = useCalendarStore((state) => state.selectedYear)
@@ -29,6 +20,8 @@ export const YearView = memo(function YearView() {
   const setSelectedDate = useCalendarStore((state) => state.setSelectedDate)
   const setSelectedYear = useCalendarStore((state) => state.setSelectedYear)
   const navigateToMonth = useCalendarStore((state) => state.navigateToMonth)
+  const yearMode = useCalendarStore((state) => state.yearMode)
+  const setYearMode = useCalendarStore((state) => state.setYearMode)
 
   const isMobile = !useMediaQuery('(min-width: 640px)')
 
@@ -69,6 +62,36 @@ export const YearView = memo(function YearView() {
     return logs.filter((l) => l.completed).length
   }, [logs])
 
+  /** Days with at least one thing done. "Active" is the word the year summary uses. */
+  const activeDays = useMemo(
+    () => [...dayDataMap.values()].filter((day) => day.completedCount > 0).length,
+    [dayDataMap]
+  )
+
+  /**
+   * A percentage per month, on the same footing as the phone's month cards: days with
+   * something done over days in the month. A month that has not begun gets null rather
+   * than a zero, because nothing was missed yet and 0% reads as a failure.
+   */
+  const monthCompletion = useMemo(() => {
+    const now = new Date()
+    return Array.from({ length: 12 }, (_, month) => {
+      if (
+        selectedYear > now.getFullYear() ||
+        (selectedYear === now.getFullYear() && month > now.getMonth())
+      ) {
+        return { month, percentage: null }
+      }
+      const daysInMonth = new Date(selectedYear, month + 1, 0).getDate()
+      let done = 0
+      for (let day = 1; day <= daysInMonth; day++) {
+        const key = formatDate(new Date(selectedYear, month, day))
+        if ((dayDataMap.get(key)?.completedCount ?? 0) > 0) done += 1
+      }
+      return { month, percentage: Math.round((done / daysInMonth) * 100) }
+    })
+  }, [dayDataMap, selectedYear])
+
   const handlePrevYear = useCallback(
     () => setSelectedYear(selectedYear - 1),
     [setSelectedYear, selectedYear]
@@ -81,50 +104,6 @@ export const YearView = memo(function YearView() {
     () => setSelectedYear(new Date().getFullYear()),
     [setSelectedYear]
   )
-
-  // Group days by month with exactly 6 weeks (42 cells) per month for consistent layout
-  const monthsData = useMemo(() => {
-    const months: MonthData[] = []
-
-    for (let month = 0; month < 12; month++) {
-      // Get all days for this month
-      const monthDays = yearDays.filter((date) => date.getMonth() === month)
-
-      if (monthDays.length === 0) continue
-
-      // Get the day of week for the first day of the month (0 = Sunday, 6 = Saturday)
-      const firstDayOfMonth = monthDays[0].getDay()
-
-      // Create array of 42 cells (6 weeks x 7 days)
-      const cells: (Date | null)[] = []
-
-      // Add empty cells at the beginning for offset
-      for (let i = 0; i < firstDayOfMonth; i++) {
-        cells.push(null)
-      }
-
-      // Add all days of the month
-      monthDays.forEach((date) => {
-        cells.push(date)
-      })
-
-      // Fill remaining cells to complete 42 (6 weeks)
-      const totalCells = WEEKS_PER_MONTH * 7 // 42 cells
-      while (cells.length < totalCells) {
-        cells.push(null)
-      }
-
-      // Convert flat array to weeks (7 days each)
-      const weeks: (Date | null)[][] = []
-      for (let i = 0; i < WEEKS_PER_MONTH; i++) {
-        weeks.push(cells.slice(i * 7, (i + 1) * 7))
-      }
-
-      months.push({ month, weeks })
-    }
-
-    return months
-  }, [yearDays])
 
   // --- Mobile Layout: Year Summary Cards ---
   if (isMobile) {
@@ -221,9 +200,12 @@ export const YearView = memo(function YearView() {
   return (
     <div className="p-4 sm:p-6 lg:p-8 w-full">
       {/* Year Navigation */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-8">
+      <div
+        className="mb-8 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between"
+        data-testid="year-header"
+      >
         <div className="flex items-center gap-4">
-          <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">{selectedYear}</h1>
+          <h1 className="text-2xl font-bold text-gray-900 sm:text-3xl">{selectedYear}</h1>
           <div className="flex items-center gap-1">
             <button
               onClick={handlePrevYear}
@@ -275,97 +257,114 @@ export const YearView = memo(function YearView() {
           </div>
         </div>
 
-        {/* Legend */}
-        <HeatmapLegend />
+        <div className="flex items-center gap-4">
+          {/* Which way the year reads. A segmented control rather than a switch: both
+              options are views of the same year, neither is on or off. */}
+          <div
+            className="inline-flex rounded-lg bg-gray-100 p-1"
+            role="group"
+            aria-label="How to show the year"
+          >
+            {(
+              [
+                ['all', 'All activities'],
+                ['byActivity', 'By activity'],
+              ] as const
+            ).map(([mode, label]) => (
+              <button
+                key={mode}
+                type="button"
+                onClick={() => setYearMode(mode)}
+                aria-pressed={yearMode === mode}
+                className={`rounded-md px-3 py-1.5 text-sm font-medium transition-colors duration-150 focus:ring-2 focus:ring-emerald-500 focus:ring-offset-1 focus:outline-none ${
+                  yearMode === mode
+                    ? 'bg-white text-gray-900 shadow-sm'
+                    : 'text-gray-500 hover:text-gray-700'
+                }`}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+
+          {/* The legend names the five shades of the combined heatmap. A row per activity
+              is one colour or grey, so in that mode it moves down to the only row it
+              still describes. */}
+          {yearMode === 'all' ? <HeatmapLegend /> : null}
+        </div>
       </div>
 
-      {/* Calendar Grid - Organized by Months */}
+      {/* One continuous heatmap: a column per week, Sunday at the top */}
       <div className="w-full">
-        {/* Day Labels Column Header */}
-        <div className="flex mb-4">
-          <div className="text-xs font-medium text-gray-400 uppercase tracking-wider">
-            Activity Calendar
-          </div>
+        <div className="mb-3 text-xs font-medium tracking-wider text-gray-400 uppercase">
+          Activity Calendar
         </div>
 
-        {/* Months Grid - Responsive with auto-fit */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 lg:gap-6">
-          {monthsData.map(({ month, weeks }) => (
-            <div key={month} className="flex flex-col min-h-0">
-              {/* Month Label */}
-              <button
-                onClick={() => navigateToMonth(selectedYear, month)}
-                className="mb-2 text-sm font-semibold text-gray-700 hover:text-emerald-600 transition-colors text-left py-2 sm:py-0 min-h-[44px] sm:min-h-0 flex items-center"
-                aria-label={`View ${MONTHS[month]} ${selectedYear}`}
-              >
-                {MONTHS[month]}
-              </button>
+        {yearMode === 'all' ? (
+          <>
+            <YearHeatmap
+              year={selectedYear}
+              dayData={dayDataMap}
+              totalActivities={activities.length}
+              selectedDate={selectedDate}
+              onSelectDate={setSelectedDate}
+            />
 
-              {/* Month Grid Container - Flexible to fill available space */}
-              <div className="flex flex-1 bg-white rounded-lg border border-gray-100 p-3 shadow-sm min-h-0">
-                {/* Day Labels for this month */}
-                <div className="grid grid-rows-7 gap-1 mr-2 pr-2 border-r border-gray-100">
-                  {DAYS.map((day, i) => (
-                    <div
-                      key={day}
-                      className="min-h-[44px] sm:min-h-[10px] flex items-center justify-end text-[10px] text-gray-400 font-medium"
-                    >
-                      {i % 2 === 1 ? day.charAt(0) : ''}
-                    </div>
-                  ))}
+            {/* Bottom Summary */}
+            <div className="mt-6 flex flex-wrap justify-between gap-6 border-t border-gray-100 pt-4 text-sm text-gray-500">
+              <div className="flex flex-wrap gap-6">
+                <div>
+                  <span className="font-medium text-gray-700">{activeDays}</span> active days
                 </div>
-
-                {/* Weeks Grid - 6 columns (weeks) x 7 rows (days) with flexible cells */}
-                <div className="grid grid-cols-6 gap-x-2 gap-y-1 flex-1">
-                  {weeks.map((week, weekIndex) => (
-                    <div key={weekIndex} className="grid grid-rows-7 gap-1">
-                      {week.map((date, dayIndex) => {
-                        if (!date) {
-                          return (
-                            <div
-                              key={`empty-${weekIndex}-${dayIndex}`}
-                              className="min-w-[10px] min-h-[10px] aspect-square"
-                            />
-                          )
-                        }
-                        const dateStr = formatDate(date)
-                        const dayData = dayDataMap.get(dateStr) || {
-                          completedCount: 0,
-                          level: 0 as const,
-                        }
-                        return (
-                          <DayCell
-                            key={dateStr}
-                            date={date}
-                            level={dayData.level}
-                            completedCount={dayData.completedCount}
-                            totalActivities={activities.length}
-                            isSelected={dateStr === selectedDate}
-                            onClick={() => setSelectedDate(dateStr)}
-                          />
-                        )
-                      })}
-                    </div>
-                  ))}
+                <div>
+                  <span className="font-medium text-gray-700">{completedLogsCount}</span>{' '}
+                  completions this year
                 </div>
               </div>
+              <div>
+                <span className="font-medium text-gray-700">{activities.length}</span> activities
+                tracked
+              </div>
             </div>
-          ))}
-        </div>
 
-        {/* Bottom Summary */}
-        <div className="mt-8 pt-6 border-t border-gray-100">
-          <div className="flex flex-wrap gap-6 text-sm text-gray-500">
-            <div>
-              <span className="font-medium text-gray-700">{activities.length}</span> activities
-              tracked
+            {/* Month completion */}
+            <div className="mt-6">
+              <div className="mb-2 text-xs font-medium tracking-wider text-gray-400 uppercase">
+                Month completion
+              </div>
+              <div className="grid grid-cols-12 gap-2" data-testid="month-completion">
+                {monthCompletion.map(({ month, percentage }) => (
+                  <button
+                    key={month}
+                    type="button"
+                    onClick={() => navigateToMonth(selectedYear, month)}
+                    className="rounded-lg px-1 py-1 text-center hover:bg-gray-50 focus:ring-2 focus:ring-emerald-500 focus:outline-none"
+                    aria-label={
+                      percentage === null
+                        ? `View ${MONTHS[month]} ${selectedYear}, not started yet`
+                        : `View ${MONTHS[month]} ${selectedYear}, ${percentage}% complete`
+                    }
+                  >
+                    <div className="text-xs text-gray-400">{MONTHS[month]}</div>
+                    <div className="text-sm font-semibold text-gray-700">
+                      {percentage === null ? '–' : `${percentage}%`}
+                    </div>
+                  </button>
+                ))}
+              </div>
             </div>
-            <div>
-              <span className="font-medium text-gray-700">{completedLogsCount}</span> completions
-              this year
-            </div>
-          </div>
-        </div>
+          </>
+        ) : (
+          <YearByActivity
+            year={selectedYear}
+            activities={activities}
+            logs={logs}
+            dayData={dayDataMap}
+            activeDays={activeDays}
+            selectedDate={selectedDate}
+            onSelectDate={setSelectedDate}
+          />
+        )}
       </div>
     </div>
   )

@@ -125,6 +125,11 @@ interface CalendarState {
   selectedYear: number
   selectedDate: string | null
   currentView: ViewType
+  /**
+   * How the year reads: everything in one heatmap, or a row per activity. Persisted,
+   * because somebody who prefers one should not have to say so after every reload.
+   */
+  yearMode: 'all' | 'byActivity'
   selectedMonth: number
   _hasHydrated: boolean
   _viewTransitionDirection: ViewTransitionDirection
@@ -152,6 +157,7 @@ interface CalendarState {
   setSelectedYear: (year: number) => void
   setSelectedDate: (date: string | null) => void
   setCurrentView: (view: ViewType, direction?: ViewTransitionDirection) => void
+  setYearMode: (mode: 'all' | 'byActivity') => void
   setSelectedMonth: (month: number) => void
   navigateToMonth: (year: number, month: number) => void
 
@@ -185,6 +191,7 @@ export const useCalendarStore = create<CalendarState>()(
       // would overrule a choice some of them made on purpose, and there is no way to tell
       // those apart from the ones who never touched the toggle.
       currentView: 'month' as ViewType,
+      yearMode: 'all' as const,
       selectedMonth: new Date().getMonth(),
       _hasHydrated: false,
       _viewTransitionDirection: null as ViewTransitionDirection,
@@ -297,6 +304,8 @@ export const useCalendarStore = create<CalendarState>()(
       setSelectedDate: (date) => set({ selectedDate: date }),
       setCurrentView: (view, direction) =>
         set({ currentView: view, _viewTransitionDirection: direction ?? null }),
+      setYearMode: (mode) => set({ yearMode: mode }),
+
       setSelectedMonth: (month) => set({ selectedMonth: month }),
       navigateToMonth: (year, month) =>
         set({
@@ -323,6 +332,7 @@ export const useCalendarStore = create<CalendarState>()(
         selectedYear: state.selectedYear,
         selectedDate: state.selectedDate,
         currentView: state.currentView,
+        yearMode: state.yearMode,
         selectedMonth: state.selectedMonth,
         reminderEnabled: state.reminderEnabled,
         reminderHour: state.reminderHour,

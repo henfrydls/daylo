@@ -54,22 +54,14 @@ describe('YearView', () => {
       expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent('2024')
     })
 
-    it('should render all 12 months', () => {
+    it('should name all 12 months under the calendar', () => {
+      useCalendarStore.setState({ selectedYear: 2024 })
       render(<YearView />)
 
-      // Use text query which is faster than role query with regex
-      expect(screen.getByText('Jan')).toBeInTheDocument()
-      expect(screen.getByText('Feb')).toBeInTheDocument()
-      expect(screen.getByText('Mar')).toBeInTheDocument()
-      expect(screen.getByText('Apr')).toBeInTheDocument()
-      expect(screen.getByText('May')).toBeInTheDocument()
-      expect(screen.getByText('Jun')).toBeInTheDocument()
-      expect(screen.getByText('Jul')).toBeInTheDocument()
-      expect(screen.getByText('Aug')).toBeInTheDocument()
-      expect(screen.getByText('Sep')).toBeInTheDocument()
-      expect(screen.getByText('Oct')).toBeInTheDocument()
-      expect(screen.getByText('Nov')).toBeInTheDocument()
-      expect(screen.getByText('Dec')).toBeInTheDocument()
+      const row = screen.getByTestId('month-completion')
+      expect(within(row).getAllByRole('button')).toHaveLength(12)
+      expect(within(row).getByText('Jan')).toBeInTheDocument()
+      expect(within(row).getByText('Dec')).toBeInTheDocument()
     })
 
     it('should display Activity Calendar label', () => {
@@ -111,9 +103,10 @@ describe('YearView', () => {
       useCalendarStore.setState({ logs })
       render(<YearView />)
 
-      // Should only count completed logs (2)
-      expect(screen.getByText('2')).toBeInTheDocument()
-      expect(screen.getByText('completions this year')).toBeInTheDocument()
+      // Only completed logs count, and the figure is read next to its own words: the
+      // month completion row is full of numbers that are not this one.
+      const summary = screen.getByText('completions this year')
+      expect(summary.parentElement).toHaveTextContent('2 completions this year')
     })
   })
 
@@ -152,7 +145,7 @@ describe('YearView', () => {
       useCalendarStore.setState({ selectedYear: 2024 })
       render(<YearView />)
 
-      const janButton = screen.getByRole('button', { name: 'View Jan 2024' })
+      const janButton = screen.getByRole('button', { name: /^View Jan 2024/ })
       fireEvent.click(janButton)
 
       const state = useCalendarStore.getState()
@@ -193,7 +186,7 @@ describe('YearView', () => {
       const dayCells = screen.getAllByTestId('day-cell')
       // Day cells should have aria-labels describing date and completion status
       expect(dayCells[0]).toHaveAttribute('aria-label')
-      expect(dayCells[0].getAttribute('aria-label')).toMatch(/\d+ of \d+ activities completed/)
+      expect(dayCells[0].getAttribute('aria-label')).toMatch(/\d+ of \d+ completed/)
     })
   })
 
@@ -249,7 +242,7 @@ describe('YearView', () => {
 
       expect(todayCell).toBeDefined()
       // Today's cell should have special ring styling (blue ring)
-      expect(todayCell?.className).toContain('ring-blue-500')
+      expect(todayCell?.className).toContain('blue-500')
     })
   })
 
@@ -280,8 +273,17 @@ describe('YearView', () => {
         'Nov',
         'Dec',
       ]
+      // The label says what the button does and where it stands: "View Jun 2024, 41%
+      // complete", or "not started yet" for a month still ahead.
+      //
+      // Scoped to the row on purpose. An unscoped getByRole computes the accessible name
+      // of every button on the page, and the page now holds a button per day of the year:
+      // twelve of those queries took seven seconds and timed the test out.
+      const row = within(screen.getByTestId('month-completion'))
       months.forEach((month) => {
-        expect(screen.getByLabelText(`View ${month} 2024`)).toBeInTheDocument()
+        expect(
+          row.getByRole('button', { name: new RegExp(`^View ${month} 2024, `) })
+        ).toBeInTheDocument()
       })
     })
 
@@ -423,32 +425,24 @@ describe('YearView', () => {
   })
 
   describe('Month grid structure', () => {
-    it('should render day labels in each month', () => {
+    it('labels the weekdays once for the whole year', () => {
       render(<YearView />)
 
-      // Each month should have abbreviated day labels (M, W, F)
-      // Only odd days show labels (Mon, Wed, Fri)
-      const mLabels = screen.getAllByText('M')
-      expect(mLabels.length).toBeGreaterThanOrEqual(12)
+      // One continuous grid means one column of weekday letters, where the old layout
+      // repeated them twelve times over.
+      expect(screen.getAllByText('M')).toHaveLength(1)
+      expect(screen.getAllByText('W')).toHaveLength(1)
+      expect(screen.getAllByText('F')).toHaveLength(1)
     })
 
-    it('should render 12 month containers', () => {
+    it('gives every month of the year a completion figure', () => {
       useCalendarStore.setState({ selectedYear: 2024 })
       render(<YearView />)
 
-      // Month labels are buttons; verify they all exist by their text content
-      expect(screen.getByText('Jan')).toBeInTheDocument()
-      expect(screen.getByText('Feb')).toBeInTheDocument()
-      expect(screen.getByText('Mar')).toBeInTheDocument()
-      expect(screen.getByText('Apr')).toBeInTheDocument()
-      expect(screen.getByText('May')).toBeInTheDocument()
-      expect(screen.getByText('Jun')).toBeInTheDocument()
-      expect(screen.getByText('Jul')).toBeInTheDocument()
-      expect(screen.getByText('Aug')).toBeInTheDocument()
-      expect(screen.getByText('Sep')).toBeInTheDocument()
-      expect(screen.getByText('Oct')).toBeInTheDocument()
-      expect(screen.getByText('Nov')).toBeInTheDocument()
-      expect(screen.getByText('Dec')).toBeInTheDocument()
+      const row = screen.getByTestId('month-completion')
+      for (const month of ['Jan', 'Jun', 'Dec']) {
+        expect(within(row).getByText(month)).toBeInTheDocument()
+      }
     })
   })
 
@@ -562,6 +556,92 @@ describe('YearView', () => {
 
       const dayCells = screen.queryAllByTestId('day-cell')
       expect(dayCells).toHaveLength(0)
+    })
+  })
+
+  describe('the All activities / By activity toggle', () => {
+    // Both halves are asserted. With only the pressed one checked, a control that
+    // reported every option as pressed would pass, and a screen reader would be told the
+    // year is shown two ways at once.
+    it('says which of the two is showing, and moves it', () => {
+      render(<YearView />)
+      const toggle = within(screen.getByRole('group', { name: /how to show the year/i }))
+      const all = () => toggle.getByRole('button', { name: 'All activities' })
+      const byActivity = () => toggle.getByRole('button', { name: 'By activity' })
+
+      expect(all()).toHaveAttribute('aria-pressed', 'true')
+      expect(byActivity()).toHaveAttribute('aria-pressed', 'false')
+
+      fireEvent.click(byActivity())
+
+      expect(all()).toHaveAttribute('aria-pressed', 'false')
+      expect(byActivity()).toHaveAttribute('aria-pressed', 'true')
+    })
+
+    it('switches to a row per activity', () => {
+      useCalendarStore.setState({
+        activities: [
+          {
+            id: 'a1',
+            name: 'Hiking',
+            color: '#8B5CF6',
+            createdAt: '2024-01-01',
+            updatedAt: '2024-01-01',
+          },
+        ],
+      })
+      render(<YearView />)
+
+      fireEvent.click(screen.getByRole('button', { name: 'By activity' }))
+
+      expect(screen.getByTestId('activity-row-Hiking')).toBeInTheDocument()
+      expect(useCalendarStore.getState().yearMode).toBe('byActivity')
+    })
+
+    // The legend reads the five shades of the combined heatmap. In the other view three
+    // rows out of four are one colour or grey, so up in the header it would be labelling
+    // something that is not on screen.
+    it('moves the legend to the row it describes', () => {
+      useCalendarStore.setState({
+        activities: [
+          {
+            id: 'a1',
+            name: 'Hiking',
+            color: '#8B5CF6',
+            createdAt: '2024-01-01',
+            updatedAt: '2024-01-01',
+          },
+        ],
+      })
+      render(<YearView />)
+      const header = screen.getByTestId('year-header')
+      expect(
+        within(header).getByRole('group', { name: /activity level legend/i })
+      ).toBeInTheDocument()
+
+      fireEvent.click(screen.getByRole('button', { name: 'By activity' }))
+
+      expect(
+        within(screen.getByTestId('year-header')).queryByRole('group', {
+          name: /activity level legend/i,
+        })
+      ).not.toBeInTheDocument()
+      expect(
+        within(screen.getByTestId('activity-row-All')).getByRole('group', {
+          name: /activity level legend/i,
+        })
+      ).toBeInTheDocument()
+    })
+
+    // The figures under the grid describe the year as a whole, and each row carries its
+    // own in the other view, so repeating them there would say the same thing twice.
+    it('keeps the year figures for the combined view only', () => {
+      render(<YearView />)
+      expect(screen.getByTestId('month-completion')).toBeInTheDocument()
+
+      fireEvent.click(screen.getByRole('button', { name: 'By activity' }))
+
+      expect(screen.queryByTestId('month-completion')).not.toBeInTheDocument()
     })
   })
 })
