@@ -175,3 +175,33 @@ describe('picking a day', () => {
     expect(cellFor('2026-03-04').className).toContain('blue')
   })
 })
+
+describe('one activity on its own', () => {
+  const hiking = {
+    name: 'Hiking',
+    color: '#8B5CF6',
+    done: new Set(['2026-03-04', '2026-03-05']),
+  }
+
+  it('paints its own colour on the days it happened', () => {
+    paint({ activity: hiking })
+
+    expect(cellFor('2026-03-04')).toHaveStyle({ backgroundColor: '#8B5CF6' })
+    expect(cellFor('2026-03-06')).not.toHaveStyle({ backgroundColor: '#8B5CF6' })
+  })
+
+  // A single activity on a day is done or it is not, so counting "1 of 1" would be a
+  // roundabout way of saying yes.
+  it('says done and not done rather than counting', () => {
+    paint({ activity: hiking })
+
+    expect(cellFor('2026-03-04')).toHaveAttribute('aria-label', 'Mar 4, 2026 — Hiking done')
+    expect(cellFor('2026-03-06')).toHaveAttribute('aria-label', 'Mar 6, 2026 — Hiking not done')
+  })
+
+  it('names the row for a screen reader', () => {
+    paint({ activity: hiking })
+
+    expect(screen.getByRole('group', { name: 'Hiking in 2026' })).toBeInTheDocument()
+  })
+})

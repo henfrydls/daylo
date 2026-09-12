@@ -27,6 +27,31 @@ describe('useCalendarStore', () => {
     })
   })
 
+  describe('how the year is shown', () => {
+    it('starts on the combined heatmap', () => {
+      expect(useCalendarStore.getInitialState().yearMode).toBe('all')
+    })
+
+    it('remembers the choice', () => {
+      useCalendarStore.getState().setYearMode('byActivity')
+
+      expect(useCalendarStore.getState().yearMode).toBe('byActivity')
+    })
+
+    // Persisted like the view itself: somebody who reads their year a row per activity
+    // should not have to say so again after every reload. The wait is not decoration: the
+    // store's storage defers its write, so reading straight after the set finds the old
+    // value. That same race is what loses a seeded state in the end-to-end tests.
+    it('is written to storage', async () => {
+      useCalendarStore.getState().setYearMode('byActivity')
+
+      await new Promise((resolve) => setTimeout(resolve, 20))
+
+      const stored = JSON.parse(localStorage.getItem('simple-calendar-storage') || '{}')
+      expect(stored.state.yearMode).toBe('byActivity')
+    })
+  })
+
   describe('activities', () => {
     it('should add activity', () => {
       const { addActivity } = useCalendarStore.getState()

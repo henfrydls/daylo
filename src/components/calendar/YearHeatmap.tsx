@@ -16,6 +16,17 @@ interface YearHeatmapProps {
   totalActivities: number
   selectedDate: string | null
   onSelectDate: (date: string) => void
+  /**
+   * One activity's own row rather than the whole year's total: its colour on the days it
+   * happened, and labels that say done or not done. A single activity on a day has no
+   * degrees, so the five heatmap levels have nothing to say about it.
+   */
+  activity?: { name: string; color: string; done: ReadonlySet<string> }
+  /**
+   * Off for every row but the first when several grids are stacked: the columns line up,
+   * so one set of month names speaks for all of them and repeating it is noise.
+   */
+  showMonthLabels?: boolean
 }
 
 function describe(date: Date, completedCount: number, totalActivities: number): string {
@@ -44,6 +55,8 @@ export const YearHeatmap = memo(function YearHeatmap({
   totalActivities,
   selectedDate,
   onSelectDate,
+  activity,
+  showMonthLabels = true,
 }: YearHeatmapProps) {
   const { weeks, monthLabels } = useMemo(() => buildYearGrid(year), [year])
   const gridRef = useRef<HTMLDivElement>(null)
@@ -107,7 +120,9 @@ export const YearHeatmap = memo(function YearHeatmap({
       <div className="flex gap-2 overflow-x-auto pb-1" data-testid="year-heatmap">
         {/* The weekday column sits outside the scrolling grid so it does not slide away */}
         <div
-          className="grid shrink-0 pt-[18px] text-[10px] leading-[11px] text-gray-400"
+          className={`grid shrink-0 text-[10px] leading-[11px] text-gray-400 ${
+            showMonthLabels ? 'pt-[18px]' : ''
+          }`}
           style={{ gridTemplateRows: 'repeat(7, 11px)', rowGap: '3px' }}
           aria-hidden="true"
         >
@@ -117,21 +132,23 @@ export const YearHeatmap = memo(function YearHeatmap({
         </div>
 
         <div>
-          <div
-            className="grid text-[10px] leading-[14px] text-gray-500"
-            style={{ gridTemplateColumns: `repeat(${weeks.length}, 11px)`, columnGap: '3px' }}
-            aria-hidden="true"
-          >
-            {monthLabels.map(({ month, column }) => (
-              <div
-                key={month}
-                className="whitespace-nowrap"
-                style={{ gridColumnStart: column + 1, gridColumnEnd: 'span 4' }}
-              >
-                {MONTHS[month]}
-              </div>
-            ))}
-          </div>
+          {showMonthLabels ? (
+            <div
+              className="grid text-[10px] leading-[14px] text-gray-500"
+              style={{ gridTemplateColumns: `repeat(${weeks.length}, 11px)`, columnGap: '3px' }}
+              aria-hidden="true"
+            >
+              {monthLabels.map(({ month, column }) => (
+                <div
+                  key={month}
+                  className="whitespace-nowrap"
+                  style={{ gridColumnStart: column + 1, gridColumnEnd: 'span 4' }}
+                >
+                  {MONTHS[month]}
+                </div>
+              ))}
+            </div>
+          ) : null}
 
           <div
             ref={gridRef}
@@ -143,7 +160,7 @@ export const YearHeatmap = memo(function YearHeatmap({
               gap: '3px',
             }}
             role="group"
-            aria-label={`Activity calendar for ${year}`}
+            aria-label={activity ? `${activity.name} in ${year}` : `Activity calendar for ${year}`}
             onPointerOver={handlePointerOver}
             onPointerLeave={handlePointerLeave}
             onFocus={handleFocus}
@@ -158,7 +175,10 @@ export const YearHeatmap = memo(function YearHeatmap({
 
                 const key = formatDate(date)
                 const { completedCount = 0, level = 0 } = dayData.get(key) ?? {}
-                const label = describe(date, completedCount, totalActivities)
+                const wasDone = activity?.done.has(key) ?? false
+                const label = activity
+                  ? `${formatDisplayDate(date)} — ${activity.name}${wasDone ? '' : ' not'} done`
+                  : describe(date, completedCount, totalActivities)
                 const isSelected = selectedDate === key
 
                 return (
@@ -170,7 +190,10 @@ export const YearHeatmap = memo(function YearHeatmap({
                       setTabStop(key)
                       onSelectDate(key)
                     }}
-                    className={`h-[11px] w-[11px] rounded-[2px] ${getHeatmapColor(level)} ${
+                    style={activity && wasDone ? { backgroundColor: activity.color } : undefined}
+                    className={`h-[11px] w-[11px] rounded-[2px] ${
+                      activity ? getHeatmapColor(0) : getHeatmapColor(level)
+                    } ${
                       isSelected
                         ? 'shadow-[0_0_0_1px_#fff,0_0_0_2px_var(--color-emerald-600)]'
                         : checkIsToday(date)
