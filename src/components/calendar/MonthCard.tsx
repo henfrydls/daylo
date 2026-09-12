@@ -90,10 +90,23 @@ export const MonthCard = memo(function MonthCard({
       data-testid="month-card"
     >
       {/* Header: Month name + stats */}
-      <div className="flex items-center justify-between mb-2 w-full">
-        <span className="text-sm font-semibold text-gray-800">{MONTHS_SHORT[month]}</span>
-        <span className="text-xs text-gray-500">
-          {daysCompleted}/{daysInMonth} &middot; {percentage}%
+      <div
+        className="flex items-center justify-between gap-1 mb-2 w-full"
+        data-testid="month-card-header"
+      >
+        <span className="text-sm font-semibold text-gray-800" data-testid="month-card-name">
+          {MONTHS_SHORT[month]}
+        </span>
+        {/* One line, always. On a 360 phone a card is 95px wide and "28/28 &middot; 100%"
+            does not fit beside the month name, so it used to wrap into it. The count is
+            dropped at that width rather than shrunk: the percentage is the part somebody
+            reads at a glance, and the grid below already shows the days. Nothing is lost
+            to a screen reader, which gets the full figures from the card's aria-label. */}
+        <span className="text-xs text-gray-500 whitespace-nowrap" data-testid="month-card-stats">
+          <span className="hidden sm:inline">
+            {daysCompleted}/{daysInMonth} &middot;{' '}
+          </span>
+          {percentage}%
         </span>
       </div>
 
