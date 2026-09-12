@@ -45,6 +45,12 @@ function describe(date: Date, completedCount: number, totalActivities: number): 
  *    can be sized from its content, so a cell cannot resize the row it sits in.
  *  - Hover and focus draw a box-shadow ring, never a transform. A scaled box feeds back
  *    into grid sizing in WebKit; a shadow only paints.
+ *  - That ring is on :focus and not :focus-visible, which is the one place in the app
+ *    where it is. The arrows move focus by calling focus() on the next cell, and WebKit
+ *    does not count script-moved focus as keyboard-initiated: measured in CI, the ring
+ *    vanished there and a keyboard user had nothing to follow. The grid is not on the
+ *    phone, so the ring a tap would leave is not the trap it is elsewhere, and on a click
+ *    it reads as the day you picked. The @webkit guard is what caught this.
  *  - One listener on the wrapper and one tooltip node answer for every cell. At a row per
  *    activity this is four thousand cells, and a tooltip each would be four thousand
  *    subscriptions to keep in step.
@@ -199,7 +205,7 @@ export const YearHeatmap = memo(function YearHeatmap({
                         : checkIsToday(date)
                           ? 'shadow-[0_0_0_1px_#fff,0_0_0_2px_var(--color-blue-500)]'
                           : ''
-                    } hover:shadow-[0_0_0_1px_#fff,0_0_0_2px_var(--color-gray-500)] focus-visible:shadow-[0_0_0_1px_#fff,0_0_0_2px_var(--color-emerald-600)] focus:outline-none`}
+                    } hover:shadow-[0_0_0_1px_#fff,0_0_0_2px_var(--color-gray-500)] focus:shadow-[0_0_0_1px_#fff,0_0_0_2px_var(--color-emerald-600)] focus:outline-none`}
                     aria-label={label}
                     data-label={label}
                     data-date={key}

@@ -687,7 +687,9 @@ test.describe('month cards on a narrow phone', () => {
 
 // ── Touch ────────────────────────────────────────────────
 
-test.describe('the view toggle on a touch screen', () => {
+// Tagged @webkit as well: the ring depends on an engine heuristic, and the year grid
+// has already shown that Chromium and WebKit do not agree about what raises it.
+test.describe('the view toggle on a touch screen @webkit', () => {
   test.use({ hasTouch: true, viewport: { width: 390, height: 844 } })
 
   /**
@@ -726,12 +728,22 @@ test.describe('the view toggle on a touch screen', () => {
   })
 
   // The other half of the same rule: a keyboard still has to be able to see where it is.
+  // Tabbed to, not focused by script. WebKit does not treat a focus() call as keyboard
+  // work, which is exactly what the year grid ran into, so a test that used one would be
+  // asking a different question than the one a person asks with their hands.
   test('but the keyboard still gets one', async ({ page }) => {
     await page.goto('/')
     const resting = await shadowOf(page, 'Month')
 
-    await page.getByRole('button', { name: 'Month', exact: true }).focus()
-    await page.keyboard.press('Space')
+    const month = page.getByRole('button', { name: 'Month', exact: true })
+    for (
+      let press = 0;
+      press < 12 && !(await month.evaluate((el) => el === document.activeElement));
+      press++
+    ) {
+      await page.keyboard.press('Tab')
+    }
+    await expect(month).toBeFocused()
 
     expect(await shadowOf(page, 'Month')).not.toBe(resting)
   })
