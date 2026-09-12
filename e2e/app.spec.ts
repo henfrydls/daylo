@@ -748,3 +748,104 @@ test.describe('the view toggle on a touch screen @webkit', () => {
     expect(await shadowOf(page, 'Month')).not.toBe(resting)
   })
 })
+
+// ── The reminder sheet on a phone ─────────────────────────
+
+/**
+ * The sheet exists only in the Android build, so the browser is told it is one. isTauri()
+ * reads a single global and invoke() goes straight to another, which is the whole of what
+ * has to be faked: everything below this line is the app's own code, in a real engine, at
+ * the size of the phone that reported these two bugs.
+ */
+async function openTheReminderSheet(
+  page: import('@playwright/test').Page,
+  { enabled }: { enabled: boolean }
+) {
+  await page.addInitScript((on) => {
+    Object.assign(window, {
+      isTauri: true,
+      __TAURI_INTERNALS__: {
+        invoke: (command: string) =>
+          Promise.resolve(
+            command === 'reminders_available' ||
+              command === 'plugin:notification|is_permission_granted'
+          ),
+      },
+    })
+    // The plugin's isPermissionGranted looks at window.Notification.permission first and
+    // only asks the native side when it reads 'default'. A headless browser says 'denied',
+    // which would have the app turn the reminder off on the way in and render the sheet
+    // in the wrong state. A phone that has been granted the permission says granted.
+    Object.defineProperty(window, 'Notification', {
+      configurable: true,
+      value: { permission: 'granted' },
+    })
+    localStorage.setItem(
+      'simple-calendar-storage',
+      JSON.stringify({
+        state: {
+          activities: [
+            {
+              id: 'a1',
+              name: 'Read',
+              color: '#10B981',
+              createdAt: '2026-01-01T00:00:00.000Z',
+              updatedAt: '2026-01-01T00:00:00.000Z',
+            },
+          ],
+          logs: [],
+          selectedYear: 2026,
+          selectedDate: null,
+          currentView: 'month',
+          yearMode: 'all',
+          selectedMonth: 8,
+          reminderEnabled: on,
+          reminderHour: 19,
+          reminderMinute: 0,
+          // Or the one-time offer opens on top of the sheet and takes the taps.
+          reminderOffered: true,
+        },
+        version: 0,
+      })
+    )
+  }, enabled)
+
+  await page.goto('/')
+  // Two triggers are in the DOM at once, one for phones and one for wider screens.
+  await page.locator('[aria-label="More options"]:visible').click()
+  await page.getByText('Daily reminder').click()
+  await expect(page.getByTestId('reminder-settings')).toBeVisible()
+  // The sheet slides up; measuring through that returns a fraction of where things land.
+  await page.waitForFunction(() => document.getAnimations().every((a) => a.playState !== 'running'))
+}
+
+test.describe('the reminder sheet on a phone', () => {
+  test.use({ viewport: { width: 412, height: 820 }, hasTouch: true })
+
+  /**
+   * Reported from the same phone: "Stop reminders" sat flush against the gesture bar with
+   * no air at all. The sheet reaches the bottom edge of the screen by design, and a phone
+   * on gesture navigation keeps a strip down there for its own bar.
+   *
+   * The inset is set through the devtools protocol rather than described, so this measures
+   * the same arithmetic a phone does. Without an override the engine reports zero, which
+   * is the other half of the fix: nothing may move on a desktop.
+   */
+  test('clears the system bar at the bottom of the screen', async ({ page, context }) => {
+    await openTheReminderSheet(page, { enabled: true })
+    const sheet = page.getByTestId('reminder-settings')
+
+    expect(await sheet.evaluate((el) => getComputedStyle(el).paddingBottom)).toBe('16px')
+
+    const devtools = await context.newCDPSession(page)
+    await devtools.send('Emulation.setSafeAreaInsetsOverride', { insets: { bottom: 34 } })
+
+    // 34 for the system's strip, 16 of the sheet's own air above it.
+    expect(await sheet.evaluate((el) => getComputedStyle(el).paddingBottom)).toBe('50px')
+
+    const button = page.getByTestId('reminder-stop')
+    const box = (await button.boundingBox())!
+    const viewport = page.viewportSize()!
+    expect(viewport.height - (box.y + box.height)).toBeGreaterThanOrEqual(50)
+  })
+})
