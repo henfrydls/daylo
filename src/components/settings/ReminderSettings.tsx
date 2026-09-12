@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import { Button, Modal, useToast } from '../ui'
 import { useCalendarStore } from '../../store'
 import { disableReminder, enableReminder, formatReminderTime } from '../../lib/reminders'
@@ -32,6 +32,18 @@ export function ReminderSettings({ isOpen, onClose }: ReminderSettingsProps) {
   const { showToast } = useToast()
   const [busy, setBusy] = useState(false)
   const [failure, setFailure] = useState<string | null>(null)
+
+  // Whether to draw the focus ring on the time row, which the browser cannot be left to
+  // decide here. Chromium treats any control you could type into as always focus-visible,
+  // tap or not: measured side by side, an input[type=time] matches :focus-visible after a
+  // touch tap and a button does not. So `has-[:focus-visible]` lit the row up on every
+  // tap and left it lit, which is the same green ring a phone already complained about
+  // once on the Year and Month buttons.
+  //
+  // The rule is the one the rest of the app follows: rings are for keyboards. A pointer
+  // sets the flag just before focus arrives, and focus reads it.
+  const [ringVisible, setRingVisible] = useState(false)
+  const focusCameFromPointer = useRef(false)
 
   const at = formatReminderTime(hour, minute)
 
@@ -146,7 +158,12 @@ export function ReminderSettings({ isOpen, onClose }: ReminderSettingsProps) {
         {/* The native picker does the work; this is what it looks like from outside. The
             input covers the row so a tap anywhere in it opens the picker, and the row
             carries the focus ring because the input itself has nothing to show. */}
-        <div className="relative mt-4 rounded-lg border border-gray-200 has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-emerald-500">
+        <div
+          className={`relative mt-4 rounded-lg border border-gray-200 ${
+            ringVisible ? 'ring-2 ring-emerald-500' : ''
+          }`}
+          data-testid="reminder-time-row"
+        >
           <div
             className="flex min-h-[44px] items-center justify-between px-4 py-3"
             aria-hidden="true"
@@ -174,6 +191,17 @@ export function ReminderSettings({ isOpen, onClose }: ReminderSettingsProps) {
               const [h, m] = e.target.value.split(':').map(Number)
               if (Number.isNaN(h) || Number.isNaN(m)) return
               changeTime(h, m)
+            }}
+            onPointerDown={() => {
+              focusCameFromPointer.current = true
+            }}
+            onFocus={() => {
+              setRingVisible(!focusCameFromPointer.current)
+              focusCameFromPointer.current = false
+            }}
+            onBlur={() => {
+              setRingVisible(false)
+              focusCameFromPointer.current = false
             }}
             className="absolute inset-0 h-full w-full cursor-pointer opacity-0 focus:outline-none"
             data-testid="reminder-time"

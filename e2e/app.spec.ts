@@ -822,6 +822,52 @@ async function openTheReminderSheet(
 test.describe('the reminder sheet on a phone', () => {
   test.use({ viewport: { width: 412, height: 820 }, hasTouch: true })
 
+  const ringOf = (page: import('@playwright/test').Page) =>
+    page.getByTestId('reminder-time-row').evaluate((el) => getComputedStyle(el).boxShadow)
+
+  /**
+   * Reported from a phone: after tapping "Change ›" the time box kept a green ring, the
+   * same complaint the Year and Month buttons drew once before.
+   *
+   * The cause is not the one that was fixed then. The row already asked for
+   * :focus-visible, but the thing focused is an input[type=time], and Chromium treats a
+   * control you could type into as always focus-visible whether it was tapped or tabbed
+   * to. Measured side by side in this engine: after a tap the input matches
+   * :focus-visible and a button does not.
+   */
+  test('tapping the time leaves no ring behind', async ({ page }) => {
+    await openTheReminderSheet(page, { enabled: true })
+    const resting = await ringOf(page)
+
+    await page.getByTestId('reminder-time').tap()
+    await page.waitForFunction(() =>
+      document.getAnimations().every((a) => a.playState !== 'running')
+    )
+
+    expect(await ringOf(page)).toBe(resting)
+  })
+
+  test('but the keyboard still gets one', async ({ page }) => {
+    await openTheReminderSheet(page, { enabled: true })
+    const resting = await ringOf(page)
+
+    // Tabbed to, not focused by script: a focus() call would show the ring under any
+    // implementation, including the one that was wrong. The count is high because the
+    // sheet does not take focus when it opens, so Tab starts at the top of the page
+    // behind it and walks the whole month before reaching the dialog.
+    const time = page.getByTestId('reminder-time')
+    for (
+      let press = 0;
+      press < 80 && !(await time.evaluate((el) => el === document.activeElement));
+      press++
+    ) {
+      await page.keyboard.press('Tab')
+    }
+    await expect(time).toBeFocused()
+
+    expect(await ringOf(page)).not.toBe(resting)
+  })
+
   /**
    * Reported from the same phone: "Stop reminders" sat flush against the gesture bar with
    * no air at all. The sheet reaches the bottom edge of the screen by design, and a phone
