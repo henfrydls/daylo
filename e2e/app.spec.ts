@@ -847,6 +847,30 @@ test.describe('the reminder sheet on a phone', () => {
     expect(await ringOf(page)).toBe(resting)
   })
 
+  /**
+   * The half a tap alone cannot reach. Tapping the row opens Android's own time picker,
+   * which takes the screen and hands focus back to the input when it closes — and focus
+   * handed back by the platform is not a pointer event. An implementation that asked "did
+   * a pointer cause this focus?" would light the ring the moment the picker closed, which
+   * is the same bug arriving one step later. Asking what the person last did instead
+   * survives the round trip.
+   */
+  test('nor after the picker hands focus back', async ({ page }) => {
+    await openTheReminderSheet(page, { enabled: true })
+    const resting = await ringOf(page)
+
+    await page.getByTestId('reminder-time').tap()
+    await page.getByTestId('reminder-time').evaluate((el: HTMLInputElement) => {
+      el.blur()
+      el.focus()
+    })
+    await page.waitForFunction(() =>
+      document.getAnimations().every((a) => a.playState !== 'running')
+    )
+
+    expect(await ringOf(page)).toBe(resting)
+  })
+
   test('but the keyboard still gets one', async ({ page }) => {
     await openTheReminderSheet(page, { enabled: true })
     const resting = await ringOf(page)

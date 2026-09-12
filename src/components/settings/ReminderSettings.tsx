@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Button, Modal, useToast } from '../ui'
 import { useCalendarStore } from '../../store'
 import { disableReminder, enableReminder, formatReminderTime } from '../../lib/reminders'
@@ -40,10 +40,31 @@ export function ReminderSettings({ isOpen, onClose }: ReminderSettingsProps) {
   // tap and left it lit, which is the same green ring a phone already complained about
   // once on the Year and Month buttons.
   //
-  // The rule is the one the rest of the app follows: rings are for keyboards. A pointer
-  // sets the flag just before focus arrives, and focus reads it.
+  // The rule is the one the rest of the app follows: rings are for keyboards. What decides
+  // it is the last thing the person did, not how this particular focus arrived, and that
+  // distinction is the whole reason it is written this way: the native time picker takes
+  // over the screen and hands focus back when it closes, and a focus handed back by the
+  // platform is not a pointer event. Reading the last interaction instead means the ring
+  // stays off through the entire tap-pick-close round, and comes on for a Tab.
   const [ringVisible, setRingVisible] = useState(false)
-  const focusCameFromPointer = useRef(false)
+  const lastInteraction = useRef<'pointer' | 'keyboard'>('pointer')
+
+  useEffect(() => {
+    if (!isOpen) return
+    const pointer = () => {
+      lastInteraction.current = 'pointer'
+    }
+    const keyboard = () => {
+      lastInteraction.current = 'keyboard'
+    }
+    // Capture, so this hears the interaction whatever else stops it on the way down.
+    document.addEventListener('pointerdown', pointer, true)
+    document.addEventListener('keydown', keyboard, true)
+    return () => {
+      document.removeEventListener('pointerdown', pointer, true)
+      document.removeEventListener('keydown', keyboard, true)
+    }
+  }, [isOpen])
 
   const at = formatReminderTime(hour, minute)
 
@@ -192,17 +213,8 @@ export function ReminderSettings({ isOpen, onClose }: ReminderSettingsProps) {
               if (Number.isNaN(h) || Number.isNaN(m)) return
               changeTime(h, m)
             }}
-            onPointerDown={() => {
-              focusCameFromPointer.current = true
-            }}
-            onFocus={() => {
-              setRingVisible(!focusCameFromPointer.current)
-              focusCameFromPointer.current = false
-            }}
-            onBlur={() => {
-              setRingVisible(false)
-              focusCameFromPointer.current = false
-            }}
+            onFocus={() => setRingVisible(lastInteraction.current === 'keyboard')}
+            onBlur={() => setRingVisible(false)}
             className="absolute inset-0 h-full w-full cursor-pointer opacity-0 focus:outline-none"
             data-testid="reminder-time"
           />
