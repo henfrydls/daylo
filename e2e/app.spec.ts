@@ -579,3 +579,80 @@ test.describe('modal actions', () => {
     expect(viewport.height - (box!.y + box!.height)).toBeGreaterThanOrEqual(24)
   })
 })
+
+// ── Month cards on a narrow phone ─────────────────────────
+
+/**
+ * A year whose numbers are as wide as they ever get: a fully completed month reads
+ * "28/28 · 100%", which is the widest the header has to hold. Seeding beats clicking here
+ * because the test is about a width, not about the flow that produces it.
+ */
+async function seedFullYear(page: import('@playwright/test').Page) {
+  // addInitScript, not evaluate-then-reload: the store persists through a deferred write,
+  // so its own empty state can land on top of a seed written after the app has started.
+  // This runs before any app code does, and the app finds the data already there.
+  await page.addInitScript(() => {
+    const logs = []
+    for (let day = 1; day <= 28; day++) {
+      const date = `2026-02-${String(day).padStart(2, '0')}`
+      logs.push({ id: `l${day}`, activityId: 'a1', date, completed: true, createdAt: date })
+    }
+    localStorage.setItem(
+      'simple-calendar-storage',
+      JSON.stringify({
+        state: {
+          activities: [
+            {
+              id: 'a1',
+              name: 'Read',
+              color: '#10B981',
+              createdAt: '2026-01-01T00:00:00.000Z',
+              updatedAt: '2026-01-01T00:00:00.000Z',
+            },
+          ],
+          logs,
+          selectedYear: 2026,
+          selectedDate: null,
+          currentView: 'year',
+          selectedMonth: 1,
+        },
+        version: 0,
+      })
+    )
+  })
+  await page.goto('/')
+  await page.waitForSelector('[data-testid="month-card"]')
+}
+
+test.describe('month cards on a narrow phone', () => {
+  // 360 is the narrowest phone Daylo is expected on, and the one where this broke: the
+  // figures wrapped to a second line and ran into the month name, which reads as two
+  // overlapping labels rather than one heading.
+  //
+  // Every card is checked, not the first: the first is January, which in this seed reads
+  // "0/31 · 0%" and fits anywhere. The card that breaks is the full one, and asserting on
+  // all twelve means the test does not depend on knowing which that is.
+  for (const width of [360, 390]) {
+    test(`month card headers stay on one line at ${width}`, async ({ page }) => {
+      await page.setViewportSize({ width, height: 800 })
+      await seedFullYear(page)
+
+      const headers = page.getByTestId('month-card-header')
+      await expect(headers).toHaveCount(12)
+
+      for (let i = 0; i < 12; i++) {
+        const header = headers.nth(i)
+        const nameBox = await header.getByTestId('month-card-name').boundingBox()
+        const statsBox = await header.getByTestId('month-card-stats').boundingBox()
+        const label = await header.getByTestId('month-card-name').textContent()
+
+        // A wrap shows up as a taller box, a collision as two different centres.
+        expect(statsBox!.height, `${label} wrapped`).toBeLessThan(20)
+        expect(
+          Math.abs(nameBox!.y + nameBox!.height / 2 - (statsBox!.y + statsBox!.height / 2)),
+          `${label} is off the line`
+        ).toBeLessThanOrEqual(2)
+      }
+    })
+  }
+})
