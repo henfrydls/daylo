@@ -12,6 +12,12 @@ month is where you tick today off, which is what most people open Daylo to do.
 This only changes where Daylo starts for someone installing it now. If you have used
 Daylo before, it remembers the view you were last on, and that does not change.
 
+**Colors another activity is already using are dimmed.** When you create or rename an
+activity, the colors your other activities wear are faded and say "already in use" when
+you point at them. They can still be picked: two activities can share a color, it is just
+harder to tell them apart. If you have used every color, nothing is dimmed, because at
+that point it would only make the palette look broken.
+
 **The year is one calendar now, instead of twelve small ones.** On a computer the year
 used to be twelve separate month blocks, and a run that crossed the end of a month looked
 like two shorter runs. It is now a single strip, a column per week, so a long run reads as
