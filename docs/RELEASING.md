@@ -35,6 +35,21 @@ GitHub Actions (`.github/workflows/release.yml`) automatically:
 - Builds for Windows (x64, ARM64), macOS (Intel, Apple Silicon), and Linux (x64)
 - Creates a GitHub Release with all installers attached
 
+## Reading logs off a phone
+
+Tauri, wry and the plugins gate every log line behind `BuildConfig.DEBUG`, `Logger.error`
+included. On a release APK nothing they write reaches logcat: not a plugin's own messages,
+not a `console.error` from the app. A release build's only channel out of the device is the
+screen.
+
+When that is not enough, the `build-debug-apk` label on a pull request (or the
+`debug_apk` input on a manual run) builds the same code in debug and signs it with the
+release key. It installs over an existing Daylo without uninstalling, so nobody loses their
+data, and everything speaks: the plugins, the console, and `chrome://inspect` over USB.
+
+That artifact is named with DEBUG in it and is never published. It is slower, larger, and
+debuggable by any process on the phone.
+
 ## Verifying the Version
 
 The app displays its version in the menu. In development:

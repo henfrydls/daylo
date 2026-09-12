@@ -24,6 +24,11 @@ on:
   pull_request:
     types: [labeled]
   workflow_dispatch:
+    inputs:
+      debug_apk:
+        description: 'Build the diagnostic debug APK instead of the installers'
+        type: boolean
+        default: false
 
 # Declared for the whole workflow rather than per job, so a job added later cannot quietly
 # inherit the repository defaults. Nothing here publishes: it reads the code, builds it,
@@ -45,7 +50,9 @@ jobs:
   verify-matrix:
     name: The matrix still matches release.yml
     # The same condition as the build, so an unrelated label starts nothing at all.
-    if: github.event_name == 'workflow_dispatch' || github.event.label.name == 'build-installers'
+    if: >-
+      (github.event_name == 'workflow_dispatch' || github.event.label.name == 'build-installers')
+      && !inputs.debug_apk
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
@@ -84,7 +91,9 @@ jobs:
 
   build:
     needs: verify-matrix
-    if: github.event_name == 'workflow_dispatch' || github.event.label.name == 'build-installers'
+    if: >-
+      (github.event_name == 'workflow_dispatch' || github.event.label.name == 'build-installers')
+      && !inputs.debug_apk
     strategy:
       fail-fast: false
       matrix:
@@ -199,6 +208,7 @@ jobs:
       (github.event_name == 'workflow_dispatch' || github.event.label.name == 'build-installers')
       && (github.event_name == 'workflow_dispatch'
           || github.event.pull_request.head.repo.full_name == github.repository)
+      && !inputs.debug_apk
     runs-on: ubuntu-latest
     timeout-minutes: 60
 
@@ -315,5 +325,178 @@ jobs:
         with:
           name: daylo-android-arm64-${{ env.SHORT_SHA || github.sha }}
           path: src-tauri/gen/android/app/build/outputs/apk/universal/release/Daylo-android-arm64.apk
+          retention-days: 7
+          if-no-files-found: error
+
+  # ── A debug APK, for reading logs off a phone ───────────────────────────────
+  #
+  # WHY IT EXISTS: Tauri and wry gate every log line behind BuildConfig.DEBUG.
+  # `Logger.error` included. On a release APK that means the plugin's own "will next fire
+  # at", any console.error from the app, and every plugin error are all silent, so a
+  # notification that does not arrive leaves no trace anywhere on the device. This job
+  # builds the same code in debug, where all of that speaks, and signs it with the release
+  # key so it installs over somebody's Daylo without uninstalling it and losing their data.
+  #
+  # It also makes the webview inspectable: a debug build is android:debuggable, and wry
+  # only calls setWebContentsDebuggingEnabled under debug_assertions, so chrome://inspect
+  # can reach it over USB.
+  #
+  # WHAT IT IS NOT: this is not a build anybody ships. It is slower, larger, debuggable by
+  # any process on the phone, and its artifact is named so nobody mistakes it for a
+  # release. Nothing here publishes: no tag, no release, no store.
+  build-debug-apk:
+    name: Debug APK (diagnostic only)
+    if: >-
+      (github.event_name == 'workflow_dispatch' && inputs.debug_apk)
+      || github.event.label.name == 'build-debug-apk'
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+
+    steps:
+      - name: Refuse to run on a fork
+        if: >-
+          github.event_name != 'workflow_dispatch'
+          && github.event.pull_request.head.repo.full_name != github.repository
+        run: |
+          echo "::error::This job signs with the release key and does not run on forks."
+          exit 1
+
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Install Android NDK
+        run: sdkmanager "ndk;29.0.14206865"
+
+      - name: Install Rust stable with Android target
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-linux-android
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+
+      - name: Cache Rust dependencies
+        uses: Swatinem/rust-cache@v2
+        with:
+          # A key of its own: this is the debug profile, and sharing the release cache
+          # would evict the artifacts the other jobs depend on.
+          workspaces: './src-tauri -> target'
+          shared-key: android-debug
+          cache-on-failure: true
+
+      - name: Install Node.js dependencies
+        run: npm ci
+
+      - name: Install Tauri CLI
+        run: npm install --save-dev @tauri-apps/cli
+
+      - name: Record the commit being built
+        shell: bash
+        run: |
+          sha="${{ github.event.pull_request.head.sha || github.sha }}"
+          echo "SHORT_SHA=${sha:0:7}" >> "$GITHUB_ENV"
+
+      - name: Build the debug APK
+        run: npx tauri android build --apk --target aarch64 --debug
+        env:
+          NDK_HOME: ${{ env.ANDROID_HOME }}/ndk/29.0.14206865
+
+      - name: Sign it with the release key and check the certificate
+        env:
+          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          set -euo pipefail
+          BUILT="src-tauri/gen/android/app/build/outputs/apk/universal/debug/app-universal-debug.apk"
+          SIGNED="src-tauri/gen/android/app/build/outputs/apk/universal/debug/Daylo-android-arm64-debug.apk"
+
+          # The same certificate the published Daylo carries. Signing the diagnostic build
+          # with it is the whole point: a different key cannot install over somebody's app,
+          # and uninstalling to make room erases their data, which is exactly what we are
+          # trying not to do while diagnosing.
+          EXPECTED="D6:2D:F3:2D:72:B1:54:87:C4:19:89:81:A7:35:0B:1D:74:F0:E6:60:71:A4:F8:95:88:86:AD:88:0C:45:F7:BD"
+
+          for v in ANDROID_KEYSTORE_BASE64 ANDROID_KEYSTORE_PASSWORD ANDROID_KEY_ALIAS ANDROID_KEY_PASSWORD; do
+            if [ -z "${!v:-}" ]; then
+              echo "::error::Missing secret $v. Not falling back to a generated key: an APK"
+              echo "::error::signed with a different key cannot install over the one people"
+              echo "::error::already have, and uninstalling erases their data."
+              exit 1
+            fi
+          done
+
+          echo "$ANDROID_KEYSTORE_BASE64" | base64 -d > release.jks
+          trap 'rm -f release.jks' EXIT
+
+          cp "$BUILT" work.apk
+          # A debug build arrives already signed with the debug keystore. Those signature
+          # files are stripped first rather than left for apksigner to replace, so that the
+          # APK being signed is unambiguous rather than the result of an overwrite.
+          zip -q -d work.apk 'META-INF/*.RSA' 'META-INF/*.SF' 'META-INF/*.DSA' 'META-INF/MANIFEST.MF' || true
+
+          BT="${ANDROID_HOME}/build-tools/$(ls ${ANDROID_HOME}/build-tools/ | tail -1)"
+          "$BT/zipalign" -f 4 work.apk "$SIGNED"
+          "$BT/apksigner" sign \
+            --ks release.jks \
+            --ks-pass "env:ANDROID_KEYSTORE_PASSWORD" \
+            --key-pass "env:ANDROID_KEY_PASSWORD" \
+            --ks-key-alias "$ANDROID_KEY_ALIAS" \
+            "$SIGNED"
+
+          certs=$("$BT/apksigner" verify --print-certs "$SIGNED")
+          echo "$certs"
+          actual=$(grep -m1 -oE 'SHA-256 digest: [0-9a-f]+' <<< "$certs" | awk '{print $NF}' \
+            | tr 'a-f' 'A-F' | sed 's/../&:/g;s/:$//')
+
+          if [ "$actual" != "$EXPECTED" ]; then
+            echo "::error::This APK is signed with a different certificate than the one"
+            echo "::error::people already have, so it cannot be installed over their Daylo."
+            echo "::error::expected $EXPECTED"
+            echo "::error::got      $actual"
+            exit 1
+          fi
+          echo "certificate matches the one on published Daylo installs"
+
+      - name: Check it is really a debug build
+        run: |
+          set -euo pipefail
+          SIGNED="src-tauri/gen/android/app/build/outputs/apk/universal/debug/Daylo-android-arm64-debug.apk"
+          BT="${ANDROID_HOME}/build-tools/$(ls ${ANDROID_HOME}/build-tools/ | tail -1)"
+          if [ -x "$BT/aapt2" ]; then
+            badging=$("$BT/aapt2" dump badging "$SIGNED")
+          else
+            badging=$("$BT/aapt" dump badging "$SIGNED")
+          fi
+
+          # The job exists to make the logs speak, and only a debuggable build does. An
+          # artifact that quietly came out of the release profile would send somebody to a
+          # phone to read lines that are not there.
+          if ! grep -q "application-debuggable" <<< "$badging"; then
+            echo "::error::This APK is not debuggable, so Tauri, wry and the plugins will"
+            echo "::error::log nothing and the whole point of this job is lost."
+            exit 1
+          fi
+          grep -E "^package:|application-debuggable" <<< "$badging"
+
+      - name: Upload the debug APK
+        uses: actions/upload-artifact@v4
+        with:
+          # DEBUG in the name on purpose: nobody should reach for this by accident.
+          name: daylo-android-arm64-DEBUG-${{ env.SHORT_SHA || github.sha }}
+          path: src-tauri/gen/android/app/build/outputs/apk/universal/debug/Daylo-android-arm64-debug.apk
           retention-days: 7
           if-no-files-found: error
