@@ -48,12 +48,19 @@ def main(path: str, status_bar: int = STATUS_BAR) -> int:
     width, height = image.size
     if status_bar and height > status_bar:
         image = image.crop((0, status_bar, width, height))
-    pixels = list(image.getdata())
+    # getcolors rather than getdata: one pass, no list of two million tuples, and it is
+    # not the call Pillow is in the middle of removing. The argument is a ceiling on how
+    # many distinct colours it will tolerate before giving up and returning None; every
+    # colour a 24-bit image can hold is under it, so it never does.
+    histogram = image.getcolors(1 << 24)
+    if histogram is None:
+        print("::error::The screenshot has more colours than fit in 24 bits, which cannot happen.")
+        return 1
 
-    colours = len(set(pixels))
+    colours = len(histogram)
     brand = sum(
-        1
-        for pixel in pixels
+        count
+        for count, pixel in histogram
         if all(abs(pixel[i] - BRAND[i]) <= TOLERANCE for i in range(3))
     )
     print(f"below the status bar: {colours} distinct colours, {brand} pixels of brand green")
