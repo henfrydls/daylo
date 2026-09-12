@@ -1,0 +1,152 @@
+import {
+  cancel,
+  isPermissionGranted,
+  pending,
+  requestPermission,
+  Schedule,
+  sendNotification,
+} from '@tauri-apps/plugin-notification'
+import { invoke, isTauri } from '@tauri-apps/api/core'
+
+/**
+ * One fixed id, so Daylo owns exactly one reminder and can always find it again. Cancelling
+ * by id rather than calling cancelAll matters: cancelAll would take down anything else the
+ * app ever schedules, and a reminder that quietly removes other notifications is a worse
+ * bug than a reminder that fails to appear.
+ */
+export const REMINDER_ID = 1
+
+const TITLE = 'Daylo'
+const BODY = 'How did today go? Tap to log it.'
+
+/** 21:00 as the person's own clock would write it, so the text matches what they set. */
+export function formatReminderTime(hour: number, minute: number): string {
+  return new Date(2026, 0, 1, hour, minute).toLocaleTimeString(undefined, {
+    hour: 'numeric',
+    minute: '2-digit',
+  })
+}
+
+export type ReminderOutcome =
+  /** Scheduled. */
+  | 'on'
+  /** The person said no to notifications. Nothing is scheduled and nothing is asked again. */
+  | 'permission-denied'
+  /** Not the Android app. Nothing to schedule. */
+  | 'unavailable'
+
+/**
+ * Whether this build can schedule a reminder at all.
+ *
+ * Asks the app rather than the user agent, the same way the save dialog does:
+ * reminders_available is registered on Android only, so a rejected call means every other
+ * platform. Desktop is deliberately out: a notification that only fires while the app is
+ * running is not a reminder, and nobody has asked for one.
+ */
+export async function remindersAvailable(): Promise<boolean> {
+  if (!isTauri()) {
+    return false
+  }
+  try {
+    return await invoke<boolean>('reminders_available')
+  } catch {
+    return false
+  }
+}
+
+/**
+ * Turn the daily reminder on at the given local time.
+ *
+ * The schedule is an interval matching an hour and a minute, which Android re-arms by
+ * itself and which the plugin restores after a reboot. allowWhileIdle is set because
+ * without it the alarm will not wake a dozing phone, and an evening reminder that waits
+ * for the phone to be picked up is no reminder at all.
+ *
+ * It will fire whether or not anything was logged that day. Suppressing it on a day
+ * already logged would mean cancelling and re-arming from inside the app, and then a
+ * person who does not open Daylo for three days stops being reminded on the days they
+ * most need it. The wording is neutral for that reason.
+ */
+export async function enableReminder(hour: number, minute: number): Promise<ReminderOutcome> {
+  if (!(await remindersAvailable())) {
+    return 'unavailable'
+  }
+
+  let granted = await isPermissionGranted()
+  if (!granted) {
+    granted = (await requestPermission()) === 'granted'
+  }
+  if (!granted) {
+    return 'permission-denied'
+  }
+
+  // Replaces rather than stacks: scheduling the same id again overwrites it, so changing
+  // the time cannot leave yesterday's reminder behind.
+  sendNotification({
+    id: REMINDER_ID,
+    title: TITLE,
+    body: BODY,
+    schedule: Schedule.interval({ hour, minute }, true),
+  })
+
+  return 'on'
+}
+
+/**
+ * Arm an already-enabled reminder again, without asking for anything.
+ *
+ * The plugin sets the first alarm with setExactAndAllowWhileIdle on RTC_WAKEUP, but it
+ * re-arms every later one from its own receiver with plain RTC, no wakeup and no idle
+ * allowance. From the second evening on, a phone in Doze can hold the reminder back until
+ * it next wakes. Scheduling it again when Daylo is opened restores the good alarm for the
+ * next evening, and it costs one call.
+ *
+ * It also puts the switch back in step with the phone: a permission taken away in the
+ * system settings leaves nothing scheduled, and this is how the app finds out. Returns
+ * whether the reminder is on after the call.
+ */
+export async function refreshReminder(hour: number, minute: number): Promise<boolean> {
+  if (!(await remindersAvailable())) {
+    return false
+  }
+  // Deliberately does not request it. Being asked again on every launch is how an app
+  // teaches people to say no.
+  if (!(await isPermissionGranted())) {
+    return false
+  }
+
+  sendNotification({
+    id: REMINDER_ID,
+    title: TITLE,
+    body: BODY,
+    schedule: Schedule.interval({ hour, minute }, true),
+  })
+
+  return true
+}
+
+/** Turn it off. Silent if it was never on. */
+export async function disableReminder(): Promise<void> {
+  if (!(await remindersAvailable())) {
+    return
+  }
+  await cancel([REMINDER_ID])
+}
+
+/**
+ * Take the reminder down when there is nothing left to be reminded about.
+ *
+ * Someone who deletes their last activity should not keep getting asked how the day went,
+ * and a reminder outliving what it reminds about is the kind of thing that gets an app
+ * uninstalled. Reads what is actually scheduled rather than trusting stored state, because
+ * the two can drift: the phone's own settings can take notifications away.
+ */
+export async function reconcileReminder(activityCount: number): Promise<void> {
+  if (activityCount > 0 || !(await remindersAvailable())) {
+    return
+  }
+  const scheduled = await pending()
+  if (scheduled.some((n) => n.id === REMINDER_ID)) {
+    await cancel([REMINDER_ID])
+  }
+}

@@ -84,6 +84,17 @@ async fn file_portal_answers() -> bool {
     }
 }
 
+/// Whether this build can schedule a daily reminder.
+///
+/// Registered on Android only, so a rejected call means every other platform. The desktop
+/// is deliberately out: a notification that only fires while the app is running is not a
+/// reminder, and nothing on the desktop restores a schedule after a restart.
+#[cfg(target_os = "android")]
+#[tauri::command]
+fn reminders_available() -> bool {
+    true
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     let builder = tauri::Builder::default().plugin(tauri_plugin_shell::init());
@@ -104,11 +115,18 @@ pub fn run() {
             ]);
 
     // Android writes through the filesystem plugin rather than through write_text_file:
-    // the picker returns a content:// URI and std::fs cannot open one.
+    // the picker returns a content:// URI and std::fs cannot open one. The notification
+    // plugin is here and nowhere else: it is what survives a reboot, because it persists
+    // what it scheduled and re-arms it from a BOOT_COMPLETED receiver of its own.
     #[cfg(target_os = "android")]
     let builder = builder
         .plugin(tauri_plugin_fs::init())
-        .invoke_handler(tauri::generate_handler![greet, save_dialog_available]);
+        .plugin(tauri_plugin_notification::init())
+        .invoke_handler(tauri::generate_handler![
+            greet,
+            save_dialog_available,
+            reminders_available
+        ]);
 
     // iOS registers neither, so the frontend falls back to the browser download, which is
     // what it has always done there. Nothing about iOS has been tested.

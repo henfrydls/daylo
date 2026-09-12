@@ -1,7 +1,7 @@
 import { memo, useMemo } from 'react'
 import { YearHeatmap } from './YearHeatmap'
 import { HeatmapLegend } from './HeatmapLegend'
-import { currentStreak } from '../../lib/streaks'
+import { summariseActivities } from '../../lib/activityYear'
 import type { Activity, ActivityLog, HeatmapLevel } from '../../types'
 
 interface YearByActivityProps {
@@ -31,28 +31,7 @@ export const YearByActivity = memo(function YearByActivity({
   selectedDate,
   onSelectDate,
 }: YearByActivityProps) {
-  const rows = useMemo(() => {
-    // Only completed logs count. An unticked log is a day somebody left a note on, and
-    // treating it as done would inflate every figure on this screen.
-    const doneByActivity = new Map<string, Set<string>>()
-    for (const entry of logs) {
-      if (!entry.completed) continue
-      const done = doneByActivity.get(entry.activityId) ?? new Set<string>()
-      done.add(entry.date)
-      doneByActivity.set(entry.activityId, done)
-    }
-
-    const today = new Date()
-    return activities.map((item) => {
-      const done = doneByActivity.get(item.id) ?? new Set<string>()
-      return {
-        activity: item,
-        done,
-        days: done.size,
-        streak: currentStreak(done, today),
-      }
-    })
-  }, [activities, logs])
+  const rows = useMemo(() => summariseActivities(activities, logs, new Date()), [activities, logs])
 
   if (activities.length === 0) {
     return (

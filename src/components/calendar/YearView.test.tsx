@@ -553,6 +553,99 @@ describe('YearView', () => {
       expect(screen.getByRole('button', { name: 'Go to current year' })).toBeInTheDocument()
     })
 
+    it('offers the same two ways of reading the year', () => {
+      render(<YearView />)
+
+      const toggle = within(screen.getByRole('group', { name: /how to show the year/i }))
+      expect(toggle.getByRole('button', { name: 'All activities' })).toHaveAttribute(
+        'aria-pressed',
+        'true'
+      )
+      expect(screen.getByTestId('month-cards-grid')).toBeInTheDocument()
+    })
+
+    // A phone cannot show 365 squares and mean anything by them, so By activity is a
+    // block per week rather than the desktop's row per day.
+    it('swaps the month cards for a strip per activity', () => {
+      useCalendarStore.setState({
+        activities: [
+          {
+            id: 'a1',
+            name: 'Hiking',
+            color: '#8B5CF6',
+            createdAt: '2024-01-01',
+            updatedAt: '2024-01-01',
+          },
+        ],
+        selectedYear: 2024,
+      })
+      render(<YearView />)
+
+      fireEvent.click(screen.getByRole('button', { name: 'By activity' }))
+
+      expect(screen.getByTestId('strip-Hiking')).toBeInTheDocument()
+      expect(screen.getAllByTestId('week-block')).toHaveLength(26)
+      expect(screen.queryByTestId('month-cards-grid')).not.toBeInTheDocument()
+    })
+
+    // "The last 26 weeks" of a year already over means the ones it ended with. Anchoring
+    // every strip on today would show 2023 the weeks before this morning, which are not
+    // in 2023 at all.
+    it('ends the strips on the year being looked at, not on today', () => {
+      useCalendarStore.setState({
+        activities: [
+          {
+            id: 'a1',
+            name: 'Hiking',
+            color: '#8B5CF6',
+            createdAt: '2023-01-01',
+            updatedAt: '2023-01-01',
+          },
+        ],
+        logs: [
+          {
+            id: 'l1',
+            activityId: 'a1',
+            date: '2023-12-27',
+            completed: true,
+            createdAt: '2023-12-27',
+          },
+        ],
+        selectedYear: 2023,
+      })
+      render(<YearView />)
+
+      fireEvent.click(screen.getByRole('button', { name: 'By activity' }))
+
+      const strip = screen.getByTestId('strip-Hiking')
+      const weeks = within(strip).getAllByTestId('week-block')
+      // 31 December 2023 was itself a Sunday, so the year ends on a week of its own and
+      // the log four days earlier belongs to the one before it.
+      expect(weeks[25]).toHaveAttribute('aria-label', 'Week of Dec 31: 0 of 7 days')
+      expect(weeks[24]).toHaveAttribute('aria-label', 'Week of Dec 24: 1 of 7 days')
+    })
+
+    // The desktop grid is 365 buttons. Rendering it behind a phone layout would cost that
+    // for nothing, and it is not what this view shows.
+    it('never draws the desktop grid, in either mode', () => {
+      useCalendarStore.setState({
+        activities: [
+          {
+            id: 'a1',
+            name: 'Hiking',
+            color: '#8B5CF6',
+            createdAt: '2024-01-01',
+            updatedAt: '2024-01-01',
+          },
+        ],
+      })
+      render(<YearView />)
+
+      fireEvent.click(screen.getByRole('button', { name: 'By activity' }))
+
+      expect(screen.queryAllByTestId('day-cell')).toHaveLength(0)
+    })
+
     it('should not render desktop day cells on mobile', () => {
       render(<YearView />)
 

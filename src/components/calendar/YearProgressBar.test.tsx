@@ -18,6 +18,7 @@ describe('YearProgressBar', () => {
     year: 2024,
     logsByDate: new Map<string, number>(),
     totalActivities: 2,
+    currentStreak: 0,
   }
 
   it('should not render when there are no activities', () => {
@@ -54,19 +55,33 @@ describe('YearProgressBar', () => {
     expect(screen.getByText(/days active/)).toBeInTheDocument()
   })
 
-  it('should show current streak', () => {
+  // The bar no longer works the run out for itself. It shows the one it is handed, which
+  // is worked out over every log there is, so this and the Statistics panel cannot end up
+  // reporting different numbers for the same run.
+  it('shows the streak it is given', () => {
+    render(<YearProgressBar {...defaultProps} currentStreak={3} />)
+
+    const streakText = screen.getByText(/d streak/)
+    expect(streakText.textContent).toContain('3')
+  })
+
+  it('says nothing about a streak of nothing', () => {
+    render(<YearProgressBar {...defaultProps} currentStreak={0} />)
+
+    expect(screen.queryByText(/d streak/)).not.toBeInTheDocument()
+  })
+
+  // "N/M days active" has the days gone by on the right of the slash, so a day still to
+  // come on the left would be claiming more active days than there have been. An imported
+  // file can carry dates in the future.
+  it('does not count a day still to come among the active ones', () => {
     const logsByDate = new Map<string, number>()
-    // Add streak: Jun 13, 14, 15
-    logsByDate.set('2024-06-13', 1)
     logsByDate.set('2024-06-14', 1)
-    logsByDate.set('2024-06-15', 1)
+    logsByDate.set('2024-12-01', 1)
 
     render(<YearProgressBar {...defaultProps} logsByDate={logsByDate} />)
 
-    expect(screen.getByText(/d streak/)).toBeInTheDocument()
-    // Verify the streak value is 3 by checking the parent span
-    const streakText = screen.getByText(/d streak/)
-    expect(streakText.textContent).toContain('3')
+    expect(screen.getByText(/days active/).textContent).toMatch(/^1\//)
   })
 
   it('should show best month', () => {

@@ -18,6 +18,56 @@ you point at them. They can still be picked: two activities can share a color, i
 harder to tell them apart. If you have used every color, nothing is dimmed, because at
 that point it would only make the palette look broken.
 
+**The year is one calendar now, instead of twelve small ones.** On a computer the year
+used to be twelve separate month blocks, and a run that crossed the end of a month looked
+like two shorter runs. It is now a single strip, a column per week, so a long run reads as
+a long run. Underneath it you get the days you were active, how many things you completed,
+and how much of each month you finished, and any of those months takes you into it.
+
+**You can also read the year one activity at a time.** A new switch in the year view, All
+activities or By activity, draws the same year once per activity in its own colour, with
+the days it has behind it and the run it is on. On a phone each activity gets the last
+twenty six weeks instead, one block per week, darker the more days of that week you did,
+which is as much as a phone can show a week at a time and still be worth looking at.
+
+Daylo remembers which of the two you were reading.
+
+**The year can be walked with the arrow keys.** Tab once to reach the calendar, then move
+a day at a time up and down or a week at a time left and right. It says the date and what
+you did that day as you go, which it never did before.
+
+**Your streak no longer resets on the first of January.** Daylo worked out your current
+streak from the year you happened to be looking at, so on New Year's Day everybody's run
+started again at one, whatever they had done in December. It counts across years now,
+which is what a run is.
+
+**And it no longer reads zero every morning.** Until today is ticked, the streak counts up
+to yesterday. Before, it showed 0 from midnight until you opened Daylo and ticked
+something, which is a strange thing to tell somebody who has not missed a day. It ends
+when a whole day goes by unticked, as it always did.
+
+Longest streak is now the best you have ever had rather than the best of the year on
+screen. And days dated in the future, which can arrive in a file you import, no longer
+count as active days or towards either streak.
+
+Each figure now says what stretch of time it covers, under the number: your active days
+are this year's, your current streak is today's, and your longest is the best of all time.
+
+You may see these numbers change the first time you open this version. Nothing happened to
+your data; only the counting changed.
+
+**Android can remind you each evening.** A daily notification asks how the day went, at a
+time you choose, so a day does not go by unlogged. It is off until you ask for it: after
+you create your first habit Daylo offers it once, and if you say no it does not ask again.
+You can turn it on, move the time or turn it off from the menu at any time, and it stays
+on after you restart your phone. Android decides the exact minute, so it may arrive a few
+minutes either side of the time you picked. If the phone has been sitting unused for days,
+Android can hold it back further while it sleeps; opening Daylo puts the next one back on
+time.
+
+The reminder is only on Android. On a computer a notification could only arrive while
+Daylo was already open, which is not a reminder.
+
 **Buttons stop glowing after you tap them.** On a phone, tapping the Year or Month switch
 left a green ring around it, and if you then swiped to the other view the ring stayed
 behind on the one you had left, so two buttons looked picked at once. Rings are for
