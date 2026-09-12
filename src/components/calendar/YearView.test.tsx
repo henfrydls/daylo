@@ -558,4 +558,55 @@ describe('YearView', () => {
       expect(dayCells).toHaveLength(0)
     })
   })
+
+  describe('the All activities / By activity toggle', () => {
+    // Both halves are asserted. With only the pressed one checked, a control that
+    // reported every option as pressed would pass, and a screen reader would be told the
+    // year is shown two ways at once.
+    it('says which of the two is showing, and moves it', () => {
+      render(<YearView />)
+      const toggle = within(screen.getByRole('group', { name: /how to show the year/i }))
+      const all = () => toggle.getByRole('button', { name: 'All activities' })
+      const byActivity = () => toggle.getByRole('button', { name: 'By activity' })
+
+      expect(all()).toHaveAttribute('aria-pressed', 'true')
+      expect(byActivity()).toHaveAttribute('aria-pressed', 'false')
+
+      fireEvent.click(byActivity())
+
+      expect(all()).toHaveAttribute('aria-pressed', 'false')
+      expect(byActivity()).toHaveAttribute('aria-pressed', 'true')
+    })
+
+    it('switches to a row per activity', () => {
+      useCalendarStore.setState({
+        activities: [
+          {
+            id: 'a1',
+            name: 'Hiking',
+            color: '#8B5CF6',
+            createdAt: '2024-01-01',
+            updatedAt: '2024-01-01',
+          },
+        ],
+      })
+      render(<YearView />)
+
+      fireEvent.click(screen.getByRole('button', { name: 'By activity' }))
+
+      expect(screen.getByTestId('activity-row-Hiking')).toBeInTheDocument()
+      expect(useCalendarStore.getState().yearMode).toBe('byActivity')
+    })
+
+    // The figures under the grid describe the year as a whole, and each row carries its
+    // own in the other view, so repeating them there would say the same thing twice.
+    it('keeps the year figures for the combined view only', () => {
+      render(<YearView />)
+      expect(screen.getByTestId('month-completion')).toBeInTheDocument()
+
+      fireEvent.click(screen.getByRole('button', { name: 'By activity' }))
+
+      expect(screen.queryByTestId('month-completion')).not.toBeInTheDocument()
+    })
+  })
 })
