@@ -40,6 +40,9 @@ Longest streak is now the best you have ever had rather than the best of the yea
 screen. And days dated in the future, which can arrive in a file you import, no longer
 count as active days or towards either streak.
 
+Each figure now says what stretch of time it covers, under the number: your active days
+are this year's, your current streak is today's, and your longest is the best of all time.
+
 You may see these numbers change the first time you open this version. Nothing happened to
 your data; only the counting changed.
 

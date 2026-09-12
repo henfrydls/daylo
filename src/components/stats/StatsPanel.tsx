@@ -68,8 +68,11 @@ export function StatsPanel() {
       <h2 className="text-base sm:text-lg font-semibold text-gray-900 mb-3 sm:mb-4">Statistics</h2>
       <div className="grid grid-cols-2 gap-2 sm:gap-4">
         <StatCard label="Active Days" value={stats.activeDays} subtitle="this year" />
-        <StatCard label="Current Streak" value={stats.currentStreak} subtitle="days" />
-        <StatCard label="Longest Streak" value={stats.longestStreak} subtitle="days" />
+        {/* Each card says what period it covers. The four are not about the same one:
+            active days and this month follow the year on screen, while the streaks are
+            about the person and do not change when an older year is opened. */}
+        <StatCard label="Current Streak" value={stats.currentStreak} subtitle="today" />
+        <StatCard label="Longest Streak" value={stats.longestStreak} subtitle="all time" />
         <StatCard label="This Month" value={`${stats.completionRate}%`} subtitle="completion" />
       </div>
     </div>

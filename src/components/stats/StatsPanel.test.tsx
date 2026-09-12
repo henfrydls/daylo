@@ -122,3 +122,20 @@ describe('with nothing logged', () => {
     expect(figure('Active Days')).toBe('0')
   })
 })
+
+// Each figure says what period it covers, because the four are not all about the same
+// one: looking at a year with nothing in it, "Active Days 0 this year" sits beside a
+// current streak that is alive today, and without the subtitles the 4 reads as if it
+// belonged to the year on screen.
+describe('what period each figure covers', () => {
+  it('says it under the number', () => {
+    show(['2026-03-04'])
+
+    // The card is value, label, subtitle; the subtitle is the one after the label.
+    const under = (label: string) => screen.getByText(label).nextElementSibling!.textContent!.trim()
+
+    expect(under('Active Days')).toBe('this year')
+    expect(under('Current Streak')).toBe('today')
+    expect(under('Longest Streak')).toBe('all time')
+  })
+})
