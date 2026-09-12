@@ -10,6 +10,24 @@ function visibleMenuTrigger(page: import('@playwright/test').Page) {
   return page.getByLabel('More options').filter({ visible: true }).first()
 }
 
+/**
+ * Take the app to the year view.
+ *
+ * Daylo opens on the month now, so every test that works with the year grid has to say
+ * so. Waiting for the year heading rather than for the click matters: the two views swap
+ * behind a transition, and asserting on a cell before the swap lands is how a suite
+ * becomes flaky.
+ */
+async function openYearView(page: import('@playwright/test').Page) {
+  await page.getByRole('button', { name: 'Year', exact: true }).click()
+  await expect(
+    page.locator('h1').filter({ hasText: String(new Date().getFullYear()) })
+  ).toBeVisible()
+  // The heading is there before the view has finished sliding in. Anything that measures
+  // a box has to wait for the animation to land, or it measures a moving one.
+  await page.waitForFunction(() => document.getAnimations().every((a) => a.playState !== 'running'))
+}
+
 // Helper: create an activity via the sidebar form
 async function createActivity(page: import('@playwright/test').Page, name: string) {
   const addButton = page.getByTestId('add-activity-button')
@@ -44,7 +62,7 @@ test.describe('Activity Tracker App', () => {
   })
 
   test('should show empty state message when no activities exist', async ({ page }) => {
-    await expect(page.getByText('No activities yet')).toBeVisible()
+    await expect(page.getByText('No activities yet. Create one to start tracking!')).toBeVisible()
   })
 
   // ── Activity CRUD ─────────────────────────────────────────
@@ -141,6 +159,7 @@ test.describe('Activity Tracker App', () => {
   test('should open QuickLog when clicking a calendar day', async ({ page }) => {
     await createActivity(page, 'Test Activity')
 
+    await openYearView(page)
     const dayCell = page.getByTestId('day-cell').first()
     await dayCell.click()
 
@@ -151,6 +170,7 @@ test.describe('Activity Tracker App', () => {
   test('should toggle activity completion in QuickLog', async ({ page }) => {
     await createActivity(page, 'Meditation')
 
+    await openYearView(page)
     const dayCell = page.getByTestId('day-cell').first()
     await dayCell.click()
 
@@ -170,6 +190,7 @@ test.describe('Activity Tracker App', () => {
   test('should close QuickLog with Done button', async ({ page }) => {
     await createActivity(page, 'Test')
 
+    await openYearView(page)
     const dayCell = page.getByTestId('day-cell').first()
     await dayCell.click()
 
@@ -183,6 +204,7 @@ test.describe('Activity Tracker App', () => {
 
   test('should create activity from QuickLog empty state', async ({ page }) => {
     // Open QuickLog with no activities
+    await openYearView(page)
     const dayCell = page.getByTestId('day-cell').first()
     await dayCell.click()
 
@@ -208,6 +230,7 @@ test.describe('Activity Tracker App', () => {
   test('should show heatmap color after marking activity as completed', async ({ page }) => {
     await createActivity(page, 'Reading')
 
+    await openYearView(page)
     const dayCell = page.getByTestId('day-cell').first()
     await dayCell.click()
 
@@ -226,14 +249,10 @@ test.describe('Activity Tracker App', () => {
   // ── View Toggle ───────────────────────────────────────────
 
   test('should switch between Year and Month views', async ({ page }) => {
-    // Default is Year view
-    const monthButton = page.getByRole('button', { name: 'Month', exact: true })
-    await monthButton.click()
-
-    // Should see month view with day-of-week headers
+    // Daylo opens on the month.
     await expect(page.getByText('Sun')).toBeVisible()
 
-    // Switch back to Year
+    // Switch to Year
     const yearButton = page.getByRole('button', { name: 'Year', exact: true })
     await yearButton.click()
 
@@ -304,9 +323,8 @@ test.describe('Activity Tracker App', () => {
   // ── Year View Navigation ──────────────────────────────────
 
   test('should navigate years with prev/next buttons', async ({ page }) => {
+    await openYearView(page)
     const currentYear = new Date().getFullYear()
-    const yearHeading = page.locator('h1').filter({ hasText: String(currentYear) })
-    await expect(yearHeading).toBeVisible()
 
     // Go to previous year
     const prevButton = page.getByLabel('Previous year')
@@ -327,6 +345,7 @@ test.describe('Activity Tracker App', () => {
     await createActivity(page, 'Exercise')
 
     // Log activity for a day
+    await openYearView(page)
     const dayCell = page.getByTestId('day-cell').first()
     await dayCell.click()
 
@@ -370,6 +389,7 @@ test.describe('Activity Tracker App', () => {
     await createActivity(page, 'Logged Activity')
 
     // Log activity for a day
+    await openYearView(page)
     const dayCell = page.getByTestId('day-cell').first()
     await dayCell.click()
 
@@ -438,12 +458,14 @@ test.describe('Activity Tracker App', () => {
   })
 
   test('should have proper ARIA labels on navigation buttons', async ({ page }) => {
+    await openYearView(page)
     await expect(page.getByLabel('Previous year')).toBeVisible()
     await expect(page.getByLabel('Next year')).toBeVisible()
     await expect(page.getByLabel('Go to current year')).toBeVisible()
   })
 
   test('should have legend for activity levels', async ({ page }) => {
+    await openYearView(page)
     await expect(page.getByText('Less')).toBeVisible()
     await expect(page.getByText('More')).toBeVisible()
   })
@@ -465,6 +487,7 @@ test.describe('year view under the pointer @webkit', () => {
     await page.goto('/')
     await createActivity(page, 'Read')
 
+    await openYearView(page)
     const cell = page.getByTestId('day-cell').nth(20)
     await expect(cell).toBeVisible()
 
