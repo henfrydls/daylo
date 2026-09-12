@@ -48,3 +48,8 @@ nul
 keystore.properties
 *.p12
 *.mobileprovision
+
+# Bytecode de Python. Se genera solo al importar o al compilar un script, va atado a la
+# versión del intérprete que lo escribió, y no aporta nada a nadie que clone el repo.
+__pycache__/
+*.pyc
