@@ -34,3 +34,18 @@ export function summariseActivities(
     return { activity, done, days: done.size, streak: currentStreak(done, today) }
   })
 }
+
+/**
+ * Every day with at least one thing done, across every year there is.
+ *
+ * One definition of "a day that counts", so the sidebar, the progress bar and the year
+ * rows cannot drift apart about what a completed day is. Unticked logs are days somebody
+ * left a note on and are not among them.
+ */
+export function completedDates(logs: ActivityLog[]): Set<string> {
+  const done = new Set<string>()
+  for (const entry of logs) {
+    if (entry.completed) done.add(entry.date)
+  }
+  return done
+}

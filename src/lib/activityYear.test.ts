@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { summariseActivities } from './activityYear'
+import { completedDates, summariseActivities } from './activityYear'
 import type { Activity, ActivityLog } from '../types'
 
 const activity = (id: string, name: string): Activity => ({
@@ -65,5 +65,21 @@ describe('summarising a year by activity', () => {
 
     expect(rows).toHaveLength(1)
     expect(rows[0]).toMatchObject({ days: 0, streak: 0 })
+  })
+})
+
+describe('the days that count', () => {
+  it('gathers every day with something done, whatever the activity or the year', () => {
+    const days = completedDates([
+      log('a', '2025-12-31'),
+      log('b', '2026-01-01'),
+      log('b', '2026-01-01'),
+    ])
+
+    expect([...days].sort()).toEqual(['2025-12-31', '2026-01-01'])
+  })
+
+  it('leaves out a log that was unticked', () => {
+    expect(completedDates([log('a', '2026-03-04', false)]).size).toBe(0)
   })
 })

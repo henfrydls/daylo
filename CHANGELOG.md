@@ -26,6 +26,23 @@ which is as much as a phone can show a week at a time and still be worth looking
 
 Daylo remembers which of the two you were reading.
 
+**Your streak no longer resets on the first of January.** Daylo worked out your current
+streak from the year you happened to be looking at, so on New Year's Day everybody's run
+started again at one, whatever they had done in December. It counts across years now,
+which is what a run is.
+
+**And it no longer reads zero every morning.** Until today is ticked, the streak counts up
+to yesterday. Before, it showed 0 from midnight until you opened Daylo and ticked
+something, which is a strange thing to tell somebody who has not missed a day. It ends
+when a whole day goes by unticked, as it always did.
+
+Longest streak is now the best you have ever had rather than the best of the year on
+screen. And days dated in the future, which can arrive in a file you import, no longer
+count as active days or towards either streak.
+
+You may see these numbers change the first time you open this version. Nothing happened to
+your data; only the counting changed.
+
 **The year can be walked with the arrow keys.** Tab once to reach the calendar, then move
 a day at a time up and down or a week at a time left and right. It says the date and what
 you did that day as you go, which it never did before.
