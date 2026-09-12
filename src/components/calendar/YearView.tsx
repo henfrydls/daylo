@@ -4,9 +4,12 @@ import { YearByActivity } from './YearByActivity'
 import { MonthCard } from './MonthCard'
 import { YearProgressBar } from './YearProgressBar'
 import { HeatmapLegend } from './HeatmapLegend'
+import { ActivityWeekStrip } from './ActivityWeekStrip'
 import { useCalendarStore } from '../../store'
 import { getYearDays, formatDate } from '../../lib/dates'
 import { calculateHeatmapLevel } from '../../lib/colors'
+import { completedDates, summariseActivities } from '../../lib/activityYear'
+import { currentStreak } from '../../lib/streaks'
 import { useMediaQuery } from '../../hooks/useMediaQuery'
 import { useShallow } from 'zustand/react/shallow'
 
@@ -92,6 +95,29 @@ export const YearView = memo(function YearView() {
     })
   }, [dayDataMap, selectedYear])
 
+  /**
+   * The phone's strips end on the week we are in, or on the last week of a year already
+   * over: "the last 26 weeks" of 2024 means the ones it ended with, not the ones before
+   * today.
+   */
+  const stripEnd = useMemo(() => {
+    const now = new Date()
+    const endOfSelected = new Date(selectedYear, 11, 31)
+    return now < endOfSelected ? now : endOfSelected
+  }, [selectedYear])
+
+  /**
+   * The run ending today, over every log rather than over the year on screen: a streak
+   * belongs to the person and not to the calendar, so it neither resets on 1 January nor
+   * changes because somebody looked at an older year.
+   */
+  const streakToday = useMemo(() => currentStreak(completedDates(logs), new Date()), [logs])
+
+  const activityRows = useMemo(
+    () => summariseActivities(activities, logs, stripEnd),
+    [activities, logs, stripEnd]
+  )
+
   const handlePrevYear = useCallback(
     () => setSelectedYear(selectedYear - 1),
     [setSelectedYear, selectedYear]
@@ -103,6 +129,40 @@ export const YearView = memo(function YearView() {
   const handleCurrentYear = useCallback(
     () => setSelectedYear(new Date().getFullYear()),
     [setSelectedYear]
+  )
+
+  /**
+   * Both layouts show the same control, so it is written once. Rendering it twice with
+   * two copies of the markup is how a phone and a desktop end up disagreeing about what
+   * a button is called.
+   */
+  const yearModeToggle = (
+    <div
+      className="inline-flex rounded-lg bg-gray-100 p-1"
+      role="group"
+      aria-label="How to show the year"
+    >
+      {(
+        [
+          ['all', 'All activities'],
+          ['byActivity', 'By activity'],
+        ] as const
+      ).map(([mode, label]) => (
+        <button
+          key={mode}
+          type="button"
+          onClick={() => setYearMode(mode)}
+          aria-pressed={yearMode === mode}
+          className={`rounded-md px-3 py-1.5 text-sm font-medium transition-colors duration-150 focus:ring-2 focus:ring-emerald-500 focus:ring-offset-1 focus:outline-none ${
+            yearMode === mode
+              ? 'bg-white text-gray-900 shadow-sm'
+              : 'text-gray-500 hover:text-gray-700'
+          }`}
+        >
+          {label}
+        </button>
+      ))}
+    </div>
   )
 
   // --- Mobile Layout: Year Summary Cards ---
@@ -171,27 +231,57 @@ export const YearView = memo(function YearView() {
             year={selectedYear}
             logsByDate={logsByDate}
             totalActivities={activities.length}
+            currentStreak={streakToday}
           />
         </div>
 
-        {/* Month Cards Grid (3 columns x 4 rows) */}
-        <div className="grid grid-cols-3 gap-2" data-testid="month-cards-grid">
-          {Array.from({ length: 12 }, (_, month) => (
-            <MonthCard
-              key={month}
-              year={selectedYear}
-              month={month}
-              totalActivities={activities.length}
-              logsByDate={logsByDate}
-              onSelect={(m) => navigateToMonth(selectedYear, m)}
-            />
-          ))}
+        <div className="mb-4 flex items-center justify-between gap-2">
+          {yearModeToggle}
+          {yearMode === 'byActivity' ? (
+            <span className="text-xs text-gray-500">Last 26 weeks</span>
+          ) : null}
         </div>
 
-        {/* Heatmap Legend */}
-        <div className="mt-4 flex justify-center">
-          <HeatmapLegend />
-        </div>
+        {yearMode === 'all' ? (
+          <>
+            {/* Month Cards Grid (3 columns x 4 rows) */}
+            <div className="grid grid-cols-3 gap-2" data-testid="month-cards-grid">
+              {Array.from({ length: 12 }, (_, month) => (
+                <MonthCard
+                  key={month}
+                  year={selectedYear}
+                  month={month}
+                  totalActivities={activities.length}
+                  logsByDate={logsByDate}
+                  onSelect={(m) => navigateToMonth(selectedYear, m)}
+                />
+              ))}
+            </div>
+
+            {/* Heatmap Legend */}
+            <div className="mt-4 flex justify-center">
+              <HeatmapLegend />
+            </div>
+          </>
+        ) : activityRows.length === 0 ? (
+          <p className="py-8 text-center text-sm text-gray-500">
+            No activities yet. Add one to see its weeks.
+          </p>
+        ) : (
+          <div>
+            {activityRows.map(({ activity, done, days, streak }) => (
+              <ActivityWeekStrip
+                key={activity.id}
+                name={activity.name}
+                color={activity.color}
+                done={done}
+                end={stripEnd}
+                days={days}
+                streak={streak}
+              />
+            ))}
+          </div>
+        )}
       </div>
     )
   }
@@ -260,32 +350,7 @@ export const YearView = memo(function YearView() {
         <div className="flex items-center gap-4">
           {/* Which way the year reads. A segmented control rather than a switch: both
               options are views of the same year, neither is on or off. */}
-          <div
-            className="inline-flex rounded-lg bg-gray-100 p-1"
-            role="group"
-            aria-label="How to show the year"
-          >
-            {(
-              [
-                ['all', 'All activities'],
-                ['byActivity', 'By activity'],
-              ] as const
-            ).map(([mode, label]) => (
-              <button
-                key={mode}
-                type="button"
-                onClick={() => setYearMode(mode)}
-                aria-pressed={yearMode === mode}
-                className={`rounded-md px-3 py-1.5 text-sm font-medium transition-colors duration-150 focus:ring-2 focus:ring-emerald-500 focus:ring-offset-1 focus:outline-none ${
-                  yearMode === mode
-                    ? 'bg-white text-gray-900 shadow-sm'
-                    : 'text-gray-500 hover:text-gray-700'
-                }`}
-              >
-                {label}
-              </button>
-            ))}
-          </div>
+          {yearModeToggle}
 
           {/* The legend names the five shades of the combined heatmap. A row per activity
               is one colour or grey, so in that mode it moves down to the only row it

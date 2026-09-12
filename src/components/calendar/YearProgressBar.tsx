@@ -20,14 +20,21 @@ interface YearProgressBarProps {
   year: number
   logsByDate: Map<string, number>
   totalActivities: number
+  /**
+   * The run ending today, worked out over every log there is rather than over this year.
+   * It arrives as a number instead of being computed here so that this bar and the
+   * Statistics panel cannot disagree about the same run.
+   */
+  currentStreak: number
 }
 
 export const YearProgressBar = memo(function YearProgressBar({
   year,
   logsByDate,
   totalActivities,
+  currentStreak,
 }: YearProgressBarProps) {
-  const { activeDays, totalDaysElapsed, percentage, currentStreak, bestMonth } = useMemo(() => {
+  const { activeDays, totalDaysElapsed, percentage, bestMonth } = useMemo(() => {
     const yearDays = getYearDays(year)
     const today = new Date()
 
@@ -35,30 +42,18 @@ export const YearProgressBar = memo(function YearProgressBar({
     const elapsed = yearDays.filter((d) => d <= today).length
 
     // Count days with at least one completion
+    // Days gone by only: the bar reads "N/M days active", and M stops at today, so a day
+    // still to come on the left of that slash would be claiming the impossible.
+    const limit = formatDate(today)
     const daysWithActivity = new Set<string>()
     logsByDate.forEach((count, dateStr) => {
-      if (count > 0 && dateStr.startsWith(String(year))) {
+      if (count > 0 && dateStr.startsWith(String(year)) && dateStr <= limit) {
         daysWithActivity.add(dateStr)
       }
     })
 
     const active = daysWithActivity.size
     const pct = elapsed > 0 ? Math.round((active / elapsed) * 100) : 0
-
-    // Current streak (from today backwards)
-    let streak = 0
-    const sortedDays = yearDays
-      .filter((d) => d <= today)
-      .map((d) => formatDate(d))
-      .reverse()
-
-    for (const dateStr of sortedDays) {
-      if (daysWithActivity.has(dateStr)) {
-        streak++
-      } else {
-        break
-      }
-    }
 
     // Best month by active days count
     const monthCounts = new Array(12).fill(0)
@@ -80,7 +75,6 @@ export const YearProgressBar = memo(function YearProgressBar({
       activeDays: active,
       totalDaysElapsed: elapsed,
       percentage: pct,
-      currentStreak: streak,
       bestMonth: bestMonthCount > 0 ? MONTHS_SHORT[bestMonthIdx] : null,
     }
   }, [year, logsByDate])
