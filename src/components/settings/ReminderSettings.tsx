@@ -11,18 +11,34 @@ interface ReminderSettingsProps {
 /**
  * The daily reminder, as one decision and one number.
  *
- * There is no checkbox and no Done. Somebody told us why: "I set the time and press Done,
- * and only then notice I also have to tick the box." Three controls for one decision, and
- * the one that looked like the commit was only a close button. So the button that commits
- * says what committing does, with the time in it, and the state is stated in words rather
- * than left to be read off a control's position.
+ * There is no checkbox. Somebody told us why: "I set the time and press Done, and only
+ * then notice I also have to tick the box." Three controls for one decision, and the one
+ * that looked like the commit was only a close button. So the button that commits says
+ * what committing does, with the time in it.
+ *
+ * There is a Done, but only where one is true. Somebody else opened this with the
+ * reminder already on, moved the time, and found nothing but "Stop reminders" underneath:
+ * "no había como un aceptar, qué sé yo". So the finish appears exactly when something has
+ * been finished — the reminder is on and its time was moved in this sitting — and never
+ * otherwise, because a Done in a sheet where nothing has happened is the close button
+ * wearing a costume, which is what was removed in the first place.
+ *
+ * It does not save. The new time is already scheduled by the time the button exists; the
+ * picker's own OK did that. Nothing can be lost by closing any other way, and every way
+ * of closing calls the same thing.
+ *
+ * The status line carries the whole state, and the same person is why it is a sentence
+ * about what is happening rather than a label: he did not notice "Reminder is on". On and
+ * off now differ in shape as well as in words, two lines against one, which is read before
+ * anything is parsed.
  *
  * It borrows the rest from the Export dialog rather than inventing a look: the same
- * padding, the same 14px medium button in the modal's own footer, nothing larger than the
+ * padding, the same 14px medium buttons in the modal's own footer, nothing larger than the
  * title, and no filled panels. The first attempt used its own sizes and weights and was
  * told, correctly, that it did not feel like the app. The only colour is one dot, and it
  * moves: on the button while the reminder is off, and up to the status once it is on, so
- * there is exactly one green thing on screen at a time.
+ * there is exactly one green thing on screen at a time. That is also why Done is the grey
+ * button and not the green one, and why Stop steps back to a ghost to let it lead.
  */
 export function ReminderSettings({ isOpen, onClose }: ReminderSettingsProps) {
   const enabled = useCalendarStore((s) => s.reminderEnabled)
@@ -66,18 +82,32 @@ export function ReminderSettings({ isOpen, onClose }: ReminderSettingsProps) {
     }
   }, [isOpen])
 
+  // Whether a reschedule has happened since this sheet was opened, which is the only thing
+  // Done is there to conclude. Not "the time differs from the one it had": moving the time
+  // and moving it back is still two reschedules, and the sheet should not pretend nothing
+  // occurred. Reset on opening, so a Done never survives from a previous sitting.
+  const [timeMoved, setTimeMoved] = useState(false)
+
+  useEffect(() => {
+    if (isOpen) setTimeMoved(false)
+  }, [isOpen])
+
   const at = formatReminderTime(hour, minute)
 
   // Changes take effect as they are made, the way a phone's own settings behave. The store
   // is only written once the platform has agreed, so a refusal cannot leave this claiming
   // a reminder that was never scheduled.
-  const turnOn = async (nextHour: number, nextMinute: number) => {
+  const turnOn = async (nextHour: number, nextMinute: number, fromPicker = false) => {
     setBusy(true)
     try {
       const { outcome, reason } = await enableReminder(nextHour, nextMinute)
       if (outcome === 'on') {
         setFailure(null)
         setReminder(true, nextHour, nextMinute)
+        // Only a reschedule the platform accepted, and only one the picker asked for.
+        // A refusal falls through to the branches below and leaves this alone: a finish
+        // offered over a reminder that is not running would be a lie.
+        if (fromPicker) setTimeMoved(true)
         return
       }
       if (outcome === 'permission-denied') {
@@ -109,7 +139,7 @@ export function ReminderSettings({ isOpen, onClose }: ReminderSettingsProps) {
   // is only remembered, because there is nothing to reschedule.
   const changeTime = (nextHour: number, nextMinute: number) => {
     if (enabled) {
-      void turnOn(nextHour, nextMinute)
+      void turnOn(nextHour, nextMinute, true)
       return
     }
     setReminder(false, nextHour, nextMinute)
@@ -122,16 +152,29 @@ export function ReminderSettings({ isOpen, onClose }: ReminderSettingsProps) {
       title="Daily reminder"
       data-testid="reminder-settings"
       footer={
-        <div className="flex justify-end">
+        // Right-aligned and at their own width, not the half-and-half of the Export
+        // dialog: there the two options are a harmless choice between each other, here one
+        // of them stops the reminder. It also puts Done at the edge and Stop to its left,
+        // so a thumb going where Stop used to be lands on the button that only closes.
+        <div className="flex justify-end gap-3">
           {enabled ? (
-            <Button
-              variant="secondary"
-              onClick={() => void turnOff()}
-              disabled={busy}
-              data-testid="reminder-stop"
-            >
-              Stop reminders
-            </Button>
+            <>
+              <Button
+                variant={timeMoved ? 'ghost' : 'secondary'}
+                onClick={() => void turnOff()}
+                disabled={busy}
+                data-testid="reminder-stop"
+              >
+                Stop reminders
+              </Button>
+              {timeMoved ? (
+                // Never disabled, because it has nothing to wait for: the reschedule it
+                // concludes has already happened.
+                <Button variant="secondary" onClick={onClose} data-testid="reminder-done">
+                  Done
+                </Button>
+              ) : null}
+            </>
           ) : (
             // The button says what pressing it does, with the time in it: the two halves of
             // the question somebody had to guess at before.
@@ -148,7 +191,10 @@ export function ReminderSettings({ isOpen, onClose }: ReminderSettingsProps) {
     >
       <div>
         {/* Said in words, with one dot for the colour. A person should not have to work out
-            whether it is on from the position of a control. */}
+            whether it is on from the position of a control — and one did not work it out
+            from a three letter word and an 8px dot, which is why the first line is now a
+            sentence about what is happening, carries the time, and is the only medium
+            weight text in the body. */}
         <div className="flex items-start gap-2" data-testid="reminder-status">
           <span
             className={`mt-[7px] h-2 w-2 shrink-0 rounded-full ${
@@ -156,13 +202,16 @@ export function ReminderSettings({ isOpen, onClose }: ReminderSettingsProps) {
             }`}
             aria-hidden="true"
           />
-          <div className="min-w-0">
-            <p className="text-gray-900">{enabled ? 'Reminder is on' : 'Reminder is off'}</p>
+          {/* Spoken after the picker closes, because the sentence rewriting itself is the
+              whole acknowledgement that the time moved. Focus stays where it is. */}
+          <div className="min-w-0" aria-live="polite">
+            <p className="font-medium text-gray-900">
+              {enabled ? `Reminding you daily at ${at}` : 'Reminder is off'}
+            </p>
 
             {enabled ? (
               <p className="mt-0.5 text-sm text-gray-500" data-testid="reminder-time-note">
-                Around {at}. Android picks the exact moment: usually close, later if the phone has
-                been asleep.
+                Android picks the exact moment: usually close, later if the phone has been asleep.
               </p>
             ) : null}
 

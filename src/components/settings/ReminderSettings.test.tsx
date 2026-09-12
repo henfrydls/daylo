@@ -24,6 +24,7 @@ const open = () => render(<ReminderSettings isOpen onClose={onClose} />)
 
 const start = () => screen.getByTestId('reminder-start')
 const stop = () => screen.getByTestId('reminder-stop')
+const done = () => screen.queryByTestId('reminder-done')
 const theTime = () => screen.getByTestId('reminder-time')
 const status = () => screen.getByTestId('reminder-status')
 
@@ -41,22 +42,39 @@ afterEach(() => {
 
 // The sheet used to hold three controls for one decision: a checkbox, a time, and a Done
 // that only closed. Somebody set the time, pressed Done, and only then noticed the box.
-describe('the two controls it has', () => {
-  it('has no checkbox and no Done', () => {
+describe('the controls it has', () => {
+  it('has no checkbox anywhere', () => {
     open()
 
     expect(screen.queryByRole('checkbox')).not.toBeInTheDocument()
-    expect(screen.queryByText('Done')).not.toBeInTheDocument()
   })
 
-  it('says whether it is on, in words', () => {
+  // The Done that was removed was a close button in a costume, offered whether or not
+  // anything had happened. The one that came back is only ever offered over something
+  // that did.
+  it('offers no Done while nothing has happened', () => {
+    open()
+    expect(done()).not.toBeInTheDocument()
+
+    useCalendarStore.setState({ reminderEnabled: true })
+    open()
+
+    expect(done()).not.toBeInTheDocument()
+  })
+
+  // Somebody opened this with the reminder already on and did not realise it was on. The
+  // line says what is happening rather than naming a setting, and it carries the time, so
+  // the most read line in the sheet answers both of the questions he had.
+  it('says what is happening, with the time in it', () => {
     open()
     expect(status()).toHaveTextContent('Reminder is off')
 
     useCalendarStore.setState({ reminderEnabled: true })
     open()
 
-    expect(screen.getAllByTestId('reminder-status')[1]).toHaveTextContent('Reminder is on')
+    expect(screen.getAllByTestId('reminder-status')[1]).toHaveTextContent(
+      'Reminding you daily at 9:00 PM'
+    )
   })
 
   // The button answers both halves of what somebody had to guess: this is the time, and
@@ -91,7 +109,7 @@ describe('turning it on', () => {
     open()
 
     expect(screen.getByTestId('reminder-time-note')).toHaveTextContent(
-      /^Around 9:00 PM\. Android picks the exact moment: usually close, later if the phone has been asleep\.$/
+      /^Android picks the exact moment: usually close, later if the phone has been asleep\.$/
     )
   })
 
@@ -145,6 +163,103 @@ describe('the time', () => {
     await waitFor(() => expect(useCalendarStore.getState().reminderHour).toBe(7))
     expect(enableReminder).not.toHaveBeenCalled()
     expect(start()).toHaveTextContent('Remind me at 7:30 AM')
+  })
+})
+
+// "no había como un aceptar, qué sé yo." Somebody opened this with the reminder on, moved
+// the time, and found nothing underneath but the button that stops it. The finish he was
+// looking for now appears, and only where there is something finished.
+describe('the finish, and when it exists', () => {
+  const openOn = () => {
+    useCalendarStore.setState({ reminderEnabled: true })
+    return open()
+  }
+
+  it('appears once the time has been moved', async () => {
+    openOn()
+    expect(done()).not.toBeInTheDocument()
+
+    fireEvent.change(theTime(), { target: { value: '07:30' } })
+
+    expect(await screen.findByTestId('reminder-done')).toHaveTextContent('Done')
+  })
+
+  // Turning the reminder on is not moving its time. The green button already said the
+  // hour, pressing it is the confirm, and a Done underneath the result would be a second
+  // one for the same act.
+  it('does not appear just because the reminder was switched on', async () => {
+    open()
+
+    await userEvent.click(start())
+
+    await waitFor(() => expect(useCalendarStore.getState().reminderEnabled).toBe(true))
+    expect(done()).not.toBeInTheDocument()
+  })
+
+  // It only closes. The reschedule it concludes happened at the picker's own OK, so there
+  // is nothing here that a person could lose by closing some other way.
+  it('only closes, and schedules nothing of its own', async () => {
+    openOn()
+    fireEvent.change(theTime(), { target: { value: '07:30' } })
+    await screen.findByTestId('reminder-done')
+    enableReminder.mockClear()
+
+    await userEvent.click(done()!)
+
+    expect(onClose).toHaveBeenCalled()
+    expect(enableReminder).not.toHaveBeenCalled()
+    expect(useCalendarStore.getState().reminderEnabled).toBe(true)
+    expect(useCalendarStore.getState().reminderHour).toBe(7)
+  })
+
+  // Nothing was scheduled, so nothing was finished: the green button already names the new
+  // time, and that is the confirm.
+  it('stays away when the time moves while the reminder is off', async () => {
+    open()
+
+    fireEvent.change(theTime(), { target: { value: '07:30' } })
+
+    await waitFor(() => expect(start()).toHaveTextContent('Remind me at 7:30 AM'))
+    expect(done()).not.toBeInTheDocument()
+  })
+
+  // A finish offered over a reminder that is not running would be a lie.
+  it('stays away when the phone refuses the new time', async () => {
+    openOn()
+    enableReminder.mockResolvedValue({ outcome: 'failed', reason: 'the phone said no' })
+
+    fireEvent.change(theTime(), { target: { value: '07:30' } })
+
+    await screen.findByTestId('reminder-failure')
+    expect(done()).not.toBeInTheDocument()
+  })
+
+  it('is gone again the next time the sheet is opened', async () => {
+    useCalendarStore.setState({ reminderEnabled: true })
+    const { rerender } = render(<ReminderSettings isOpen onClose={onClose} />)
+    fireEvent.change(theTime(), { target: { value: '07:30' } })
+    await screen.findByTestId('reminder-done')
+
+    rerender(<ReminderSettings isOpen={false} onClose={onClose} />)
+    rerender(<ReminderSettings isOpen onClose={onClose} />)
+
+    expect(done()).not.toBeInTheDocument()
+  })
+
+  // Two buttons, and the one that stops the reminder steps back to let the other lead:
+  // somebody who has just moved the time is not looking for the way to stop. Done sits at
+  // the right edge, where a thumb aiming at where Stop used to be lands on the button that
+  // only closes.
+  it('leads, with the stop button behind it and to its left', async () => {
+    openOn()
+    expect(stop().className).toContain('bg-gray-100')
+
+    fireEvent.change(theTime(), { target: { value: '07:30' } })
+    await screen.findByTestId('reminder-done')
+
+    expect(stop().className).toContain('bg-transparent')
+    expect(done()!.className).toContain('bg-gray-100')
+    expect(stop().compareDocumentPosition(done()!)).toBe(Node.DOCUMENT_POSITION_FOLLOWING)
   })
 })
 
