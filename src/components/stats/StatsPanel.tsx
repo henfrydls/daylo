@@ -1,6 +1,8 @@
 import { useMemo } from 'react'
 import { useCalendarStore } from '../../store'
 import { formatDate, getYearDays } from '../../lib/dates'
+import { currentStreak, longestStreak } from '../../lib/streaks'
+import { completedDates } from '../../lib/activityYear'
 
 export function StatsPanel() {
   const { selectedYear, activities, logs } = useCalendarStore()
@@ -19,51 +21,22 @@ export function StatsPanel() {
     const yearDays = getYearDays(selectedYear)
     const today = new Date()
 
-    // Count days with at least one activity completed
-    const daysWithActivity = new Set<string>()
-    logs.forEach((log) => {
-      if (log.completed && log.date.startsWith(String(selectedYear))) {
-        daysWithActivity.add(log.date)
-      }
-    })
+    // Two sets, because the panel answers two kinds of question. Active days and this
+    // month are about the year on screen. The streaks are about the person: they are read
+    // over every log there is, so a run through the new year is not cut in half by the
+    // calendar, and "current" means the run ending today whatever year is being looked at.
+    const everyDayWithActivity = completedDates(logs)
+    // Days gone by, in the year on screen. A day still to come is not an active day: an
+    // imported file can carry next year in it, and the days elapsed underneath stop at
+    // today, so counting them said more days active than there have been.
+    const limit = formatDate(today)
+    const daysWithActivity = new Set(
+      [...everyDayWithActivity].filter(
+        (date) => date.startsWith(String(selectedYear)) && date <= limit
+      )
+    )
 
-    // Calculate streaks
-    let currentStreak = 0
-    let longestStreak = 0
-    let tempStreak = 0
-
-    // Sort days for streak calculation
-    const sortedDays = yearDays
-      .filter((d) => d <= today)
-      .map((d) => formatDate(d))
-      .reverse()
-
-    for (const dateStr of sortedDays) {
-      if (daysWithActivity.has(dateStr)) {
-        tempStreak++
-        if (currentStreak === 0 || sortedDays.indexOf(dateStr) === tempStreak - 1) {
-          currentStreak = tempStreak
-        }
-        longestStreak = Math.max(longestStreak, tempStreak)
-      } else {
-        if (tempStreak > 0 && sortedDays.indexOf(dateStr) !== 0) {
-          currentStreak = tempStreak
-        }
-        tempStreak = 0
-      }
-    }
-
-    // Recalculate current streak properly
-    currentStreak = 0
-    for (let i = 0; i < sortedDays.length; i++) {
-      if (daysWithActivity.has(sortedDays[i])) {
-        currentStreak++
-      } else {
-        break
-      }
-    }
-
-    // Calculate completion rate for current month
+    // Completion rate for the current month of the year on screen
     const currentMonth = today.getMonth()
     const currentMonthDays = yearDays.filter((d) => d.getMonth() === currentMonth && d <= today)
     const currentMonthCompleted = currentMonthDays.filter((d) =>
@@ -77,8 +50,8 @@ export function StatsPanel() {
     return {
       totalDays: yearDays.filter((d) => d <= today).length,
       activeDays: daysWithActivity.size,
-      currentStreak,
-      longestStreak,
+      currentStreak: currentStreak(everyDayWithActivity, today),
+      longestStreak: longestStreak(everyDayWithActivity, today),
       completionRate,
     }
   }, [selectedYear, activities, logs])
@@ -95,8 +68,11 @@ export function StatsPanel() {
       <h2 className="text-base sm:text-lg font-semibold text-gray-900 mb-3 sm:mb-4">Statistics</h2>
       <div className="grid grid-cols-2 gap-2 sm:gap-4">
         <StatCard label="Active Days" value={stats.activeDays} subtitle="this year" />
-        <StatCard label="Current Streak" value={stats.currentStreak} subtitle="days" />
-        <StatCard label="Longest Streak" value={stats.longestStreak} subtitle="days" />
+        {/* Each card says what period it covers. The four are not about the same one:
+            active days and this month follow the year on screen, while the streaks are
+            about the person and do not change when an older year is opened. */}
+        <StatCard label="Current Streak" value={stats.currentStreak} subtitle="today" />
+        <StatCard label="Longest Streak" value={stats.longestStreak} subtitle="all time" />
         <StatCard label="This Month" value={`${stats.completionRate}%`} subtitle="completion" />
       </div>
     </div>
