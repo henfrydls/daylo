@@ -22,6 +22,10 @@ export const QuickLog = memo(function QuickLog() {
   const nameInputRef = useRef<HTMLInputElement>(null)
   const modalRef = useRef<HTMLDivElement>(null)
 
+  // Every color already worn by an activity: this form only ever creates, so none of
+  // them belongs to what is being edited.
+  const colorsInUse = useMemo(() => activities.map((a) => a.color), [activities])
+
   const handleClose = useCallback(() => {
     setSelectedDate(null)
   }, [setSelectedDate])
@@ -138,6 +142,7 @@ export const QuickLog = memo(function QuickLog() {
         value={newColor}
         onChange={setNewColor}
         colors={ACTIVITY_COLORS}
+        colorsInUse={colorsInUse}
         size="sm"
         label=""
         testIdPrefix="quicklog-color"

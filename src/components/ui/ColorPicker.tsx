@@ -12,6 +12,15 @@ export interface ColorPickerProps {
   onChange: (color: string) => void
   /** Array of color options to display */
   colors: readonly ColorOption[]
+  /**
+   * Colors already taken by other activities. They are dimmed and announced as in use,
+   * not removed: an option that quietly disappears is a worse surprise than one that
+   * explains itself, and two activities sharing a color is allowed, just unhelpful.
+   *
+   * If every color is taken the dimming is dropped, because dimming all sixteen says
+   * nothing and would make a palette that looks broken.
+   */
+  colorsInUse?: readonly string[]
   /** Optional label for the color picker. If not provided, label is screen-reader only */
   label?: string
   /** Size variant for the color buttons */
@@ -49,6 +58,7 @@ export const ColorPicker = memo(function ColorPicker({
   value,
   onChange,
   colors,
+  colorsInUse,
   label = 'Color',
   size = 'md',
   testIdPrefix,
@@ -57,6 +67,13 @@ export const ColorPicker = memo(function ColorPicker({
   collapsedCount = 0,
   autoCollapse = false,
 }: ColorPickerProps) {
+  // Dropped when every color is taken: dimming all of them tells the person nothing and
+  // makes the palette look broken, and repeating a color has to stay possible or the
+  // seventeenth activity could not be created at all.
+  const everyColorTaken = !!colorsInUse && colors.every((c) => colorsInUse.includes(c.value))
+  const isInUse = (colorValue: string) =>
+    !!colorsInUse && !everyColorTaken && colorValue !== value && colorsInUse.includes(colorValue)
+
   const [expanded, setExpanded] = useState(false)
   const [autoCount, setAutoCount] = useState<number>(0)
   const containerRef = useRef<HTMLDivElement>(null)
@@ -141,11 +158,16 @@ export const ColorPicker = memo(function ColorPicker({
                   ? 'ring-2 ring-offset-2 ring-gray-400 scale-110'
                   : hoverScales[size]
               }
+              ${isInUse(color.value) ? 'opacity-35' : ''}
             `}
             style={{ backgroundColor: color.value }}
-            aria-label={`${color.name} color`}
+            aria-label={
+              isInUse(color.value) ? `${color.name} color, already in use` : `${color.name} color`
+            }
+            title={isInUse(color.value) ? 'In use by another activity' : undefined}
             role="radio"
             aria-checked={isSelected(color.value)}
+            data-in-use={isInUse(color.value) ? 'true' : undefined}
             data-testid={
               testIdPrefix ? `${testIdPrefix}-${color.name.toLowerCase()}` : 'color-option'
             }
