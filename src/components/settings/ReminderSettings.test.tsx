@@ -212,6 +212,39 @@ describe('the finish, and when it exists', () => {
     expect(useCalendarStore.getState().reminderHour).toBe(7)
   })
 
+  // Asked out loud: "it should also work if I changed it and tapped outside, because I
+  // didn't press Done." It does, and this is what says so. The time was scheduled at the
+  // picker's own OK, long before the button existed, so every way of closing leaves it
+  // where it is — which is the whole reason the button cannot be called Save.
+  it('keeps the new time when the sheet is closed without pressing it', async () => {
+    openOn()
+    fireEvent.change(theTime(), { target: { value: '07:30' } })
+    await screen.findByTestId('reminder-done')
+    expect(enableReminder).toHaveBeenCalledWith(7, 30)
+
+    await userEvent.click(screen.getByLabelText('Close modal'))
+
+    expect(onClose).toHaveBeenCalled()
+    expect(useCalendarStore.getState().reminderEnabled).toBe(true)
+    expect(useCalendarStore.getState().reminderHour).toBe(7)
+    expect(useCalendarStore.getState().reminderMinute).toBe(30)
+  })
+
+  // And it is still there the next time the sheet is opened, which is where a person
+  // would go looking to check.
+  it('still reads the new time when the sheet is opened again', async () => {
+    useCalendarStore.setState({ reminderEnabled: true })
+    const { rerender } = render(<ReminderSettings isOpen onClose={onClose} />)
+    fireEvent.change(theTime(), { target: { value: '07:30' } })
+    await screen.findByTestId('reminder-done')
+
+    rerender(<ReminderSettings isOpen={false} onClose={onClose} />)
+    rerender(<ReminderSettings isOpen onClose={onClose} />)
+
+    expect(theTime()).toHaveValue('07:30')
+    expect(status()).toHaveTextContent('Reminding you daily at 7:30 AM')
+  })
+
   // Nothing was scheduled, so nothing was finished: the green button already names the new
   // time, and that is the confirm.
   it('stays away when the time moves while the reminder is off', async () => {
@@ -258,7 +291,7 @@ describe('the finish, and when it exists', () => {
     await screen.findByTestId('reminder-done')
 
     expect(stop().className).toContain('bg-transparent')
-    expect(done()!.className).toContain('bg-gray-100')
+    expect(done()!.className).toContain('bg-emerald-500')
     expect(stop().compareDocumentPosition(done()!)).toBe(Node.DOCUMENT_POSITION_FOLLOWING)
   })
 })

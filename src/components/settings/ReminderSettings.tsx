@@ -36,9 +36,10 @@ interface ReminderSettingsProps {
  * padding, the same 14px medium buttons in the modal's own footer, nothing larger than the
  * title, and no filled panels. The first attempt used its own sizes and weights and was
  * told, correctly, that it did not feel like the app. The only colour is one dot, and it
- * moves: on the button while the reminder is off, and up to the status once it is on, so
- * there is exactly one green thing on screen at a time. That is also why Done is the grey
- * button and not the green one, and why Stop steps back to a ghost to let it lead.
+ * moves: on the button while the reminder is off, and up to the status once it is on. The
+ * one place two green things meet is the moment after the time is changed, where Done is
+ * green because the owner of the app asked for the button that finishes to read as the
+ * main one. Stop steps back to a ghost to let it lead.
  */
 export function ReminderSettings({ isOpen, onClose }: ReminderSettingsProps) {
   const enabled = useCalendarStore((s) => s.reminderEnabled)
@@ -170,7 +171,13 @@ export function ReminderSettings({ isOpen, onClose }: ReminderSettingsProps) {
               {timeMoved ? (
                 // Never disabled, because it has nothing to wait for: the reschedule it
                 // concludes has already happened.
-                <Button variant="secondary" onClick={onClose} data-testid="reminder-done">
+                //
+                // Green, at the owner's word. The design had it grey, on the grounds that
+                // while the reminder is on the green is already spoken for by the status
+                // dot and the app allows one green thing at a time. He looked at it and
+                // wanted the button that finishes to read as the main one, which is his
+                // call to make about his own app.
+                <Button onClick={onClose} data-testid="reminder-done">
                   Done
                 </Button>
               ) : null}
