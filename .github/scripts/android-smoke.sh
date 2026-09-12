@@ -54,43 +54,56 @@ done
 sleep 10
 adb logcat -d > "$LOG" || true
 
+# The picture first, before anything can fail. It is the cheapest evidence there is and a
+# failing run is exactly when it is wanted: the first time this job suspended, it did so
+# before this line and the artifact arrived with a log and no screen. If the process is
+# already gone this captures whatever is behind it, which is itself worth seeing.
+adb shell screencap -p /data/local/tmp/smoke.png || true
+adb pull /data/local/tmp/smoke.png "$SHOT" || true
+
 echo "::group::Android's own account of why anything died"
+exits=""
 if exits=$(adb shell dumpsys activity exit-info "$PKG" 2>&1); then
   echo "${exits:-(nothing recorded)}"
-  if grep -q "CRASH" <<< "$exits"; then
-    echo "::endgroup::"
-    fail "Android recorded a crash for $PKG. Its own words are in the group above."
-  fi
 else
-  # Said out loud rather than swallowed: without this the strongest check in the script
-  # would be skipped and the job would still go green.
+  # Said out loud rather than swallowed: without this one of the checks below would be
+  # skipped and the job would still go green.
   echo "::warning::dumpsys activity exit-info is not available on this image."
   echo "::warning::Falling back on the process and logcat checks alone."
 fi
 echo "::endgroup::"
 
-if [ -z "$resumed" ]; then
-  fail "$ACTIVITY never reached the foreground within 30 seconds."
+# What Android calls the exit and what actually happened are not always the same word. A
+# process that aborts inside libc during teardown has been recorded here as EXIT_SELF,
+# with the abort itself only in logcat — so this reports the reason rather than deciding
+# on it, and the logcat check below is what rules.
+exit_reason=$(grep -oE "reason=[0-9]+ \([A-Z_ ]+\)" <<< "${exits:-}" | head -1)
+[ -n "$exit_reason" ] && echo "Android's word for the last exit: $exit_reason"
+
+if grep -q "CRASH" <<< "${exits:-}"; then
+  fail "Android recorded a crash for $PKG ($exit_reason). Its own words are in the group above."
 fi
 
-if ! adb shell pidof "$PKG" > /dev/null 2>&1; then
-  fail "$PKG started and was gone again before it could be looked at."
-fi
-
-# Belt and braces: exit-info is the reliable channel, but a Rust panic reaches logcat
-# through tao's stdout pipe under this tag whether or not the process is recorded as
-# crashed, and it is the one line that says what actually went wrong.
-if grep -qE "FATAL EXCEPTION|RustStdoutStderr.*panicked at" "$LOG"; then
+# A native abort is not a Java exception and not a Rust panic, and until a run produced
+# one this looked only for those two. libc writes its own epitaph and logcat marks the
+# spot: "--------- beginning of crash", then an F line. FORTIFY aborts land here, and so
+# does any signal.
+if grep -qE "beginning of crash|^[0-9-]+ [0-9:.]+ +[0-9]+ +[0-9]+ F |FATAL EXCEPTION|RustStdoutStderr.*panicked at|Fatal signal" "$LOG"; then
   echo "::group::What logcat says went wrong"
-  grep -E "FATAL EXCEPTION|RustStdoutStderr|Fatal signal" -A5 "$LOG" | head -60
+  grep -nE "beginning of crash| F (libc|DEBUG) |FATAL EXCEPTION|RustStdoutStderr|Fatal signal" "$LOG" | head -40
   echo "::endgroup::"
-  fail "The app logged a fatal error while starting."
+  fail "The app logged a fatal error. The lines are in the group above and the whole log is in the artifact."
 fi
 
-# The webview is the part none of the above can see: a Tauri app whose frontend failed to
-# load is a live process with its activity in front and a blank rectangle on screen.
-adb shell screencap -p /data/local/tmp/smoke.png
-adb pull /data/local/tmp/smoke.png "$SHOT"
+if [ -z "$resumed" ]; then
+  fail "$ACTIVITY never reached the foreground: 30 seconds of dumpsys and it was never the resumed activity."
+fi
+
+if pid=$(adb shell pidof "$PKG" 2>/dev/null) && [ -n "$pid" ]; then
+  echo "still running as pid $pid"
+else
+  fail "$PKG started and was gone again: pidof returned nothing. Android's word for the last exit was ${exit_reason:-(nothing recorded)}."
+fi
 
 # But first, whose browser is this? An emulator image carries a WebView baked in and has
 # no Play Store to update it, so the image decides the engine — and on a real phone
