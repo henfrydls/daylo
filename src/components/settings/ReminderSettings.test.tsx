@@ -21,112 +21,72 @@ vi.mock('../ui', async (importOriginal) => ({
 
 const onClose = vi.fn()
 const open = () => render(<ReminderSettings isOpen onClose={onClose} />)
-const theSwitch = () => screen.getByTestId('reminder-toggle')
+
+const start = () => screen.getByTestId('reminder-start')
+const stop = () => screen.getByTestId('reminder-stop')
 const theTime = () => screen.getByTestId('reminder-time')
+const status = () => screen.getByTestId('reminder-status')
 
 beforeEach(() => {
   enableReminder.mockReset().mockResolvedValue({ outcome: 'on' })
   disableReminder.mockReset().mockResolvedValue(undefined)
   showToast.mockReset()
   onClose.mockReset()
-  useCalendarStore.setState({
-    reminderEnabled: false,
-    reminderHour: 21,
-    reminderMinute: 0,
-  })
+  useCalendarStore.setState({ reminderEnabled: false, reminderHour: 21, reminderMinute: 0 })
 })
 
 afterEach(() => {
   vi.restoreAllMocks()
 })
 
-describe('the switch', () => {
-  it('schedules at the stored time when turned on', async () => {
+// The sheet used to hold three controls for one decision: a checkbox, a time, and a Done
+// that only closed. Somebody set the time, pressed Done, and only then noticed the box.
+describe('the two controls it has', () => {
+  it('has no checkbox and no Done', () => {
     open()
 
-    await userEvent.click(theSwitch())
+    expect(screen.queryByRole('checkbox')).not.toBeInTheDocument()
+    expect(screen.queryByText('Done')).not.toBeInTheDocument()
+  })
+
+  it('says whether it is on, in words', () => {
+    open()
+    expect(status()).toHaveTextContent('Reminder is off')
+
+    useCalendarStore.setState({ reminderEnabled: true })
+    open()
+
+    expect(screen.getAllByTestId('reminder-status')[1]).toHaveTextContent('Reminder is on')
+  })
+
+  // The button answers both halves of what somebody had to guess: this is the time, and
+  // this is what turns it on.
+  it('names the time in the button that turns it on', () => {
+    open()
+
+    expect(start()).toHaveTextContent('Remind me at 9:00 PM')
+  })
+
+  it('offers stopping, and not restarting, once it is on', () => {
+    useCalendarStore.setState({ reminderEnabled: true })
+    open()
+
+    expect(stop()).toHaveTextContent('Stop reminders')
+    expect(screen.queryByTestId('reminder-start')).not.toBeInTheDocument()
+  })
+})
+
+describe('turning it on', () => {
+  it('schedules at the time on the button', async () => {
+    open()
+
+    await userEvent.click(start())
 
     expect(enableReminder).toHaveBeenCalledWith(21, 0)
     await waitFor(() => expect(useCalendarStore.getState().reminderEnabled).toBe(true))
   })
 
-  it('cancels when turned off', async () => {
-    useCalendarStore.setState({ reminderEnabled: true })
-    open()
-
-    await userEvent.click(theSwitch())
-
-    expect(disableReminder).toHaveBeenCalled()
-    await waitFor(() => expect(useCalendarStore.getState().reminderEnabled).toBe(false))
-  })
-
-  // The store is written only once the platform has agreed. A switch left showing "on"
-  // with nothing scheduled is worse than one that refuses to move.
-  it('stays off when the permission is refused', async () => {
-    enableReminder.mockResolvedValue({ outcome: 'permission-denied' })
-    open()
-
-    await userEvent.click(theSwitch())
-
-    await waitFor(() => expect(showToast).toHaveBeenCalled())
-    expect(useCalendarStore.getState().reminderEnabled).toBe(false)
-    expect(theSwitch()).not.toBeChecked()
-  })
-})
-
-// The switch is only ever on over something the phone agreed to schedule. Before, a
-// refusal from the phone was invisible and the switch stayed on with nothing behind it.
-it('goes back off, and says so, when the phone refuses the schedule', async () => {
-  enableReminder.mockResolvedValue({ outcome: 'failed', reason: 'the phone said no' })
-  open()
-
-  await userEvent.click(theSwitch())
-
-  await waitFor(() => expect(showToast).toHaveBeenCalled())
-  expect(showToast.mock.calls[0][0]).toMatch(/could not set the reminder/i)
-  expect(useCalendarStore.getState().reminderEnabled).toBe(false)
-  expect(theSwitch()).not.toBeChecked()
-
-  // The phone's own words, on screen. A release build writes nothing to any log that
-  // leaves the device, so if the reason is not here it is nowhere.
-  expect(screen.getByTestId('reminder-failure')).toHaveTextContent(
-    'Could not set the reminder: the phone said no'
-  )
-})
-
-it('stops showing an old reason once the reminder is set', async () => {
-  enableReminder.mockResolvedValueOnce({ outcome: 'failed', reason: 'the phone said no' })
-  open()
-  await userEvent.click(theSwitch())
-  await screen.findByTestId('reminder-failure')
-
-  enableReminder.mockResolvedValue({ outcome: 'on' })
-  await userEvent.click(theSwitch())
-
-  await waitFor(() => expect(useCalendarStore.getState().reminderEnabled).toBe(true))
-  expect(screen.queryByTestId('reminder-failure')).not.toBeInTheDocument()
-})
-
-describe('the time', () => {
-  it('shows the stored one', () => {
-    useCalendarStore.setState({ reminderHour: 7, reminderMinute: 5 })
-    open()
-
-    expect(theTime()).toHaveValue('07:05')
-    expect(screen.getByText(/7:05/)).toBeInTheDocument()
-  })
-
-  // Nothing is scheduled while the switch is off, so the note cannot speak as though
-  // something were coming.
-  it('does not describe a reminder that is not coming', () => {
-    open()
-
-    expect(screen.getByTestId('reminder-time-note')).toHaveTextContent(
-      /turn it on and it will arrive/i
-    )
-  })
-
-  it('describes the one that is', () => {
+  it('says how late Android may be, once it is on', () => {
     useCalendarStore.setState({ reminderEnabled: true })
     open()
 
@@ -135,41 +95,97 @@ describe('the time', () => {
     )
   })
 
-  // Moving the time has to re-schedule, not just store a number: the alarm already on the
+  // Nothing is scheduled while it is off, so there is nothing to describe.
+  it('promises nothing while it is off', () => {
+    open()
+
+    expect(screen.queryByTestId('reminder-time-note')).not.toBeInTheDocument()
+  })
+})
+
+describe('turning it off', () => {
+  it('cancels and goes back to off', async () => {
+    useCalendarStore.setState({ reminderEnabled: true })
+    open()
+
+    await userEvent.click(stop())
+
+    expect(disableReminder).toHaveBeenCalled()
+    await waitFor(() => expect(useCalendarStore.getState().reminderEnabled).toBe(false))
+  })
+})
+
+describe('the time', () => {
+  it('shows the stored one on the row and in the button', () => {
+    useCalendarStore.setState({ reminderHour: 7, reminderMinute: 5 })
+    open()
+
+    expect(theTime()).toHaveValue('07:05')
+    expect(start()).toHaveTextContent('Remind me at 7:05 AM')
+  })
+
+  // Moving the time has to reschedule, not just store a number: the alarm already on the
   // phone is at the old hour and nothing else will move it.
-  it('re-schedules an enabled reminder when it changes', async () => {
+  it('reschedules at once while the reminder is on', async () => {
     useCalendarStore.setState({ reminderEnabled: true })
     open()
 
     fireEvent.change(theTime(), { target: { value: '07:30' } })
 
     await waitFor(() => expect(enableReminder).toHaveBeenCalledWith(7, 30))
-    expect(useCalendarStore.getState().reminderHour).toBe(7)
-    expect(useCalendarStore.getState().reminderMinute).toBe(30)
   })
 
-  // Nothing is scheduled while the reminder is off, so there is nothing to re-schedule.
-  it('is remembered without scheduling anything while the reminder is off', async () => {
+  // Nothing is scheduled while it is off, so there is nothing to reschedule: the time is
+  // only remembered, and the button follows it.
+  it('is only remembered while the reminder is off', async () => {
     open()
 
     fireEvent.change(theTime(), { target: { value: '07:30' } })
 
     await waitFor(() => expect(useCalendarStore.getState().reminderHour).toBe(7))
     expect(enableReminder).not.toHaveBeenCalled()
+    expect(start()).toHaveTextContent('Remind me at 7:30 AM')
   })
 })
 
-it('closes on Done', async () => {
-  open()
+describe('when the phone says no', () => {
+  it('stays off when the permission is refused', async () => {
+    enableReminder.mockResolvedValue({ outcome: 'permission-denied' })
+    open()
 
-  await userEvent.click(screen.getByText('Done'))
+    await userEvent.click(start())
 
-  expect(onClose).toHaveBeenCalled()
-})
+    await waitFor(() => expect(showToast).toHaveBeenCalled())
+    expect(useCalendarStore.getState().reminderEnabled).toBe(false)
+    expect(status()).toHaveTextContent('Reminder is off')
+  })
 
-// Below the scrolling body, where every other modal in the app puts its actions.
-it('keeps Done out of the scrolling body', () => {
-  open()
+  it('stays off, and quotes the phone, when the schedule is refused', async () => {
+    enableReminder.mockResolvedValue({ outcome: 'failed', reason: 'the phone said no' })
+    open()
 
-  expect(screen.getByTestId('modal-footer')).toContainElement(screen.getByText('Done'))
+    await userEvent.click(start())
+
+    await waitFor(() => expect(showToast).toHaveBeenCalled())
+    expect(showToast.mock.calls[0][0]).toMatch(/could not set the reminder/i)
+    expect(useCalendarStore.getState().reminderEnabled).toBe(false)
+    // A release build writes nothing to any log that leaves the device, so if the reason
+    // is not here it is nowhere.
+    expect(screen.getByTestId('reminder-failure')).toHaveTextContent(
+      'Could not set the reminder: the phone said no'
+    )
+  })
+
+  it('stops showing an old reason once the reminder is set', async () => {
+    enableReminder.mockResolvedValueOnce({ outcome: 'failed', reason: 'the phone said no' })
+    open()
+    await userEvent.click(start())
+    await screen.findByTestId('reminder-failure')
+
+    enableReminder.mockResolvedValue({ outcome: 'on' })
+    await userEvent.click(start())
+
+    await waitFor(() => expect(useCalendarStore.getState().reminderEnabled).toBe(true))
+    expect(screen.queryByTestId('reminder-failure')).not.toBeInTheDocument()
+  })
 })
