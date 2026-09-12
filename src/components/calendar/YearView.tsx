@@ -200,9 +200,12 @@ export const YearView = memo(function YearView() {
   return (
     <div className="p-4 sm:p-6 lg:p-8 w-full">
       {/* Year Navigation */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-8">
+      <div
+        className="mb-8 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between"
+        data-testid="year-header"
+      >
         <div className="flex items-center gap-4">
-          <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">{selectedYear}</h1>
+          <h1 className="text-2xl font-bold text-gray-900 sm:text-3xl">{selectedYear}</h1>
           <div className="flex items-center gap-1">
             <button
               onClick={handlePrevYear}
@@ -284,8 +287,10 @@ export const YearView = memo(function YearView() {
             ))}
           </div>
 
-          {/* Legend */}
-          <HeatmapLegend />
+          {/* The legend names the five shades of the combined heatmap. A row per activity
+              is one colour or grey, so in that mode it moves down to the only row it
+              still describes. */}
+          {yearMode === 'all' ? <HeatmapLegend /> : null}
         </div>
       </div>
 
