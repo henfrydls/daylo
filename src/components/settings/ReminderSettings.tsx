@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Modal, useToast } from '../ui'
+import { Button, Modal, useToast } from '../ui'
 import { useCalendarStore } from '../../store'
 import { disableReminder, enableReminder, formatReminderTime } from '../../lib/reminders'
 
@@ -8,23 +8,21 @@ interface ReminderSettingsProps {
   onClose: () => void
 }
 
-function BellIcon({ on }: { on: boolean }) {
-  return (
-    <svg viewBox="0 0 24 24" className="h-5 w-5" aria-hidden="true" fill="currentColor">
-      <path d="M12 22a2.2 2.2 0 0 0 2.2-2.2H9.8A2.2 2.2 0 0 0 12 22Zm7-5.2v-5.3c0-3.2-1.8-5.9-4.8-6.6v-.7a1.7 1.7 0 0 0-3.4 0v.7C7.8 5.6 6 8.3 6 11.5v5.3l-1.6 1.6v.8h15.2v-.8L19 16.8Z" />
-      {on ? null : <path d="M3.4 2 22 20.6l-1.4 1.4L2 3.4 3.4 2Z" />}
-    </svg>
-  )
-}
-
 /**
  * The daily reminder, as one decision and one number.
  *
  * There is no checkbox and no Done. Somebody told us why: "I set the time and press Done,
  * and only then notice I also have to tick the box." Three controls for one decision, and
  * the one that looked like the commit was only a close button. So the button that commits
- * says what committing does, with the time in it, and the state is stated in words above
- * rather than left to be read off a control's position.
+ * says what committing does, with the time in it, and the state is stated in words rather
+ * than left to be read off a control's position.
+ *
+ * It borrows the rest from the Export dialog rather than inventing a look: the same
+ * padding, the same 14px medium button in the modal's own footer, nothing larger than the
+ * title, and no filled panels. The first attempt used its own sizes and weights and was
+ * told, correctly, that it did not feel like the app. The only colour is one dot, and it
+ * moves: on the button while the reminder is off, and up to the status once it is on, so
+ * there is exactly one green thing on screen at a time.
  */
 export function ReminderSettings({ isOpen, onClose }: ReminderSettingsProps) {
   const enabled = useCalendarStore((s) => s.reminderEnabled)
@@ -85,98 +83,102 @@ export function ReminderSettings({ isOpen, onClose }: ReminderSettingsProps) {
   }
 
   return (
-    <Modal isOpen={isOpen} onClose={onClose} title="Daily reminder" data-testid="reminder-settings">
-      <div className="space-y-4">
-        {/* Said in words. A person should not have to work out whether it is on from the
-            position of a switch. */}
-        <div
-          className={`rounded-lg border p-3 ${
-            enabled ? 'border-emerald-200 bg-emerald-50' : 'border-gray-200 bg-gray-50'
-          }`}
-          data-testid="reminder-status"
-        >
-          <div
-            className={`flex items-center gap-2 font-semibold ${
-              enabled ? 'text-emerald-700' : 'text-gray-500'
-            }`}
-          >
-            <BellIcon on={enabled} />
-            <span>{enabled ? 'Reminder is on' : 'Reminder is off'}</span>
-          </div>
-
+    <Modal
+      isOpen={isOpen}
+      onClose={onClose}
+      title="Daily reminder"
+      data-testid="reminder-settings"
+      footer={
+        <div className="flex justify-end">
           {enabled ? (
-            <p className="mt-1 text-sm text-gray-600" data-testid="reminder-time-note">
-              Around {at}. Android picks the exact moment and may deliver it an hour or more later.
-            </p>
-          ) : null}
-
-          {/* The phone's own words, untranslated. A release build writes nothing to any log
-              that leaves the device, so if this is not on screen it is nowhere. */}
-          {failure ? (
-            <p className="mt-1 text-xs break-words text-red-600" data-testid="reminder-failure">
-              Could not set the reminder: {failure}
-            </p>
-          ) : null}
-        </div>
-
-        <div>
-          <span className="mb-1 block text-sm font-medium text-gray-700">Time</span>
-          {/* The native picker does the work; this is what it looks like from outside. The
-              input covers the row so a tap anywhere in it opens the picker, and the row
-              carries the focus ring because the input itself has nothing to show. */}
-          <div className="relative rounded-lg border border-gray-300 has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-emerald-500">
-            <div
-              className="flex min-h-[44px] items-center justify-between px-3 py-2"
-              aria-hidden="true"
-            >
-              <span className="text-lg font-semibold text-gray-900">{at}</span>
-              <span className="text-sm font-medium text-emerald-700">Change</span>
-            </div>
-            <input
-              id="reminder-time"
-              type="time"
-              aria-label="Reminder time"
-              value={`${String(hour).padStart(2, '0')}:${String(minute).padStart(2, '0')}`}
+            <Button
+              variant="secondary"
+              onClick={() => void turnOff()}
               disabled={busy}
-              onChange={(e) => {
-                const [h, m] = e.target.value.split(':').map(Number)
-                if (Number.isNaN(h) || Number.isNaN(m)) return
-                changeTime(h, m)
-              }}
-              className="absolute inset-0 h-full w-full cursor-pointer opacity-0 focus:outline-none"
-              data-testid="reminder-time"
-            />
+              data-testid="reminder-stop"
+            >
+              Stop reminders
+            </Button>
+          ) : (
+            // The button says what pressing it does, with the time in it: the two halves of
+            // the question somebody had to guess at before.
+            <Button
+              onClick={() => void turnOn(hour, minute)}
+              disabled={busy}
+              data-testid="reminder-start"
+            >
+              Remind me at {at}
+            </Button>
+          )}
+        </div>
+      }
+    >
+      <div>
+        {/* Said in words, with one dot for the colour. A person should not have to work out
+            whether it is on from the position of a control. */}
+        <div className="flex items-start gap-2" data-testid="reminder-status">
+          <span
+            className={`mt-[7px] h-2 w-2 shrink-0 rounded-full ${
+              enabled ? 'bg-emerald-500' : 'bg-gray-400'
+            }`}
+            aria-hidden="true"
+          />
+          <div className="min-w-0">
+            <p className="text-gray-900">{enabled ? 'Reminder is on' : 'Reminder is off'}</p>
+
+            {enabled ? (
+              <p className="mt-0.5 text-sm text-gray-500" data-testid="reminder-time-note">
+                Around {at}. Android picks the exact moment and may deliver it an hour or more
+                later.
+              </p>
+            ) : null}
+
+            {/* The phone's own words, untranslated. A release build writes nothing to any
+                log that leaves the device, so if this is not on screen it is nowhere. */}
+            {failure ? (
+              <p className="mt-0.5 text-sm break-words text-red-600" data-testid="reminder-failure">
+                Could not set the reminder: {failure}
+              </p>
+            ) : null}
           </div>
-          {enabled ? (
-            <p className="mt-1 text-xs text-gray-500">
-              A new time takes effect as soon as you pick it.
-            </p>
-          ) : null}
         </div>
 
-        {enabled ? (
-          <button
-            type="button"
-            onClick={() => void turnOff()}
-            disabled={busy}
-            className="min-h-[44px] w-full rounded-lg border border-gray-300 px-4 font-medium text-gray-700 hover:bg-gray-50 focus-visible:ring-2 focus-visible:ring-emerald-500 focus:outline-none disabled:opacity-50"
-            data-testid="reminder-stop"
+        {/* The native picker does the work; this is what it looks like from outside. The
+            input covers the row so a tap anywhere in it opens the picker, and the row
+            carries the focus ring because the input itself has nothing to show. */}
+        <div className="relative mt-4 rounded-lg border border-gray-200 has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-emerald-500">
+          <div
+            className="flex min-h-[44px] items-center justify-between px-4 py-3"
+            aria-hidden="true"
           >
-            Stop reminders
-          </button>
-        ) : (
-          // The button says what pressing it does, with the time in it: the two halves of
-          // the question somebody had to guess at before.
-          <button
-            type="button"
-            onClick={() => void turnOn(hour, minute)}
+            <span className="text-gray-900">{at}</span>
+            <span className="flex items-center gap-1 text-sm text-gray-500">
+              Change
+              <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor">
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="m9 5 7 7-7 7"
+                />
+              </svg>
+            </span>
+          </div>
+          <input
+            id="reminder-time"
+            type="time"
+            aria-label="Reminder time"
+            value={`${String(hour).padStart(2, '0')}:${String(minute).padStart(2, '0')}`}
             disabled={busy}
-            className="min-h-[44px] w-full rounded-lg bg-emerald-600 px-4 font-semibold text-white hover:bg-emerald-700 focus-visible:ring-2 focus-visible:ring-emerald-500 focus-visible:ring-offset-2 focus:outline-none disabled:opacity-50"
-            data-testid="reminder-start"
-          >
-            Remind me at {at}
-          </button>
-        )}
+            onChange={(e) => {
+              const [h, m] = e.target.value.split(':').map(Number)
+              if (Number.isNaN(h) || Number.isNaN(m)) return
+              changeTime(h, m)
+            }}
+            className="absolute inset-0 h-full w-full cursor-pointer opacity-0 focus:outline-none"
+            data-testid="reminder-time"
+          />
+        </div>
       </div>
     </Modal>
   )
