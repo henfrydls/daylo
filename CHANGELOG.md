@@ -76,6 +76,11 @@ fields still show one when you tap into them, which is where you want it. The ye
 calendar on a computer keeps its ring on click, because that is also how it shows you the
 day you are on when you walk it with the arrow keys.
 
+**The Android reminder actually arrives.** It could be switched on and nothing was ever
+scheduled: the part of the app that hands the daily time to Android was being stripped out
+when the app was packaged for release, so the phone rejected every reminder. It only
+happened in the published builds, which is why it took a phone to find.
+
 **A reminder that could not be set no longer looks like one that was.** On Android the
 switch could stay on when the phone had refused to schedule anything, so the app claimed a
 reminder that was never going to arrive. Daylo now waits for the phone's answer, turns the
