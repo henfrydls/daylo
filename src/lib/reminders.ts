@@ -123,6 +123,20 @@ async function putOnTheQueue(hour: number, minute: number): Promise<string | nul
  * without it the alarm will not wake a dozing phone, and an evening reminder that waits
  * for the phone to be picked up is no reminder at all.
  *
+ * What it does not buy is punctuality. Without SCHEDULE_EXACT_ALARM the alarm is an
+ * inexact one, which Android is free to move within a window of about an hour, and
+ * further than that out of a deep doze. Two deliveries measured on the same phone, a
+ * Galaxy S24+ on Android 16:
+ *
+ *   set for 11:00, arrived 12:19 — 79 minutes late, phone asleep since the night before
+ *   set for 19:00, arrived 19:00 — on time, phone in use
+ *
+ * Which is the behaviour the documentation describes rather than a fault: close when the
+ * device is awake, stretched when it has not been. Asking for the exact-alarm permission
+ * would fix the second case and is not worth it — it is the permission Android warns
+ * about by name, for a notification nobody is waiting on to the minute. The wording in
+ * the sheet says as much, so nobody has to discover it by being late.
+ *
  * It will fire whether or not anything was logged that day. Suppressing it on a day
  * already logged would mean cancelling and re-arming from inside the app, and then a
  * person who does not open Daylo for three days stops being reminded on the days they

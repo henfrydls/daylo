@@ -140,8 +140,8 @@ export function ReminderSettings({ isOpen, onClose }: ReminderSettingsProps) {
 
             {enabled ? (
               <p className="mt-0.5 text-sm text-gray-500" data-testid="reminder-time-note">
-                Around {at}. Android picks the exact moment and may deliver it an hour or more
-                later.
+                Around {at}. Android picks the exact moment: usually close, later if the phone has
+                been asleep.
               </p>
             ) : null}
 

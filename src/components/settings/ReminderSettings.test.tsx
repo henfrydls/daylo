@@ -91,7 +91,7 @@ describe('turning it on', () => {
     open()
 
     expect(screen.getByTestId('reminder-time-note')).toHaveTextContent(
-      /^Around 9:00 PM\. Android picks the exact moment and may deliver it an hour or more later\.$/
+      /^Around 9:00 PM\. Android picks the exact moment: usually close, later if the phone has been asleep\.$/
     )
   })
 
