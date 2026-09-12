@@ -317,3 +317,141 @@ jobs:
           path: src-tauri/gen/android/app/build/outputs/apk/universal/release/Daylo-android-arm64.apk
           retention-days: 7
           if-no-files-found: error
+
+  # Does it start?
+  #
+  # Every other check in this repository compiles the app and none of them run it, and
+  # that gap has now shipped two APKs that died before drawing a frame: one where R8
+  # stripped a constructor the plugin looks up by reflection, one where a plugins block
+  # tauri.conf.json was not allowed to have aborted the process on the first frame. Both
+  # builds were green everywhere. A person installed them and found out.
+  #
+  # So this job installs the app on an emulator and looks at it. Release, not debug, on
+  # purpose: debug skips R8, and R8 is where one of those two bugs lived. The signature is
+  # a throwaway generated here rather than the release key, because nothing leaves this
+  # job and signing happens after R8, so it cannot change whether the app starts.
+  #
+  # Not on every pull request: this is ten minutes of emulator on top of an Android build,
+  # and it belongs where the other test builds are, before a person is asked to install
+  # something.
+  smoke-android:
+    name: Test build (android-smoke)
+    needs: verify-matrix
+    if: >-
+      (github.event_name == 'workflow_dispatch' || github.event.label.name == 'build-installers')
+      && (github.event_name == 'workflow_dispatch'
+          || github.event.pull_request.head.repo.full_name == github.repository)
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Install Android NDK
+        run: sdkmanager "ndk;29.0.14206865"
+
+      # x86_64, not aarch64: an emulator on a GitHub runner is x86_64 and an arm64 APK
+      # would need full instruction translation, which is slow enough to be useless.
+      - name: Install Rust stable with the emulator's Android target
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: x86_64-linux-android
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+
+      # Its own cache key. The other Android jobs cross compile for aarch64 and sharing a
+      # key with them would have each evicting the other's artifacts every run.
+      - name: Cache Rust dependencies
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: './src-tauri -> target'
+          shared-key: android-x86_64
+          cache-on-failure: true
+
+      - name: Install Node.js dependencies
+        run: npm ci
+
+      - name: Install Tauri CLI
+        run: npm install --save-dev @tauri-apps/cli
+
+      - name: Build the APK
+        run: npx tauri android build --apk --target x86_64
+        env:
+          NDK_HOME: ${{ env.ANDROID_HOME }}/ndk/29.0.14206865
+
+      - name: Sign it with a throwaway key
+        run: |
+          set -euo pipefail
+          shopt -s nullglob globstar
+          # globstar because the ABI directory name is Tauri's to choose, not ours.
+          apks=( src-tauri/gen/android/app/build/outputs/apk/**/release/*-unsigned.apk )
+          if [ ${#apks[@]} -ne 1 ]; then
+            echo "::error::Expected exactly one unsigned release APK, found ${#apks[@]}."
+            printf '::error::  %s\n' "${apks[@]}"
+            exit 1
+          fi
+
+          keytool -genkeypair -keystore smoke.jks -alias smoke \
+            -storepass smokesmoke -keypass smokesmoke \
+            -keyalg RSA -keysize 2048 -validity 1 \
+            -dname "CN=Daylo smoke test, O=nobody, C=ZZ"
+
+          BT="${ANDROID_HOME}/build-tools/$(ls "${ANDROID_HOME}/build-tools/" | tail -1)"
+          "$BT/zipalign" -f 4 "${apks[0]}" smoke.apk
+          "$BT/apksigner" sign --ks smoke.jks \
+            --ks-pass pass:smokesmoke --key-pass pass:smokesmoke \
+            --ks-key-alias smoke smoke.apk
+          echo "SMOKE_APK=$PWD/smoke.apk" >> "$GITHUB_ENV"
+
+      # The emulator will not start without it, and the runner's kvm device is root-only
+      # until this rule is in place.
+      - name: Let the runner use KVM
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' \
+            | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+
+      # For counting the colours on the screenshot below. Usually already on the image;
+      # installed only when it is not, because apt-get update is not free.
+      - name: Make sure ImageMagick is here
+        run: command -v identify >/dev/null || (sudo apt-get update -qq && sudo apt-get install -y -qq imagemagick)
+
+      # API 30 is the oldest that has `dumpsys activity exit-info`, which is the only way
+      # to ask Android why a process died after the fact rather than guessing from logs.
+      - name: Start it and see whether it stays up
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 30
+          target: default
+          arch: x86_64
+          profile: pixel_2
+          force-avd-creation: false
+          emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none
+          disable-animations: true
+          script: bash .github/scripts/android-smoke.sh
+
+      - name: Upload what the screen looked like
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: android-smoke-evidence
+          path: |
+            smoke-screenshot.png
+            smoke-logcat.txt
+          retention-days: 7
+          if-no-files-found: warn
