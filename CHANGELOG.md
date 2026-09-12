@@ -3,7 +3,7 @@
 What changed in each release, for the people who use Daylo. Earlier versions are not
 listed: this file starts at 1.1.2, when the first change worth warning about arrived.
 
-## Unreleased
+## 1.2.0
 
 **Daylo opens on the month.** It used to open on the year on anything wider than a phone,
 so the same person met a different first screen on their laptop than on their phone. The
