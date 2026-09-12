@@ -10,7 +10,6 @@ import {
 
 const isPermissionGranted = vi.hoisted(() => vi.fn())
 const requestPermission = vi.hoisted(() => vi.fn())
-const sendNotification = vi.hoisted(() => vi.fn())
 const cancel = vi.hoisted(() => vi.fn())
 const pending = vi.hoisted(() => vi.fn())
 const invoke = vi.hoisted(() => vi.fn())
@@ -18,7 +17,6 @@ const invoke = vi.hoisted(() => vi.fn())
 vi.mock('@tauri-apps/plugin-notification', () => ({
   isPermissionGranted,
   requestPermission,
-  sendNotification,
   cancel,
   pending,
   Schedule: {
@@ -30,22 +28,21 @@ vi.mock('@tauri-apps/api/core', async (importOriginal) => ({
   invoke,
 }))
 
-/** The Android app: the command exists and answers. */
+/** The Android app: the commands exist and answer. */
 function pretendAndroid() {
   vi.stubGlobal('isTauri', true)
-  invoke.mockResolvedValue(true)
+  invoke.mockImplementation((command: string) =>
+    command === 'reminders_available' ? Promise.resolve(true) : Promise.resolve(undefined)
+  )
+}
+
+/** What the plugin was asked to schedule, or undefined if it was never asked. */
+function scheduled() {
+  return invoke.mock.calls.find(([command]) => command === 'plugin:notification|notify')?.[1]
 }
 
 beforeEach(() => {
-  for (const m of [
-    isPermissionGranted,
-    requestPermission,
-    sendNotification,
-    cancel,
-    pending,
-    invoke,
-  ])
-    m.mockReset()
+  for (const m of [isPermissionGranted, requestPermission, cancel, pending, invoke]) m.mockReset()
 })
 
 afterEach(() => {
@@ -81,16 +78,16 @@ describe('turning the reminder on', () => {
 
     await expect(enableReminder(21, 0)).resolves.toBe('on')
 
-    expect(sendNotification).toHaveBeenCalledWith(
-      expect.objectContaining({
+    expect(scheduled()).toEqual({
+      options: expect.objectContaining({
         id: REMINDER_ID,
         // An interval matching hour and minute, which Android re-arms on its own and the
         // plugin restores after a reboot. Not Schedule.at: with repeating it computes the
         // repeat gap as the time left until the first fire, so a reminder set at 20:00 for
         // 21:00 would repeat hourly.
         schedule: { interval: { hour: 21, minute: 0 }, allowWhileIdle: true },
-      })
-    )
+      }),
+    })
   })
 
   it('asks for permission only when it does not have it', async () => {
@@ -110,13 +107,36 @@ describe('turning the reminder on', () => {
     requestPermission.mockResolvedValue('denied')
 
     await expect(enableReminder(21, 0)).resolves.toBe('permission-denied')
-    expect(sendNotification).not.toHaveBeenCalled()
+    expect(scheduled()).toBeUndefined()
+  })
+
+  // The plugin's own sendNotification builds a window.Notification and the polyfill
+  // forwards it inside a promise nobody returns, so a refusal from the phone used to
+  // vanish and this said 'on' over nothing scheduled.
+  it('says so when the phone refuses it', async () => {
+    pretendAndroid()
+    isPermissionGranted.mockResolvedValue(true)
+    invoke.mockImplementation((command: string) =>
+      command === 'reminders_available'
+        ? Promise.resolve(true)
+        : Promise.reject(new Error('notification channel is blocked'))
+    )
+    const complaint = vi.spyOn(console, 'error').mockImplementation(() => {})
+
+    await expect(enableReminder(21, 0)).resolves.toBe('failed')
+
+    // Written down rather than swallowed: on Android this line reaches logcat, which is
+    // where somebody looks when a reminder does not arrive.
+    expect(complaint).toHaveBeenCalledWith(
+      expect.stringContaining('could not be scheduled'),
+      expect.any(Error)
+    )
   })
 
   it('does nothing at all off Android', async () => {
     await expect(enableReminder(21, 0)).resolves.toBe('unavailable')
     expect(isPermissionGranted).not.toHaveBeenCalled()
-    expect(sendNotification).not.toHaveBeenCalled()
+    expect(scheduled()).toBeUndefined()
   })
 })
 
@@ -182,12 +202,12 @@ describe('re-arming at launch', () => {
 
     await expect(refreshReminder(21, 0)).resolves.toBe(true)
 
-    expect(sendNotification).toHaveBeenCalledWith(
-      expect.objectContaining({
+    expect(scheduled()).toEqual({
+      options: expect.objectContaining({
         id: REMINDER_ID,
         schedule: { interval: { hour: 21, minute: 0 }, allowWhileIdle: true },
-      })
-    )
+      }),
+    })
   })
 
   // Opening the app is not a moment to be asked for anything. Somebody who took the
@@ -206,11 +226,22 @@ describe('re-arming at launch', () => {
     isPermissionGranted.mockResolvedValue(false)
 
     await expect(refreshReminder(21, 0)).resolves.toBe(false)
-    expect(sendNotification).not.toHaveBeenCalled()
+    expect(scheduled()).toBeUndefined()
   })
 
   it('does nothing at all off Android', async () => {
     await expect(refreshReminder(21, 0)).resolves.toBe(false)
     expect(isPermissionGranted).not.toHaveBeenCalled()
+  })
+
+  it('reports itself off when the phone refuses the schedule', async () => {
+    pretendAndroid()
+    isPermissionGranted.mockResolvedValue(true)
+    invoke.mockImplementation((command: string) =>
+      command === 'reminders_available' ? Promise.resolve(true) : Promise.reject(new Error('nope'))
+    )
+    vi.spyOn(console, 'error').mockImplementation(() => {})
+
+    await expect(refreshReminder(21, 0)).resolves.toBe(false)
   })
 })

@@ -4,7 +4,6 @@ import {
   pending,
   requestPermission,
   Schedule,
-  sendNotification,
 } from '@tauri-apps/plugin-notification'
 import { invoke, isTauri } from '@tauri-apps/api/core'
 
@@ -28,8 +27,10 @@ export function formatReminderTime(hour: number, minute: number): string {
 }
 
 export type ReminderOutcome =
-  /** Scheduled. */
+  /** Scheduled, and the platform said so. */
   | 'on'
+  /** The platform refused it. Nothing is scheduled and the switch must not claim it is. */
+  | 'failed'
   /** The person said no to notifications. Nothing is scheduled and nothing is asked again. */
   | 'permission-denied'
   /** Not the Android app. Nothing to schedule. */
@@ -50,6 +51,37 @@ export async function remindersAvailable(): Promise<boolean> {
   try {
     return await invoke<boolean>('reminders_available')
   } catch {
+    return false
+  }
+}
+
+/**
+ * Put the reminder on the phone's alarm queue, and say whether it got there.
+ *
+ * Called through invoke rather than through the plugin's own sendNotification, which is
+ * where this went wrong: that helper builds a window.Notification, and the polyfill Tauri
+ * injects forwards it inside an async function whose promise nobody returns or awaits. A
+ * failure on the native side vanished, and the switch stayed on over nothing scheduled.
+ * The command is the same one that helper calls, and notification:default allows it.
+ *
+ * The same id every time, so scheduling again replaces rather than stacks and changing the
+ * time cannot leave yesterday's reminder behind.
+ */
+async function putOnTheQueue(hour: number, minute: number): Promise<boolean> {
+  try {
+    await invoke('plugin:notification|notify', {
+      options: {
+        id: REMINDER_ID,
+        title: TITLE,
+        body: BODY,
+        schedule: Schedule.interval({ hour, minute }, true),
+      },
+    })
+    return true
+  } catch (error) {
+    // Written down rather than swallowed: on Android this reaches logcat, which is where
+    // somebody will be looking when a reminder does not arrive.
+    console.error('[Daylo] the reminder could not be scheduled', error)
     return false
   }
 }
@@ -80,16 +112,7 @@ export async function enableReminder(hour: number, minute: number): Promise<Remi
     return 'permission-denied'
   }
 
-  // Replaces rather than stacks: scheduling the same id again overwrites it, so changing
-  // the time cannot leave yesterday's reminder behind.
-  sendNotification({
-    id: REMINDER_ID,
-    title: TITLE,
-    body: BODY,
-    schedule: Schedule.interval({ hour, minute }, true),
-  })
-
-  return 'on'
+  return (await putOnTheQueue(hour, minute)) ? 'on' : 'failed'
 }
 
 /**
@@ -115,14 +138,7 @@ export async function refreshReminder(hour: number, minute: number): Promise<boo
     return false
   }
 
-  sendNotification({
-    id: REMINDER_ID,
-    title: TITLE,
-    body: BODY,
-    schedule: Schedule.interval({ hour, minute }, true),
-  })
-
-  return true
+  return putOnTheQueue(hour, minute)
 }
 
 /** Turn it off. Silent if it was never on. */

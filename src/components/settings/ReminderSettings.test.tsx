@@ -74,6 +74,20 @@ describe('the switch', () => {
   })
 })
 
+// The switch is only ever on over something the phone agreed to schedule. Before, a
+// refusal from the phone was invisible and the switch stayed on with nothing behind it.
+it('goes back off, and says so, when the phone refuses the schedule', async () => {
+  enableReminder.mockResolvedValue('failed')
+  open()
+
+  await userEvent.click(theSwitch())
+
+  await waitFor(() => expect(showToast).toHaveBeenCalled())
+  expect(showToast.mock.calls[0][0]).toMatch(/could not set the reminder/i)
+  expect(useCalendarStore.getState().reminderEnabled).toBe(false)
+  expect(theSwitch()).not.toBeChecked()
+})
+
 describe('the time', () => {
   it('shows the stored one', () => {
     useCalendarStore.setState({ reminderHour: 7, reminderMinute: 5 })

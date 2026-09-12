@@ -76,6 +76,11 @@ fields still show one when you tap into them, which is where you want it. The ye
 calendar on a computer keeps its ring on click, because that is also how it shows you the
 day you are on when you walk it with the arrow keys.
 
+**A reminder that could not be set no longer looks like one that was.** On Android the
+switch could stay on when the phone had refused to schedule anything, so the app claimed a
+reminder that was never going to arrive. Daylo now waits for the phone's answer, turns the
+switch back off if the answer is no, and says so.
+
 ## 1.1.3
 
 **Exporting now asks you where to save.** Before, Daylo handed the file to the system and

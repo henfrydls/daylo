@@ -221,6 +221,21 @@ describe('opening the app', () => {
     await waitFor(() => expect(refreshReminder).toHaveBeenCalledWith(21, 0))
   })
 
+  // Accepting the offer and getting nothing is worse than never being offered: the switch
+  // would sit there claiming a reminder the phone never took.
+  it('says so when the phone refuses the schedule', async () => {
+    firstHabitOnAndroid()
+    enableReminder.mockResolvedValue('failed')
+    render(<DailyReminder />)
+    await theOffer()
+
+    await userEvent.click(screen.getByText('Turn on'))
+
+    await waitFor(() => expect(showToast).toHaveBeenCalled())
+    expect(showToast.mock.calls[0][0]).toMatch(/could not set the reminder/i)
+    expect(useCalendarStore.getState().reminderEnabled).toBe(false)
+  })
+
   // The permission can be taken away in the phone's own settings, and nothing tells the
   // app. A switch that says "on" over an alarm that no longer exists is a lie.
   it('turns the switch off when the permission has gone', async () => {

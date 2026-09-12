@@ -67,6 +67,11 @@ export function DailyReminder() {
     if (outcome === 'permission-denied') {
       showToast('Daylo needs permission to send notifications', 'error')
     }
+    // The phone had the permission and still would not take it. Saying nothing would
+    // leave a switch that looks on over a reminder that will never arrive.
+    if (outcome === 'failed') {
+      showToast('Daylo could not set the reminder on this phone', 'error')
+    }
   }
 
   return (
