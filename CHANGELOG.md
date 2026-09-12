@@ -68,6 +68,14 @@ time.
 The reminder is only on Android. On a computer a notification could only arrive while
 Daylo was already open, which is not a reminder.
 
+**Buttons stop glowing after you tap them.** On a phone, tapping the Year or Month switch
+left a green ring around it, and if you then swiped to the other view the ring stayed
+behind on the one you had left, so two buttons looked picked at once. Rings are for
+keyboards now: they appear when you tab to something and not when you touch it. Text
+fields still show one when you tap into them, which is where you want it. The year
+calendar on a computer keeps its ring on click, because that is also how it shows you the
+day you are on when you walk it with the arrow keys.
+
 ## 1.1.3
 
 **Exporting now asks you where to save.** Before, Daylo handed the file to the system and

@@ -164,7 +164,7 @@ export const MonthView = memo(function MonthView() {
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 sm:gap-4 mb-4 sm:mb-6">
         <button
           onClick={() => setCurrentView('year', 'drill-up')}
-          className="text-xl sm:text-2xl font-bold text-gray-900 hover:text-emerald-600 transition-colors focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:ring-offset-1 rounded-lg px-1 -mx-1"
+          className="text-xl sm:text-2xl font-bold text-gray-900 hover:text-emerald-600 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 focus-visible:ring-offset-1 rounded-lg px-1 -mx-1"
           aria-label={`Switch to year view for ${selectedYear}`}
           data-testid="month-title-button"
         >
@@ -173,7 +173,7 @@ export const MonthView = memo(function MonthView() {
         <div className="flex items-center gap-1">
           <button
             onClick={handlePrevMonth}
-            className="p-2.5 sm:p-1.5 rounded-lg text-gray-500 hover:bg-gray-100 transition-colors focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:ring-offset-1 min-h-[44px] min-w-[44px] sm:min-h-0 sm:min-w-0 flex items-center justify-center"
+            className="p-2.5 sm:p-1.5 rounded-lg text-gray-500 hover:bg-gray-100 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 focus-visible:ring-offset-1 min-h-[44px] min-w-[44px] sm:min-h-0 sm:min-w-0 flex items-center justify-center"
             aria-label="Previous month"
           >
             <svg
@@ -193,7 +193,7 @@ export const MonthView = memo(function MonthView() {
           </button>
           <button
             onClick={handleNextMonth}
-            className="p-2.5 sm:p-1.5 rounded-lg text-gray-500 hover:bg-gray-100 transition-colors focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:ring-offset-1 min-h-[44px] min-w-[44px] sm:min-h-0 sm:min-w-0 flex items-center justify-center"
+            className="p-2.5 sm:p-1.5 rounded-lg text-gray-500 hover:bg-gray-100 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 focus-visible:ring-offset-1 min-h-[44px] min-w-[44px] sm:min-h-0 sm:min-w-0 flex items-center justify-center"
             aria-label="Next month"
           >
             <svg
@@ -208,7 +208,7 @@ export const MonthView = memo(function MonthView() {
           </button>
           <button
             onClick={handleToday}
-            className="ml-2 px-3 py-2 sm:py-1 text-sm font-medium text-gray-600 hover:bg-gray-100 rounded-lg transition-colors focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:ring-offset-1 min-h-[44px] sm:min-h-0"
+            className="ml-2 px-3 py-2 sm:py-1 text-sm font-medium text-gray-600 hover:bg-gray-100 rounded-lg transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 focus-visible:ring-offset-1 min-h-[44px] sm:min-h-0"
             aria-label="Go to current month"
           >
             Today

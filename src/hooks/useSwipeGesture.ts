@@ -63,6 +63,15 @@ export function useSwipeGesture<T extends HTMLElement = HTMLDivElement>(
       // Velocity check: swipe should complete within a reasonable time (1 second)
       if (elapsed > 1000) return
 
+      // A gesture is not a click, and whatever the finger last touched keeps DOM focus.
+      // Left alone it points at the screen the person has just swiped away from: on the
+      // view toggle that showed as a ring on one button and the selection on the other.
+      // Only once the movement has been accepted as a swipe, so a stray touch cannot take
+      // the focus from something somebody was using.
+      if (document.activeElement instanceof HTMLElement) {
+        document.activeElement.blur()
+      }
+
       if (deltaX < 0) {
         onSwipeLeftRef.current?.()
       } else {

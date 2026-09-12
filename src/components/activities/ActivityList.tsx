@@ -76,7 +76,7 @@ export const ActivityList = memo(function ActivityList() {
           {(showAll ? activities : activities.slice(0, maxVisible)).map((activity, index) => (
             <li
               key={activity.id}
-              className="flex items-center justify-between p-2 sm:p-3 rounded-lg hover:bg-gray-50 focus-within:bg-gray-50 transition-colors group"
+              className="flex items-center justify-between p-2 sm:p-3 rounded-lg hover:bg-gray-50 has-[:focus-visible]:bg-gray-50 transition-colors group"
               style={{
                 animation: 'view-fade 200ms var(--ease-emphasized-decel) both',
                 animationDelay: `${index * 30}ms`,
@@ -97,14 +97,14 @@ export const ActivityList = memo(function ActivityList() {
               <div className="flex items-center gap-1 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 sm:group-focus-within:opacity-100 transition-opacity flex-shrink-0">
                 <button
                   onClick={() => handleEdit(activity)}
-                  className="p-2.5 sm:p-1.5 rounded-lg text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition-colors focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:opacity-100 min-h-[44px] min-w-[44px] sm:min-h-0 sm:min-w-0 flex items-center justify-center"
+                  className="p-2.5 sm:p-1.5 rounded-lg text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 focus:opacity-100 min-h-[44px] min-w-[44px] sm:min-h-0 sm:min-w-0 flex items-center justify-center"
                   aria-label={`Edit ${activity.name}`}
                 >
                   <PencilIcon className="w-4 h-4" />
                 </button>
                 <button
                   onClick={() => handleDeleteClick(activity.id)}
-                  className="p-2.5 sm:p-1.5 rounded-lg text-gray-400 hover:text-red-600 hover:bg-red-50 transition-colors focus:outline-none focus:ring-2 focus:ring-red-500 focus:opacity-100 min-h-[44px] min-w-[44px] sm:min-h-0 sm:min-w-0 flex items-center justify-center"
+                  className="p-2.5 sm:p-1.5 rounded-lg text-gray-400 hover:text-red-600 hover:bg-red-50 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-red-500 focus:opacity-100 min-h-[44px] min-w-[44px] sm:min-h-0 sm:min-w-0 flex items-center justify-center"
                   aria-label={`Delete ${activity.name}`}
                 >
                   <TrashIcon className="w-4 h-4" />
@@ -118,7 +118,7 @@ export const ActivityList = memo(function ActivityList() {
       {activities.length > maxVisible && (
         <button
           onClick={() => setShowAll((prev) => !prev)}
-          className="w-full min-h-[44px] mt-2 text-sm font-medium text-emerald-600 hover:text-emerald-700 hover:bg-emerald-50 rounded-lg transition-colors focus:outline-none focus:ring-2 focus:ring-emerald-500"
+          className="w-full min-h-[44px] mt-2 text-sm font-medium text-emerald-600 hover:text-emerald-700 hover:bg-emerald-50 rounded-lg transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500"
           data-testid="show-more-button"
         >
           {showAll ? 'Show less' : `Show all (${activities.length})`}

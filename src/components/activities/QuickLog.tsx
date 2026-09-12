@@ -208,7 +208,7 @@ export const QuickLog = memo(function QuickLog() {
 
       <button
         onClick={handleStartCreating}
-        className="flex items-center gap-2 w-full p-3 border-2 border-dashed border-gray-200 rounded-lg text-gray-500 hover:bg-gray-50 hover:border-gray-300 transition-colors focus:outline-none focus:ring-2 focus:ring-emerald-500 min-h-[48px] sm:min-h-0"
+        className="flex items-center gap-2 w-full p-3 border-2 border-dashed border-gray-200 rounded-lg text-gray-500 hover:bg-gray-50 hover:border-gray-300 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 min-h-[48px] sm:min-h-0"
         data-testid="quicklog-new-activity-button"
       >
         <PlusIcon className="w-5 h-5" />
@@ -262,7 +262,7 @@ export const QuickLog = memo(function QuickLog() {
           </h2>
           <button
             onClick={() => setSelectedDate(null)}
-            className="p-2.5 sm:p-1 rounded-lg text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition-colors focus:outline-none focus:ring-2 focus:ring-emerald-500 min-h-[44px] min-w-[44px] sm:min-h-0 sm:min-w-0 flex items-center justify-center"
+            className="p-2.5 sm:p-1 rounded-lg text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 min-h-[44px] min-w-[44px] sm:min-h-0 sm:min-w-0 flex items-center justify-center"
             aria-label="Close quick log"
           >
             <XIcon className="w-5 h-5" />

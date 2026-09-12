@@ -153,7 +153,7 @@ export const YearView = memo(function YearView() {
           type="button"
           onClick={() => setYearMode(mode)}
           aria-pressed={yearMode === mode}
-          className={`rounded-md px-3 py-1.5 text-sm font-medium transition-colors duration-150 focus:ring-2 focus:ring-emerald-500 focus:ring-offset-1 focus:outline-none ${
+          className={`rounded-md px-3 py-1.5 text-sm font-medium transition-colors duration-150 focus-visible:ring-2 focus-visible:ring-emerald-500 focus-visible:ring-offset-1 focus:outline-none ${
             yearMode === mode
               ? 'bg-white text-gray-900 shadow-sm'
               : 'text-gray-500 hover:text-gray-700'
@@ -176,7 +176,7 @@ export const YearView = memo(function YearView() {
             <div className="flex items-center gap-1">
               <button
                 onClick={handlePrevYear}
-                className="min-h-[44px] min-w-[44px] flex items-center justify-center rounded-lg text-gray-500 hover:bg-gray-100 hover:text-gray-700 transition-colors focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:ring-offset-1"
+                className="min-h-[44px] min-w-[44px] flex items-center justify-center rounded-lg text-gray-500 hover:bg-gray-100 hover:text-gray-700 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 focus-visible:ring-offset-1"
                 aria-label="Previous year"
               >
                 <svg
@@ -196,7 +196,7 @@ export const YearView = memo(function YearView() {
               </button>
               <button
                 onClick={handleNextYear}
-                className="min-h-[44px] min-w-[44px] flex items-center justify-center rounded-lg text-gray-500 hover:bg-gray-100 hover:text-gray-700 transition-colors focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:ring-offset-1"
+                className="min-h-[44px] min-w-[44px] flex items-center justify-center rounded-lg text-gray-500 hover:bg-gray-100 hover:text-gray-700 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 focus-visible:ring-offset-1"
                 aria-label="Next year"
               >
                 <svg
@@ -218,7 +218,7 @@ export const YearView = memo(function YearView() {
           </div>
           <button
             onClick={handleCurrentYear}
-            className="min-h-[44px] px-4 text-sm font-medium text-gray-600 hover:bg-gray-100 hover:text-gray-800 rounded-lg transition-colors border border-gray-200 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:ring-offset-1"
+            className="min-h-[44px] px-4 text-sm font-medium text-gray-600 hover:bg-gray-100 hover:text-gray-800 rounded-lg transition-colors border border-gray-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 focus-visible:ring-offset-1"
             aria-label="Go to current year"
           >
             Today
@@ -299,7 +299,7 @@ export const YearView = memo(function YearView() {
           <div className="flex items-center gap-1">
             <button
               onClick={handlePrevYear}
-              className="p-2 rounded-lg text-gray-500 hover:bg-gray-100 hover:text-gray-700 transition-colors focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:ring-offset-1 min-h-[44px] min-w-[44px] sm:min-h-0 sm:min-w-0 flex items-center justify-center"
+              className="p-2 rounded-lg text-gray-500 hover:bg-gray-100 hover:text-gray-700 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 focus-visible:ring-offset-1 min-h-[44px] min-w-[44px] sm:min-h-0 sm:min-w-0 flex items-center justify-center"
               aria-label="Previous year"
             >
               <svg
@@ -319,7 +319,7 @@ export const YearView = memo(function YearView() {
             </button>
             <button
               onClick={handleNextYear}
-              className="p-2 rounded-lg text-gray-500 hover:bg-gray-100 hover:text-gray-700 transition-colors focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:ring-offset-1 min-h-[44px] min-w-[44px] sm:min-h-0 sm:min-w-0 flex items-center justify-center"
+              className="p-2 rounded-lg text-gray-500 hover:bg-gray-100 hover:text-gray-700 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 focus-visible:ring-offset-1 min-h-[44px] min-w-[44px] sm:min-h-0 sm:min-w-0 flex items-center justify-center"
               aria-label="Next year"
             >
               <svg
@@ -339,7 +339,7 @@ export const YearView = memo(function YearView() {
             </button>
             <button
               onClick={handleCurrentYear}
-              className="ml-2 px-4 py-1.5 text-sm font-medium text-gray-600 hover:bg-gray-100 hover:text-gray-800 rounded-lg transition-colors border border-gray-200 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:ring-offset-1 min-h-[44px] sm:min-h-0"
+              className="ml-2 px-4 py-1.5 text-sm font-medium text-gray-600 hover:bg-gray-100 hover:text-gray-800 rounded-lg transition-colors border border-gray-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 focus-visible:ring-offset-1 min-h-[44px] sm:min-h-0"
               aria-label="Go to current year"
             >
               Today
@@ -403,7 +403,7 @@ export const YearView = memo(function YearView() {
                     key={month}
                     type="button"
                     onClick={() => navigateToMonth(selectedYear, month)}
-                    className="rounded-lg px-1 py-1 text-center hover:bg-gray-50 focus:ring-2 focus:ring-emerald-500 focus:outline-none"
+                    className="rounded-lg px-1 py-1 text-center hover:bg-gray-50 focus-visible:ring-2 focus-visible:ring-emerald-500 focus:outline-none"
                     aria-label={
                       percentage === null
                         ? `View ${MONTHS[month]} ${selectedYear}, not started yet`

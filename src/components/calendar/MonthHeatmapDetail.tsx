@@ -136,7 +136,7 @@ export const MonthHeatmapDetail = memo(function MonthHeatmapDetail({
           type="button"
           onClick={handlePrevMonth}
           disabled={month === 0}
-          className="min-h-[44px] min-w-[44px] flex items-center justify-center rounded-lg text-gray-500 hover:bg-gray-100 hover:text-gray-700 transition-colors focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:ring-offset-1 disabled:opacity-30 disabled:cursor-not-allowed"
+          className="min-h-[44px] min-w-[44px] flex items-center justify-center rounded-lg text-gray-500 hover:bg-gray-100 hover:text-gray-700 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 focus-visible:ring-offset-1 disabled:opacity-30 disabled:cursor-not-allowed"
           aria-label="Previous month"
         >
           <svg
@@ -161,7 +161,7 @@ export const MonthHeatmapDetail = memo(function MonthHeatmapDetail({
           type="button"
           onClick={handleNextMonth}
           disabled={month === 11}
-          className="min-h-[44px] min-w-[44px] flex items-center justify-center rounded-lg text-gray-500 hover:bg-gray-100 hover:text-gray-700 transition-colors focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:ring-offset-1 disabled:opacity-30 disabled:cursor-not-allowed"
+          className="min-h-[44px] min-w-[44px] flex items-center justify-center rounded-lg text-gray-500 hover:bg-gray-100 hover:text-gray-700 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 focus-visible:ring-offset-1 disabled:opacity-30 disabled:cursor-not-allowed"
           aria-label="Next month"
         >
           <svg
@@ -206,7 +206,7 @@ export const MonthHeatmapDetail = memo(function MonthHeatmapDetail({
               className={`
                 w-full aspect-square rounded-lg flex items-center justify-center
                 text-sm font-medium transition-colors
-                focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:ring-offset-1
+                focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 focus-visible:ring-offset-1
                 ${
                   cell.isCurrentMonth
                     ? `${heatmapClass} ${cell.level === 0 ? 'border border-gray-200' : ''} active:scale-95`

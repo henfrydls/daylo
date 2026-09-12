@@ -164,3 +164,55 @@ describe('useSwipeGesture', () => {
     document.body.removeChild(container)
   })
 })
+
+describe('focus after a swipe', () => {
+  // A gesture is not a click. Whatever the finger last touched keeps DOM focus, so after
+  // tapping Year and swiping to Month the focus was still on the button for the view you
+  // had just left: on the phone, a ring on one button and the selection on the other.
+  it('drops the focus the finger left behind', () => {
+    const container = document.createElement('div')
+    const button = document.createElement('button')
+    document.body.append(container, button)
+    button.focus()
+    expect(document.activeElement).toBe(button)
+
+    const { unmount } = renderHook(() => {
+      const ref = useSwipeGesture<HTMLDivElement>({ onSwipeLeft: vi.fn() })
+      Object.defineProperty(ref, 'current', { value: container, writable: true })
+      return ref
+    })
+
+    container.dispatchEvent(createTouchEvent('touchstart', 200, 100))
+    container.dispatchEvent(createTouchEvent('touchend', 100, 100))
+
+    expect(document.activeElement).not.toBe(button)
+
+    unmount()
+    container.remove()
+    button.remove()
+  })
+
+  // A movement that was not a swipe changes nothing, so it has no business taking the
+  // focus away from whatever the person was using.
+  it('leaves the focus alone when the movement was not a swipe', () => {
+    const container = document.createElement('div')
+    const button = document.createElement('button')
+    document.body.append(container, button)
+    button.focus()
+
+    const { unmount } = renderHook(() => {
+      const ref = useSwipeGesture<HTMLDivElement>({ onSwipeLeft: vi.fn() })
+      Object.defineProperty(ref, 'current', { value: container, writable: true })
+      return ref
+    })
+
+    container.dispatchEvent(createTouchEvent('touchstart', 200, 100))
+    container.dispatchEvent(createTouchEvent('touchend', 180, 100))
+
+    expect(document.activeElement).toBe(button)
+
+    unmount()
+    container.remove()
+    button.remove()
+  })
+})

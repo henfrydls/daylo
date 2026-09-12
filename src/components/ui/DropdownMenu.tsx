@@ -161,7 +161,7 @@ export function DropdownMenu({ trigger, items, 'data-testid': testId }: Dropdown
         ref={triggerRef}
         onClick={handleTriggerClick}
         onKeyDown={handleTriggerKeyDown}
-        className="inline-flex items-center focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:ring-offset-1 rounded-lg"
+        className="inline-flex items-center focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 focus-visible:ring-offset-1 rounded-lg"
         aria-haspopup="menu"
         aria-expanded={isOpen}
         aria-controls={isOpen ? 'dropdown-menu' : undefined}
@@ -231,7 +231,7 @@ export function DropdownMenu({ trigger, items, 'data-testid': testId }: Dropdown
                   w-full px-4 py-2 text-sm text-left
                   flex items-center gap-2
                   transition-colors duration-150
-                  focus:outline-none focus:ring-2 focus:ring-inset focus:ring-emerald-500
+                  focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-emerald-500
                   min-h-[44px] sm:min-h-0
                   ${
                     item.disabled

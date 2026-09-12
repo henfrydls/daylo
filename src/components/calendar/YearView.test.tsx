@@ -304,8 +304,10 @@ describe('YearView', () => {
       render(<YearView />)
 
       const prevButton = screen.getByLabelText('Previous year')
-      // Check that the button has focus ring classes
-      expect(prevButton.className).toContain('focus:ring')
+      // focus-visible, not focus: a ring that a tap leaves behind sticks on a phone, and
+      // the toggle ended up showing one on the button for the view you had just left.
+      expect(prevButton.className).toContain('focus-visible:ring')
+      expect(prevButton.className).not.toContain(' focus:ring')
     })
 
     it('should have SVG icons hidden from screen readers', () => {
