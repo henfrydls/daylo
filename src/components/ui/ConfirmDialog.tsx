@@ -103,9 +103,9 @@ export function ConfirmDialog({
 
   const confirmButtonClass =
     variant === 'danger'
-      ? 'bg-red-600 hover:bg-red-700 focus:ring-red-500 text-white'
+      ? 'bg-red-600 hover:bg-red-700 focus-visible:ring-red-500 text-white'
       : variant === 'warning'
-        ? 'bg-amber-600 hover:bg-amber-700 focus:ring-amber-500 text-white'
+        ? 'bg-amber-600 hover:bg-amber-700 focus-visible:ring-amber-500 text-white'
         : ''
 
   return createPortal(
@@ -153,9 +153,9 @@ export function ConfirmDialog({
           <button
             ref={confirmButtonRef}
             onClick={handleConfirm}
-            className={`flex-1 px-4 py-2 rounded-lg font-medium transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2 min-h-[44px] sm:min-h-0 order-1 sm:order-2 ${
+            className={`flex-1 px-4 py-2 rounded-lg font-medium transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 min-h-[44px] sm:min-h-0 order-1 sm:order-2 ${
               confirmButtonClass ||
-              'bg-emerald-500 hover:bg-emerald-600 focus:ring-emerald-500 text-white'
+              'bg-emerald-500 hover:bg-emerald-600 focus-visible:ring-emerald-500 text-white'
             }`}
             data-testid="confirm-dialog-confirm"
           >

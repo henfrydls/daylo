@@ -199,7 +199,7 @@ export const YearHeatmap = memo(function YearHeatmap({
                         : checkIsToday(date)
                           ? 'shadow-[0_0_0_1px_#fff,0_0_0_2px_var(--color-blue-500)]'
                           : ''
-                    } hover:shadow-[0_0_0_1px_#fff,0_0_0_2px_var(--color-gray-500)] focus:shadow-[0_0_0_1px_#fff,0_0_0_2px_var(--color-emerald-600)] focus:outline-none`}
+                    } hover:shadow-[0_0_0_1px_#fff,0_0_0_2px_var(--color-gray-500)] focus-visible:shadow-[0_0_0_1px_#fff,0_0_0_2px_var(--color-emerald-600)] focus:outline-none`}
                     aria-label={label}
                     data-label={label}
                     data-date={key}

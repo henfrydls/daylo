@@ -33,7 +33,7 @@ function ViewToggle() {
         onClick={() => setCurrentView('year', 'drill-up')}
         className={`
           px-3 py-2 sm:py-1.5 text-sm font-medium rounded-md transition-all duration-150
-          focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:ring-offset-1
+          focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 focus-visible:ring-offset-1
           min-h-[44px] sm:min-h-0 min-w-[44px]
           ${
             currentView === 'year'
@@ -49,7 +49,7 @@ function ViewToggle() {
         onClick={() => setCurrentView('month', 'drill-down')}
         className={`
           px-3 py-2 sm:py-1.5 text-sm font-medium rounded-md transition-all duration-150
-          focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:ring-offset-1
+          focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 focus-visible:ring-offset-1
           min-h-[44px] sm:min-h-0 min-w-[44px]
           ${
             currentView === 'month'
@@ -143,7 +143,7 @@ function App() {
         {/* Skip Link for keyboard users */}
         <a
           href="#main-content"
-          className="sr-only focus:not-sr-only focus:absolute focus:top-4 focus:left-4 focus:z-50 focus:px-4 focus:py-2 focus:bg-emerald-500 focus:text-white focus:rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-600"
+          className="sr-only focus:not-sr-only focus:absolute focus:top-4 focus:left-4 focus:z-50 focus:px-4 focus:py-2 focus:bg-emerald-500 focus:text-white focus:rounded-lg focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-600"
         >
           Skip to main content
         </a>
@@ -266,7 +266,7 @@ function App() {
         {/* FAB Button - Visible only on mobile (< lg) */}
         <button
           onClick={() => setIsBottomSheetOpen(true)}
-          className="fixed bottom-6 right-6 z-20 lg:hidden w-14 h-14 bg-emerald-500 hover:bg-emerald-600 active:bg-emerald-700 text-white rounded-full shadow-lg flex items-center justify-center transition-colors focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:ring-offset-2"
+          className="fixed bottom-6 right-6 z-20 lg:hidden w-14 h-14 bg-emerald-500 hover:bg-emerald-600 active:bg-emerald-700 text-white rounded-full shadow-lg flex items-center justify-center transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 focus-visible:ring-offset-2"
           aria-label="Open activities panel"
           data-testid="fab-button"
         >

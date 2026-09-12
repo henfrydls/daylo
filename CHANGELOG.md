@@ -18,6 +18,12 @@ you point at them. They can still be picked: two activities can share a color, i
 harder to tell them apart. If you have used every color, nothing is dimmed, because at
 that point it would only make the palette look broken.
 
+**Buttons stop glowing after you tap them.** On a phone, tapping the Year or Month switch
+left a green ring around it, and if you then swiped to the other view the ring stayed
+behind on the one you had left, so two buttons looked picked at once. Rings are for
+keyboards now: they appear when you tab to something and not when you touch it. Text
+fields still show one when you tap into them, which is where you want it.
+
 ## 1.1.3
 
 **Exporting now asks you where to save.** Before, Daylo handed the file to the system and

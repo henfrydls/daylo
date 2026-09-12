@@ -684,3 +684,55 @@ test.describe('month cards on a narrow phone', () => {
     })
   }
 })
+
+// ── Touch ────────────────────────────────────────────────
+
+test.describe('the view toggle on a touch screen', () => {
+  test.use({ hasTouch: true, viewport: { width: 390, height: 844 } })
+
+  /**
+   * The button's own shadow once nothing is moving.
+   *
+   * Read as a string and compared against the resting state rather than matched against a
+   * colour: Tailwind 4 writes these in oklab, so a regex for the emerald rgb triple can
+   * never match and a test built on one passes whatever the ring does. The wait is not
+   * decoration either, because the ring grows through a 150ms transition and measuring
+   * during it returns a fraction of a pixel.
+   */
+  async function shadowOf(page: import('@playwright/test').Page, name: string) {
+    await page.waitForFunction(() =>
+      document.getAnimations().every((a) => a.playState !== 'running')
+    )
+    return page
+      .getByRole('button', { name, exact: true })
+      .evaluate((el) => getComputedStyle(el).boxShadow)
+  }
+
+  // Measured on the button that is already selected. Daylo opens on the month, so tapping
+  // Month changes nothing about the selection and the only thing that can move the shadow
+  // is the focus ring. Tapping Year would also swap which button carries shadow-sm, and
+  // the test would be reading that instead.
+  //
+  // Reported from a real phone: tapping the toggle painted the green focus ring and left
+  // it there. Swiping to the other view then moved the selection but not the ring, so two
+  // buttons were highlighted at once, one of them the view you had just left.
+  test('tapping it leaves no ring behind', async ({ page }) => {
+    await page.goto('/')
+    const resting = await shadowOf(page, 'Month')
+
+    await page.getByRole('button', { name: 'Month', exact: true }).tap()
+
+    expect(await shadowOf(page, 'Month')).toBe(resting)
+  })
+
+  // The other half of the same rule: a keyboard still has to be able to see where it is.
+  test('but the keyboard still gets one', async ({ page }) => {
+    await page.goto('/')
+    const resting = await shadowOf(page, 'Month')
+
+    await page.getByRole('button', { name: 'Month', exact: true }).focus()
+    await page.keyboard.press('Space')
+
+    expect(await shadowOf(page, 'Month')).not.toBe(resting)
+  })
+})
