@@ -598,6 +598,41 @@ describe('YearView', () => {
       expect(useCalendarStore.getState().yearMode).toBe('byActivity')
     })
 
+    // The legend reads the five shades of the combined heatmap. In the other view three
+    // rows out of four are one colour or grey, so up in the header it would be labelling
+    // something that is not on screen.
+    it('moves the legend to the row it describes', () => {
+      useCalendarStore.setState({
+        activities: [
+          {
+            id: 'a1',
+            name: 'Hiking',
+            color: '#8B5CF6',
+            createdAt: '2024-01-01',
+            updatedAt: '2024-01-01',
+          },
+        ],
+      })
+      render(<YearView />)
+      const header = screen.getByTestId('year-header')
+      expect(
+        within(header).getByRole('group', { name: /activity level legend/i })
+      ).toBeInTheDocument()
+
+      fireEvent.click(screen.getByRole('button', { name: 'By activity' }))
+
+      expect(
+        within(screen.getByTestId('year-header')).queryByRole('group', {
+          name: /activity level legend/i,
+        })
+      ).not.toBeInTheDocument()
+      expect(
+        within(screen.getByTestId('activity-row-All')).getByRole('group', {
+          name: /activity level legend/i,
+        })
+      ).toBeInTheDocument()
+    })
+
     // The figures under the grid describe the year as a whole, and each row carries its
     // own in the other view, so repeating them there would say the same thing twice.
     it('keeps the year figures for the combined view only', () => {

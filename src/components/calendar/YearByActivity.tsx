@@ -1,5 +1,6 @@
 import { memo, useMemo } from 'react'
 import { YearHeatmap } from './YearHeatmap'
+import { HeatmapLegend } from './HeatmapLegend'
 import { currentStreak } from '../../lib/streaks'
 import type { Activity, ActivityLog, HeatmapLevel } from '../../types'
 
@@ -97,6 +98,10 @@ export const YearByActivity = memo(function YearByActivity({
         <div className="mb-2 flex items-center gap-2">
           <span className="text-sm font-semibold text-gray-800">All activities</span>
           <span className="text-xs text-gray-500">{activeDays} active days</span>
+          {/* The five shades belong to this row and to no other one here. */}
+          <div className="ml-auto">
+            <HeatmapLegend compact />
+          </div>
         </div>
 
         <YearHeatmap
