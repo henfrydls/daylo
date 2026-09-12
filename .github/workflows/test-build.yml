@@ -443,10 +443,14 @@ jobs:
           sudo udevadm control --reload-rules
           sudo udevadm trigger --name-match=kvm
 
-      # For counting the colours on the screenshot below. Usually already on the image;
-      # installed only when it is not, because apt-get update is not free.
-      - name: Make sure ImageMagick is here
-        run: command -v identify >/dev/null || (sudo apt-get update -qq && sudo apt-get install -y -qq imagemagick)
+      # For reading the screenshot below. Pillow rather than ImageMagick so the scoring
+      # is a Python script that can be run against known-good and known-bad images on a
+      # laptop, which is how its numbers were arrived at and how they stay checkable.
+      - name: Install Pillow
+        # The fallback is for a runner image whose Python is externally managed, where
+        # pip refuses to write to it without being told; the flag does not exist on
+        # older pip, so it cannot simply be passed always.
+        run: python3 -m pip install --quiet pillow || python3 -m pip install --quiet --break-system-packages pillow
 
       # API 34, and the level is load bearing for a reason that is not the Android
       # version. An emulator image carries a WebView baked in and no Play Store to update

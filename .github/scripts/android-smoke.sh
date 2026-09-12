@@ -121,19 +121,13 @@ elif [ "${engine%%.*}" -lt "$MIN_CHROMIUM" ]; then
   exit 0
 fi
 
-# The status bar has content of its own, so it is cut off before counting: without that,
-# a completely blank app still scores a few dozen colours and this check says nothing.
-# ImageMagick 7 renamed the command and keeps `convert` only as a compatibility shim,
-# which some images drop.
-IM=$(command -v magick || command -v convert)
-"$IM" "$SHOT" -gravity North -chop 0x150 cropped.png
-colours=$(identify -format '%k' cropped.png)
-echo "the screen below the status bar has $colours distinct colours"
-
-# A blank webview is one colour, or two or three with a bar drawn across it. Daylo's year
-# view is a grid of tinted cells and runs to the hundreds. Twenty is far enough from both.
-if [ "$colours" -lt 20 ]; then
-  fail "The app is running but the screen is blank ($colours colours). The webview did not paint."
+# The screenshot is scored by a script rather than here, because what it has to tell
+# apart — a page with Daylo's stylesheet and a page without it — cannot be read off a
+# colour count, and the script is the part that can be run against known-good and
+# known-bad images on a laptop. Its own message says which of the two failed.
+if ! python3 .github/scripts/screen-check.py "$SHOT"; then
+  echo "::error::The screenshot is in the android-smoke-evidence artifact. Look at it."
+  exit 1
 fi
 
-echo "Daylo installed, started, stayed up, and painted something."
+echo "Daylo installed, started, stayed up, and painted its own colours."
