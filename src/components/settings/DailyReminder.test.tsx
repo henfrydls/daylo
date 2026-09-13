@@ -124,7 +124,7 @@ describe('the one-time offer', () => {
 describe('answering the offer', () => {
   it('turns the reminder on at the stored time', async () => {
     firstHabitOnAndroid()
-    enableReminder.mockResolvedValue('on')
+    enableReminder.mockResolvedValue({ outcome: 'on' })
     render(<DailyReminder />)
     await theOffer()
 
@@ -150,7 +150,7 @@ describe('answering the offer', () => {
 
   it('leaves the reminder off when the permission is refused', async () => {
     firstHabitOnAndroid()
-    enableReminder.mockResolvedValue('permission-denied')
+    enableReminder.mockResolvedValue({ outcome: 'permission-denied' })
     render(<DailyReminder />)
     await theOffer()
 
@@ -219,6 +219,21 @@ describe('opening the app', () => {
     act(() => useCalendarStore.setState({ activities: [anActivity('a')] }))
 
     await waitFor(() => expect(refreshReminder).toHaveBeenCalledWith(21, 0))
+  })
+
+  // Accepting the offer and getting nothing is worse than never being offered: the switch
+  // would sit there claiming a reminder the phone never took.
+  it('says so when the phone refuses the schedule', async () => {
+    firstHabitOnAndroid()
+    enableReminder.mockResolvedValue({ outcome: 'failed', reason: 'the phone said no' })
+    render(<DailyReminder />)
+    await theOffer()
+
+    await userEvent.click(screen.getByText('Turn on'))
+
+    await waitFor(() => expect(showToast).toHaveBeenCalled())
+    expect(showToast.mock.calls[0][0]).toMatch(/could not set the reminder/i)
+    expect(useCalendarStore.getState().reminderEnabled).toBe(false)
   })
 
   // The permission can be taken away in the phone's own settings, and nothing tells the

@@ -4,6 +4,24 @@ import type { ReactNode } from 'react'
 import { useFocusTrap, useAnimatedPresence } from '../../hooks'
 import { XIcon } from './Icons'
 
+/**
+ * The dialog, and on a phone the sheet that comes up from the bottom.
+ *
+ * The bottom padding is the design's own plus whatever the system has reserved down
+ * there. A phone on gesture navigation keeps a strip at the bottom of the screen for its
+ * own bar, and a sheet that reaches the bottom edge — which this one does, by design —
+ * has its last row sitting in it. Reported from a phone: the button that stops the
+ * reminder was flush against the gesture bar with no air at all.
+ *
+ * calc rather than max. With max the system's strip eats the padding the design asked
+ * for, and the button clears the bar by exactly nothing; with calc it keeps its own
+ * breathing room above whatever the system takes. Where there is no inset — every
+ * desktop, and a phone on button navigation — env() is 0 and this is exactly the padding
+ * it always had, so nothing moves anywhere else.
+ *
+ * It needs viewport-fit=cover in the viewport meta to be anything but zero, which
+ * index.html has.
+ */
 interface ModalProps {
   isOpen: boolean
   onClose: () => void
@@ -43,7 +61,7 @@ export function Modal({
       />
       <div
         ref={modalRef}
-        className={`relative bg-white rounded-t-xl sm:rounded-xl shadow-xl max-w-md w-full mx-0 sm:mx-4 px-6 py-4 sm:p-6 max-h-[90dvh] flex flex-col overflow-hidden transition-[transform,opacity] ${
+        className={`relative bg-white rounded-t-xl sm:rounded-xl shadow-xl max-w-md w-full mx-0 sm:mx-4 px-6 pt-4 sm:pt-6 pb-[calc(1rem_+_env(safe-area-inset-bottom))] sm:pb-[calc(1.5rem_+_env(safe-area-inset-bottom))] max-h-[90dvh] flex flex-col overflow-hidden transition-[transform,opacity] ${
           isVisible
             ? 'opacity-100 scale-100 duration-250 ease-[var(--ease-emphasized-decel)]'
             : 'opacity-0 scale-95 duration-150 ease-[var(--ease-emphasized-accel)]'

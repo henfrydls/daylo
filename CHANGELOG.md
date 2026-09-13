@@ -60,10 +60,9 @@ your data; only the counting changed.
 time you choose, so a day does not go by unlogged. It is off until you ask for it: after
 you create your first habit Daylo offers it once, and if you say no it does not ask again.
 You can turn it on, move the time or turn it off from the menu at any time, and it stays
-on after you restart your phone. Android decides the exact minute, so it may arrive a few
-minutes either side of the time you picked. If the phone has been sitting unused for days,
-Android can hold it back further while it sleeps; opening Daylo puts the next one back on
-time.
+on after you restart your phone. Android picks the exact moment: usually close to the time
+you chose, and later if the phone has been asleep. It does not need the app open. Opening
+Daylo puts the next one back on time.
 
 The reminder is only on Android. On a computer a notification could only arrive while
 Daylo was already open, which is not a reminder.
@@ -75,6 +74,16 @@ keyboards now: they appear when you tab to something and not when you touch it. 
 fields still show one when you tap into them, which is where you want it. The year
 calendar on a computer keeps its ring on click, because that is also how it shows you the
 day you are on when you walk it with the arrow keys.
+
+**The Android reminder actually arrives.** It could be switched on and nothing was ever
+scheduled: the part of the app that hands the daily time to Android was being stripped out
+when the app was packaged for release, so the phone rejected every reminder. It only
+happened in the published builds, which is why it took a phone to find.
+
+**A reminder that could not be set no longer looks like one that was.** On Android the
+switch could stay on when the phone had refused to schedule anything, so the app claimed a
+reminder that was never going to arrive. Daylo now waits for the phone's answer, turns the
+switch back off if the answer is no, and says so.
 
 ## 1.1.3
 

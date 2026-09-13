@@ -71,6 +71,19 @@ tauri-plugin-fs = "~2.5"
 # on npm asks for ^2.8.0 and the pair lines up.
 tauri-plugin-notification = "~2.3"
 
+# Only for the test that reads tauri.conf.json and checks each `plugins.<name>` block
+# against the config type that plugin actually accepts.
+#
+# The app registers these two on Android alone, but the failure they guard against is not
+# platform specific: Tauri deserializes the block with serde_json::from_value in its own
+# plugin initialisation, the same code on every target, and aborts the app when it does
+# not fit. So the test needs the crates on whatever machine runs `cargo test`. Same
+# version requirements as the real dependencies above, or the test would be checking a
+# type the app does not ship.
+[dev-dependencies]
+tauri-plugin-fs = "~2.5"
+tauri-plugin-notification = "~2.3"
+
 [profile.dev]
 incremental = true
 

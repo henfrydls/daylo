@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Daylo's mark for the status bar: four days of the year heatmap, three done and one still
+  outlined, which is how Daylo draws a day nobody has ticked yet.
+
+  Android masks a small icon by its alpha and paints the result white on a dark status bar
+  and dark on a light one, so this is one flat silhouette and the empty day is a real hole
+  cut with evenOdd. Anything coloured here would come out as a solid blob.
+
+  The 3-unit gaps are what keep the four cells apart at the 18 px this is read at; a 3x3
+  version was drawn and rejected, because at that size it turns into Android's own "apps"
+  grid. Without any of this the notification plugin falls back to
+  android.R.drawable.ic_dialog_info, the generic system "i", which tells nobody whose
+  reminder arrived.
+-->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+    <path
+        android:fillColor="#FFFFFFFF"
+        android:fillType="evenOdd"
+        android:pathData="M4 2 H8.5 A2 2 0 0 1 10.5 4 V8.5 A2 2 0 0 1 8.5 10.5 H4 A2 2 0 0 1 2 8.5 V4 A2 2 0 0 1 4 2 Z M15.5 2 H20 A2 2 0 0 1 22 4 V8.5 A2 2 0 0 1 20 10.5 H15.5 A2 2 0 0 1 13.5 8.5 V4 A2 2 0 0 1 15.5 2 Z M4 13.5 H8.5 A2 2 0 0 1 10.5 15.5 V20 A2 2 0 0 1 8.5 22 H4 A2 2 0 0 1 2 20 V15.5 A2 2 0 0 1 4 13.5 Z M15.5 13.5 H20 A2 2 0 0 1 22 15.5 V20 A2 2 0 0 1 20 22 H15.5 A2 2 0 0 1 13.5 20 V15.5 A2 2 0 0 1 15.5 13.5 Z M16.75 15.75 H18.75 A1 1 0 0 1 19.75 16.75 V18.75 A1 1 0 0 1 18.75 19.75 H16.75 A1 1 0 0 1 15.75 18.75 V16.75 A1 1 0 0 1 16.75 15.75 Z" />
+</vector>
