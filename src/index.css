@@ -178,9 +178,26 @@
   }
 }
 
+/* clip, not hidden, and the difference is the whole of a bug.
+ *
+ * `overflow-x: hidden` on the body does not just clip: it makes the body a scrolling box,
+ * and the body's own `overscroll-behavior-y: none` then forbids a scroll from chaining out
+ * of it. The body has nothing to scroll, so a wheel over any part of the page moved
+ * nothing at all, while dragging the scrollbar and window.scrollTo both worked, because
+ * those move the viewport directly and never ask the body.
+ *
+ * Reported from a Linux desktop as "By activity does not scroll", and it was every view
+ * and every pixel of the window. Measured in Chromium: with this rule, a wheel anywhere
+ * leaves scrollY at 0; with `clip` it reaches the bottom, 897px, from over a heat strip or
+ * over the sidebar alike.
+ *
+ * `clip` keeps what the rule was for — no horizontal scrolling when a view is swiped
+ * sideways on a phone — without creating a scroll container, so nothing needs chaining and
+ * overscroll-behavior keeps doing its job. It needs Chrome 90, Safari 16 or Firefox 81,
+ * all of them below the floor this stylesheet already sets with oklch(). */
 html,
 body {
-  overflow-x: hidden;
+  overflow-x: clip;
   overscroll-behavior-x: none;
   overscroll-behavior-y: none;
 }

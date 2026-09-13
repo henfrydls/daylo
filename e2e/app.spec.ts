@@ -923,18 +923,20 @@ test.describe('the reminder sheet on a phone', () => {
 // ── A window that is not tall ─────────────────────────────
 
 /**
- * Reported from a Linux desktop, on a window about 1200 by 835: with eight activities and
- * a full year of records, "By activity" showed three rows and half of a fourth, and the
- * five below them could not be reached. The panel on the right was cut off in the same
- * place. The page did not scroll at all — not awkwardly, not at all.
+ * Reported from a Linux desktop: with eight activities and a full year, "By activity"
+ * showed three rows and half of a fourth and the rest could not be reached. The panel on
+ * the right was cut in the same place.
  *
- * Both columns being cut says it is the page and not the view, so these check what a
- * person can actually see rather than any one row: scroll as far as the page will go, and
- * then ask whether the bottom of the content is on screen. All three views, at the size it
- * was reported at rather than a round number.
+ * The first version of these tests scrolled with window.scrollTo and passed everywhere,
+ * in Chromium, in WebKit and in the real app under WebKitGTK. They were asking the wrong
+ * question. What the person does is turn a wheel, and that is a different path: scrollTo
+ * moves the viewport directly, while a wheel is delivered to whatever box is under the
+ * pointer and only reaches the viewport by chaining out of it. The body was a scrolling
+ * box with nothing to scroll and chaining switched off, so the wheel moved nothing while
+ * the scrollbar and scrollTo both worked — which is exactly what was reported, once the
+ * report was read closely enough: "it only scrolls if I grab it and drag it".
  *
- * The view was argued for on the grounds that it grows — a row per activity, the same
- * cells, scroll when there are many. Eight is what "many" was supposed to mean.
+ * So these turn a wheel, from three places, at the size it was reported at.
  */
 async function seedYear(
   page: import('@playwright/test').Page,
@@ -964,8 +966,6 @@ async function seedYear(
         createdAt: '2026-01-01T00:00:00.000Z',
         updatedAt: '2026-01-01T00:00:00.000Z',
       }))
-      // A year as full as the one that was imported to reproduce this: every activity on
-      // most days from January to September.
       const logs = []
       for (const activity of activities) {
         for (let month = 1; month <= 9; month++) {
@@ -1011,54 +1011,85 @@ async function seedYear(
 test.describe('a window that is not tall @webkit', () => {
   test.use({ viewport: { width: 1200, height: 835 } })
 
-  /** Scroll as far as the page goes, then report what is left below the fold. */
-  async function afterScrollingToTheBottom(page: import('@playwright/test').Page) {
-    await page.evaluate(() => window.scrollTo(0, document.documentElement.scrollHeight))
-    await page.waitForTimeout(200)
+  /**
+   * Turn the wheel from a point, then report what is left below the fold. The point
+   * matters: a wheel goes to the box under the pointer, and the heat strips are scrolling
+   * boxes of their own.
+   */
+  async function wheelFrom(page: import('@playwright/test').Page, x: number, y: number) {
+    await page.evaluate(() => window.scrollTo(0, 0))
+    await page.mouse.move(x, y)
+    for (let turn = 0; turn < 10; turn++) {
+      await page.mouse.wheel(0, 300)
+    }
+    await page.waitForTimeout(300)
     return page.evaluate(() => {
       const root = document.documentElement
       const main = document.querySelector('#main-content')!.getBoundingClientRect()
       return {
-        windowHeight: window.innerHeight,
-        pageHeight: root.scrollHeight,
-        pageScrolls: root.scrollHeight > window.innerHeight,
         scrolledTo: Math.round(window.scrollY),
+        couldScrollTo: root.scrollHeight - window.innerHeight,
         contentBottom: Math.round(main.bottom),
         cutOffBy: Math.max(0, Math.round(main.bottom - window.innerHeight)),
       }
     })
   }
 
-  test('shows the whole of the year by activity, eventually', async ({ page }) => {
+  // Over a heat strip, which is the half of the window a person's pointer is most likely
+  // to be over, and the one box on the page that scrolls in its own right.
+  test('the wheel reaches the bottom of the year by activity', async ({ page }) => {
     await seedYear(page, { activities: 8, view: 'year', mode: 'byActivity' })
 
-    const seen = await afterScrollingToTheBottom(page)
+    const seen = await wheelFrom(page, 400, 300)
 
     expect(seen.cutOffBy, JSON.stringify(seen)).toBe(0)
   })
 
-  test('shows the whole of the year', async ({ page }) => {
+  test('and from over the panel on the right', async ({ page }) => {
+    await seedYear(page, { activities: 8, view: 'year', mode: 'byActivity' })
+
+    const seen = await wheelFrom(page, 1100, 400)
+
+    expect(seen.cutOffBy, JSON.stringify(seen)).toBe(0)
+  })
+
+  test('and from the header, where nothing scrolls at all', async ({ page }) => {
+    await seedYear(page, { activities: 8, view: 'year', mode: 'byActivity' })
+
+    const seen = await wheelFrom(page, 600, 20)
+
+    expect(seen.cutOffBy, JSON.stringify(seen)).toBe(0)
+  })
+
+  // Both columns were cut, so this was never about one view.
+  test('the whole year, and the whole month, are reachable too', async ({ page }) => {
     await seedYear(page, { activities: 8, view: 'year', mode: 'all' })
-
-    const seen = await afterScrollingToTheBottom(page)
-
-    expect(seen.cutOffBy, JSON.stringify(seen)).toBe(0)
+    expect((await wheelFrom(page, 400, 300)).cutOffBy).toBe(0)
   })
 
-  test('shows the whole of the month', async ({ page }) => {
+  test('the month as well', async ({ page }) => {
     await seedYear(page, { activities: 8, view: 'month', mode: 'all' })
-
-    const seen = await afterScrollingToTheBottom(page)
-
-    expect(seen.cutOffBy, JSON.stringify(seen)).toBe(0)
+    expect((await wheelFrom(page, 400, 300)).cutOffBy).toBe(0)
   })
 
-  // The row that was reported by name, checked as a person would look for it.
-  test('and the last activity row is on screen', async ({ page }) => {
+  // The row that was reported by name, looked for the way a person looks for it.
+  test('and the last activity row is on screen after turning the wheel', async ({ page }) => {
     await seedYear(page, { activities: 8, view: 'year', mode: 'byActivity' })
-    await page.evaluate(() => window.scrollTo(0, document.documentElement.scrollHeight))
-    await page.waitForTimeout(200)
+    await wheelFrom(page, 400, 300)
 
     await expect(page.getByTestId('activity-row-All')).toBeInViewport({ ratio: 0.9 })
+  })
+
+  // The rule the clipping is there for in the first place: a view swiped sideways on a
+  // phone must not leave the page scrollable across.
+  test('and nothing can be scrolled sideways', async ({ page }) => {
+    await seedYear(page, { activities: 8, view: 'year', mode: 'byActivity' })
+
+    const sideways = await page.evaluate(() => {
+      const root = document.documentElement
+      return { scrollWidth: root.scrollWidth, clientWidth: root.clientWidth }
+    })
+
+    expect(sideways.scrollWidth).toBeLessThanOrEqual(sideways.clientWidth)
   })
 })
