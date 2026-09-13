@@ -3,7 +3,7 @@
 What changed in each release, for the people who use Daylo. Earlier versions are not
 listed: this file starts at 1.1.2, when the first change worth warning about arrived.
 
-## Unreleased
+## 1.2.0
 
 **Daylo opens on the month.** It used to open on the year on anything wider than a phone,
 so the same person met a different first screen on their laptop than on their phone. The
@@ -74,6 +74,11 @@ keyboards now: they appear when you tab to something and not when you touch it. 
 fields still show one when you tap into them, which is where you want it. The year
 calendar on a computer keeps its ring on click, because that is also how it shows you the
 day you are on when you walk it with the arrow keys.
+
+**Buttons at the bottom of a dialog are no longer pressed against the edge.** On a phone,
+dialogs slide up from the bottom, and the button that finishes the job sat right on top of
+the bar your phone draws down there, with nothing around it. It has room now, in Export,
+Import, the activity form and the daily reminder.
 
 **The mouse wheel scrolls the page again.** In the desktop app the wheel did nothing, and
 the only way down was to drag the scrollbar. It had been that way for several versions;
