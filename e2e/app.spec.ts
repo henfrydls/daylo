@@ -919,3 +919,146 @@ test.describe('the reminder sheet on a phone', () => {
     expect(viewport.height - (box.y + box.height)).toBeGreaterThanOrEqual(50)
   })
 })
+
+// ── A window that is not tall ─────────────────────────────
+
+/**
+ * Reported from a Linux desktop, on a window about 1200 by 835: with eight activities and
+ * a full year of records, "By activity" showed three rows and half of a fourth, and the
+ * five below them could not be reached. The panel on the right was cut off in the same
+ * place. The page did not scroll at all — not awkwardly, not at all.
+ *
+ * Both columns being cut says it is the page and not the view, so these check what a
+ * person can actually see rather than any one row: scroll as far as the page will go, and
+ * then ask whether the bottom of the content is on screen. All three views, at the size it
+ * was reported at rather than a round number.
+ *
+ * The view was argued for on the grounds that it grows — a row per activity, the same
+ * cells, scroll when there are many. Eight is what "many" was supposed to mean.
+ */
+async function seedYear(
+  page: import('@playwright/test').Page,
+  {
+    activities: count,
+    view,
+    mode,
+  }: { activities: number; view: 'year' | 'month'; mode: 'all' | 'byActivity' }
+) {
+  await page.addInitScript(
+    ({ count, view, mode }) => {
+      const activities = Array.from({ length: count }, (_, i) => ({
+        id: `a${i}`,
+        name:
+          ['Read', 'Exercise', 'Meditate', 'Walk', 'Write', 'Water', 'Stretch', 'Sleep early'][i] ??
+          `Activity ${i}`,
+        color: [
+          '#10B981',
+          '#3B82F6',
+          '#F59E0B',
+          '#8B5CF6',
+          '#EF4444',
+          '#06B6D4',
+          '#EC4899',
+          '#84CC16',
+        ][i % 8],
+        createdAt: '2026-01-01T00:00:00.000Z',
+        updatedAt: '2026-01-01T00:00:00.000Z',
+      }))
+      // A year as full as the one that was imported to reproduce this: every activity on
+      // most days from January to September.
+      const logs = []
+      for (const activity of activities) {
+        for (let month = 1; month <= 9; month++) {
+          for (let day = 1; day <= 28; day += 2) {
+            const date = `2026-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`
+            logs.push({
+              id: `${activity.id}-${date}`,
+              activityId: activity.id,
+              date,
+              completed: true,
+              createdAt: date,
+            })
+          }
+        }
+      }
+      localStorage.setItem(
+        'simple-calendar-storage',
+        JSON.stringify({
+          state: {
+            activities,
+            logs,
+            selectedYear: 2026,
+            selectedDate: null,
+            currentView: view,
+            yearMode: mode,
+            selectedMonth: 8,
+            reminderEnabled: false,
+            reminderHour: 21,
+            reminderMinute: 0,
+            reminderOffered: true,
+          },
+          version: 0,
+        })
+      )
+    },
+    { count, view, mode }
+  )
+  await page.goto('/')
+  await page.waitForSelector('#main-content')
+  await page.waitForFunction(() => document.getAnimations().every((a) => a.playState !== 'running'))
+}
+
+test.describe('a window that is not tall @webkit', () => {
+  test.use({ viewport: { width: 1200, height: 835 } })
+
+  /** Scroll as far as the page goes, then report what is left below the fold. */
+  async function afterScrollingToTheBottom(page: import('@playwright/test').Page) {
+    await page.evaluate(() => window.scrollTo(0, document.documentElement.scrollHeight))
+    await page.waitForTimeout(200)
+    return page.evaluate(() => {
+      const root = document.documentElement
+      const main = document.querySelector('#main-content')!.getBoundingClientRect()
+      return {
+        windowHeight: window.innerHeight,
+        pageHeight: root.scrollHeight,
+        pageScrolls: root.scrollHeight > window.innerHeight,
+        scrolledTo: Math.round(window.scrollY),
+        contentBottom: Math.round(main.bottom),
+        cutOffBy: Math.max(0, Math.round(main.bottom - window.innerHeight)),
+      }
+    })
+  }
+
+  test('shows the whole of the year by activity, eventually', async ({ page }) => {
+    await seedYear(page, { activities: 8, view: 'year', mode: 'byActivity' })
+
+    const seen = await afterScrollingToTheBottom(page)
+
+    expect(seen.cutOffBy, JSON.stringify(seen)).toBe(0)
+  })
+
+  test('shows the whole of the year', async ({ page }) => {
+    await seedYear(page, { activities: 8, view: 'year', mode: 'all' })
+
+    const seen = await afterScrollingToTheBottom(page)
+
+    expect(seen.cutOffBy, JSON.stringify(seen)).toBe(0)
+  })
+
+  test('shows the whole of the month', async ({ page }) => {
+    await seedYear(page, { activities: 8, view: 'month', mode: 'all' })
+
+    const seen = await afterScrollingToTheBottom(page)
+
+    expect(seen.cutOffBy, JSON.stringify(seen)).toBe(0)
+  })
+
+  // The row that was reported by name, checked as a person would look for it.
+  test('and the last activity row is on screen', async ({ page }) => {
+    await seedYear(page, { activities: 8, view: 'year', mode: 'byActivity' })
+    await page.evaluate(() => window.scrollTo(0, document.documentElement.scrollHeight))
+    await page.waitForTimeout(200)
+
+    await expect(page.getByTestId('activity-row-All')).toBeInViewport({ ratio: 0.9 })
+  })
+})
