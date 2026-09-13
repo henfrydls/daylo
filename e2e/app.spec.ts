@@ -1008,6 +1008,27 @@ async function seedYear(
   await page.waitForFunction(() => document.getAnimations().every((a) => a.playState !== 'running'))
 }
 
+/**
+ * Before any of the tests below can mean anything, the browser running them has to be
+ * able to deliver a wheel event at all. This asks, on a page with nothing of ours on it.
+ *
+ * It is here because the alternative is worse: a browser that silently ignores
+ * page.mouse.wheel would fail every test below for a reason that has nothing to do with
+ * Daylo, and somebody would go looking in the app for it.
+ */
+test.describe('the wheel, before anything else @webkit', () => {
+  test('turns in this browser', async ({ page }) => {
+    await page.setContent('<div style="height:4000px">tall</div>')
+    await page.mouse.move(400, 300)
+    await page.mouse.wheel(0, 300)
+    await page.waitForTimeout(300)
+
+    const scrolled = await page.evaluate(() => Math.round(window.scrollY))
+
+    expect(scrolled, `this browser moved ${scrolled}px for a 300px wheel turn`).toBeGreaterThan(0)
+  })
+})
+
 test.describe('a window that is not tall @webkit', () => {
   test.use({ viewport: { width: 1200, height: 835 } })
 
