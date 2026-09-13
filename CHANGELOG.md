@@ -75,6 +75,10 @@ fields still show one when you tap into them, which is where you want it. The ye
 calendar on a computer keeps its ring on click, because that is also how it shows you the
 day you are on when you walk it with the arrow keys.
 
+**The mouse wheel scrolls the page again.** In the desktop app the wheel did nothing, and
+the only way down was to drag the scrollbar. It had been that way for several versions;
+the year view is simply the first screen with enough on it for anyone to notice.
+
 **The Android reminder actually arrives.** It could be switched on and nothing was ever
 scheduled: the part of the app that hands the daily time to Android was being stripped out
 when the app was packaged for release, so the phone rejected every reminder. It only

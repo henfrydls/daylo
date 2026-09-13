@@ -919,3 +919,198 @@ test.describe('the reminder sheet on a phone', () => {
     expect(viewport.height - (box.y + box.height)).toBeGreaterThanOrEqual(50)
   })
 })
+
+// ── A window that is not tall ─────────────────────────────
+
+/**
+ * Reported from a Linux desktop: with eight activities and a full year, "By activity"
+ * showed three rows and half of a fourth and the rest could not be reached. The panel on
+ * the right was cut in the same place.
+ *
+ * The first version of these tests scrolled with window.scrollTo and passed everywhere,
+ * in Chromium, in WebKit and in the real app under WebKitGTK. They were asking the wrong
+ * question. What the person does is turn a wheel, and that is a different path: scrollTo
+ * moves the viewport directly, while a wheel is delivered to whatever box is under the
+ * pointer and only reaches the viewport by chaining out of it. The body was a scrolling
+ * box with nothing to scroll and chaining switched off, so the wheel moved nothing while
+ * the scrollbar and scrollTo both worked — which is exactly what was reported, once the
+ * report was read closely enough: "it only scrolls if I grab it and drag it".
+ *
+ * So these turn a wheel, from three places, at the size it was reported at.
+ */
+async function seedYear(
+  page: import('@playwright/test').Page,
+  {
+    activities: count,
+    view,
+    mode,
+  }: { activities: number; view: 'year' | 'month'; mode: 'all' | 'byActivity' }
+) {
+  await page.addInitScript(
+    ({ count, view, mode }) => {
+      const activities = Array.from({ length: count }, (_, i) => ({
+        id: `a${i}`,
+        name:
+          ['Read', 'Exercise', 'Meditate', 'Walk', 'Write', 'Water', 'Stretch', 'Sleep early'][i] ??
+          `Activity ${i}`,
+        color: [
+          '#10B981',
+          '#3B82F6',
+          '#F59E0B',
+          '#8B5CF6',
+          '#EF4444',
+          '#06B6D4',
+          '#EC4899',
+          '#84CC16',
+        ][i % 8],
+        createdAt: '2026-01-01T00:00:00.000Z',
+        updatedAt: '2026-01-01T00:00:00.000Z',
+      }))
+      const logs = []
+      for (const activity of activities) {
+        for (let month = 1; month <= 9; month++) {
+          for (let day = 1; day <= 28; day += 2) {
+            const date = `2026-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`
+            logs.push({
+              id: `${activity.id}-${date}`,
+              activityId: activity.id,
+              date,
+              completed: true,
+              createdAt: date,
+            })
+          }
+        }
+      }
+      localStorage.setItem(
+        'simple-calendar-storage',
+        JSON.stringify({
+          state: {
+            activities,
+            logs,
+            selectedYear: 2026,
+            selectedDate: null,
+            currentView: view,
+            yearMode: mode,
+            selectedMonth: 8,
+            reminderEnabled: false,
+            reminderHour: 21,
+            reminderMinute: 0,
+            reminderOffered: true,
+          },
+          version: 0,
+        })
+      )
+    },
+    { count, view, mode }
+  )
+  await page.goto('/')
+  await page.waitForSelector('#main-content')
+  await page.waitForFunction(() => document.getAnimations().every((a) => a.playState !== 'running'))
+}
+
+/**
+ * Before any of the tests below can mean anything, the browser running them has to be
+ * able to deliver a wheel event at all. This asks, on a page with nothing of ours on it.
+ *
+ * It is here because the alternative is worse: a browser that silently ignores
+ * page.mouse.wheel would fail every test below for a reason that has nothing to do with
+ * Daylo, and somebody would go looking in the app for it.
+ */
+test.describe('the wheel, before anything else @webkit', () => {
+  test('turns in this browser', async ({ page }) => {
+    await page.setContent('<div style="height:4000px">tall</div>')
+    await page.mouse.move(400, 300)
+    await page.mouse.wheel(0, 300)
+    await page.waitForTimeout(300)
+
+    const scrolled = await page.evaluate(() => Math.round(window.scrollY))
+
+    expect(scrolled, `this browser moved ${scrolled}px for a 300px wheel turn`).toBeGreaterThan(0)
+  })
+})
+
+test.describe('a window that is not tall @webkit', () => {
+  test.use({ viewport: { width: 1200, height: 835 } })
+
+  /**
+   * Turn the wheel from a point, then report what is left below the fold. The point
+   * matters: a wheel goes to the box under the pointer, and the heat strips are scrolling
+   * boxes of their own.
+   */
+  async function wheelFrom(page: import('@playwright/test').Page, x: number, y: number) {
+    await page.evaluate(() => window.scrollTo(0, 0))
+    await page.mouse.move(x, y)
+    for (let turn = 0; turn < 10; turn++) {
+      await page.mouse.wheel(0, 300)
+    }
+    await page.waitForTimeout(300)
+    return page.evaluate(() => {
+      const root = document.documentElement
+      const main = document.querySelector('#main-content')!.getBoundingClientRect()
+      return {
+        scrolledTo: Math.round(window.scrollY),
+        couldScrollTo: root.scrollHeight - window.innerHeight,
+        contentBottom: Math.round(main.bottom),
+        cutOffBy: Math.max(0, Math.round(main.bottom - window.innerHeight)),
+      }
+    })
+  }
+
+  // Over a heat strip, which is the half of the window a person's pointer is most likely
+  // to be over, and the one box on the page that scrolls in its own right.
+  test('the wheel reaches the bottom of the year by activity', async ({ page }) => {
+    await seedYear(page, { activities: 8, view: 'year', mode: 'byActivity' })
+
+    const seen = await wheelFrom(page, 400, 300)
+
+    expect(seen.cutOffBy, JSON.stringify(seen)).toBe(0)
+  })
+
+  test('and from over the panel on the right', async ({ page }) => {
+    await seedYear(page, { activities: 8, view: 'year', mode: 'byActivity' })
+
+    const seen = await wheelFrom(page, 1100, 400)
+
+    expect(seen.cutOffBy, JSON.stringify(seen)).toBe(0)
+  })
+
+  test('and from the header, where nothing scrolls at all', async ({ page }) => {
+    await seedYear(page, { activities: 8, view: 'year', mode: 'byActivity' })
+
+    const seen = await wheelFrom(page, 600, 20)
+
+    expect(seen.cutOffBy, JSON.stringify(seen)).toBe(0)
+  })
+
+  // Both columns were cut, so this was never about one view.
+  test('the whole year, and the whole month, are reachable too', async ({ page }) => {
+    await seedYear(page, { activities: 8, view: 'year', mode: 'all' })
+    expect((await wheelFrom(page, 400, 300)).cutOffBy).toBe(0)
+  })
+
+  test('the month as well', async ({ page }) => {
+    await seedYear(page, { activities: 8, view: 'month', mode: 'all' })
+    expect((await wheelFrom(page, 400, 300)).cutOffBy).toBe(0)
+  })
+
+  // The row that was reported by name, looked for the way a person looks for it.
+  test('and the last activity row is on screen after turning the wheel', async ({ page }) => {
+    await seedYear(page, { activities: 8, view: 'year', mode: 'byActivity' })
+    await wheelFrom(page, 400, 300)
+
+    await expect(page.getByTestId('activity-row-All')).toBeInViewport({ ratio: 0.9 })
+  })
+
+  // The rule the clipping is there for in the first place: a view swiped sideways on a
+  // phone must not leave the page scrollable across.
+  test('and nothing can be scrolled sideways', async ({ page }) => {
+    await seedYear(page, { activities: 8, view: 'year', mode: 'byActivity' })
+
+    const sideways = await page.evaluate(() => {
+      const root = document.documentElement
+      return { scrollWidth: root.scrollWidth, clientWidth: root.clientWidth }
+    })
+
+    expect(sideways.scrollWidth).toBeLessThanOrEqual(sideways.clientWidth)
+  })
+})

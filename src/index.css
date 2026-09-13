@@ -178,11 +178,29 @@
   }
 }
 
+/* Two changes, and the second one is why a wheel works at all.
+ *
+ * `overscroll-behavior-y: none` was the thing that stopped the page from scrolling. It is
+ * meant to stop a scroll from chaining out of a box, and that is what Chromium does with
+ * it; WebKit takes it further and the page does not scroll at all, from any pointer
+ * position, in any view. The scrollbar still worked and so did window.scrollTo, which is
+ * why it went unnoticed for six months and why four test benches said the page was fine:
+ * all of them scrolled by script, and none of them ever turned a wheel.
+ *
+ * Measured, one override at a time, at 1200x835 with eight activities and a full year.
+ * In Chromium every override frees the wheel; in WebKit exactly one does, and it is this
+ * one. The horizontal half stays, because that is the half the rule was added for: a view
+ * swiped sideways on a phone must not leave the page scrollable across.
+ *
+ * `clip` rather than `hidden` is the second change and it stands on its own. `hidden`
+ * does not only clip: it makes the body a scrolling box, so a wheel lands in a box with
+ * nothing to scroll instead of on the page. `clip` clips and creates no such box. It
+ * needs Chrome 90, Safari 16 or Firefox 81, all below the floor this stylesheet already
+ * sets with oklch(). */
 html,
 body {
-  overflow-x: hidden;
+  overflow-x: clip;
   overscroll-behavior-x: none;
-  overscroll-behavior-y: none;
 }
 
 body {
