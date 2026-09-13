@@ -75,6 +75,11 @@ fields still show one when you tap into them, which is where you want it. The ye
 calendar on a computer keeps its ring on click, because that is also how it shows you the
 day you are on when you walk it with the arrow keys.
 
+**Buttons at the bottom of a dialog are no longer pressed against the edge.** On a phone,
+dialogs slide up from the bottom, and the button that finishes the job sat right on top of
+the bar your phone draws down there, with nothing around it. It has room now, in Export,
+Import, the activity form and the daily reminder.
+
 **The mouse wheel scrolls the page again.** In the desktop app the wheel did nothing, and
 the only way down was to drag the scrollbar. It had been that way for several versions;
 the year view is simply the first screen with enough on it for anyone to notice.
