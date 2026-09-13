@@ -22,6 +22,14 @@ APK="${SMOKE_APK:?SMOKE_APK is not set: the signing step should have put it in G
 LOG=smoke-logcat.txt
 SHOT=smoke-screenshot.png
 
+# Anything that ends this script without going through fail() is a bug in the script, not
+# a verdict on the app, and it has to say so out loud. One run suspended with Daylo alive
+# and painting because `[ -n "$x" ] && echo` returned non-zero on an empty string and
+# set -e took the whole script with it; all the runner could say was "failed with exit
+# code 1", and the app wore the blame for a shell mistake. exit does not raise ERR, so
+# this fires only on the unplanned kind.
+trap 'echo "::error::The smoke script itself failed at line $LINENO. That is a bug in this script, not a finding about the app."' ERR
+
 fail() {
   echo "::error::$*"
   echo "--- last 200 lines of logcat ---"
@@ -77,8 +85,15 @@ echo "::endgroup::"
 # process that aborts inside libc during teardown has been recorded here as EXIT_SELF,
 # with the abort itself only in logcat — so this reports the reason rather than deciding
 # on it, and the logcat check below is what rules.
-exit_reason=$(grep -oE "reason=[0-9]+ \([A-Z_ ]+\)" <<< "${exits:-}" | head -1)
-[ -n "$exit_reason" ] && echo "Android's word for the last exit: $exit_reason"
+#
+# Taken from the start of the field to the next one rather than by shape: the name has
+# parentheses of its own — "APP CRASH(NATIVE)" — and a pattern that stopped at the first
+# closing bracket read the subreason instead and reported an exit as UNKNOWN while Android
+# was calling it a native crash.
+exit_reason=$(sed -n 's/.* \(reason=[0-9]\+ .*\) subreason=.*/\1/p' <<< "${exits:-}" | head -1)
+if [ -n "$exit_reason" ]; then
+  echo "Android's word for the last exit: $exit_reason"
+fi
 
 if grep -q "CRASH" <<< "${exits:-}"; then
   fail "Android recorded a crash for $PKG ($exit_reason). Its own words are in the group above."
