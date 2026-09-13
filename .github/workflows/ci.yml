@@ -60,9 +60,15 @@ jobs:
       - name: Run ESLint
         run: npm run lint
 
-      # Run TypeScript check
+      # `tsc -b`, not `tsc --noEmit`. The root tsconfig.json is a solution file: it has
+      # "files": [] and nothing but references, so `tsc --noEmit` type checked an empty
+      # program and passed in about a second no matter what was in src. It was measured
+      # doing exactly that: a test file importing 'fs' and using __dirname, neither of
+      # which tsconfig.app.json allows, went straight through this step and was caught
+      # later by `npm run build`, which does run `tsc -b`. The step now checks what it
+      # says it checks, and fails where the name says it would.
       - name: TypeScript check
-        run: npx tsc --noEmit
+        run: npx tsc -b
 
       # Run unit tests with coverage
       - name: Run unit tests
@@ -84,6 +90,14 @@ jobs:
       - name: Rust clippy
         working-directory: src-tauri
         run: cargo clippy -- -D warnings
+
+      # Reads tauri.conf.json and checks every `plugins.<name>` block against the config
+      # type that plugin's own init() declares. Cheap, and it covers a gap the build
+      # checks cannot: they all compile the app and none of them start it, so a config
+      # block the plugin refuses passed all six of them and killed the app on the phone.
+      - name: Rust tests
+        working-directory: src-tauri
+        run: cargo test
 
       # Build frontend to ensure it compiles
       - name: Build frontend

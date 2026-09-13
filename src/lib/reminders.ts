@@ -4,7 +4,6 @@ import {
   pending,
   requestPermission,
   Schedule,
-  sendNotification,
 } from '@tauri-apps/plugin-notification'
 import { invoke, isTauri } from '@tauri-apps/api/core'
 
@@ -19,6 +18,23 @@ export const REMINDER_ID = 1
 const TITLE = 'Daylo'
 const BODY = 'How did today go? Tap to log it.'
 
+/**
+ * The status-bar icon, named per notification rather than configured.
+ *
+ * The obvious place for this is `plugins.notification.icon` in tauri.conf.json, and the
+ * plugin's Kotlin half does read a config block by that name. Its Rust half does not: it
+ * builds with `Builder::new("notification")`, whose config type is the unit `()`, and
+ * Tauri deserializes `plugins.notification` into that type while the app starts. A map
+ * against a unit is an error, `.run()` turns it into an abort, and the app dies on the
+ * first frame with "invalid type: map, expected unit" — which is what a phone did, twice.
+ *
+ * The per-notification field has no such problem: it goes through the same options object
+ * as the title and the schedule, and Android resolves it against res/drawable. A bare
+ * resource name is the only form that resolves; a path or an extension silently falls
+ * back to the system's ic_dialog_info.
+ */
+export const REMINDER_ICON = 'ic_notification'
+
 /** 21:00 as the person's own clock would write it, so the text matches what they set. */
 export function formatReminderTime(hour: number, minute: number): string {
   return new Date(2026, 0, 1, hour, minute).toLocaleTimeString(undefined, {
@@ -27,9 +43,21 @@ export function formatReminderTime(hour: number, minute: number): string {
   })
 }
 
+export interface ReminderResult {
+  outcome: ReminderOutcome
+  /**
+   * What the phone said when it refused, in its own words. Shown to the person rather
+   * than only written to the console: on a release build nothing written to the console
+   * leaves the device, because Tauri and wry gate every log line behind BuildConfig.DEBUG.
+   */
+  reason?: string
+}
+
 export type ReminderOutcome =
-  /** Scheduled. */
+  /** Scheduled, and the platform said so. */
   | 'on'
+  /** The platform refused it. Nothing is scheduled and the switch must not claim it is. */
+  | 'failed'
   /** The person said no to notifications. Nothing is scheduled and nothing is asked again. */
   | 'permission-denied'
   /** Not the Android app. Nothing to schedule. */
@@ -55,6 +83,39 @@ export async function remindersAvailable(): Promise<boolean> {
 }
 
 /**
+ * Put the reminder on the phone's alarm queue, and say whether it got there.
+ *
+ * Called through invoke rather than through the plugin's own sendNotification, which is
+ * where this went wrong: that helper builds a window.Notification, and the polyfill Tauri
+ * injects forwards it inside an async function whose promise nobody returns or awaits. A
+ * failure on the native side vanished, and the switch stayed on over nothing scheduled.
+ * The command is the same one that helper calls, and notification:default allows it.
+ *
+ * The same id every time, so scheduling again replaces rather than stacks and changing the
+ * time cannot leave yesterday's reminder behind.
+ */
+async function putOnTheQueue(hour: number, minute: number): Promise<string | null> {
+  try {
+    await invoke('plugin:notification|notify', {
+      options: {
+        id: REMINDER_ID,
+        title: TITLE,
+        body: BODY,
+        icon: REMINDER_ICON,
+        schedule: Schedule.interval({ hour, minute }, true),
+      },
+    })
+    return null
+  } catch (error) {
+    // Both: the console for a debug build, and the returned text for a release one, where
+    // the console goes nowhere. A Tauri command rejects with a string, so this is already
+    // readable.
+    console.error('[Daylo] the reminder could not be scheduled', error)
+    return typeof error === 'string' ? error : ((error as Error)?.message ?? String(error))
+  }
+}
+
+/**
  * Turn the daily reminder on at the given local time.
  *
  * The schedule is an interval matching an hour and a minute, which Android re-arms by
@@ -62,14 +123,28 @@ export async function remindersAvailable(): Promise<boolean> {
  * without it the alarm will not wake a dozing phone, and an evening reminder that waits
  * for the phone to be picked up is no reminder at all.
  *
+ * What it does not buy is punctuality. Without SCHEDULE_EXACT_ALARM the alarm is an
+ * inexact one, which Android is free to move within a window of about an hour, and
+ * further than that out of a deep doze. Two deliveries measured on the same phone, a
+ * Galaxy S24+ on Android 16:
+ *
+ *   set for 11:00, arrived 12:19 — 79 minutes late, phone asleep since the night before
+ *   set for 19:00, arrived 19:00 — on time, phone in use
+ *
+ * Which is the behaviour the documentation describes rather than a fault: close when the
+ * device is awake, stretched when it has not been. Asking for the exact-alarm permission
+ * would fix the second case and is not worth it — it is the permission Android warns
+ * about by name, for a notification nobody is waiting on to the minute. The wording in
+ * the sheet says as much, so nobody has to discover it by being late.
+ *
  * It will fire whether or not anything was logged that day. Suppressing it on a day
  * already logged would mean cancelling and re-arming from inside the app, and then a
  * person who does not open Daylo for three days stops being reminded on the days they
  * most need it. The wording is neutral for that reason.
  */
-export async function enableReminder(hour: number, minute: number): Promise<ReminderOutcome> {
+export async function enableReminder(hour: number, minute: number): Promise<ReminderResult> {
   if (!(await remindersAvailable())) {
-    return 'unavailable'
+    return { outcome: 'unavailable' }
   }
 
   let granted = await isPermissionGranted()
@@ -77,19 +152,11 @@ export async function enableReminder(hour: number, minute: number): Promise<Remi
     granted = (await requestPermission()) === 'granted'
   }
   if (!granted) {
-    return 'permission-denied'
+    return { outcome: 'permission-denied' }
   }
 
-  // Replaces rather than stacks: scheduling the same id again overwrites it, so changing
-  // the time cannot leave yesterday's reminder behind.
-  sendNotification({
-    id: REMINDER_ID,
-    title: TITLE,
-    body: BODY,
-    schedule: Schedule.interval({ hour, minute }, true),
-  })
-
-  return 'on'
+  const reason = await putOnTheQueue(hour, minute)
+  return reason === null ? { outcome: 'on' } : { outcome: 'failed', reason }
 }
 
 /**
@@ -115,14 +182,7 @@ export async function refreshReminder(hour: number, minute: number): Promise<boo
     return false
   }
 
-  sendNotification({
-    id: REMINDER_ID,
-    title: TITLE,
-    body: BODY,
-    schedule: Schedule.interval({ hour, minute }, true),
-  })
-
-  return true
+  return (await putOnTheQueue(hour, minute)) === null
 }
 
 /** Turn it off. Silent if it was never on. */

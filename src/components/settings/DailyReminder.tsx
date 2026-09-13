@@ -59,13 +59,18 @@ export function DailyReminder() {
   }, [available, activityCount, setReminder])
 
   const accept = async () => {
-    const outcome = await enableReminder(hour, minute)
+    const { outcome } = await enableReminder(hour, minute)
     if (outcome === 'on') {
       setReminder(true, hour, minute)
       return
     }
     if (outcome === 'permission-denied') {
       showToast('Daylo needs permission to send notifications', 'error')
+    }
+    // The phone had the permission and still would not take it. Saying nothing would
+    // leave a switch that looks on over a reminder that will never arrive.
+    if (outcome === 'failed') {
+      showToast('Daylo could not set the reminder on this phone', 'error')
     }
   }
 
@@ -75,7 +80,7 @@ export function DailyReminder() {
       onClose={markReminderOffered}
       onConfirm={() => void accept()}
       title="Remind me each evening?"
-      message={`A notification around ${formatReminderTime(hour, minute)} so the day does not go unlogged. You can change the time or turn it off from the menu.`}
+      message={`A notification around ${formatReminderTime(hour, minute)} so the day does not go unlogged. Android picks the exact moment. You can change the time or turn it off from the menu.`}
       confirmText="Turn on"
       cancelText="Not now"
       data-testid="reminder-offer"

@@ -18,6 +18,28 @@
 # five release builds with lto are expensive and most pushes do not need them. A label
 # rather than only a manual dispatch because a workflow_dispatch does not appear until the
 # file is on the default branch, which would be too late to test the branch that adds it.
+#
+# HOW TO RUN IT AGAIN. The trigger is the 'labeled' event, which fires on the transition
+# and not on the state: adding a label the pull request already carries does nothing at
+# all, silently. Take it off, check it is off, put it back:
+#
+#   gh pr edit <number> --remove-label build-installers
+#   gh pr view <number> --json labels   # confirm it is gone before adding it again
+#   gh pr edit <number> --add-label build-installers
+#
+# The better way in, and it does not need the label at all:
+#
+#   gh workflow run "Test build" --ref <branch>
+#
+# --ref both picks the branch to build and decides which copy of this file runs, so a
+# branch that changes this workflow — or adds a job to it — is tested by its own version
+# before it is merged, and there is nothing for an input to add. What has to be on the
+# default branch for dispatch to be offered is the *file*, not the change: this one has
+# been there since the workflow existed, which was mistaken for the opposite once and cost
+# somebody a round of removing and re-adding a label for nothing.
+#
+# The label stays for a workflow that is genuinely new, where there is no file on the
+# default branch yet and dispatch is not offered.
 name: Test build
 
 on:
@@ -317,3 +339,173 @@ jobs:
           path: src-tauri/gen/android/app/build/outputs/apk/universal/release/Daylo-android-arm64.apk
           retention-days: 7
           if-no-files-found: error
+
+  # Does it start?
+  #
+  # Every other check in this repository compiles the app and none of them run it, and
+  # that gap has now shipped two APKs that died before drawing a frame: one where R8
+  # stripped a constructor the plugin looks up by reflection, one where a plugins block
+  # tauri.conf.json was not allowed to have aborted the process on the first frame. Both
+  # builds were green everywhere. A person installed them and found out.
+  #
+  # So this job installs the app on an emulator and looks at it. Release, not debug, on
+  # purpose: debug skips R8, and R8 is where one of those two bugs lived. The signature is
+  # a throwaway generated here rather than the release key, because nothing leaves this
+  # job and signing happens after R8, so it cannot change whether the app starts.
+  #
+  # Not on every pull request: this is ten minutes of emulator on top of an Android build,
+  # and it belongs where the other test builds are, before a person is asked to install
+  # something.
+  smoke-android:
+    name: Test build (android-smoke)
+    needs: verify-matrix
+    # Informative since 2026-09-12, not blocking. It still runs, still reports, and still
+    # uploads its screenshot and log; what it no longer does is stop a test build.
+    #
+    # Three runs in a row suspended it. One was a bug in its own script. The other two were
+    # real aborts of the app, with two different signatures, and both of them were the
+    # emulator being slow: a destroyed-mutex abort during teardown, and a panic on
+    # `rx.recv_timeout(MAIN_PIPE_TIMEOUT).unwrap()` in wry's Android bridge, which turns a
+    # webview thread that answers late into SIGABRT because the release profile aborts on
+    # panic. Every one of those runs had the emulator start badly — "Unable to connect to
+    # adb daemon", 42 seconds to boot against the 31 of the run that passed.
+    #
+    # So it is measuring something true and not about this release: a device slow enough
+    # will abort the app, and that risk lives upstream, not in the change under test. A
+    # check that stops every build over an environment nobody is shipping teaches people to
+    # ignore it, and an ignored check is a deleted check.
+    #
+    # What would make it blocking again: the upstream unwrap gone or routed around, and a
+    # run of ten in a row where the only red is the app's own doing.
+    continue-on-error: true
+    if: >-
+      (github.event_name == 'workflow_dispatch' || github.event.label.name == 'build-installers')
+      && (github.event_name == 'workflow_dispatch'
+          || github.event.pull_request.head.repo.full_name == github.repository)
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Install Android NDK
+        run: sdkmanager "ndk;29.0.14206865"
+
+      # x86_64, not aarch64: an emulator on a GitHub runner is x86_64 and an arm64 APK
+      # would need full instruction translation, which is slow enough to be useless.
+      - name: Install Rust stable with the emulator's Android target
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: x86_64-linux-android
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+
+      # Its own cache key. The other Android jobs cross compile for aarch64 and sharing a
+      # key with them would have each evicting the other's artifacts every run.
+      - name: Cache Rust dependencies
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: './src-tauri -> target'
+          shared-key: android-x86_64
+          cache-on-failure: true
+
+      - name: Install Node.js dependencies
+        run: npm ci
+
+      - name: Install Tauri CLI
+        run: npm install --save-dev @tauri-apps/cli
+
+      - name: Build the APK
+        run: npx tauri android build --apk --target x86_64
+        env:
+          NDK_HOME: ${{ env.ANDROID_HOME }}/ndk/29.0.14206865
+
+      - name: Sign it with a throwaway key
+        run: |
+          set -euo pipefail
+          shopt -s nullglob globstar
+          # globstar because the ABI directory name is Tauri's to choose, not ours.
+          apks=( src-tauri/gen/android/app/build/outputs/apk/**/release/*-unsigned.apk )
+          if [ ${#apks[@]} -ne 1 ]; then
+            echo "::error::Expected exactly one unsigned release APK, found ${#apks[@]}."
+            printf '::error::  %s\n' "${apks[@]}"
+            exit 1
+          fi
+
+          keytool -genkeypair -keystore smoke.jks -alias smoke \
+            -storepass smokesmoke -keypass smokesmoke \
+            -keyalg RSA -keysize 2048 -validity 1 \
+            -dname "CN=Daylo smoke test, O=nobody, C=ZZ"
+
+          BT="${ANDROID_HOME}/build-tools/$(ls "${ANDROID_HOME}/build-tools/" | tail -1)"
+          "$BT/zipalign" -f 4 "${apks[0]}" smoke.apk
+          "$BT/apksigner" sign --ks smoke.jks \
+            --ks-pass pass:smokesmoke --key-pass pass:smokesmoke \
+            --ks-key-alias smoke smoke.apk
+          echo "SMOKE_APK=$PWD/smoke.apk" >> "$GITHUB_ENV"
+
+      # The emulator will not start without it, and the runner's kvm device is root-only
+      # until this rule is in place.
+      - name: Let the runner use KVM
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' \
+            | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+
+      # For reading the screenshot below. Pillow rather than ImageMagick so the scoring
+      # is a Python script that can be run against known-good and known-bad images on a
+      # laptop, which is how its numbers were arrived at and how they stay checkable.
+      - name: Install Pillow
+        # The fallback is for a runner image whose Python is externally managed, where
+        # pip refuses to write to it without being told; the flag does not exist on
+        # older pip, so it cannot simply be passed always.
+        run: python3 -m pip install --quiet pillow || python3 -m pip install --quiet --break-system-packages pillow
+
+      # API 34, and the level is load bearing for a reason that is not the Android
+      # version. An emulator image carries a WebView baked in and no Play Store to update
+      # it, so the image decides which browser the app runs in. The first green run of
+      # this job was on API 30, whose AOSP image ships WebView 83.0.4103.120 — Chromium
+      # 83, from 2020 — and Daylo's stylesheet opens with `@layer`, which Chromium
+      # learned in 99. The whole block was skipped and the app painted a page with no
+      # styling at all. It passed every check here and told us nothing, because no real
+      # phone runs that WebView: on a device WebView comes from the Play Store.
+      #
+      # API 30 was chosen for `dumpsys activity exit-info`, which arrived in 30 and is
+      # still here.
+      - name: Start it and see whether it stays up
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 34
+          target: google_apis
+          arch: x86_64
+          profile: pixel_2
+          force-avd-creation: false
+          emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none
+          disable-animations: true
+          script: bash .github/scripts/android-smoke.sh
+
+      - name: Upload what the screen looked like
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: android-smoke-evidence
+          path: |
+            smoke-screenshot.png
+            smoke-logcat.txt
+          retention-days: 7
+          if-no-files-found: warn
