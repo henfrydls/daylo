@@ -1029,48 +1029,6 @@ test.describe('the wheel, before anything else @webkit', () => {
   })
 })
 
-// TEMPORARY. Which override lets the wheel scroll, in whichever engine is running this.
-// The fix that works in Chromium does not work in Playwright's WebKit, and the control
-// above says that browser can turn a wheel, so the difference is ours to find. Each of
-// these asserts the wheel reaches the bottom; the ones that pass are the candidates.
-test.describe('which override frees the wheel @webkit', () => {
-  test.use({ viewport: { width: 1200, height: 835 } })
-
-  const variants: Array<[string, string]> = [
-    ['as shipped (html+body clip)', ''],
-    ['html hidden, body clip', 'html{overflow-x:hidden}body{overflow-x:clip}'],
-    ['html visible, body clip', 'html{overflow-x:visible}body{overflow-x:clip}'],
-    ['both visible', 'html,body{overflow-x:visible}'],
-    ['overscroll auto', 'html,body{overscroll-behavior-y:auto}'],
-    ['body visible, html clip', 'body{overflow-x:visible}'],
-    ['body overflow visible both axes', 'body{overflow:visible}'],
-  ]
-
-  for (const [name, css] of variants) {
-    test(`${name}`, async ({ page }) => {
-      await seedYear(page, { activities: 8, view: 'year', mode: 'byActivity' })
-      if (css) await page.addStyleTag({ content: css })
-      await page.evaluate(() => window.scrollTo(0, 0))
-      await page.mouse.move(400, 300)
-      for (let turn = 0; turn < 10; turn++) await page.mouse.wheel(0, 300)
-      await page.waitForTimeout(300)
-      const seen = await page.evaluate(() => ({
-        scrolledTo: Math.round(window.scrollY),
-        couldScrollTo: document.documentElement.scrollHeight - window.innerHeight,
-        html:
-          getComputedStyle(document.documentElement).overflowX +
-          '/' +
-          getComputedStyle(document.documentElement).overflowY,
-        body:
-          getComputedStyle(document.body).overflowX +
-          '/' +
-          getComputedStyle(document.body).overflowY,
-      }))
-      expect(seen.scrolledTo, JSON.stringify(seen)).toBeGreaterThan(0)
-    })
-  }
-})
-
 test.describe('a window that is not tall @webkit', () => {
   test.use({ viewport: { width: 1200, height: 835 } })
 
