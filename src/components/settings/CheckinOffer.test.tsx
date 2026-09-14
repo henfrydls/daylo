@@ -169,6 +169,8 @@ describe('what it says', () => {
     const turnOn = screen.getByTestId('checkin-turn-on')
     expect(leaveOff.className).toBe(turnOn.className)
     expect(screen.getByTestId('checkin-offer').innerHTML).not.toContain('bg-emerald')
+    // And the keyboard's first Enter is the one that turns nothing on.
+    await waitFor(() => expect(document.activeElement).toBe(leaveOff))
   })
 
   it('shows what would be sent, with an example number and the real version', async () => {
@@ -210,6 +212,11 @@ describe('what each answer does', () => {
     expect(state.checkinId).toBeNull()
     expect(invoke).not.toHaveBeenCalledWith('send_checkin', expect.anything())
     await waitFor(() => expect(asked()).not.toBeInTheDocument())
+    // Against the text of what was written to disk, not against the field: a number kept
+    // anywhere at all would mean the answer produced one, and the answer was no.
+    await waitFor(() =>
+      expect(localStorage.getItem('simple-calendar-storage') ?? '').not.toMatch(/[0-9a-f]{32}/)
+    )
   })
 
   it('treats Escape as the same no', async () => {

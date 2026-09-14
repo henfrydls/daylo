@@ -33,10 +33,10 @@ command: daylo
 # src-tauri/src/checkin.rs, which is short enough to read.
 #
 # Hiding it instead was considered and rejected. The switch could have been compiled out
-# under FLATPAK_ID, keeping the permission off — but then the Flatpak and the .deb would
-# not be the same app, and the part of the code that must be readable in one sitting would
-# grow a branch. A person who installs from Flathub should get the same program, and see
-# the same list of what it can do.
+# under FLATPAK_ID, keeping the permission off. Then the Flatpak and the .deb would not be
+# the same app, and the part of the code that must be readable in one sitting would grow a
+# branch. A person who installs from Flathub should get the same program, and see the same
+# list of what it can do.
 #
 # Which is the other half: Flathub shows "Network" on the listing page. That is the
 # verifiable version of what the app says about itself, exactly as the absence of it was

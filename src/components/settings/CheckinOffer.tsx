@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { Button, Modal } from '../ui'
 import { useCalendarStore } from '../../store'
 import { useCheckinFields } from '../../hooks'
@@ -22,7 +22,16 @@ export function CheckinOffer() {
   const available = fields !== null
   const [momentCame, setMomentCame] = useState(false)
   const isOpen = momentCame && available
-  const leaveOffRef = useRef<HTMLButtonElement>(null)
+
+  // The answer that changes nothing is where the focus starts, so the keyboard's first
+  // Enter is the one that turns nothing on.
+  //
+  // On the node arriving rather than in an effect, and that is not a style choice: the
+  // modal keeps its own presence state for the animation, so the footer does not exist
+  // yet on the render where isOpen turns true. An effect there finds a null ref, and
+  // never runs again because isOpen does not change twice. The dialog opened with the
+  // focus on the body, which a test caught and a keyboard would have caught later.
+  const focusLeaveOff = useCallback((node: HTMLButtonElement | null) => node?.focus(), [])
 
   // Watched rather than derived, because the question is about a moment and not about a
   // state. Ticking a day from the bar on the home screen leaves the sheet closed the
@@ -55,12 +64,6 @@ export function CheckinOffer() {
     if (isOpen) useCalendarStore.getState().claimOffer('checkin')
   }, [isOpen])
 
-  // The answer that changes nothing is where the focus starts, so the keyboard's first
-  // Enter is the one that does not turn anything on.
-  useEffect(() => {
-    if (isOpen) leaveOffRef.current?.focus()
-  }, [isOpen])
-
   const leaveOff = () => {
     useCalendarStore.getState().markCheckinOffered()
     setMomentCame(false)
@@ -84,7 +87,7 @@ export function CheckinOffer() {
         // side by side at every width, for the same reason.
         <div className="flex gap-3">
           <Button
-            ref={leaveOffRef}
+            ref={focusLeaveOff}
             variant="secondary"
             className="flex-1"
             onClick={leaveOff}
