@@ -168,8 +168,34 @@ jobs:
           distribution: 'temurin'
           java-version: '17'
 
+      # The packages are named because the action's default is not what it looks like.
+      # With no `packages:` input it runs `sdkmanager tools platform-tools`, and `tools`
+      # is the SDK's retired all-in-one package, which Google no longer publishes. Until
+      # recently that cost nothing: the runner's preinstalled command-line tools (12.0)
+      # still listed it. The action wants 16.0 and downloads it, and that sdkmanager
+      # cannot find `tools`, exits 1, and takes the whole job with it — before Gradle has
+      # been asked to do anything. This is what it looked like on 2026-09-14, in five
+      # workflows at once:
+      #
+      #   Warning: Failed to find package 'tools'
+      #   Error: The process '.../cmdline-tools/16.0/bin/sdkmanager' failed with exit code 1
+      #
+      # So the three are named, and they are what the build actually reaches for, read out
+      # of the project rather than guessed:
+      #
+      #   platforms;android-36    compileSdk = 36, src-tauri/gen/android/app/build.gradle.kts
+      #   build-tools;35.0.0      no buildToolsVersion is set, so AGP picks its own default,
+      #                           and AGP 8.11.0 (buildSrc/build.gradle.kts) has 35.0.0 in
+      #                           ToolsRevisionUtils.DEFAULT_BUILD_TOOLS_REVISION
+      #   platform-tools          adb, which the emulator smoke test drives
+      #
+      # All three ship on the ubuntu image today, so naming them costs a few seconds of
+      # "already installed" and buys the job back the day one of them stops shipping.
+      # If Tauri regenerates gen/android against a newer compileSdk, this list moves too.
       - name: Setup Android SDK
         uses: android-actions/setup-android@v3
+        with:
+          packages: 'platforms;android-36 build-tools;35.0.0 platform-tools'
 
       # No cache for the NDK: it is already on the ubuntu-latest image, so this resolves in
       # under a second and there is nothing to cache. Measured, after caching it first and
