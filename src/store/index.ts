@@ -159,6 +159,27 @@ interface CalendarState {
   feedbackInviteSeen: boolean
 
   /**
+   * Whether the check-in has been asked about. Deliberately not versioned: a question
+   * about whether Daylo may speak to a server is answered once, and a new version is not
+   * a reason to ask again.
+   */
+  checkinOffered: boolean
+  /** Whether the check-in is on. Off unless somebody said otherwise. */
+  checkinEnabled: boolean
+  /**
+   * The random number this installation uses, made here and tied to nothing. It exists
+   * only while the check-in is on: turning it off deletes it, and turning it on again
+   * makes a new one, so the two seasons cannot be joined by anyone, us included.
+   */
+  checkinId: string | null
+  /**
+   * The last time Daylo tried to send, whether or not it arrived. It is what keeps
+   * "once a day at most" true across launches, and what the settings sheet reports.
+   * There is no queue behind it: a try is recorded and the day is spent.
+   */
+  checkinLastAttempt: { date: string; at: string; ok: boolean } | null
+
+  /**
    * Whether anything was ticked or unticked in this session. Not persisted: it exists so
    * the invitation can appear while the day sheet still covers the screen, and a session
    * that has not touched a day has not opened that sheet.
@@ -195,6 +216,12 @@ interface CalendarState {
   markFeedbackInviteSeen: () => void
   /** Takes this session's offer slot, if nobody has taken it. */
   claimOffer: (kind: 'reminder' | 'checkin') => void
+
+  // Check-in
+  markCheckinOffered: () => void
+  /** The switch and the number together, because they are one fact. */
+  setCheckin: (enabled: boolean, id: string | null) => void
+  recordCheckinAttempt: (date: string, at: string, ok: boolean) => void
 
   // Hydration
   setHasHydrated: (value: boolean) => void
@@ -236,6 +263,10 @@ export const useCalendarStore = create<CalendarState>()(
 
       firstOpenedAt: null,
       feedbackInviteSeen: false,
+      checkinOffered: false,
+      checkinEnabled: false,
+      checkinId: null,
+      checkinLastAttempt: null,
       _loggedThisSession: false,
       _offerThisSession: null,
 
@@ -260,6 +291,21 @@ export const useCalendarStore = create<CalendarState>()(
 
       claimOffer: (kind) =>
         set((state) => (state._offerThisSession === null ? { _offerThisSession: kind } : {})),
+
+      markCheckinOffered: () => set({ checkinOffered: true }),
+
+      // Off clears everything the season produced, in the same set as the switch itself:
+      // there is no instant in which the check-in is off and the number it was using is
+      // still on disk, and none in which Daylo remembers when it last spoke to a server
+      // it is no longer speaking to.
+      setCheckin: (enabled, id) =>
+        set(
+          enabled
+            ? { checkinEnabled: true, checkinId: id }
+            : { checkinEnabled: false, checkinId: null, checkinLastAttempt: null }
+        ),
+
+      recordCheckinAttempt: (date, at, ok) => set({ checkinLastAttempt: { date, at, ok } }),
 
       setHasHydrated: (value: boolean) => set({ _hasHydrated: value }),
 
@@ -393,6 +439,10 @@ export const useCalendarStore = create<CalendarState>()(
         reminderOffered: state.reminderOffered,
         firstOpenedAt: state.firstOpenedAt,
         feedbackInviteSeen: state.feedbackInviteSeen,
+        checkinOffered: state.checkinOffered,
+        checkinEnabled: state.checkinEnabled,
+        checkinId: state.checkinId,
+        checkinLastAttempt: state.checkinLastAttempt,
       }),
       onRehydrateStorage: () => (state) => {
         state?.setHasHydrated(true)

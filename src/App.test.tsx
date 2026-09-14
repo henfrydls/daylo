@@ -6,6 +6,14 @@ import { useCalendarStore } from './store'
 
 const remindersAvailable = vi.hoisted(() => vi.fn())
 const openMailto = vi.hoisted(() => vi.fn())
+const checkinFields = vi.hoisted(() => vi.fn())
+const sendCheckinIfDue = vi.hoisted(() => vi.fn())
+
+vi.mock('./lib/checkin', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('./lib/checkin')>()),
+  checkinFields,
+  sendCheckinIfDue,
+}))
 
 vi.mock('./lib/feedbackInvite', async (importOriginal) => ({
   ...(await importOriginal<typeof import('./lib/feedbackInvite')>()),
@@ -30,6 +38,8 @@ async function openTheMenu() {
 
 beforeEach(() => {
   remindersAvailable.mockReset().mockResolvedValue(false)
+  checkinFields.mockReset().mockResolvedValue(null)
+  sendCheckinIfDue.mockReset().mockResolvedValue(undefined)
   useCalendarStore.setState({
     activities: [],
     logs: [],
@@ -106,5 +116,61 @@ describe('writing without being asked', () => {
 
     expect(await screen.findByText(/Could not open an email app/)).toBeInTheDocument()
     expect(useCalendarStore.getState().feedbackInviteSeen).toBe(false)
+  })
+})
+
+// The check-in has no place outside the native app: the web build and the Docker image
+// have no command to call and a CSP that forbids the call anyway.
+describe('the check-in in the menu', () => {
+  it('is absent where nothing can be sent', async () => {
+    render(<App />)
+    await act(async () => {})
+
+    await openTheMenu()
+
+    expect(screen.queryByText('Anonymous check-in')).not.toBeInTheDocument()
+  })
+
+  it('is there in the app, and opens the sheet', async () => {
+    checkinFields.mockResolvedValue({ version: '1.3.0', os: 'android' })
+    render(<App />)
+    await act(async () => {})
+
+    await openTheMenu()
+    await userEvent.click(screen.getByText('Anonymous check-in'))
+
+    expect(await screen.findByTestId('checkin-settings')).toBeInTheDocument()
+  })
+})
+
+// Two moments, because two kinds of device. A phone is closed and opened; a desktop is
+// left running for days and only the window coming back says a new day has started.
+describe('when the daily check-in is attempted', () => {
+  it('asks once the store is there and the app can send', async () => {
+    checkinFields.mockResolvedValue({ version: '1.3.0', os: 'linux' })
+    render(<App />)
+    await act(async () => {})
+
+    expect(sendCheckinIfDue).toHaveBeenCalled()
+  })
+
+  it('does not ask where nothing can be sent', async () => {
+    render(<App />)
+    await act(async () => {})
+
+    expect(sendCheckinIfDue).not.toHaveBeenCalled()
+  })
+
+  it('asks again when the window comes back', async () => {
+    checkinFields.mockResolvedValue({ version: '1.3.0', os: 'linux' })
+    render(<App />)
+    await act(async () => {})
+    sendCheckinIfDue.mockClear()
+
+    await act(async () => {
+      document.dispatchEvent(new Event('visibilitychange'))
+    })
+
+    expect(sendCheckinIfDue).toHaveBeenCalled()
   })
 })

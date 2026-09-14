@@ -1,3 +1,5 @@
+mod checkin;
+
 // Learn more about Tauri commands at https://tauri.app/develop/calling-rust/
 #[tauri::command]
 fn greet(name: &str) -> String {
@@ -111,7 +113,9 @@ pub fn run() {
             .invoke_handler(tauri::generate_handler![
                 greet,
                 write_text_file,
-                save_dialog_available
+                save_dialog_available,
+                checkin::checkin_fields,
+                checkin::send_checkin
             ]);
 
     // Android writes through the filesystem plugin rather than through write_text_file:
@@ -132,7 +136,9 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             greet,
             save_dialog_available,
-            reminders_available
+            reminders_available,
+            checkin::checkin_fields,
+            checkin::send_checkin
         ]);
 
     // iOS registers neither, so the frontend falls back to the browser download, which is
@@ -199,6 +205,33 @@ mod plugin_config {
         serde_json::from_value::<C>(block(name))
             .map(|_| ())
             .map_err(|e| format!("plugins.{name} in tauri.conf.json: {e}"))
+    }
+
+    /// The page can reach no host at all, and the check-in's whole argument rests on it.
+    ///
+    /// Pinned in full rather than checked for `connect-src`, because the interesting
+    /// failure is not somebody adding a host: it is somebody loosening `default-src` or
+    /// dropping `form-action` while adding something unrelated, and then the check-in
+    /// stops being the only thing that can leave. If this test fails, the sentence in the
+    /// privacy policy has to be rewritten before the line is.
+    #[test]
+    fn the_page_may_still_reach_nothing() {
+        let csp = conf()
+            .get("app")
+            .and_then(|app| app.get("security"))
+            .and_then(|security| security.get("csp"))
+            .and_then(Value::as_str)
+            .expect("tauri.conf.json has no app.security.csp")
+            .to_string();
+
+        assert_eq!(
+            csp,
+            concat!(
+                "default-src 'none'; script-src 'self'; style-src 'self' 'unsafe-inline'; ",
+                "img-src 'self' data:; font-src 'self'; connect-src 'self' ipc: tauri:; ",
+                "form-action 'none'; base-uri 'self'; frame-ancestors 'none'"
+            )
+        );
     }
 
     #[test]

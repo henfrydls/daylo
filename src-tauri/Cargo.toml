@@ -20,6 +20,13 @@ tauri-build = { version = "2", features = [] }
 # together or not at all.
 tauri = { version = "~2.10", features = [] }
 tauri-plugin-shell = "2"
+# For the anonymous check-in, and chosen over reqwest for two measured reasons. reqwest is
+# already in the lock as somebody else's dependency, but there is no TLS backend in the
+# tree at all — no rustls, no native-tls, no openssl — so either way the whole stack gets
+# added and reqwest buys nothing. And this one is blocking with a tiny surface, which is
+# what lets src/checkin.rs stay short enough to read in one sitting, which is the only
+# guarantee anyone has about what the native side sends.
+ureq = { version = "2", default-features = false, features = ["tls", "json"] }
 log = "0.4"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"

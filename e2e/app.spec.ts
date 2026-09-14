@@ -1266,3 +1266,37 @@ test.describe('the two-week invitation @webkit', () => {
     await expect(page.getByText('Send feedback')).toBeVisible()
   })
 })
+
+// ── The check-in, where it does not exist ─────────────────
+
+/**
+ * In a browser there is no check-in at all, and this is what says so.
+ *
+ * Everything else about it is covered by unit tests and by hand on a device, because the
+ * dialog and the sheet only exist where `checkin_fields` answers — desktop and Android.
+ * What a browser can prove is the absence, and the absence is the promise: the demo and
+ * the self-hosted Docker build have no code path that sends anything, on top of a CSP
+ * that would refuse it.
+ */
+test.describe('the check-in in a browser @webkit', () => {
+  test('is not in the menu', async ({ page }) => {
+    await seedTwoWeeksIn(page, { firstOpenedAt: 'yesterday' })
+
+    await page.locator('[aria-label="More options"]:visible').click()
+
+    await expect(page.getByText('Anonymous check-in')).toHaveCount(0)
+    // The one next to it is there, so this is not passing because the menu never opened.
+    await expect(page.getByText('Send feedback')).toBeVisible()
+  })
+
+  test('does not ask when the day sheet closes on a later day', async ({ page }) => {
+    await seedTwoWeeksIn(page, { firstOpenedAt: 'yesterday' })
+
+    await tickADay(page)
+
+    await expect(page.getByText('Send an anonymous check-in?')).toHaveCount(0)
+    // The moment was a real one: the band took it, which is what happens when the
+    // check-in is not there to ask first.
+    await expect(page.getByTestId('feedback-invite')).toBeVisible()
+  })
+})

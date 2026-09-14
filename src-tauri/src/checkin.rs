@@ -1,0 +1,132 @@
+//! The anonymous check-in: the whole of what Daylo ever sends anywhere.
+//!
+//! It is here and not in the webview for the reason that is also the point. The app's CSP
+//! is `default-src 'none'` with `connect-src 'self' ipc: tauri:`, so the page can reach no
+//! host at all, and anyone can check that in tauri.conf.json without trusting us. Nothing
+//! checks the native side for them, so this file is short enough to read instead: four
+//! fields, one address, no retry, no queue, no state.
+
+/// Both are named in the privacy policy, and scripts/check-no-analytics.sh checks that this
+/// is the only file under src-tauri/ naming a host, with exactly one URL, equal to this one.
+const URL: &str = "https://checkin.henfrydls.com/api/send";
+const WEBSITE: &str = "b382ce66-26f7-4bc7-9a0a-34d4c5e730f2";
+
+#[derive(serde::Serialize)]
+pub struct CheckinFields {
+    version: String,
+    os: &'static str,
+}
+
+/// What the message carries for this build, so the settings sheet can show exactly what
+/// leaves. Desktop and Android only: a rejected call means "no check-in here".
+#[tauri::command]
+pub fn checkin_fields(app: tauri::AppHandle) -> CheckinFields {
+    CheckinFields {
+        version: app.package_info().version.to_string(),
+        os: std::env::consts::OS,
+    }
+}
+
+/// The message, and nothing but the message. `last` is added only when the switch is being
+/// turned off. Separate from the sending so that "exactly these four keys" is something a
+/// test asserts rather than something a comment claims.
+pub fn message(id: &str, version: &str, os: &str, date: &str, last: bool) -> serde_json::Value {
+    let mut data = serde_json::json!({ "id": id, "version": version, "os": os, "date": date });
+    if last {
+        data["last"] = serde_json::Value::Bool(true);
+    }
+    serde_json::json!({
+        "type": "event",
+        "payload": {
+            "website": WEBSITE,
+            "hostname": "app",
+            "url": "/",
+            "name": "check-in",
+            "data": data
+        }
+    })
+}
+
+/// Send one check-in. A failure is reported to the caller and forgotten: no queue, no
+/// retry, no backoff; whether there is another is tomorrow's question, and the webview's.
+/// The user agent is the bare word Daylo, because the version already travels as a field
+/// and one carrying more would make "nothing else" harder to check than to say.
+#[tauri::command]
+pub async fn send_checkin(
+    app: tauri::AppHandle,
+    id: String,
+    date: String,
+    last: bool,
+) -> Result<(), String> {
+    let version = app.package_info().version.to_string();
+    let body = message(&id, &version, std::env::consts::OS, &date, last);
+    tauri::async_runtime::spawn_blocking(move || {
+        ureq::post(URL)
+            .set("User-Agent", "Daylo")
+            .timeout(std::time::Duration::from_secs(10))
+            .send_json(body)
+            .map(|_| ())
+            .map_err(|error| error.to_string())
+    })
+    .await
+    .map_err(|error| error.to_string())?
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{message, WEBSITE};
+
+    /// The promise the privacy policy makes, as an assertion. Four keys, and a fifth only
+    /// when the switch is being turned off — which the dialog announces before anyone can
+    /// turn anything on.
+    #[test]
+    fn carries_four_things_and_a_fifth_only_at_the_end() {
+        let ordinary = message(
+            "4f9c2a7e1b60d3a8c5e2f1b74a9d0c6e",
+            "1.3.0",
+            "android",
+            "2026-09-14",
+            false,
+        );
+        let data = ordinary["payload"]["data"].as_object().unwrap();
+
+        let mut keys: Vec<&str> = data.keys().map(String::as_str).collect();
+        keys.sort_unstable();
+        assert_eq!(keys, ["date", "id", "os", "version"]);
+
+        let farewell = message(
+            "4f9c2a7e1b60d3a8c5e2f1b74a9d0c6e",
+            "1.3.0",
+            "android",
+            "2026-09-14",
+            true,
+        );
+        let data = farewell["payload"]["data"].as_object().unwrap();
+        let mut keys: Vec<&str> = data.keys().map(String::as_str).collect();
+        keys.sort_unstable();
+        assert_eq!(keys, ["date", "id", "last", "os", "version"]);
+        assert_eq!(farewell["payload"]["data"]["last"], serde_json::json!(true));
+    }
+
+    /// Nothing about the person, the device or the habits rides along in the envelope
+    /// either. The values outside `data` are constants and are pinned as such.
+    #[test]
+    fn the_envelope_says_nothing_about_anyone() {
+        let m = message("id", "1.3.0", "linux", "2026-09-14", false);
+
+        assert_eq!(m["type"], serde_json::json!("event"));
+        assert_eq!(m["payload"]["hostname"], serde_json::json!("app"));
+        assert_eq!(m["payload"]["url"], serde_json::json!("/"));
+        assert_eq!(m["payload"]["name"], serde_json::json!("check-in"));
+        assert_eq!(m["payload"]["website"], serde_json::json!(WEBSITE));
+        // The whole message, so a field added anywhere in it fails here.
+        let mut top: Vec<&str> = m["payload"]
+            .as_object()
+            .unwrap()
+            .keys()
+            .map(String::as_str)
+            .collect();
+        top.sort_unstable();
+        assert_eq!(top, ["data", "hostname", "name", "url", "website"]);
+    }
+}

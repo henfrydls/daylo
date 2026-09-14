@@ -453,3 +453,66 @@ describe('what the store remembers about how long somebody has been here', () =>
     expect(persisted).not.toHaveProperty('_offerThisSession')
   })
 })
+
+// What the store holds for the check-in. The switch and the random number are one fact in
+// two fields and the store is what keeps them one: there is no state where the check-in is
+// off and a number survives, because the number is the thing consent produced.
+describe('what the store remembers about the check-in', () => {
+  beforeEach(() => {
+    useCalendarStore.setState({
+      checkinOffered: false,
+      checkinEnabled: false,
+      checkinId: null,
+      checkinLastAttempt: null,
+    })
+  })
+
+  it('remembers that the question was asked, however it was answered', () => {
+    useCalendarStore.getState().markCheckinOffered()
+    expect(useCalendarStore.getState().checkinOffered).toBe(true)
+  })
+
+  it('turns on with a number and off without one', () => {
+    useCalendarStore.getState().setCheckin(true, '4f9c2a7e1b60d3a8c5e2f1b74a9d0c6e')
+
+    expect(useCalendarStore.getState().checkinEnabled).toBe(true)
+    expect(useCalendarStore.getState().checkinId).toBe('4f9c2a7e1b60d3a8c5e2f1b74a9d0c6e')
+  })
+
+  // Turning it off is the one action in the app that has to be complete on its own: the
+  // number is gone from disk before the last note has even left, and the record of when
+  // Daylo last spoke to a server goes with it. Nothing about that season is kept.
+  it('forgets the number and the last attempt when it is turned off', () => {
+    useCalendarStore.getState().setCheckin(true, '4f9c2a7e1b60d3a8c5e2f1b74a9d0c6e')
+    useCalendarStore.getState().recordCheckinAttempt('2026-09-14', '2026-09-14T21:12:00.000Z', true)
+
+    useCalendarStore.getState().setCheckin(false, null)
+
+    expect(useCalendarStore.getState().checkinEnabled).toBe(false)
+    expect(useCalendarStore.getState().checkinId).toBeNull()
+    expect(useCalendarStore.getState().checkinLastAttempt).toBeNull()
+  })
+
+  it('records a try whether or not it arrived', () => {
+    useCalendarStore
+      .getState()
+      .recordCheckinAttempt('2026-09-14', '2026-09-14T21:12:00.000Z', false)
+
+    expect(useCalendarStore.getState().checkinLastAttempt).toEqual({
+      date: '2026-09-14',
+      at: '2026-09-14T21:12:00.000Z',
+      ok: false,
+    })
+  })
+
+  // The four survive a restart: "once a day" is a promise across launches, and a number
+  // that did not survive would make a new device out of the same one every morning.
+  it('writes all four to disk', () => {
+    const persisted = useCalendarStore.persist.getOptions().partialize!(useCalendarStore.getState())
+
+    expect(persisted).toHaveProperty('checkinOffered')
+    expect(persisted).toHaveProperty('checkinEnabled')
+    expect(persisted).toHaveProperty('checkinId')
+    expect(persisted).toHaveProperty('checkinLastAttempt')
+  })
+})
