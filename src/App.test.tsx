@@ -5,6 +5,12 @@ import App from './App'
 import { useCalendarStore } from './store'
 
 const remindersAvailable = vi.hoisted(() => vi.fn())
+const openMailto = vi.hoisted(() => vi.fn())
+
+vi.mock('./lib/feedbackInvite', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('./lib/feedbackInvite')>()),
+  openMailto,
+}))
 
 // The platform side of reminders is stubbed: this is about what the menu offers, not
 // about what Android does with it.
@@ -56,5 +62,49 @@ describe('the daily reminder in the menu', () => {
     await userEvent.click(screen.getByText('Daily reminder'))
 
     expect(await screen.findByTestId('reminder-settings')).toBeInTheDocument()
+  })
+})
+
+// The invitation asks once, on day fourteen. This is for the rest of the time: somebody
+// with something to say on day three should not have to wait to be asked.
+describe('writing without being asked', () => {
+  beforeEach(() => {
+    openMailto.mockReset().mockResolvedValue('opened')
+    useCalendarStore.setState({ feedbackInviteSeen: false })
+  })
+
+  it('is in the menu, on every platform', async () => {
+    render(<App />)
+    await act(async () => {})
+
+    await openTheMenu()
+
+    expect(screen.getByText('Send feedback')).toBeInTheDocument()
+  })
+
+  it('does not ask again on day fourteen once somebody has written', async () => {
+    render(<App />)
+    await act(async () => {})
+    await openTheMenu()
+
+    await userEvent.click(screen.getByText('Send feedback'))
+
+    await act(async () => {})
+    expect(openMailto).toHaveBeenCalledTimes(1)
+    expect(useCalendarStore.getState().feedbackInviteSeen).toBe(true)
+  })
+
+  // A toast rather than a line, because there is no band on screen to write into, and the
+  // address has to reach the person somehow.
+  it('gives the address when no email app answers', async () => {
+    openMailto.mockResolvedValue('failed')
+    render(<App />)
+    await act(async () => {})
+    await openTheMenu()
+
+    await userEvent.click(screen.getByText('Send feedback'))
+
+    expect(await screen.findByText(/Could not open an email app/)).toBeInTheDocument()
+    expect(useCalendarStore.getState().feedbackInviteSeen).toBe(false)
   })
 })

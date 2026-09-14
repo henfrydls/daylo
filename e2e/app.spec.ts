@@ -1114,3 +1114,155 @@ test.describe('a window that is not tall @webkit', () => {
     expect(sideways.scrollWidth).toBeLessThanOrEqual(sideways.clientWidth)
   })
 })
+
+// ── The two-week invitation ───────────────────────────────
+
+/**
+ * Two weeks in, Daylo asks once how it went. The band is the only part of that piece a
+ * browser can see: the check-in's consent and sheet need the native app, so they are
+ * covered by unit tests and by hand.
+ *
+ * What these check is the part a person meets: that it is not there on the first day of
+ * an installation, that it arrives behind the day sheet rather than jumping under a
+ * thumb, that it sits where it was designed to sit, and that closing it closes it for
+ * good and not just for now.
+ */
+async function seedTwoWeeksIn(
+  page: import('@playwright/test').Page,
+  { firstOpenedAt }: { firstOpenedAt: 'today' | 'yesterday' }
+) {
+  await page.addInitScript((when) => {
+    const day = (back: number) => {
+      const d = new Date()
+      d.setDate(d.getDate() - back)
+      return [
+        d.getFullYear(),
+        String(d.getMonth() + 1).padStart(2, '0'),
+        String(d.getDate()).padStart(2, '0'),
+      ].join('-')
+    }
+    // Twenty days of use, one record each, so both the fourteen days and the eight
+    // distinct days are well past.
+    const logs = Array.from({ length: 20 }, (_, i) => ({
+      id: `l${i}`,
+      activityId: 'a1',
+      date: day(20 - i),
+      completed: true,
+      createdAt: day(20 - i),
+    }))
+    localStorage.setItem(
+      'simple-calendar-storage',
+      JSON.stringify({
+        state: {
+          activities: [
+            {
+              id: 'a1',
+              name: 'Read',
+              color: '#10B981',
+              createdAt: '2026-01-01T00:00:00.000Z',
+              updatedAt: '2026-01-01T00:00:00.000Z',
+            },
+          ],
+          logs,
+          selectedYear: new Date().getFullYear(),
+          selectedDate: null,
+          currentView: 'month',
+          yearMode: 'all',
+          selectedMonth: new Date().getMonth(),
+          reminderEnabled: false,
+          reminderHour: 21,
+          reminderMinute: 0,
+          reminderOffered: true,
+          firstOpenedAt: when === 'today' ? day(0) : day(1),
+          feedbackInviteSeen: false,
+        },
+        version: 0,
+      })
+    )
+  }, firstOpenedAt)
+  await page.goto('/')
+  await page.waitForSelector('[data-testid="month-title-button"]')
+  await page.waitForFunction(() => document.getAnimations().every((a) => a.playState !== 'running'))
+}
+
+/**
+ * Open today, tick it, close the sheet — which is when the band is allowed to appear.
+ * Today by its own label rather than the first cell in the grid: the first cell is the
+ * tail of the previous month, and the bar that says "Today" is only drawn on a phone.
+ */
+async function tickADay(page: import('@playwright/test').Page) {
+  const d = new Date()
+  const today = [
+    d.getFullYear(),
+    String(d.getMonth() + 1).padStart(2, '0'),
+    String(d.getDate()).padStart(2, '0'),
+  ].join('-')
+  await page.getByRole('button', { name: new RegExp(`^${today},`) }).click()
+  await page.getByTestId('quicklog-activity-checkbox').first().click()
+  await page.getByTestId('quicklog-done-button').click()
+  await page.waitForFunction(() => document.getAnimations().every((a) => a.playState !== 'running'))
+}
+
+test.describe('the two-week invitation @webkit', () => {
+  test('is not there until something has been ticked', async ({ page }) => {
+    await seedTwoWeeksIn(page, { firstOpenedAt: 'yesterday' })
+
+    await expect(page.getByTestId('feedback-invite')).toHaveCount(0)
+
+    await tickADay(page)
+
+    await expect(page.getByTestId('feedback-invite')).toBeVisible()
+  })
+
+  // Under the header and above the calendar, which is the only place visible on every
+  // screen without scrolling.
+  test('sits between the header and the calendar', async ({ page }) => {
+    await seedTwoWeeksIn(page, { firstOpenedAt: 'yesterday' })
+    await tickADay(page)
+
+    const band = (await page.getByTestId('feedback-invite').boundingBox())!
+    const card = (await page.locator('#main-content .lg\\:col-span-3').boundingBox())!
+    const header = (await page.locator('header').first().boundingBox())!
+
+    expect(
+      band.y + band.height,
+      `band ${JSON.stringify(band)} card ${JSON.stringify(card)}`
+    ).toBeLessThanOrEqual(card.y + 1)
+    expect(band.y).toBeGreaterThanOrEqual(header.y + header.height - 1)
+  })
+
+  // Somebody setting up a new phone is not the person to ask for a favour, however long
+  // the records they restored say they have been here.
+  test('stays away on the first day of an installation', async ({ page }) => {
+    await seedTwoWeeksIn(page, { firstOpenedAt: 'today' })
+
+    await tickADay(page)
+
+    await expect(page.getByTestId('feedback-invite')).toHaveCount(0)
+  })
+
+  test('goes for good when it is dismissed', async ({ page }) => {
+    await seedTwoWeeksIn(page, { firstOpenedAt: 'yesterday' })
+    await tickADay(page)
+
+    await page.getByTestId('feedback-invite-dismiss').click()
+
+    await expect(page.getByTestId('feedback-invite')).toHaveCount(0)
+    expect(
+      await page.evaluate(
+        () => JSON.parse(localStorage.getItem('simple-calendar-storage')!).state.feedbackInviteSeen
+      )
+    ).toBe(true)
+
+    await page.reload()
+    await page.waitForSelector('[data-testid="month-title-button"]')
+    await expect(page.getByTestId('feedback-invite')).toHaveCount(0)
+  })
+
+  test('and writing is offered from the menu at any time', async ({ page }) => {
+    await page.goto('/')
+    await page.locator('[aria-label="More options"]:visible').click()
+
+    await expect(page.getByText('Send feedback')).toBeVisible()
+  })
+})

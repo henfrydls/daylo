@@ -1162,3 +1162,16 @@ describe('dataExport utility functions', () => {
     })
   })
 })
+
+// The backup carries what a person made, and nothing about how long they have been here.
+// Not a new rule: reminderEnabled has never travelled either. It is pinned because the
+// fields the 1.3 pieces add are exactly the kind somebody would helpfully include, and a
+// backup that carried "we already asked you" would answer a question on a device that was
+// never asked it.
+describe('what a backup does not carry', () => {
+  it('has four keys and none of them is a preference', () => {
+    const backup = JSON.parse(exportToJSON([], []))
+
+    expect(Object.keys(backup).sort()).toEqual(['activities', 'exportedAt', 'logs', 'version'])
+  })
+})

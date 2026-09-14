@@ -122,6 +122,13 @@ pub fn run() {
     let builder = builder
         .plugin(tauri_plugin_fs::init())
         .plugin(tauri_plugin_notification::init())
+        // Also here, and not only on the desktop, because the shell plugin's `open` cannot
+        // do it: it goes through the `open` crate, which maps Android to its unix module
+        // and reaches for `xdg-open`, a program no Android has. The opener plugin has
+        // Kotlin of its own and sends an ACTION_VIEW intent, which is how a mailto: finds
+        // a mail app there — and how the app learns it did not, because a phone with none
+        // rejects with the system's own exception.
+        .plugin(tauri_plugin_opener::init())
         .invoke_handler(tauri::generate_handler![
             greet,
             save_dialog_available,

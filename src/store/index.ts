@@ -1,7 +1,7 @@
 import { create } from 'zustand'
 import { persist, createJSONStorage, type StateStorage } from 'zustand/middleware'
 import type { Activity, ActivityLog } from '../types'
-import { generateId } from '../lib/dates'
+import { formatDate, generateId } from '../lib/dates'
 // Import estatico a proposito: Toast.tsx ya importa este modulo de forma estatica,
 // asi que un import() dinamico aqui no partiria el bundle -- solo retrasaria el aviso.
 import { useToastStore } from './toast'
@@ -144,6 +144,32 @@ interface CalendarState {
   reminderMinute: number
   reminderOffered: boolean
 
+  /**
+   * The first day this installation was opened, local, `YYYY-MM-DD`. Written once and
+   * never again, so it says how long the app has been on this device rather than how
+   * recently it was used. Somebody updating from 1.2 gets the day they updated, which is
+   * the earliest thing that can honestly be said about them.
+   *
+   * It answers two different questions and on purpose: for the check-in it is about this
+   * installation, and for the invitation it is one half of "how long has this person
+   * lived with Daylo", the other half being the oldest record they hold.
+   */
+  firstOpenedAt: string | null
+  /** Whether the two-week invitation has been put. One invitation, not one drawing. */
+  feedbackInviteSeen: boolean
+
+  /**
+   * Whether anything was ticked or unticked in this session. Not persisted: it exists so
+   * the invitation can appear while the day sheet still covers the screen, and a session
+   * that has not touched a day has not opened that sheet.
+   */
+  _loggedThisSession: boolean
+  /**
+   * Which of the three one-time offers has already been made in this session, if any.
+   * Not persisted. Three things want the same moment and none may talk over another.
+   */
+  _offerThisSession: 'reminder' | 'checkin' | null
+
   // Activity actions
   addActivity: (name: string, color: string) => void
   updateActivity: (id: string, updates: Partial<Pick<Activity, 'name' | 'color'>>) => void
@@ -164,6 +190,11 @@ interface CalendarState {
   // Reminder
   setReminder: (enabled: boolean, hour?: number, minute?: number) => void
   markReminderOffered: () => void
+  /** Records the first day, once. Called when the store finishes hydrating. */
+  markOpened: () => void
+  markFeedbackInviteSeen: () => void
+  /** Takes this session's offer slot, if nobody has taken it. */
+  claimOffer: (kind: 'reminder' | 'checkin') => void
 
   // Hydration
   setHasHydrated: (value: boolean) => void
@@ -203,6 +234,11 @@ export const useCalendarStore = create<CalendarState>()(
       reminderMinute: 0,
       reminderOffered: false,
 
+      firstOpenedAt: null,
+      feedbackInviteSeen: false,
+      _loggedThisSession: false,
+      _offerThisSession: null,
+
       setReminder: (enabled, hour, minute) =>
         set((state) => ({
           reminderEnabled: enabled,
@@ -211,6 +247,19 @@ export const useCalendarStore = create<CalendarState>()(
         })),
 
       markReminderOffered: () => set({ reminderOffered: true }),
+
+      // Once, and never again: the second call has to be a no-op or the field would mean
+      // "the last day the app was opened", which is a different fact and not the one
+      // anything here asks for.
+      markOpened: () =>
+        set((state) =>
+          state.firstOpenedAt === null ? { firstOpenedAt: formatDate(new Date()) } : {}
+        ),
+
+      markFeedbackInviteSeen: () => set({ feedbackInviteSeen: true }),
+
+      claimOffer: (kind) =>
+        set((state) => (state._offerThisSession === null ? { _offerThisSession: kind } : {})),
 
       setHasHydrated: (value: boolean) => set({ _hasHydrated: value }),
 
@@ -246,6 +295,10 @@ export const useCalendarStore = create<CalendarState>()(
       },
 
       toggleLog: (activityId, date) => {
+        // Whatever else this does, the session has now touched a day. The invitation
+        // needs that: it mounts behind the day sheet, and this is what says the sheet is
+        // open. Unticking counts too — the app was used either way.
+        set({ _loggedThisSession: true })
         const existingLog = get().logs.find((l) => l.activityId === activityId && l.date === date)
 
         if (existingLog) {
@@ -338,6 +391,8 @@ export const useCalendarStore = create<CalendarState>()(
         reminderHour: state.reminderHour,
         reminderMinute: state.reminderMinute,
         reminderOffered: state.reminderOffered,
+        firstOpenedAt: state.firstOpenedAt,
+        feedbackInviteSeen: state.feedbackInviteSeen,
       }),
       onRehydrateStorage: () => (state) => {
         state?.setHasHydrated(true)
