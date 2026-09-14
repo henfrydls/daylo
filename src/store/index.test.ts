@@ -383,3 +383,73 @@ describe('useCalendarStore', () => {
     })
   })
 })
+
+// The three fields the two-week invitation and the check-in are built on. They are here
+// rather than beside the feature because what matters about them is where they live:
+// which survive a restart, which do not, and which are written once and never again.
+describe('what the store remembers about how long somebody has been here', () => {
+  beforeEach(() => {
+    useCalendarStore.setState({
+      firstOpenedAt: null,
+      feedbackInviteSeen: false,
+      _loggedThisSession: false,
+      _offerThisSession: null,
+      logs: [],
+      activities: [],
+    })
+  })
+
+  it('writes the first day once and then leaves it alone', () => {
+    useCalendarStore.getState().markOpened()
+    const first = useCalendarStore.getState().firstOpenedAt
+    expect(first).toMatch(/^\d{4}-\d{2}-\d{2}$/)
+
+    useCalendarStore.setState({ firstOpenedAt: '2020-01-01' })
+    useCalendarStore.getState().markOpened()
+
+    // If this ever changed, the field would mean "the last day it was opened", which is a
+    // different fact and not the one anything asks for.
+    expect(useCalendarStore.getState().firstOpenedAt).toBe('2020-01-01')
+  })
+
+  it('gives this session to whoever asks first', () => {
+    useCalendarStore.getState().claimOffer('reminder')
+    useCalendarStore.getState().claimOffer('checkin')
+
+    expect(useCalendarStore.getState()._offerThisSession).toBe('reminder')
+  })
+
+  // The invitation mounts behind the day sheet, and this flag is what says the sheet was
+  // opened. Unticking counts: the app was used either way.
+  it('notices a day being ticked, and a day being unticked', () => {
+    useCalendarStore.setState({
+      activities: [
+        {
+          id: 'a1',
+          name: 'Read',
+          color: '#10B981',
+          createdAt: '2026-01-01',
+          updatedAt: '2026-01-01',
+        },
+      ],
+    })
+
+    useCalendarStore.getState().toggleLog('a1', '2026-02-01')
+    expect(useCalendarStore.getState()._loggedThisSession).toBe(true)
+
+    useCalendarStore.setState({ _loggedThisSession: false })
+    useCalendarStore.getState().toggleLog('a1', '2026-02-01')
+    expect(useCalendarStore.getState()._loggedThisSession).toBe(true)
+  })
+
+  // A session flag that survived a restart would make the invitation appear on a screen
+  // where nothing had been ticked, which is the one place it must not appear.
+  it('keeps the two session flags out of what is written to disk', () => {
+    const persisted = useCalendarStore.persist.getOptions().partialize!(useCalendarStore.getState())
+
+    expect(persisted).toHaveProperty('firstOpenedAt')
+    expect(persisted).toHaveProperty('feedbackInviteSeen')
+    expect(persisted).not.toHaveProperty('_loggedThisSession')
+    expect(persisted).not.toHaveProperty('_offerThisSession')
+  })
+})

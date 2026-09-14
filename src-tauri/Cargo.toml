@@ -65,6 +65,9 @@ tokio = { version = "1", features = ["time"] }
 # app.tauri.** with its members. Test on a release APK; a debug one does not minify and
 # cannot reproduce the failure. docs/RELEASING.md explains what it looks like when it bites.
 [target.'cfg(target_os = "android")'.dependencies]
+# The mailto: of the feedback invitation needs this here: the shell plugin's open reaches
+# for xdg-open through the `open` crate, and Android has none. See the comment in lib.rs.
+tauri-plugin-opener = "2"
 tauri-plugin-fs = "~2.5"
 # Held to 2.3 and not left to resolve: the crate's 2.4.0 is fine against tauri 2.10, but
 # its npm counterpart wants @tauri-apps/api 2.11, which has no matching tauri crate. 2.3.3

@@ -1,13 +1,16 @@
-import { useState, lazy, Suspense } from 'react'
+import { useState, useEffect, useMemo, lazy, Suspense } from 'react'
 import { YearView, MonthView } from './components/calendar'
 import { ActivityList, QuickLog } from './components/activities'
 import { StatsPanel } from './components/stats'
-import { BottomSheet, DropdownMenu, ErrorBoundary, ToastContainer } from './components/ui'
+import { BottomSheet, DropdownMenu, ErrorBoundary, ToastContainer, useToast } from './components/ui'
 import type { DropdownMenuItem } from './components/ui'
 import { AppSkeleton } from './components/skeletons'
 import { DailyReminder, ReminderSettings } from './components/settings'
 import { useCalendarStore } from './store'
 import { useAppVersion, useRemindersAvailable, useSwipeGesture } from './hooks'
+import { FeedbackInvite } from './components/feedback/FeedbackInvite'
+import { FEEDBACK_MAILTO, openMailto, shouldInviteFeedback } from './lib/feedbackInvite'
+import { formatDate } from './lib/dates'
 
 // Lazy load modals - they are rarely used
 const ExportModal = lazy(() =>
@@ -77,6 +80,48 @@ function App() {
   // Android only: nowhere else can a notification arrive with the app closed, so nowhere
   // else is there a setting to show.
   const hasReminders = useRemindersAvailable()
+  const logs = useCalendarStore((state) => state.logs)
+  const firstOpenedAt = useCalendarStore((state) => state.firstOpenedAt)
+  const feedbackInviteSeen = useCalendarStore((state) => state.feedbackInviteSeen)
+  const loggedThisSession = useCalendarStore((state) => state._loggedThisSession)
+  const offerThisSession = useCalendarStore((state) => state._offerThisSession)
+  const reminderOffered = useCalendarStore((state) => state.reminderOffered)
+  const markOpened = useCalendarStore((state) => state.markOpened)
+  const { showToast } = useToast()
+  // The slot stays open once the band has thanked, so the line can outlive the condition
+  // that put the band there. Set from the click, not from an effect.
+  const [inviteThanked, setInviteThanked] = useState(false)
+
+  // The first day this installation was opened, written once, as soon as there is a store
+  // to write it to. Everything that asks how long somebody has been here reads it.
+  useEffect(() => {
+    if (hasHydrated) markOpened()
+  }, [hasHydrated, markOpened])
+
+  const shouldInvite = useMemo(
+    () =>
+      shouldInviteFeedback({
+        today: formatDate(new Date()),
+        firstOpenedAt,
+        logs,
+        feedbackInviteSeen,
+        loggedThisSession,
+        offerThisSession,
+        reminderOfferPending: hasReminders && !reminderOffered,
+        // Nothing offers the check-in yet; it arrives with its own piece.
+        checkinOfferPending: false,
+      }),
+    [
+      firstOpenedAt,
+      logs,
+      feedbackInviteSeen,
+      loggedThisSession,
+      offerThisSession,
+      hasReminders,
+      reminderOffered,
+    ]
+  )
+
   const swipeRef = useSwipeGesture<HTMLDivElement>({
     onSwipeLeft: () =>
       setCurrentView(
@@ -159,6 +204,37 @@ function App() {
           } satisfies DropdownMenuItem,
         ]
       : []),
+    {
+      label: 'Send feedback',
+      icon: (
+        <svg
+          className="w-4 h-4"
+          fill="none"
+          viewBox="0 0 24 24"
+          stroke="currentColor"
+          aria-hidden="true"
+        >
+          <path
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            strokeWidth={2}
+            d="M21.75 6.75v10.5a2.25 2.25 0 01-2.25 2.25h-15a2.25 2.25 0 01-2.25-2.25V6.75m19.5 0A2.25 2.25 0 0019.5 4.5h-15a2.25 2.25 0 00-2.25 2.25m19.5 0v.243a2.25 2.25 0 01-1.07 1.916l-7.5 4.615a2.25 2.25 0 01-2.36 0L3.32 8.91a2.25 2.25 0 01-1.07-1.916V6.75"
+          />
+        </svg>
+      ),
+      // Here on every platform and from the first day, so that somebody with something to
+      // say on day three does not have to wait to be asked on day fourteen.
+      onClick: () => {
+        void openMailto(FEEDBACK_MAILTO).then((result) => {
+          if (result === 'opened') {
+            // Whoever has already written is not asked again on day fourteen.
+            useCalendarStore.getState().markFeedbackInviteSeen()
+            return
+          }
+          showToast('Could not open an email app. You can write to daylo@henfrydls.com.', 'error')
+        })
+      },
+    },
     { type: 'divider' },
     {
       type: 'info',
@@ -263,6 +339,12 @@ function App() {
           className="max-w-7xl mx-auto px-3 sm:px-4 py-4 sm:py-6"
           tabIndex={-1}
         >
+          {/* Under the header and above the calendar: the only place visible on every
+              screen without scrolling, and the same place on a phone and on a desktop. */}
+          {shouldInvite || inviteThanked ? (
+            <FeedbackInvite onThanked={() => setInviteThanked(true)} />
+          ) : null}
+
           <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
             {/* Calendar Section */}
             <div

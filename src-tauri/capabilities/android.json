@@ -1,8 +1,17 @@
 {
   "$schema": "https://schema.tauri.app/config/2/capability",
   "identifier": "android",
-  "description": "Android-only: the system document picker, writing to the file it returns, and the daily reminder",
-  "windows": ["main"],
-  "platforms": ["android"],
-  "permissions": ["dialog:allow-save", "fs:allow-write-text-file", "notification:default"]
+  "description": "Android-only: the system document picker, writing to the file it returns, the daily reminder, and opening a mailto: link, which the shell plugin cannot do here",
+  "windows": [
+    "main"
+  ],
+  "platforms": [
+    "android"
+  ],
+  "permissions": [
+    "dialog:allow-save",
+    "fs:allow-write-text-file",
+    "notification:default",
+    "opener:default"
+  ]
 }
