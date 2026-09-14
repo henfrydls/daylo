@@ -151,8 +151,13 @@ jobs:
           distribution: 'temurin'
           java-version: '17'
 
+      # Named, not defaulted: the action's default list includes the retired `tools`
+      # package, which no longer exists and fails the step outright. The reasoning and the
+      # measurements behind these three are in ci.yml, on the same step.
       - name: Setup Android SDK
         uses: android-actions/setup-android@v3
+        with:
+          packages: 'platforms;android-36 build-tools;35.0.0 platform-tools'
 
       - name: Install Android NDK
         run: sdkmanager "ndk;29.0.14206865"
