@@ -20,7 +20,7 @@
 
 ## Installation
 
-Daylo runs entirely on your device: no account, no cloud, no tracking.
+Your data stays on your device. No account, and nothing you track is ever uploaded. What the app sends, and how to turn it off, is in the [privacy policy](https://daylo.henfrydls.com/privacy/).
 
 - **[Desktop app](#desktop-app)** (Windows, macOS, Linux): Download from GitHub Releases
 - **[Android app](#android-app)** (arm64 phones and tablets): Download the APK from GitHub Releases
