@@ -10,7 +10,7 @@
   </developer>
   <description>
     <p>Daylo is a habit tracker with a calendar you can read at a glance. Tick off what you did today and the year fills in with color, so you can see a streak forming or a month you let slip without reading a single number.</p>
-    <p>Your data stays on your device. Daylo has no account, and no server stores your habits or the days you marked. One thing is optional and off until you turn it on: an anonymous daily check-in that tells us the app is still in use. It carries a random number, the app version, your system and the date, and nothing else. You can turn it off from the menu at any time. You can export a backup whenever you want and import it on another machine.</p>
+    <p>Your data stays on your device. Daylo has no account, and no server stores your habits or the days you marked. One thing leaves your device unless you turn it off: an anonymous daily check-in that tells us the app is still in use. It carries a random number, the app version, your system and the date, and nothing else. The app tells you the first time it opens, and you can turn it off from the menu at any time. You can export a backup whenever you want and import it on another machine.</p>
     <ul>
       <li>Year view: twelve month heatmaps side by side</li>
       <li>Month view: a dot per habit on each day, one tap to mark it</li>

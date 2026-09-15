@@ -127,7 +127,7 @@ jobs:
 
             **Linux.** The `.deb` installs with your package manager. The AppImage needs to be made executable first (right-click → Properties → allow executing, or `chmod +x`).
 
-            Your data stays on your device. Daylo has no account, and no server stores your habits or the days you marked. One thing is optional and off until you turn it on: an anonymous daily check-in that tells us the app is still in use. It carries a random number, the app version, your system and the date, and nothing else. You can turn it off from the menu at any time.
+            Your data stays on your device. Daylo has no account, and no server stores your habits or the days you marked. One thing leaves your device unless you turn it off: an anonymous daily check-in that tells us the app is still in use. It carries a random number, the app version, your system and the date, and nothing else. The app tells you the first time it opens, and you can turn it off from the menu at any time.
           releaseDraft: false
           prerelease: false
           args: ${{ matrix.args }}
