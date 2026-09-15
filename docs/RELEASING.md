@@ -23,24 +23,34 @@ written about it.
 See `changelog.d/README.md` for what belongs in a fragment. Anything that arrived before
 this was introduced is already written straight into `CHANGELOG.md`; leave it there.
 
-### 2. Bump the version
+### 2. Bump the version, in a pull request
 
 ```bash
-npm version patch   # 1.0.0 → 1.0.1 (bug fixes)
-npm version minor   # 1.0.0 → 1.1.0 (new features)
-npm version major   # 1.0.0 → 2.0.0 (breaking changes)
+npm version patch --no-git-tag-version   # 1.0.0 → 1.0.1 (bug fixes)
+npm version minor --no-git-tag-version   # 1.0.0 → 1.1.0 (new features)
+npm version major --no-git-tag-version   # 1.0.0 → 2.0.0 (breaking changes)
 ```
 
-This single command:
-- Updates `package.json` version
-- Runs `scripts/sync-version.js` to update `Cargo.toml`
-- Creates a git commit with message `v1.0.1`
-- Creates a git tag `v1.0.1`
+That writes the version into `package.json` and `package-lock.json`, and the `version`
+script runs `scripts/sync-version.js`, which writes it into `src-tauri/Cargo.toml` and
+`src-tauri/Cargo.lock`.
 
-### 3. Push the tag
+**The flag is not optional here.** Without it, `npm version` also makes a commit and a git
+tag on the spot, and the next `git push --follow-tags` sends that tag, which starts the
+release build from a branch nobody has reviewed. The tag belongs after the merge, not
+before it.
+
+Then add the release to `packaging/flathub/io.github.henfrydls.daylo.metainfo.xml`, dated
+the day the tag will be made, and open the bump as its own pull request. If the tag slips
+to another day, move the date with it.
+
+### 3. Tag, once the bump is on main
+
+The tag is the owner's to make, on the merge commit, and it is what publishes:
 
 ```bash
-git push --follow-tags
+git tag v1.3.0
+git push origin v1.3.0
 ```
 
 ### 4. CI builds and publishes
