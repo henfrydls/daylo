@@ -262,18 +262,55 @@ describe('the check-in on a device updating from an earlier version', () => {
 
     expect(screen.queryByTestId('checkin-notice')).not.toBeInTheDocument()
   })
+})
 
-  // The reminder is owed from an earlier day and goes first; two bands in one launch is
-  // one too many.
-  it('waits a session when the reminder offer is still owed', async () => {
+// The launch the line exists for is the first one, and on Android that is exactly the
+// launch where the reminder offer is owed and cannot be put yet, because there are no
+// habits to be reminded about. A line that queued behind it would be a new installation
+// sending its first check-in and saying nothing, which is the one thing this default is
+// not allowed to do.
+describe('the line and the reminder, on a new Android installation', () => {
+  beforeEach(() => {
+    checkinFields.mockResolvedValue({ version: '1.3.0', os: 'android' })
     remindersAvailable.mockResolvedValue(true)
     useCalendarStore.setState({
+      _checkinStart: 'new',
+      checkinEnabled: false,
+      checkinNoticeSeen: false,
+      _checkinNoticeShown: false,
+      _offerThisSession: null,
+      // Owed from this launch, and unanswerable: no habits exist yet.
       reminderOffered: false,
-      activities: [{ id: 'a1', name: 'Read', color: '#10B981', createdAt: NOW, updatedAt: NOW }],
+      activities: [],
     })
+  })
+
+  it('shows on the first launch, before there is anything to be reminded about', async () => {
     render(<App />)
     await act(async () => {})
 
-    expect(screen.queryByTestId('checkin-notice')).not.toBeInTheDocument()
+    expect(await screen.findByTestId('checkin-notice')).toBeInTheDocument()
+    expect(useCalendarStore.getState().checkinNoticeSeen).toBe(true)
+  })
+
+  it('stays while the reminder is asked, and after it is answered', async () => {
+    render(<App />)
+    await act(async () => {})
+    await screen.findByTestId('checkin-notice')
+
+    // A first habit exists, so the reminder can finally ask. Its modal opens over the
+    // line, which is allowed: one is a question, the other is a statement.
+    await act(async () => {
+      useCalendarStore.setState({
+        activities: [{ id: 'a1', name: 'Read', color: '#10B981', createdAt: NOW, updatedAt: NOW }],
+      })
+    })
+    expect(await screen.findByText('Remind me each evening?')).toBeInTheDocument()
+    expect(screen.getByTestId('checkin-notice')).toBeInTheDocument()
+
+    await userEvent.click(screen.getByText('Not now'))
+    await act(async () => {})
+
+    expect(screen.getByTestId('checkin-notice')).toBeInTheDocument()
   })
 })

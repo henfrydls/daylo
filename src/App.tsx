@@ -123,14 +123,16 @@ function App() {
 
   // Showing the line is what marks it seen, so the condition that put it there answers no
   // a moment later. The session flag is what keeps it on screen until this window is
-  // closed; the persisted one is what stops it coming back tomorrow. It claims no session
-  // slot for the same reason. What it must not talk over stands down on its own: the
-  // reminder goes first because it is owed from an earlier day, and the invitation waits
-  // because this one is pending.
-  const noticeIsOpen =
-    (shouldTellAboutCheckin || checkinNoticeShown) &&
-    !reminderOfferOwed &&
-    offerThisSession === null
+  // closed; the persisted one is what stops it coming back tomorrow.
+  //
+  // It waits for nothing and claims nothing, because it is not a question. The reminder's
+  // offer is a question and goes first among questions; this says what the app is already
+  // doing, and the one launch where it must appear is the first one, which on Android is
+  // exactly the launch where the reminder is owed and cannot be put yet, because there are
+  // no habits to be reminded about. Queuing there meant a new installation sent its first
+  // check-in and said nothing, which is the one thing this default may not do. The
+  // reminder's modal opens over it, and when that closes the line is still there.
+  const noticeIsOpen = shouldTellAboutCheckin || checkinNoticeShown
 
   const shouldInvite = useMemo(
     () =>
@@ -142,10 +144,12 @@ function App() {
         loggedThisSession,
         offerThisSession,
         reminderOfferPending: reminderOfferOwed,
-        // The notice is owed until it has been shown, and the invitation waits for it the
-        // way it waits for the reminder: an installation that updates today could be due
-        // both, and two bands at once is two too many.
-        checkinNoticePending: shouldTellAboutCheckin,
+        // The invitation waits for the line the way it waits for the reminder, and it
+        // keeps waiting for the rest of the session once the line has been shown: an
+        // installation that updates today could be due both, and two bands at once is two
+        // too many. Reading only the persisted flag would not do it, because that one is
+        // false again a moment after the line appears.
+        checkinNoticePending: shouldTellAboutCheckin || checkinNoticeShown,
       }),
     [
       firstOpenedAt,
@@ -155,6 +159,7 @@ function App() {
       offerThisSession,
       reminderOfferOwed,
       shouldTellAboutCheckin,
+      checkinNoticeShown,
     ]
   )
 
