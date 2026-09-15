@@ -460,16 +460,10 @@ describe('what the store remembers about how long somebody has been here', () =>
 describe('what the store remembers about the check-in', () => {
   beforeEach(() => {
     useCalendarStore.setState({
-      checkinOffered: false,
       checkinEnabled: false,
       checkinId: null,
       checkinLastAttempt: null,
     })
-  })
-
-  it('remembers that the question was asked, however it was answered', () => {
-    useCalendarStore.getState().markCheckinOffered()
-    expect(useCalendarStore.getState().checkinOffered).toBe(true)
   })
 
   it('turns on with a number and off without one', () => {
@@ -505,12 +499,45 @@ describe('what the store remembers about the check-in', () => {
     })
   })
 
-  // The four survive a restart: "once a day" is a promise across launches, and a number
+  // Daylo 1.3 asked once whether it could check in, and kept the answer in
+  // checkinOffered. It does not ask any more, so the field is gone, and a device that was
+  // running a build from that week still has it on disk. Hydration must carry on around
+  // it, and the next write must not put it back.
+  it('hydrates a state that still carries the field the question used', async () => {
+    // The adapter answers reads from its own pending write until that write lands, so the
+    // seed below would otherwise be read straight back over. This is what the app does
+    // when it goes to the background.
+    window.dispatchEvent(new Event('pagehide'))
+    localStorage.setItem(
+      'simple-calendar-storage',
+      JSON.stringify({
+        state: {
+          activities: [],
+          logs: [],
+          firstOpenedAt: '2026-09-01',
+          checkinOffered: true,
+          checkinEnabled: true,
+          checkinId: '4f9c2a7e1b60d3a8c5e2f1b74a9d0c6e',
+        },
+        version: 0,
+      })
+    )
+
+    await useCalendarStore.persist.rehydrate()
+
+    expect(useCalendarStore.getState().checkinEnabled).toBe(true)
+    expect(useCalendarStore.getState().checkinId).toBe('4f9c2a7e1b60d3a8c5e2f1b74a9d0c6e')
+    expect(useCalendarStore.getState().firstOpenedAt).toBe('2026-09-01')
+
+    const persisted = useCalendarStore.persist.getOptions().partialize!(useCalendarStore.getState())
+    expect(persisted).not.toHaveProperty('checkinOffered')
+  })
+
+  // The three survive a restart: "once a day" is a promise across launches, and a number
   // that did not survive would make a new device out of the same one every morning.
-  it('writes all four to disk', () => {
+  it('writes all three to disk', () => {
     const persisted = useCalendarStore.persist.getOptions().partialize!(useCalendarStore.getState())
 
-    expect(persisted).toHaveProperty('checkinOffered')
     expect(persisted).toHaveProperty('checkinEnabled')
     expect(persisted).toHaveProperty('checkinId')
     expect(persisted).toHaveProperty('checkinLastAttempt')

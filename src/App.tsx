@@ -5,12 +5,7 @@ import { StatsPanel } from './components/stats'
 import { BottomSheet, DropdownMenu, ErrorBoundary, ToastContainer, useToast } from './components/ui'
 import type { DropdownMenuItem } from './components/ui'
 import { AppSkeleton } from './components/skeletons'
-import {
-  CheckinOffer,
-  CheckinSettings,
-  DailyReminder,
-  ReminderSettings,
-} from './components/settings'
+import { CheckinSettings, DailyReminder, ReminderSettings } from './components/settings'
 import { useCalendarStore } from './store'
 import { useAppVersion, useCheckinFields, useRemindersAvailable, useSwipeGesture } from './hooks'
 import { FeedbackInvite } from './components/feedback/FeedbackInvite'
@@ -91,7 +86,6 @@ function App() {
   // CSP forbids reaching any host, so there is nothing to show a setting for.
   const checkinFields = useCheckinFields()
   const canCheckIn = checkinFields !== null
-  const checkinOffered = useCalendarStore((state) => state.checkinOffered)
   const logs = useCalendarStore((state) => state.logs)
   const firstOpenedAt = useCalendarStore((state) => state.firstOpenedAt)
   const feedbackInviteSeen = useCalendarStore((state) => state.feedbackInviteSeen)
@@ -120,7 +114,6 @@ function App() {
         loggedThisSession,
         offerThisSession,
         reminderOfferPending: hasReminders && !reminderOffered,
-        checkinOfferPending: canCheckIn && !checkinOffered,
       }),
     [
       firstOpenedAt,
@@ -130,8 +123,6 @@ function App() {
       offerThisSession,
       hasReminders,
       reminderOffered,
-      canCheckIn,
-      checkinOffered,
     ]
   )
 
@@ -252,14 +243,16 @@ function App() {
       ),
       // Here on every platform and from the first day, so that somebody with something to
       // say on day three does not have to wait to be asked on day fourteen.
+      // It marks nothing. Opening the letter is not writing it, and this entry is easy to
+      // press out of curiosity: somebody who did that and backed out would never be
+      // invited on day fourteen, and would never know there had been an invitation. The
+      // cost the other way is that somebody who did write may still be asked, and that
+      // one they can see and close.
       onClick: () => {
         void openMailto(FEEDBACK_MAILTO).then((result) => {
-          if (result === 'opened') {
-            // Whoever has already written is not asked again on day fourteen.
-            useCalendarStore.getState().markFeedbackInviteSeen()
-            return
+          if (result === 'failed') {
+            showToast('Could not open an email app. You can write to daylo@henfrydls.com.', 'error')
           }
-          showToast('Could not open an email app. You can write to daylo@henfrydls.com.', 'error')
         })
       },
     },
@@ -482,8 +475,7 @@ function App() {
           <ReminderSettings isOpen={isReminderOpen} onClose={() => setIsReminderOpen(false)} />
         )}
 
-        {/* The check-in: the one-time question, and the switch behind the menu */}
-        <CheckinOffer />
+        {/* The check-in: the switch behind the menu, and nothing else. It never asks. */}
         {isCheckinOpen && (
           <CheckinSettings isOpen={isCheckinOpen} onClose={() => setIsCheckinOpen(false)} />
         )}

@@ -92,7 +92,12 @@ describe('writing without being asked', () => {
     expect(screen.getByText('Send feedback')).toBeInTheDocument()
   })
 
-  it('does not ask again on day fourteen once somebody has written', async () => {
+  // It opens the letter and marks nothing. Pressing this out of curiosity and backing out
+  // of the chooser would otherwise take the invitation away for good, and take it away
+  // silently: the person would never learn there had been one. The cost the other way is
+  // that somebody who did write may still be invited on day fourteen, and that one they
+  // can see and close.
+  it('opens the letter without spending the invitation', async () => {
     render(<App />)
     await act(async () => {})
     await openTheMenu()
@@ -101,7 +106,7 @@ describe('writing without being asked', () => {
 
     await act(async () => {})
     expect(openMailto).toHaveBeenCalledTimes(1)
-    expect(useCalendarStore.getState().feedbackInviteSeen).toBe(true)
+    expect(useCalendarStore.getState().feedbackInviteSeen).toBe(false)
   })
 
   // A toast rather than a line, because there is no band on screen to write into, and the

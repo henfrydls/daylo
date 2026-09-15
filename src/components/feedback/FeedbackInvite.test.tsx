@@ -28,12 +28,18 @@ afterEach(() => {
 })
 
 describe('what it says', () => {
-  it('asks for a line, and says nothing has left yet', () => {
+  // One sentence and a link. The long version said why it was asking and what would
+  // happen when the link was pressed; the person it was asking called it invasive, and a
+  // favour asked at length is a favour asked twice.
+  it('asks for a line, in one sentence', () => {
     show()
 
-    expect(screen.getByText('Two weeks in')).toBeInTheDocument()
-    expect(note()).toHaveTextContent(/^Nothing leaves your device until you send the email\./)
+    expect(screen.getByTestId('feedback-invite')).toHaveTextContent(
+      'Two weeks in. How did it go? daylo@henfrydls.com'
+    )
     expect(link()).toHaveAttribute('href', FEEDBACK_MAILTO)
+    // Nothing else: no explanation of the email, and no note until there is one to give.
+    expect(screen.queryByTestId('feedback-invite-note')).not.toBeInTheDocument()
   })
 
   // A band, not a dialog: it can be ignored, and ignoring is a valid answer.
@@ -68,9 +74,7 @@ describe('when no email app answers', () => {
     await userEvent.click(link())
 
     await waitFor(() =>
-      expect(note()).toHaveTextContent(
-        'Daylo could not open an email app. Write to daylo@henfrydls.com.'
-      )
+      expect(note()).toHaveTextContent('Could not open an email app. Write to daylo@henfrydls.com.')
     )
     expect(useCalendarStore.getState().feedbackInviteSeen).toBe(false)
     expect(link()).toBeInTheDocument()
