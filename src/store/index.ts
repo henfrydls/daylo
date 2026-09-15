@@ -158,8 +158,13 @@ interface CalendarState {
   /** Whether the two-week invitation has been put. One invitation, not one drawing. */
   feedbackInviteSeen: boolean
 
-  /** Whether the check-in is on. Off unless somebody said otherwise. */
+  /**
+   * Whether the check-in is on. On from the first launch of a new installation, off for
+   * anybody updating from a version that promised the app sent nothing.
+   */
   checkinEnabled: boolean
+  /** Whether the one-line notice about the check-in has been shown. Once per install. */
+  checkinNoticeSeen: boolean
   /**
    * The random number this installation uses, made here and tied to nothing. It exists
    * only while the check-in is on: turning it off deletes it, and turning it on again
@@ -180,10 +185,30 @@ interface CalendarState {
    */
   _loggedThisSession: boolean
   /**
-   * Which of the three one-time offers has already been made in this session, if any.
-   * Not persisted. Three things want the same moment and none may talk over another.
+   * Which of the one-time offers has already been made in this session, if any.
+   * Not persisted. Several things want the same moment and none may talk over another.
    */
   _offerThisSession: 'reminder' | 'checkin' | null
+  /**
+   * What the stored state says about the check-in, decided once while hydrating and not
+   * persisted:
+   *
+   *   'new'      nothing was stored at all, so this is a new installation
+   *   'update'   something was stored, from before the check-in existed
+   *   'decided'  something was stored and it carries a decision to respect
+   *
+   * The difference matters because the default is not the same for everybody. A new
+   * installation starts with the check-in on and is told so. Somebody updating installed
+   * Daylo under "it sends nothing anywhere", and that promise is not withdrawn behind
+   * their back: they stay off and are invited instead.
+   */
+  _checkinStart: 'new' | 'update' | 'decided'
+  /**
+   * Whether the check-in notice has been shown in this session. Not persisted, and it
+   * exists because showing the line is what marks it seen: without this, the condition
+   * that put it there would answer no a moment later and take it off the screen.
+   */
+  _checkinNoticeShown: boolean
 
   // Activity actions
   addActivity: (name: string, color: string) => void
@@ -215,6 +240,7 @@ interface CalendarState {
   /** The switch and the number together, because they are one fact. */
   setCheckin: (enabled: boolean, id: string | null) => void
   recordCheckinAttempt: (date: string, at: string, ok: boolean) => void
+  markCheckinNoticeSeen: () => void
 
   // Hydration
   setHasHydrated: (value: boolean) => void
@@ -257,10 +283,15 @@ export const useCalendarStore = create<CalendarState>()(
       firstOpenedAt: null,
       feedbackInviteSeen: false,
       checkinEnabled: false,
+      checkinNoticeSeen: false,
       checkinId: null,
       checkinLastAttempt: null,
       _loggedThisSession: false,
       _offerThisSession: null,
+      // Nothing stored is what a new installation looks like: merge is only called when
+      // there is something to merge.
+      _checkinStart: 'new',
+      _checkinNoticeShown: false,
 
       setReminder: (enabled, hour, minute) =>
         set((state) => ({
@@ -296,6 +327,8 @@ export const useCalendarStore = create<CalendarState>()(
         ),
 
       recordCheckinAttempt: (date, at, ok) => set({ checkinLastAttempt: { date, at, ok } }),
+
+      markCheckinNoticeSeen: () => set({ checkinNoticeSeen: true, _checkinNoticeShown: true }),
 
       setHasHydrated: (value: boolean) => set({ _hasHydrated: value }),
 
@@ -430,9 +463,24 @@ export const useCalendarStore = create<CalendarState>()(
         firstOpenedAt: state.firstOpenedAt,
         feedbackInviteSeen: state.feedbackInviteSeen,
         checkinEnabled: state.checkinEnabled,
+        checkinNoticeSeen: state.checkinNoticeSeen,
         checkinId: state.checkinId,
         checkinLastAttempt: state.checkinLastAttempt,
       }),
+      // The default merge would do, except that it cannot say whether a field was absent
+      // or merely false: by the time anything else can look, the default has filled the
+      // gap. This runs with the stored object in hand, before that happens, and it is the
+      // only moment at which "this install has never been asked" is a fact rather than a
+      // guess. It is not called at all when there is nothing stored, which is exactly
+      // what a new installation is.
+      merge: (persisted, current) => {
+        const stored = (persisted ?? {}) as Partial<CalendarState>
+        return {
+          ...current,
+          ...stored,
+          _checkinStart: 'checkinEnabled' in stored ? 'decided' : 'update',
+        }
+      },
       onRehydrateStorage: () => (state) => {
         state?.setHasHydrated(true)
       },

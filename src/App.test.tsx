@@ -4,15 +4,19 @@ import userEvent from '@testing-library/user-event'
 import App from './App'
 import { useCalendarStore } from './store'
 
+const NOW = '2026-09-01T00:00:00.000Z'
+
 const remindersAvailable = vi.hoisted(() => vi.fn())
 const openMailto = vi.hoisted(() => vi.fn())
 const checkinFields = vi.hoisted(() => vi.fn())
 const sendCheckinIfDue = vi.hoisted(() => vi.fn())
+const startCheckinOnNewInstall = vi.hoisted(() => vi.fn())
 
 vi.mock('./lib/checkin', async (importOriginal) => ({
   ...(await importOriginal<typeof import('./lib/checkin')>()),
   checkinFields,
   sendCheckinIfDue,
+  startCheckinOnNewInstall,
 }))
 
 vi.mock('./lib/feedbackInvite', async (importOriginal) => ({
@@ -40,6 +44,7 @@ beforeEach(() => {
   remindersAvailable.mockReset().mockResolvedValue(false)
   checkinFields.mockReset().mockResolvedValue(null)
   sendCheckinIfDue.mockReset().mockResolvedValue(undefined)
+  startCheckinOnNewInstall.mockReset().mockResolvedValue(undefined)
   useCalendarStore.setState({
     activities: [],
     logs: [],
@@ -177,5 +182,135 @@ describe('when the daily check-in is attempted', () => {
     })
 
     expect(sendCheckinIfDue).toHaveBeenCalled()
+  })
+})
+
+// On by default for a new installation, and the line is what makes that honest: it is on
+// the screen in the same launch that starts sending, before anything has to be tapped.
+describe('the check-in on a device that has never had Daylo', () => {
+  beforeEach(() => {
+    checkinFields.mockResolvedValue({ version: '1.3.0', os: 'android' })
+    useCalendarStore.setState({
+      _checkinStart: 'new',
+      checkinEnabled: false,
+      checkinNoticeSeen: false,
+      _checkinNoticeShown: false,
+      _offerThisSession: null,
+      reminderOffered: true,
+    })
+  })
+
+  it('turns it on at the first launch, and says so', async () => {
+    render(<App />)
+    await act(async () => {})
+
+    expect(startCheckinOnNewInstall).toHaveBeenCalled()
+    expect(sendCheckinIfDue).not.toHaveBeenCalled()
+    expect(await screen.findByTestId('checkin-notice')).toHaveTextContent(
+      'Anonymous check-in is on.'
+    )
+  })
+
+  it('says it once: the line is marked as seen while it is on screen', async () => {
+    render(<App />)
+    await act(async () => {})
+    await screen.findByTestId('checkin-notice')
+
+    expect(useCalendarStore.getState().checkinNoticeSeen).toBe(true)
+    // And still there, because the flag it just set is the one the condition reads.
+    expect(screen.getByTestId('checkin-notice')).toBeInTheDocument()
+  })
+})
+
+// Somebody updating installed Daylo when it said it sent nothing anywhere. That promise
+// is not withdrawn behind their back.
+describe('the check-in on a device updating from an earlier version', () => {
+  beforeEach(() => {
+    checkinFields.mockResolvedValue({ version: '1.3.0', os: 'android' })
+    useCalendarStore.setState({
+      _checkinStart: 'update',
+      checkinEnabled: false,
+      checkinNoticeSeen: false,
+      _checkinNoticeShown: false,
+      _offerThisSession: null,
+      reminderOffered: true,
+    })
+  })
+
+  it('leaves it off and invites instead', async () => {
+    render(<App />)
+    await act(async () => {})
+
+    expect(startCheckinOnNewInstall).not.toHaveBeenCalled()
+    expect(sendCheckinIfDue).toHaveBeenCalled()
+    expect(await screen.findByTestId('checkin-notice')).toHaveTextContent('See and turn on')
+    expect(useCalendarStore.getState().checkinEnabled).toBe(false)
+  })
+
+  it('says nothing to somebody who already decided', async () => {
+    useCalendarStore.setState({ _checkinStart: 'decided' })
+    render(<App />)
+    await act(async () => {})
+
+    expect(screen.queryByTestId('checkin-notice')).not.toBeInTheDocument()
+  })
+
+  it('says nothing again once it has been seen', async () => {
+    useCalendarStore.setState({ checkinNoticeSeen: true })
+    render(<App />)
+    await act(async () => {})
+
+    expect(screen.queryByTestId('checkin-notice')).not.toBeInTheDocument()
+  })
+})
+
+// The launch the line exists for is the first one, and on Android that is exactly the
+// launch where the reminder offer is owed and cannot be put yet, because there are no
+// habits to be reminded about. A line that queued behind it would be a new installation
+// sending its first check-in and saying nothing, which is the one thing this default is
+// not allowed to do.
+describe('the line and the reminder, on a new Android installation', () => {
+  beforeEach(() => {
+    checkinFields.mockResolvedValue({ version: '1.3.0', os: 'android' })
+    remindersAvailable.mockResolvedValue(true)
+    useCalendarStore.setState({
+      _checkinStart: 'new',
+      checkinEnabled: false,
+      checkinNoticeSeen: false,
+      _checkinNoticeShown: false,
+      _offerThisSession: null,
+      // Owed from this launch, and unanswerable: no habits exist yet.
+      reminderOffered: false,
+      activities: [],
+    })
+  })
+
+  it('shows on the first launch, before there is anything to be reminded about', async () => {
+    render(<App />)
+    await act(async () => {})
+
+    expect(await screen.findByTestId('checkin-notice')).toBeInTheDocument()
+    expect(useCalendarStore.getState().checkinNoticeSeen).toBe(true)
+  })
+
+  it('stays while the reminder is asked, and after it is answered', async () => {
+    render(<App />)
+    await act(async () => {})
+    await screen.findByTestId('checkin-notice')
+
+    // A first habit exists, so the reminder can finally ask. Its modal opens over the
+    // line, which is allowed: one is a question, the other is a statement.
+    await act(async () => {
+      useCalendarStore.setState({
+        activities: [{ id: 'a1', name: 'Read', color: '#10B981', createdAt: NOW, updatedAt: NOW }],
+      })
+    })
+    expect(await screen.findByText('Remind me each evening?')).toBeInTheDocument()
+    expect(screen.getByTestId('checkin-notice')).toBeInTheDocument()
+
+    await userEvent.click(screen.getByText('Not now'))
+    await act(async () => {})
+
+    expect(screen.getByTestId('checkin-notice')).toBeInTheDocument()
   })
 })

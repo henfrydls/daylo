@@ -499,6 +499,45 @@ describe('what the store remembers about the check-in', () => {
     })
   })
 
+  // Three starts, and only the stored object can tell them apart. Once the defaults have
+  // filled the gaps, "never decided" and "decided no" look the same, and they are not:
+  // one is a new installation that should be on, the other is somebody who installed
+  // Daylo when it sent nothing anywhere.
+  it('calls a store with nothing in it a new installation', () => {
+    expect(useCalendarStore.getInitialState()._checkinStart).toBe('new')
+  })
+
+  it('calls a stored state without the switch an update', async () => {
+    window.dispatchEvent(new Event('pagehide'))
+    localStorage.setItem(
+      'simple-calendar-storage',
+      JSON.stringify({
+        state: { activities: [], logs: [], firstOpenedAt: '2026-09-01' },
+        version: 0,
+      })
+    )
+
+    await useCalendarStore.persist.rehydrate()
+
+    expect(useCalendarStore.getState()._checkinStart).toBe('update')
+    expect(useCalendarStore.getState().checkinEnabled).toBe(false)
+  })
+
+  it('leaves a stored decision alone, either way', async () => {
+    for (const enabled of [true, false]) {
+      window.dispatchEvent(new Event('pagehide'))
+      localStorage.setItem(
+        'simple-calendar-storage',
+        JSON.stringify({ state: { activities: [], logs: [], checkinEnabled: enabled }, version: 0 })
+      )
+
+      await useCalendarStore.persist.rehydrate()
+
+      expect(useCalendarStore.getState()._checkinStart).toBe('decided')
+      expect(useCalendarStore.getState().checkinEnabled).toBe(enabled)
+    }
+  })
+
   // Daylo 1.3 asked once whether it could check in, and kept the answer in
   // checkinOffered. It does not ask any more, so the field is gone, and a device that was
   // running a build from that week still has it on disk. Hydration must carry on around

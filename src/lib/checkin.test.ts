@@ -4,6 +4,7 @@ import {
   generateCheckinId,
   sendCheckin,
   sendCheckinIfDue,
+  startCheckinOnNewInstall,
   today,
   turnOffCheckin,
   turnOnCheckin,
@@ -124,6 +125,33 @@ describe('turning it on', () => {
 
     invoke.mockClear()
     await sendCheckinIfDue()
+    expect(invoke).not.toHaveBeenCalled()
+  })
+})
+
+describe('the first launch of a new installation', () => {
+  it('turns it on and sends, without anybody asking for it', async () => {
+    await startCheckinOnNewInstall()
+
+    const state = useCalendarStore.getState()
+    expect(state.checkinEnabled).toBe(true)
+    expect(state.checkinId).toMatch(/^[0-9a-f]{32}$/)
+    expect(invoke).toHaveBeenCalledExactlyOnceWith('send_checkin', {
+      id: state.checkinId,
+      date: today(),
+      last: false,
+    })
+  })
+
+  // It can only ever run for a store that had nothing in it, but the guard is here
+  // anyway: turning it on twice would throw away a number the server has already seen and
+  // make one device look like two.
+  it('leaves an installation that is already on alone', async () => {
+    useCalendarStore.setState({ checkinEnabled: true, checkinId: 'a'.repeat(32) })
+
+    await startCheckinOnNewInstall()
+
+    expect(useCalendarStore.getState().checkinId).toBe('a'.repeat(32))
     expect(invoke).not.toHaveBeenCalled()
   })
 })
