@@ -41,7 +41,6 @@ beforeEach(() => {
   checkinFields.mockReset().mockResolvedValue({ version: '1.3.0', os: 'android' })
   onClose.mockReset()
   useCalendarStore.setState({
-    checkinOffered: true,
     checkinEnabled: false,
     checkinId: null,
     checkinLastAttempt: null,
@@ -52,8 +51,7 @@ describe('with the check-in off', () => {
   it('says so, and offers to turn it on', async () => {
     open()
 
-    expect(status()).toHaveTextContent('Check-in is off')
-    expect(screen.getByText('Daylo is not sending anything.')).toBeInTheDocument()
+    expect(status()).toHaveTextContent('Check-in is off.')
     expect(start()).toHaveTextContent('Turn it on')
     // The one green thing on the sheet: the action somebody came here to take.
     expect(start().className).toContain('bg-emerald')
@@ -68,63 +66,44 @@ describe('with the check-in off', () => {
 
     expect(screen.getByText('4f9c2a7e1b60d3a8c5e2f1b74a9d0c6e')).toBeInTheDocument()
     expect(screen.getByText('1.3.0')).toBeInTheDocument()
-    expect(
-      screen.getByText(/the random number is not made until you turn this on/, { exact: false })
-    ).toBeInTheDocument()
-  })
-
-  // Somebody who found the menu before the second day answers the question by using it.
-  it('counts turning it on here as an answer to the question', async () => {
-    useCalendarStore.setState({ checkinOffered: false })
-    open()
-
-    await userEvent.click(start())
-
-    await waitFor(() => expect(useCalendarStore.getState().checkinEnabled).toBe(true))
-    expect(useCalendarStore.getState().checkinOffered).toBe(true)
-    expect(useCalendarStore.getState().checkinId).toMatch(/^[0-9a-f]{32}$/)
+    expect(screen.getByTestId('checkin-settings').textContent ?? '').toContain(
+      'Made on this device, tied to nothing'
+    )
   })
 })
 
 describe('with the check-in on', () => {
-  it('says when the last one went, in this device s own clock', async () => {
+  // What it does not say any more. The time was a number nobody had a use for, and it
+  // invited the question "why does it know that?" about the one screen whose job is to
+  // make what is known obvious. It is still recorded: it is what keeps "once a day" true.
+  it('does not say when the last one went', async () => {
     const when = new Date(at(today())).toISOString()
     isOn({ date: today(), at: when, ok: true })
     open()
 
-    const hour = new Date(when).toLocaleTimeString(undefined, {
-      hour: 'numeric',
-      minute: '2-digit',
-    })
-    expect(status()).toHaveTextContent('Checking in once a day')
-    expect(screen.getByText(`Last sent today at ${hour}.`)).toBeInTheDocument()
+    expect(status()).toHaveTextContent('Checking in once a day.')
+    const sheet = screen.getByTestId('checkin-settings').textContent ?? ''
+    expect(sheet).not.toContain('Last sent')
+    expect(sheet).not.toMatch(/\d{1,2}:\d{2}/)
   })
 
-  it('says the day when the last one was another day', async () => {
-    isOn({ date: '2026-09-11', at: '2026-09-11T21:12:00.000Z', ok: true })
-    open()
-
-    expect(screen.getByText('Last sent on 11 September.')).toBeInTheDocument()
-  })
-
-  // Grey and not red: no connection is the ordinary case, not a fault to alarm anyone
-  // about, and the sentence says what happens next rather than asking for anything.
   it('says plainly when the last one did not arrive', async () => {
     isOn({ date: today(), at: new Date().toISOString(), ok: false })
     open()
 
-    const line = screen.getByText(
-      'The last one did not go through. Daylo will try again on the next day you open it.'
-    )
+    const line = screen.getByText('The last one did not go through.')
     expect(line).toBeInTheDocument()
     expect(line.className).not.toContain('text-red')
   })
 
-  it('says it is sending while there is nothing to report yet', async () => {
+  // Nothing is said in the seconds before the first one lands: the state is the whole
+  // message, and a sentence that exists for two seconds is one more thing to read.
+  it('says only that it is checking in while the first one is in the air', async () => {
     isOn(null)
     open()
 
-    expect(screen.getByText("Sending today's check-in.")).toBeInTheDocument()
+    expect(status()).toHaveTextContent('Checking in once a day.')
+    expect(screen.getByTestId('checkin-settings').textContent ?? '').not.toContain('Sending')
   })
 
   it('shows the real number, and warns before the switch is touched', async () => {
@@ -137,7 +116,7 @@ describe('with the check-in on', () => {
     expect(screen.getByText(ID)).toBeInTheDocument()
     expect(screen.queryByText(/An example/, { exact: false })).not.toBeInTheDocument()
     expect(screen.getByTestId('checkin-off-warning')).toHaveTextContent(
-      'Turning this off sends one last note saying so, and then nothing at all.'
+      'Turning this off sends one last note, and then nothing.'
     )
     expect(stop().className).not.toContain('bg-emerald')
   })
@@ -153,11 +132,8 @@ describe('turning it off', () => {
 
     await userEvent.click(stop())
 
-    await waitFor(() => expect(status()).toHaveTextContent('Check-in is off'))
-    expect(screen.getByText('Daylo is not sending anything.')).toBeInTheDocument()
-    expect(
-      screen.getByText('The random number this device was using is deleted.')
-    ).toBeInTheDocument()
+    await waitFor(() => expect(status()).toHaveTextContent('Check-in is off.'))
+    expect(screen.getByText('The random number is deleted.')).toBeInTheDocument()
     expect(useCalendarStore.getState().checkinId).toBeNull()
     expect(invoke).toHaveBeenCalledWith('send_checkin', { id: ID, date: today(), last: true })
   })
@@ -171,9 +147,7 @@ describe('turning it off', () => {
     await userEvent.click(stop())
 
     await waitFor(() =>
-      expect(
-        screen.getByText('The last note did not go through. Daylo will not try again.')
-      ).toBeInTheDocument()
+      expect(screen.getByText('The last note did not go through.')).toBeInTheDocument()
     )
   })
 

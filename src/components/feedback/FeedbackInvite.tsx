@@ -73,32 +73,31 @@ export function FeedbackInvite({ onThanked }: FeedbackInviteProps) {
     >
       <div className="flex items-start gap-3">
         <div className="min-w-0 flex-1">
-          <h2 id="feedback-invite-title" className="font-medium text-gray-900">
-            Two weeks in
-          </h2>
-          <p className="mt-0.5 text-sm text-gray-600">
-            I built Daylo on my own and I have never spoken to anyone who uses it. Tell me how these
-            two weeks went. Even one line helps.
+          <p className="text-sm text-gray-600">
+            <span id="feedback-invite-title" className="font-medium text-gray-900">
+              Two weeks in.
+            </span>{' '}
+            How did it go?{' '}
+            <a
+              href={FEEDBACK_MAILTO}
+              onClick={(event) => void open(event)}
+              className="rounded font-medium text-emerald-700 underline underline-offset-2 hover:text-emerald-800 focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500"
+              data-testid="feedback-invite-link"
+            >
+              daylo@henfrydls.com
+            </a>
           </p>
-          {/* Spoken when it changes, because the only thing that changes it is a failure,
-              and somebody who cannot see the screen needs the address read out. */}
-          <p
-            className={`mt-1 text-xs ${failed ? 'text-red-600' : 'text-gray-500'}`}
-            aria-live="polite"
-            data-testid="feedback-invite-note"
-          >
-            {failed
-              ? 'Daylo could not open an email app. Write to daylo@henfrydls.com.'
-              : 'Nothing leaves your device until you send the email. The link opens your email app, or write to daylo@henfrydls.com.'}
-          </p>
-          <a
-            href={FEEDBACK_MAILTO}
-            onClick={(event) => void open(event)}
-            className="mt-2 inline-block rounded text-sm font-medium text-emerald-700 underline underline-offset-2 hover:text-emerald-800 focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500"
-            data-testid="feedback-invite-link"
-          >
-            Tell me how it went
-          </a>
+          {/* Only when there is something to say, and spoken: the address is the way out
+              and somebody who cannot see the screen needs it read. */}
+          {failed ? (
+            <p
+              className="mt-1 text-xs text-red-600"
+              aria-live="polite"
+              data-testid="feedback-invite-note"
+            >
+              Could not open an email app. Write to daylo@henfrydls.com.
+            </p>
+          ) : null}
         </div>
         <button
           onClick={dismiss}

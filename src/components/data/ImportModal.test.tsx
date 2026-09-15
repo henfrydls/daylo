@@ -28,7 +28,6 @@ const settled = {
   logs: [{ id: 'l1', activityId: 'a1', date: '2026-09-01', completed: true, createdAt: NOW }],
   firstOpenedAt: '2026-08-01',
   feedbackInviteSeen: true,
-  checkinOffered: true,
   checkinEnabled: true,
   checkinId: '4f9c2a7e1b60d3a8c5e2f1b74a9d0c6e',
   checkinLastAttempt: { date: '2026-09-14', at: NOW, ok: true },
@@ -60,7 +59,6 @@ describe('what restoring a backup does not touch', () => {
     const state = useCalendarStore.getState()
     expect(state.firstOpenedAt).toBe('2026-08-01')
     expect(state.feedbackInviteSeen).toBe(true)
-    expect(state.checkinOffered).toBe(true)
     expect(state.checkinEnabled).toBe(true)
     expect(state.checkinId).toBe('4f9c2a7e1b60d3a8c5e2f1b74a9d0c6e')
     expect(state.checkinLastAttempt).toEqual({ date: '2026-09-14', at: NOW, ok: true })

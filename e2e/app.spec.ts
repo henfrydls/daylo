@@ -1272,11 +1272,11 @@ test.describe('the two-week invitation @webkit', () => {
 /**
  * In a browser there is no check-in at all, and this is what says so.
  *
- * Everything else about it is covered by unit tests and by hand on a device, because the
- * dialog and the sheet only exist where `checkin_fields` answers — desktop and Android.
- * What a browser can prove is the absence, and the absence is the promise: the demo and
- * the self-hosted Docker build have no code path that sends anything, on top of a CSP
- * that would refuse it.
+ * The sheet only exists where `checkin_fields` answers, which is desktop and Android, so
+ * everything else about it is covered by unit tests and by hand on a device. What a
+ * browser can prove is the absence, and the absence is the promise: the demo and the
+ * self-hosted Docker build have no code path that sends anything, on top of a CSP that
+ * would refuse it.
  */
 test.describe('the check-in in a browser @webkit', () => {
   test('is not in the menu', async ({ page }) => {
@@ -1289,14 +1289,15 @@ test.describe('the check-in in a browser @webkit', () => {
     await expect(page.getByText('Send feedback')).toBeVisible()
   })
 
-  test('does not ask when the day sheet closes on a later day', async ({ page }) => {
+  // Daylo does not ask about the check-in on any platform any more: the switch is in the
+  // menu and that is the whole of it. This watches the moment a question would have been
+  // put, and the moment is a real one, because the band takes it.
+  test('nothing asks when the day sheet closes on a later day', async ({ page }) => {
     await seedTwoWeeksIn(page, { firstOpenedAt: 'yesterday' })
 
     await tickADay(page)
 
-    await expect(page.getByText('Send an anonymous check-in?')).toHaveCount(0)
-    // The moment was a real one: the band took it, which is what happens when the
-    // check-in is not there to ask first.
+    await expect(page.getByText(/check-in/i)).toHaveCount(0)
     await expect(page.getByTestId('feedback-invite')).toBeVisible()
   })
 })

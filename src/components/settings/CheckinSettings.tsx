@@ -1,25 +1,13 @@
 import { useState } from 'react'
-import { format, parseISO } from 'date-fns'
 import { Button, Modal } from '../ui'
 import { useCalendarStore } from '../../store'
 import { useCheckinFields } from '../../hooks'
-import { today, turnOffCheckin, turnOnCheckin } from '../../lib/checkin'
+import { turnOffCheckin, turnOnCheckin } from '../../lib/checkin'
 import { WhatGetsSent } from './WhatGetsSent'
 
 interface CheckinSettingsProps {
   isOpen: boolean
   onClose: () => void
-}
-
-/** `Last sent today at 9:12 PM.` or `Last sent on 11 September.`, in this device's clock. */
-function lastSent(at: string): string {
-  const when = parseISO(at)
-  if (format(when, 'yyyy-MM-dd') === today()) {
-    const hour = when.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' })
-    return `Last sent today at ${hour}.`
-  }
-  const sameYear = format(when, 'yyyy') === format(new Date(), 'yyyy')
-  return `Last sent on ${format(when, sameYear ? 'd MMMM' : 'd MMMM yyyy')}.`
 }
 
 /**
@@ -49,7 +37,6 @@ export function CheckinSettings({ isOpen, onClose }: CheckinSettingsProps) {
   const turnOn = async () => {
     setBusy(true)
     try {
-      useCalendarStore.getState().markCheckinOffered()
       setJustStopped(null)
       await turnOnCheckin()
     } finally {
@@ -103,32 +90,26 @@ export function CheckinSettings({ isOpen, onClose }: CheckinSettingsProps) {
               and no confirmation, and the sentence rewriting itself is the whole reply. */}
           <div className="min-w-0" aria-live="polite">
             <p className="font-medium text-gray-900">
-              {enabled ? 'Checking in once a day' : 'Check-in is off'}
+              {enabled ? 'Checking in once a day.' : 'Check-in is off.'}
             </p>
 
-            {enabled ? (
-              <p className="mt-0.5 text-sm text-gray-500">
-                {lastAttempt === null
-                  ? "Sending today's check-in."
-                  : lastAttempt.ok
-                    ? lastSent(lastAttempt.at)
-                    : 'The last one did not go through. Daylo will try again on the next day you open it.'}
-              </p>
-            ) : (
-              <>
-                <p className="mt-0.5 text-sm text-gray-500">Daylo is not sending anything.</p>
-                {justStopped ? (
-                  <p className="mt-0.5 text-sm text-gray-500">
-                    The random number this device was using is deleted.
-                  </p>
-                ) : null}
-                {justStopped === 'lost' ? (
-                  <p className="mt-0.5 text-sm text-gray-500">
-                    The last note did not go through. Daylo will not try again.
-                  </p>
-                ) : null}
-              </>
-            )}
+            {/* When the last one went is not said at all. It was a number the person had
+                no use for, and the sheet is about what is happening, not about a history.
+                The time is still recorded: it is what keeps "once a day" true. */}
+            {enabled
+              ? lastAttempt?.ok === false && (
+                  <p className="mt-0.5 text-sm text-gray-500">The last one did not go through.</p>
+                )
+              : justStopped && (
+                  <>
+                    <p className="mt-0.5 text-sm text-gray-500">The random number is deleted.</p>
+                    {justStopped === 'lost' ? (
+                      <p className="mt-0.5 text-sm text-gray-500">
+                        The last note did not go through.
+                      </p>
+                    ) : null}
+                  </>
+                )}
           </div>
         </div>
 
@@ -138,7 +119,7 @@ export function CheckinSettings({ isOpen, onClose }: CheckinSettingsProps) {
           // Said before the button and not after it: a warning that arrives in a
           // confirmation dialog is a warning that arrives once the decision is made.
           <p className="mt-4 text-sm text-gray-600" data-testid="checkin-off-warning">
-            Turning this off sends one last note saying so, and then nothing at all.
+            Turning this off sends one last note, and then nothing.
           </p>
         ) : null}
       </div>

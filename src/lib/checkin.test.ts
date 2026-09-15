@@ -23,7 +23,7 @@ beforeEach(() => {
   invoke.mockReset()
   invoke.mockResolvedValue(undefined)
   ;(globalThis as { isTauri?: boolean }).isTauri = true
-  useCalendarStore.setState({ checkinOffered: false, ...off() })
+  useCalendarStore.setState(off())
 })
 
 afterEach(() => {

@@ -158,12 +158,6 @@ interface CalendarState {
   /** Whether the two-week invitation has been put. One invitation, not one drawing. */
   feedbackInviteSeen: boolean
 
-  /**
-   * Whether the check-in has been asked about. Deliberately not versioned: a question
-   * about whether Daylo may speak to a server is answered once, and a new version is not
-   * a reason to ask again.
-   */
-  checkinOffered: boolean
   /** Whether the check-in is on. Off unless somebody said otherwise. */
   checkinEnabled: boolean
   /**
@@ -218,7 +212,6 @@ interface CalendarState {
   claimOffer: (kind: 'reminder' | 'checkin') => void
 
   // Check-in
-  markCheckinOffered: () => void
   /** The switch and the number together, because they are one fact. */
   setCheckin: (enabled: boolean, id: string | null) => void
   recordCheckinAttempt: (date: string, at: string, ok: boolean) => void
@@ -263,7 +256,6 @@ export const useCalendarStore = create<CalendarState>()(
 
       firstOpenedAt: null,
       feedbackInviteSeen: false,
-      checkinOffered: false,
       checkinEnabled: false,
       checkinId: null,
       checkinLastAttempt: null,
@@ -291,8 +283,6 @@ export const useCalendarStore = create<CalendarState>()(
 
       claimOffer: (kind) =>
         set((state) => (state._offerThisSession === null ? { _offerThisSession: kind } : {})),
-
-      markCheckinOffered: () => set({ checkinOffered: true }),
 
       // Off clears everything the season produced, in the same set as the switch itself:
       // there is no instant in which the check-in is off and the number it was using is
@@ -439,7 +429,6 @@ export const useCalendarStore = create<CalendarState>()(
         reminderOffered: state.reminderOffered,
         firstOpenedAt: state.firstOpenedAt,
         feedbackInviteSeen: state.feedbackInviteSeen,
-        checkinOffered: state.checkinOffered,
         checkinEnabled: state.checkinEnabled,
         checkinId: state.checkinId,
         checkinLastAttempt: state.checkinLastAttempt,

@@ -1188,7 +1188,6 @@ describe('what a backup does not carry', () => {
     for (const field of [
       'firstOpenedAt',
       'feedbackInviteSeen',
-      'checkinOffered',
       'checkinEnabled',
       'checkinId',
       'checkinLastAttempt',

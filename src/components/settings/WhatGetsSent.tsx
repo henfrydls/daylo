@@ -54,12 +54,6 @@ export function WhatGetsSent({ fields, id }: WhatGetsSentProps) {
 
       {open ? (
         <div id={contentId} className="space-y-3 px-4 pb-4 text-sm text-gray-600">
-          <p>
-            {id === null
-              ? 'This is everything the message says about this device. An example, because the random number is not made until you turn this on:'
-              : 'This is everything the message says about this device:'}
-          </p>
-
           <dl className="space-y-1">
             {[
               ['Random number', id ?? EXAMPLE_ID],
@@ -75,16 +69,11 @@ export function WhatGetsSent({ fields, id }: WhatGetsSentProps) {
           </dl>
 
           <p>
-            Once a day at most, and only on a day you open Daylo. The random number is made here, on
-            this device, and is tied to nothing: not your name, not your email, not your phone. If
-            you turn this off later, it is deleted.
+            Made on this device, tied to nothing, and deleted if you turn this off. Your habits and
+            notes are never part of it.
           </p>
           <p>
-            Your habits, their names, the days you marked and your notes are never part of this.
-          </p>
-          <p>
-            Like any website you open, our server sees the address your internet connection is
-            using. We do not store it.
+            Like any website, our server sees your connection&apos;s address and does not keep it.
           </p>
         </div>
       ) : null}
