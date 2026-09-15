@@ -1,0 +1,75 @@
+<?xml version="1.0" encoding="utf-8"?>
+
+<!--
+  The package manifest for the Microsoft Store.
+
+  Tauri cannot produce an MSIX: its bundle targets are deb, rpm, appimage, nsis, msi, app
+  and dmg. So the package is assembled by hand from what the Windows build already makes,
+  and this file is the part that cannot be generated: the identity.
+
+  The three identity values are not ours to choose. Partner Center assigns them when the
+  name is reserved, they are compared character for character on upload, and a mismatch is
+  rejected with an error that does not say which field is wrong. They are public: the
+  publisher is a certificate subject, not a secret, and the Store shows the family name on
+  the listing.
+
+  The version is written in by the workflow from package.json, with a fourth part of 0.
+  That last part is reserved for the Store and must be 0 on upload; the first must not be
+  0. Everything else about this file is checked by makeappx at pack time, which is the
+  point of packing in CI rather than trusting a reading of the schema.
+-->
+<Package
+  xmlns="http://schemas.microsoft.com/appx/manifest/foundation/windows10"
+  xmlns:uap="http://schemas.microsoft.com/appx/manifest/uap/windows10"
+  xmlns:rescap="http://schemas.microsoft.com/appx/manifest/foundation/windows10/restrictedcapabilities"
+  IgnorableNamespaces="uap rescap">
+
+  <Identity
+    Name="DLSLabs.Daylo"
+    Publisher="CN=83D20D57-7941-400D-910D-9FE6C571F806"
+    Version="0.0.0.0"
+    ProcessorArchitecture="x64" />
+
+  <Properties>
+    <DisplayName>Daylo</DisplayName>
+    <PublisherDisplayName>DLSLabs</PublisherDisplayName>
+    <Logo>Assets\StoreLogo.png</Logo>
+  </Properties>
+
+  <Dependencies>
+    <!--
+      1809 is the floor the winget manifest already declares, and the oldest Windows the
+      Store still serves. MaxVersionTested says what it says: 22621 is the newest build
+      this has been run on, which is the CI runner's. Nobody on the team has a Windows
+      machine, and that is worth knowing when reading this line.
+    -->
+    <TargetDeviceFamily Name="Windows.Desktop" MinVersion="10.0.17763.0" MaxVersionTested="10.0.22621.0" />
+  </Dependencies>
+
+  <Resources>
+    <Resource Language="en-us" />
+  </Resources>
+
+  <Applications>
+    <!--
+      A packaged Win32 app, not a UWP one: the entry point is the full trust host, which
+      runs Daylo.exe as it runs anywhere else. That pair is what needs runFullTrust below;
+      without the capability makeappx refuses the manifest outright (error 80080204,
+      measured by the tooling probe).
+    -->
+    <Application Id="Daylo" Executable="Daylo.exe" EntryPoint="Windows.FullTrustApplication">
+      <uap:VisualElements
+        DisplayName="Daylo"
+        Description="Track your habits and see the year at a glance."
+        BackgroundColor="transparent"
+        Square150x150Logo="Assets\Square150x150Logo.png"
+        Square44x44Logo="Assets\Square44x44Logo.png">
+        <uap:DefaultTile Square71x71Logo="Assets\Square71x71Logo.png" Square310x310Logo="Assets\Square310x310Logo.png" />
+      </uap:VisualElements>
+    </Application>
+  </Applications>
+
+  <Capabilities>
+    <rescap:Capability Name="runFullTrust" />
+  </Capabilities>
+</Package>
