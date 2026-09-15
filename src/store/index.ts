@@ -471,10 +471,19 @@ export const useCalendarStore = create<CalendarState>()(
       // or merely false: by the time anything else can look, the default has filled the
       // gap. This runs with the stored object in hand, before that happens, and it is the
       // only moment at which "this install has never been asked" is a fact rather than a
-      // guess. It is not called at all when there is nothing stored, which is exactly
-      // what a new installation is.
+      // guess.
+      //
+      // It is called even when there is nothing stored, with undefined, which is not what
+      // the name suggests and is worth knowing: zustand's hydrate resolves to
+      // `[false, void 0]` for an empty storage and calls merge with that anyway
+      // (zustand/middleware.js). Reading undefined as "stored but undecided" told a phone
+      // with a freshly cleared app that it was updating, so it stayed off and said the
+      // wrong line. Nothing at all is a new installation; an object without the switch is
+      // an update.
       merge: (persisted, current) => {
-        const stored = (persisted ?? {}) as Partial<CalendarState>
+        if (persisted == null) return { ...current, _checkinStart: 'new' }
+
+        const stored = persisted as Partial<CalendarState>
         return {
           ...current,
           ...stored,

@@ -503,8 +503,17 @@ describe('what the store remembers about the check-in', () => {
   // filled the gaps, "never decided" and "decided no" look the same, and they are not:
   // one is a new installation that should be on, the other is somebody who installed
   // Daylo when it sent nothing anywhere.
-  it('calls a store with nothing in it a new installation', () => {
-    expect(useCalendarStore.getInitialState()._checkinStart).toBe('new')
+  // Through hydration, not by reading the default. The default was right all along and
+  // the journey was not: zustand calls merge even when storage is empty, with undefined,
+  // and reading that as "stored but undecided" told a freshly cleared phone it was
+  // updating. Asserting the initial value could never have caught it.
+  it('calls a store with nothing in it a new installation', async () => {
+    window.dispatchEvent(new Event('pagehide'))
+    localStorage.removeItem('simple-calendar-storage')
+
+    await useCalendarStore.persist.rehydrate()
+
+    expect(useCalendarStore.getState()._checkinStart).toBe('new')
   })
 
   it('calls a stored state without the switch an update', async () => {
