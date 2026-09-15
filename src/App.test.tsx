@@ -45,6 +45,9 @@ beforeEach(() => {
   checkinFields.mockReset().mockResolvedValue(null)
   sendCheckinIfDue.mockReset().mockResolvedValue(undefined)
   startCheckinOnNewInstall.mockReset().mockResolvedValue(undefined)
+  // The ordinary case for most of this file: a device that has run Daylo before and has
+  // a decision on disk. The tests about the first launch say otherwise for themselves.
+  useCalendarStore.setState({ _checkinStart: 'decided' })
   useCalendarStore.setState({
     activities: [],
     logs: [],
