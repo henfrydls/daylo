@@ -41,6 +41,9 @@ function firstHabitOnAndroid() {
     reminderHour: 21,
     reminderMinute: 0,
     reminderOffered: false,
+    // Nobody has asked anything yet this session, which is the state a first habit is
+    // usually made in. A test that wants the other case says so.
+    _offerThisSession: null,
   })
 }
 
@@ -113,6 +116,19 @@ describe('the one-time offer', () => {
   it('is not made twice', async () => {
     firstHabitOnAndroid()
     useCalendarStore.setState({ reminderOffered: true })
+
+    render(<DailyReminder />)
+
+    await settle()
+    noOffer()
+  })
+
+  // Somebody who makes their first habit after the check-in has already asked something
+  // meets both questions in one sitting otherwise. The session belongs to whoever asked
+  // first, and this one waits for the next.
+  it('stands down in a session the check-in already took', async () => {
+    firstHabitOnAndroid()
+    useCalendarStore.setState({ _offerThisSession: 'checkin' })
 
     render(<DailyReminder />)
 

@@ -24,8 +24,23 @@ command: daylo
 # these permissions on the listing, so declaring no network access is the verifiable
 # version of what the landing page promises.
 #
-# There is NO --share=network. If a future version ever needs it, that is a product
-# decision to argue for, not a line to add quietly.
+# There IS --share=network as of 1.3, and this is the argument, made in the open as the
+# previous version of this comment demanded it be.
+#
+# Daylo can now send one message a day to a server, and only if the person turned the
+# anonymous check-in on: a random number made on the device, the app version, the system
+# and the date. It is off until somebody says otherwise, and what it sends is the whole of
+# src-tauri/src/checkin.rs, which is short enough to read.
+#
+# Hiding it instead was considered and rejected. The switch could have been compiled out
+# under FLATPAK_ID, keeping the permission off. Then the Flatpak and the .deb would not be
+# the same app, and the part of the code that must be readable in one sitting would grow a
+# branch. A person who installs from Flathub should get the same program, and see the same
+# list of what it can do.
+#
+# Which is the other half: Flathub shows "Network" on the listing page. That is the
+# verifiable version of what the app says about itself, exactly as the absence of it was
+# before. Better that it says so than that we say so.
 #
 # There is no --filesystem either, and by 1.1.3 that is a property of the app rather than
 # a hope about the sandbox.
@@ -50,6 +65,8 @@ command: daylo
 # left the backup just as lost. The fix belonged in the app. This stays empty.
 finish-args:
   - --share=ipc
+  # Only the check-in uses it, and only when it is on. See the argument above.
+  - --share=network
   - --socket=fallback-x11
   - --socket=wayland
   - --device=dri

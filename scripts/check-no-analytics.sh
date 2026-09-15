@@ -2,10 +2,20 @@
 #
 # Checks that whatever it is pointed at contains no analytics or telemetry code.
 #
-# Daylo promises that the user's data never leaves their device, and that promise rests
-# entirely on this repository containing nothing that phones home. This script is what
-# turns the promise into something verified on every change, instead of depending on
-# somebody remembering to look for it during review.
+# It verifies two claims, and the privacy policy makes the same two in the same words:
+#
+#   1. The part of the app that draws the screen names no analytics, tracking or
+#      error-reporting service, in its code, its dependencies or its built files.
+#   2. The native part names no address other than the one the check-in sends to.
+#
+# Until 1.3 there was one claim and it was shorter: nothing in this repository phones
+# home. The check-in made that false on purpose, and a guard that keeps asserting
+# something false is worse than no guard, because it goes green anyway once somebody
+# widens a pattern to get their branch through. So the promise narrowed to something that
+# is still true and still mechanical: exactly one file may name a host, it is
+# src-tauri/src/checkin.rs, and the address in it is the one written here. A second URL
+# in that file, or a changed one, fails — which is the part that matters, since that file
+# is where an address would be changed if anyone wanted to send somewhere else.
 #
 # It lives in one place on purpose: both the CI of every pull request and the job that
 # builds the demo call it, and if the pattern list were duplicated across the two
@@ -14,6 +24,16 @@
 # Usage: scripts/check-no-analytics.sh [--text-only] <path> [path...]
 
 set -uo pipefail
+
+# The one address the app may contain, character for character. It is also in the privacy
+# policy and in src-tauri/src/checkin.rs, and the three have to agree: if this line and
+# that file ever disagree, this script is what says so.
+CHECKIN_URL='https://checkin.henfrydls.com/api/send'
+
+# The file that address lives in. Everything else under the swept paths is held to the old
+# rule, which is why this is a name and not a pattern: a second file could not be given
+# the same exemption without editing this line.
+CHECKIN_FILE='checkin.rs'
 
 # Hosts data would be sent to. 'analytics' is scoped to a host context: without that, a
 # comment saying "no analytics" anywhere in the code breaks the build, and in this
@@ -34,6 +54,13 @@ HOSTS='analytics\.henfrydls\.com'
 HOSTS="$HOSTS"'|[a-z0-9-]*analytics\.(com|io|js|net)|\bumami\b|\bgoogle-analytics\b|\bgoogletagmanager\b'
 HOSTS="$HOSTS"'|plausible\.io|\bmatomo\b|\bmixpanel\b|segment\.(com|io)|amplitude\.com|sentry\.io'
 HOSTS="$HOSTS"'|\bposthog\b|\bhotjar\b|\bfullstory\b|\bdatadoghq\b|\bbugsnag\b|\brollbar\b|\bnewrelic\b'
+
+# Our own check-in host, swept for like any other: checkin.rs is excluded from the sweep,
+# so naming it anywhere else — another Rust file, a capability, the webview — fails. It is
+# derived from CHECKIN_URL rather than written again, because two copies of an address in
+# one file is how the two stop matching.
+CHECKIN_HOST=$(printf '%s' "$CHECKIN_URL" | sed -E 's|https?://([^/]+).*|\1|; s|\.|\\.|g')
+HOSTS="$HOSTS|$CHECKIN_HOST"
 
 # Page APIs that exist only to measure. Word-bounded, so they do not match inside longer
 # identifiers.
@@ -89,7 +116,8 @@ for target in "$@"; do
   # grep's exit code is checked explicitly rather than with `if grep ...`: 0 means found,
   # 1 means nothing found, and anything else means grep could not do its job. Folding that
   # third case into "nothing found" is how a guard reports clean on a file it never read.
-  grep -rInE "$PATTERNS" "$target"
+  # The one file allowed to name a host is excluded here and checked below instead.
+  grep -rInE --exclude="$CHECKIN_FILE" "$PATTERNS" "$target"
   status=$?
   case $status in
     0) found=1 ;;
@@ -101,11 +129,41 @@ done
 
 if [ "$found" -eq 1 ]; then
   echo "::error::Analytics or telemetry code was found in the application."
-  echo "::error::Daylo promises that the user's data never leaves their device, and that"
+  echo "::error::Daylo promises that nothing about a person leaves their device, and that"
   echo "::error::only holds if this repository contains none of this."
+  echo "::error::The one exception is the anonymous check-in, and it lives in exactly one"
+  echo "::error::file: src-tauri/src/$CHECKIN_FILE. Nothing else may name a host."
   echo "::error::The landing page's analytics script is injected when the website is"
   echo "::error::deployed, over the already built artifact, not here."
   exit 1
+fi
+
+# The second claim. Exactly one address in that file, and it is the one written above.
+# Checked wherever the file turns up under the given paths rather than at a fixed path, so
+# that pointing this script at a copy of the tree checks that copy, which is how it is
+# tested.
+checked=0
+for target in "$@"; do
+  [ -e "$target" ] || continue
+  while IFS= read -r file; do
+    checked=$((checked + 1))
+    urls=$(grep -oE 'https?://[^"[:space:]]+' "$file" || true)
+    count=$(printf '%s' "$urls" | grep -c . || true)
+
+    if [ "$count" -ne 1 ] || [ "$urls" != "$CHECKIN_URL" ]; then
+      echo "::error::$file must contain exactly one address, and it must be $CHECKIN_URL"
+      echo "::error::What it contains instead:"
+      printf '%s\n' "${urls:-(no address at all)}" | sed 's/^/::error::  /'
+      echo "::error::This file is the whole of what Daylo ever sends anywhere, and the"
+      echo "::error::privacy policy names that address. Changing it here changes where"
+      echo "::error::people's check-ins go, so it cannot be changed here alone."
+      exit 1
+    fi
+  done < <(find "$target" -type f -name "$CHECKIN_FILE")
+done
+
+if [ "$checked" -gt 0 ]; then
+  echo "The check-in sends to $CHECKIN_URL and nowhere else."
 fi
 
 echo "No analytics or telemetry in: $*"

@@ -1168,10 +1168,32 @@ describe('dataExport utility functions', () => {
 // fields the 1.3 pieces add are exactly the kind somebody would helpfully include, and a
 // backup that carried "we already asked you" would answer a question on a device that was
 // never asked it.
+const NOW = '2026-09-14T12:00:00.000Z'
+
 describe('what a backup does not carry', () => {
   it('has four keys and none of them is a preference', () => {
     const backup = JSON.parse(exportToJSON([], []))
 
     expect(Object.keys(backup).sort()).toEqual(['activities', 'exportedAt', 'logs', 'version'])
+  })
+
+  // The six by name, and against the text rather than the keys: a preference nested
+  // inside an activity or a log would pass the check above and still travel.
+  it('does not mention any of the six anywhere in the file', () => {
+    const backup = exportToJSON(
+      [{ id: 'a1', name: 'Read', color: '#10B981', createdAt: NOW, updatedAt: NOW }],
+      [{ id: 'l1', activityId: 'a1', date: '2026-09-14', completed: true, createdAt: NOW }]
+    )
+
+    for (const field of [
+      'firstOpenedAt',
+      'feedbackInviteSeen',
+      'checkinOffered',
+      'checkinEnabled',
+      'checkinId',
+      'checkinLastAttempt',
+    ]) {
+      expect(backup).not.toContain(field)
+    }
   })
 })

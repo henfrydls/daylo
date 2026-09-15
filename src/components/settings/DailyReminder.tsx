@@ -77,7 +77,8 @@ export function DailyReminder() {
   // Three things want a person's attention once, and none of them may talk over another:
   // this offer, the check-in's, and the two-week invitation. Whichever opens first takes
   // the session, and the other two stand down until the next one.
-  const offerIsOpen = available && !offered && activityCount > 0
+  const offerThisSession = useCalendarStore((state) => state._offerThisSession)
+  const offerIsOpen = available && !offered && activityCount > 0 && offerThisSession !== 'checkin'
   const claimOffer = useCalendarStore((state) => state.claimOffer)
   useEffect(() => {
     if (offerIsOpen) claimOffer('reminder')

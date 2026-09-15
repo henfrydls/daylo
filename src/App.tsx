@@ -5,12 +5,18 @@ import { StatsPanel } from './components/stats'
 import { BottomSheet, DropdownMenu, ErrorBoundary, ToastContainer, useToast } from './components/ui'
 import type { DropdownMenuItem } from './components/ui'
 import { AppSkeleton } from './components/skeletons'
-import { DailyReminder, ReminderSettings } from './components/settings'
+import {
+  CheckinOffer,
+  CheckinSettings,
+  DailyReminder,
+  ReminderSettings,
+} from './components/settings'
 import { useCalendarStore } from './store'
-import { useAppVersion, useRemindersAvailable, useSwipeGesture } from './hooks'
+import { useAppVersion, useCheckinFields, useRemindersAvailable, useSwipeGesture } from './hooks'
 import { FeedbackInvite } from './components/feedback/FeedbackInvite'
 import { FEEDBACK_MAILTO, openMailto, shouldInviteFeedback } from './lib/feedbackInvite'
 import { formatDate } from './lib/dates'
+import { sendCheckinIfDue } from './lib/checkin'
 
 // Lazy load modals - they are rarely used
 const ExportModal = lazy(() =>
@@ -76,10 +82,16 @@ function App() {
   const [isImportOpen, setIsImportOpen] = useState(false)
   const [isBottomSheetOpen, setIsBottomSheetOpen] = useState(false)
   const [isReminderOpen, setIsReminderOpen] = useState(false)
+  const [isCheckinOpen, setIsCheckinOpen] = useState(false)
   const appVersion = useAppVersion()
   // Android only: nowhere else can a notification arrive with the app closed, so nowhere
   // else is there a setting to show.
   const hasReminders = useRemindersAvailable()
+  // Desktop and Android: everywhere else there is no command to call, and the page's own
+  // CSP forbids reaching any host, so there is nothing to show a setting for.
+  const checkinFields = useCheckinFields()
+  const canCheckIn = checkinFields !== null
+  const checkinOffered = useCalendarStore((state) => state.checkinOffered)
   const logs = useCalendarStore((state) => state.logs)
   const firstOpenedAt = useCalendarStore((state) => state.firstOpenedAt)
   const feedbackInviteSeen = useCalendarStore((state) => state.feedbackInviteSeen)
@@ -108,8 +120,7 @@ function App() {
         loggedThisSession,
         offerThisSession,
         reminderOfferPending: hasReminders && !reminderOffered,
-        // Nothing offers the check-in yet; it arrives with its own piece.
-        checkinOfferPending: false,
+        checkinOfferPending: canCheckIn && !checkinOffered,
       }),
     [
       firstOpenedAt,
@@ -119,8 +130,25 @@ function App() {
       offerThisSession,
       hasReminders,
       reminderOffered,
+      canCheckIn,
+      checkinOffered,
     ]
   )
+
+  // Today's check-in, if the switch is on and today has not been tried. Twice, because
+  // there are two kinds of device: a phone is closed and opened again, which remounts
+  // this; a desktop is left running for days, and the window coming back is the only
+  // thing that says a new day has started. Whichever arrives second does nothing.
+  useEffect(() => {
+    if (!hasHydrated || !canCheckIn) return
+
+    void sendCheckinIfDue()
+    const onVisible = () => {
+      if (document.visibilityState === 'visible') void sendCheckinIfDue()
+    }
+    document.addEventListener('visibilitychange', onVisible)
+    return () => document.removeEventListener('visibilitychange', onVisible)
+  }, [hasHydrated, canCheckIn])
 
   const swipeRef = useSwipeGesture<HTMLDivElement>({
     onSwipeLeft: () =>
@@ -235,6 +263,30 @@ function App() {
         })
       },
     },
+    ...(canCheckIn
+      ? [
+          {
+            label: 'Anonymous check-in',
+            icon: (
+              <svg
+                className="w-4 h-4"
+                fill="none"
+                viewBox="0 0 24 24"
+                stroke="currentColor"
+                aria-hidden="true"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M9.348 14.652a3.75 3.75 0 010-5.304m5.304 0a3.75 3.75 0 010 5.304m-7.425 2.121a6.75 6.75 0 010-9.546m9.546 0a6.75 6.75 0 010 9.546M5.106 18.894c-3.808-3.807-3.808-9.98 0-13.788m13.788 0c3.808 3.807 3.808 9.98 0 13.788M12 12h.008v.008H12V12zm.375 0a.375.375 0 11-.75 0 .375.375 0 01.75 0z"
+                />
+              </svg>
+            ),
+            onClick: () => setIsCheckinOpen(true),
+          } satisfies DropdownMenuItem,
+        ]
+      : []),
     { type: 'divider' },
     {
       type: 'info',
@@ -428,6 +480,12 @@ function App() {
         <DailyReminder />
         {isReminderOpen && (
           <ReminderSettings isOpen={isReminderOpen} onClose={() => setIsReminderOpen(false)} />
+        )}
+
+        {/* The check-in: the one-time question, and the switch behind the menu */}
+        <CheckinOffer />
+        {isCheckinOpen && (
+          <CheckinSettings isOpen={isCheckinOpen} onClose={() => setIsCheckinOpen(false)} />
         )}
 
         {/* Toast Notifications */}
