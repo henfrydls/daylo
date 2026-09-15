@@ -106,6 +106,20 @@ export async function turnOnCheckin(): Promise<void> {
 }
 
 /**
+ * What a new installation does on its first launch: turn the check-in on and say hello.
+ *
+ * On by default is the owner's decision, made with the cost in front of him. What the
+ * code owes it is that the person is told in the same launch, which the notice under the
+ * header does, and that nobody who installed Daylo under "it sends nothing anywhere" is
+ * moved without asking, which is why this is only ever called for a store that had
+ * nothing in it at all.
+ */
+export async function startCheckinOnNewInstall(): Promise<void> {
+  if (useCalendarStore.getState().checkinEnabled) return
+  await turnOnCheckin()
+}
+
+/**
  * Today's, if today has not been tried yet.
  *
  * Tried, not sent: a day whose send failed is spent. Retrying tomorrow would not recover

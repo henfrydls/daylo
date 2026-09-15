@@ -5,13 +5,18 @@ import { StatsPanel } from './components/stats'
 import { BottomSheet, DropdownMenu, ErrorBoundary, ToastContainer, useToast } from './components/ui'
 import type { DropdownMenuItem } from './components/ui'
 import { AppSkeleton } from './components/skeletons'
-import { CheckinSettings, DailyReminder, ReminderSettings } from './components/settings'
+import {
+  CheckinNotice,
+  CheckinSettings,
+  DailyReminder,
+  ReminderSettings,
+} from './components/settings'
 import { useCalendarStore } from './store'
 import { useAppVersion, useCheckinFields, useRemindersAvailable, useSwipeGesture } from './hooks'
 import { FeedbackInvite } from './components/feedback/FeedbackInvite'
 import { FEEDBACK_MAILTO, openMailto, shouldInviteFeedback } from './lib/feedbackInvite'
 import { formatDate } from './lib/dates'
-import { sendCheckinIfDue } from './lib/checkin'
+import { sendCheckinIfDue, startCheckinOnNewInstall } from './lib/checkin'
 
 // Lazy load modals - they are rarely used
 const ExportModal = lazy(() =>
@@ -92,17 +97,40 @@ function App() {
   const loggedThisSession = useCalendarStore((state) => state._loggedThisSession)
   const offerThisSession = useCalendarStore((state) => state._offerThisSession)
   const reminderOffered = useCalendarStore((state) => state.reminderOffered)
+  const checkinNoticeSeen = useCalendarStore((state) => state.checkinNoticeSeen)
+  const checkinNoticeShown = useCalendarStore((state) => state._checkinNoticeShown)
+  const checkinEnabled = useCalendarStore((state) => state.checkinEnabled)
+  const checkinStart = useCalendarStore((state) => state._checkinStart)
   const markOpened = useCalendarStore((state) => state.markOpened)
   const { showToast } = useToast()
   // The slot stays open once the band has thanked, so the line can outlive the condition
   // that put the band there. Set from the click, not from an effect.
   const [inviteThanked, setInviteThanked] = useState(false)
 
+  const reminderOfferOwed = hasReminders && !reminderOffered
+
   // The first day this installation was opened, written once, as soon as there is a store
   // to write it to. Everything that asks how long somebody has been here reads it.
   useEffect(() => {
     if (hasHydrated) markOpened()
   }, [hasHydrated, markOpened])
+
+  // The line about the check-in. Not for somebody who already decided in an earlier
+  // build, and not once it has been closed. It needs nothing to have been tapped first:
+  // a new installation is already sending by the time this renders, so being told is the
+  // only thing that makes that honest, and it cannot wait for a habit to be ticked.
+  const shouldTellAboutCheckin = canCheckIn && !checkinNoticeSeen && checkinStart !== 'decided'
+
+  // Showing the line is what marks it seen, so the condition that put it there answers no
+  // a moment later. The session flag is what keeps it on screen until this window is
+  // closed; the persisted one is what stops it coming back tomorrow. It claims no session
+  // slot for the same reason. What it must not talk over stands down on its own: the
+  // reminder goes first because it is owed from an earlier day, and the invitation waits
+  // because this one is pending.
+  const noticeIsOpen =
+    (shouldTellAboutCheckin || checkinNoticeShown) &&
+    !reminderOfferOwed &&
+    offerThisSession === null
 
   const shouldInvite = useMemo(
     () =>
@@ -113,7 +141,11 @@ function App() {
         feedbackInviteSeen,
         loggedThisSession,
         offerThisSession,
-        reminderOfferPending: hasReminders && !reminderOffered,
+        reminderOfferPending: reminderOfferOwed,
+        // The notice is owed until it has been shown, and the invitation waits for it the
+        // way it waits for the reminder: an installation that updates today could be due
+        // both, and two bands at once is two too many.
+        checkinNoticePending: shouldTellAboutCheckin,
       }),
     [
       firstOpenedAt,
@@ -121,8 +153,8 @@ function App() {
       feedbackInviteSeen,
       loggedThisSession,
       offerThisSession,
-      hasReminders,
-      reminderOffered,
+      reminderOfferOwed,
+      shouldTellAboutCheckin,
     ]
   )
 
@@ -133,13 +165,17 @@ function App() {
   useEffect(() => {
     if (!hasHydrated || !canCheckIn) return
 
-    void sendCheckinIfDue()
+    if (checkinStart === 'new') {
+      void startCheckinOnNewInstall()
+    } else {
+      void sendCheckinIfDue()
+    }
     const onVisible = () => {
       if (document.visibilityState === 'visible') void sendCheckinIfDue()
     }
     document.addEventListener('visibilitychange', onVisible)
     return () => document.removeEventListener('visibilitychange', onVisible)
-  }, [hasHydrated, canCheckIn])
+  }, [hasHydrated, canCheckIn, checkinStart])
 
   const swipeRef = useSwipeGesture<HTMLDivElement>({
     onSwipeLeft: () =>
@@ -386,6 +422,17 @@ function App() {
         >
           {/* Under the header and above the calendar: the only place visible on every
               screen without scrolling, and the same place on a phone and on a desktop. */}
+          {/* A new installation is on by the time anybody can read this: the effect that
+              turns it on runs in the same tick, but effects run after the first paint, and
+              a line that said "Anonymous check-in." for one frame and then corrected
+              itself would be the app hesitating in public. */}
+          {noticeIsOpen ? (
+            <CheckinNotice
+              on={checkinEnabled || checkinStart === 'new'}
+              onOpen={() => setIsCheckinOpen(true)}
+            />
+          ) : null}
+
           {shouldInvite || inviteThanked ? (
             <FeedbackInvite onThanked={() => setInviteThanked(true)} />
           ) : null}

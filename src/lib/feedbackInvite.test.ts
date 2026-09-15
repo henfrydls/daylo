@@ -37,6 +37,7 @@ const ready = {
   loggedThisSession: true,
   offerThisSession: null,
   reminderOfferPending: false,
+  checkinNoticePending: false,
 } as const
 
 beforeEach(() => {
@@ -179,8 +180,9 @@ describe('giving way to the other two offers', () => {
     expect(shouldInviteFeedback({ ...ready, offerThisSession: 'checkin' })).toBe(false)
   })
 
-  it('stands down while the reminder offer is still owed', () => {
+  it('stands down while either of the other two is still owed', () => {
     expect(shouldInviteFeedback({ ...ready, reminderOfferPending: true })).toBe(false)
+    expect(shouldInviteFeedback({ ...ready, checkinNoticePending: true })).toBe(false)
   })
 })
 
