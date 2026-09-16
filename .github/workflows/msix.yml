@@ -79,7 +79,7 @@ jobs:
           # are copied: an asset nobody references is weight in a package the Store
           # downloads.
           foreach ($logo in 'StoreLogo', 'Square44x44Logo', 'Square71x71Logo',
-                            'Square150x150Logo', 'Square310x310Logo') {
+                            'Square150x150Logo') {
             Copy-Item "src-tauri\icons\$logo.png" msix\Assets\
           }
 
