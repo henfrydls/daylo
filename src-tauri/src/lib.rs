@@ -1,4 +1,5 @@
 mod checkin;
+mod webview2;
 
 // Learn more about Tauri commands at https://tauri.app/develop/calling-rust/
 #[tauri::command]
@@ -99,6 +100,15 @@ fn reminders_available() -> bool {
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    // Before anything else, because everything else assumes a window can exist. Without
+    // the WebView2 runtime this app does not fail, it vanishes: no window, a panic with
+    // no console to print it, and a person left looking at a desktop where nothing
+    // happened. The installer we publish fetches the runtime; the Store package cannot.
+    #[cfg(target_os = "windows")]
+    if webview2::is_missing() {
+        webview2::explain_and_exit();
+    }
+
     let builder = tauri::Builder::default().plugin(tauri_plugin_shell::init());
 
     // The dialog goes everywhere it can open: the desktop and Android. What each platform

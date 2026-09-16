@@ -81,6 +81,16 @@ tauri-plugin-fs = "~2.5"
 # on npm asks for ^2.8.0 and the pair lines up.
 tauri-plugin-notification = "~2.3"
 
+[target.'cfg(target_os = "windows")'.dependencies]
+# Both are already in the tree through tauri and its dialog plugin; they are named here so
+# the check for a missing WebView2 runtime can use them directly, before there is an app.
+# winreg reads the version the runtime records about itself. rfd puts a system window on
+# the screen without an event loop, which is the only kind of window that can exist at
+# that point, and common-controls-v6 is what lets that window have buttons that say what
+# they do instead of OK and Cancel.
+winreg = "0.55"
+rfd = { version = "0.16", features = ["common-controls-v6"] }
+
 # Only for the test that reads tauri.conf.json and checks each `plugins.<name>` block
 # against the config type that plugin actually accepts.
 #
