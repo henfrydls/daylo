@@ -993,6 +993,13 @@
     },
     {
         "type": "file",
+        "url": "https://registry.npmjs.org/@tauri-apps/plugin-notification/-/plugin-notification-2.3.3.tgz",
+        "sha512": "670f991f5f1125be351b836b7c7808ba87c98b29aeb2a37eabc7c6508215eefc821fee6c4a7e5ca2a46ffcc581f6a113b14b3deef994d38e6aececac78257742",
+        "dest-filename": "991f5f1125be351b836b7c7808ba87c98b29aeb2a37eabc7c6508215eefc821fee6c4a7e5ca2a46ffcc581f6a113b14b3deef994d38e6aececac78257742",
+        "dest": "flatpak-node/npm-cache/_cacache/content-v2/sha512/67/0f"
+    },
+    {
+        "type": "file",
         "url": "https://registry.npmjs.org/@testing-library/dom/-/dom-10.4.1.tgz",
         "sha512": "a383d725089da8997cd9c90569751ea005be5f2b0f2dab98238dc06e48b984005df39de23218ada2873ace73a773381b4d89843fa53aff2d59c8a008b2f30a1a",
         "dest-filename": "d725089da8997cd9c90569751ea005be5f2b0f2dab98238dc06e48b984005df39de23218ada2873ace73a773381b4d89843fa53aff2d59c8a008b2f30a1a",
@@ -4315,6 +4322,12 @@
         "contents": "b377c721de9bf940dad41b73f0ad5f578082476a\t{\"key\": \"make-fetch-happen:request-cache:https://registry.npmjs.org/@tailwindcss/oxide-win32-x64-msvc/-/oxide-win32-x64-msvc-4.1.18.tgz\", \"integrity\": \"sha512-bJWbyYpUlqamC8dpR7pfjA0I7vdF6t5VpUGMWRkXVE3AXgIZjYUYAK7II1GNaxR8J1SSrSrppRar8G++JekE3Q==\", \"time\": 0, \"size\": 1286963, \"metadata\": {\"url\": \"https://registry.npmjs.org/@tailwindcss/oxide-win32-x64-msvc/-/oxide-win32-x64-msvc-4.1.18.tgz\", \"reqHeaders\": {}, \"resHeaders\": {}}}",
         "dest-filename": "106162591f8bf76e6c1c36f5fa3082eb19c4273241afdcfd69b1ecd13d63",
         "dest": "flatpak-node/npm-cache/_cacache/index-v5/d9/0b"
+    },
+    {
+        "type": "inline",
+        "contents": "b3da19bf6f969812819833eac72462ecfd5468a0\t{\"key\": \"make-fetch-happen:request-cache:https://registry.npmjs.org/@tauri-apps/plugin-notification/-/plugin-notification-2.3.3.tgz\", \"integrity\": \"sha512-Zw+ZH18RJb41G4NrfHgIuofJiymusqN+q8fGUIIV7vyCH+5sSn5coqRv/MWB9qETsUs97vmU045q7OyseCV3Qg==\", \"time\": 0, \"size\": 6663, \"metadata\": {\"url\": \"https://registry.npmjs.org/@tauri-apps/plugin-notification/-/plugin-notification-2.3.3.tgz\", \"reqHeaders\": {}, \"resHeaders\": {}}}",
+        "dest-filename": "59ff9f5e275bdcf0b45688ce6c8201a53d62a556588104249af72a122fb4",
+        "dest": "flatpak-node/npm-cache/_cacache/index-v5/19/de"
     },
     {
         "type": "inline",

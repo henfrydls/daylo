@@ -128,8 +128,8 @@ modules:
       # a lockfile moved.
       - type: git
         url: https://github.com/henfrydls/daylo.git
-        tag: v1.1.3
-        commit: 8e16d42850bbd4f98818cc3e15c7c594559ecf52
+        tag: v1.3.0
+        commit: 2769f990a3f1d91d8df9477f4c58f5c98c09c5c1
       - type: file
         path: io.github.henfrydls.daylo.desktop
       - type: file
