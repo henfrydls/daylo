@@ -93,6 +93,9 @@ tauri-plugin-notification = "~2.3"
 [dev-dependencies]
 tauri-plugin-fs = "~2.5"
 tauri-plugin-notification = "~2.3"
+# Only for the tests: it brings tauri::test::mock_app, which is what lets the commands be
+# called for real instead of testing a helper next to them and hoping they use it.
+tauri = { version = "~2.10", features = ["test"] }
 
 [profile.dev]
 incremental = true
