@@ -165,6 +165,18 @@ npm run test:e2e      # E2E tests (Playwright)
 npm run test:e2e:ui   # E2E tests with interactive UI
 ```
 
+#### Turning the check-in off in a build
+
+A build you run yourself starts with a fresh profile, which the app reads as a new
+installation: the anonymous check-in turns itself on and sends one. Set
+`DAYLO_DISABLE_CHECKIN` to anything, including empty, and the app behaves as it does on
+the web, with no check-in, no menu entry and nothing sent. Continuous integration sets it
+for the same reason.
+
+```bash
+DAYLO_DISABLE_CHECKIN=1 npm run tauri:dev
+```
+
 </details>
 
 ## Project Structure

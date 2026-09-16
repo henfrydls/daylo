@@ -432,6 +432,13 @@ jobs:
       # a separate test, over release.yml, that would install the real package.
       - name: Smoke run the binary (Linux and macOS)
         if: runner.os != 'Windows'
+        # The binary is about to be started with an empty profile, which since 1.3 is a
+        # new installation: it would turn the check-in on and send one, and the server
+        # would count a runner as a person. Seven arrived in one evening before anybody
+        # noticed. With this set the app behaves as it does on the web: no check-in at
+        # all. See src-tauri/src/checkin.rs.
+        env:
+          DAYLO_DISABLE_CHECKIN: '1'
         run: |
           set -uo pipefail
           shopt -s nullglob
@@ -686,6 +693,13 @@ jobs:
       - name: Smoke run the binary (Windows)
         if: runner.os == 'Windows'
         shell: pwsh
+        # The binary is about to be started with an empty profile, which since 1.3 is a
+        # new installation: it would turn the check-in on and send one, and the server
+        # would count a runner as a person. Seven arrived in one evening before anybody
+        # noticed. With this set the app behaves as it does on the web: no check-in at
+        # all. See src-tauri/src/checkin.rs.
+        env:
+          DAYLO_DISABLE_CHECKIN: '1'
         run: |
           $ErrorActionPreference = 'Stop'
           $rel = 'src-tauri/target/debug/Daylo.exe'

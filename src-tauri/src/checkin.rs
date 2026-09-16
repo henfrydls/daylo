@@ -17,14 +17,47 @@ pub struct CheckinFields {
     os: &'static str,
 }
 
-/// What the message carries for this build, so the settings sheet can show exactly what
-/// leaves. Desktop and Android only: a rejected call means "no check-in here".
-#[tauri::command]
-pub fn checkin_fields(app: tauri::AppHandle) -> CheckinFields {
-    CheckinFields {
+/// The switch that turns the check-in off for a whole build, read from the environment.
+///
+/// It exists because continuous integration starts the app to see whether it starts, and
+/// since 1.3 a fresh profile is a new installation, which means every such run was a real
+/// device as far as the server could tell: a new random number, one check-in, never seen
+/// again. Seven of them arrived in one evening before anybody noticed. They are not
+/// people, and a number that counts them is worth less than one that does not.
+///
+/// Set to anything at all, including empty, it makes the app behave as it does on the web:
+/// no menu entry, no line, nothing sent. Anybody building Daylo themselves can use it for
+/// the same reason.
+fn disabled() -> bool {
+    std::env::var_os("DAYLO_DISABLE_CHECKIN").is_some()
+}
+
+/// What the message carries for this build, and the one gate in front of it.
+///
+/// Both commands go through here, so the switch cannot be honoured by the one that draws
+/// the screen and forgotten by the one that opens a socket: there is nothing to forget,
+/// because there is only one of it.
+fn fields<R: tauri::Runtime>(app: &tauri::AppHandle<R>) -> Result<CheckinFields, String> {
+    if disabled() {
+        return Err("the check-in is off: DAYLO_DISABLE_CHECKIN is set".into());
+    }
+
+    Ok(CheckinFields {
         version: app.package_info().version.to_string(),
         os: std::env::consts::OS,
-    }
+    })
+}
+
+/// What the message carries for this build, so the settings sheet can show exactly what
+/// leaves. Desktop and Android only: a rejected call means "no check-in here", which is
+/// also what the environment switch produces.
+/// Generic over the runtime so the tests can call it with Tauri's mock one. That is the
+/// only reason: there is one runtime in the app.
+#[tauri::command]
+pub fn checkin_fields<R: tauri::Runtime>(
+    app: tauri::AppHandle<R>,
+) -> Result<CheckinFields, String> {
+    fields(&app)
 }
 
 /// The message, and nothing but the message. `last` is added only when the switch is being
@@ -52,14 +85,17 @@ pub fn message(id: &str, version: &str, os: &str, date: &str, last: bool) -> ser
 /// The user agent is the bare word Daylo, because the version already travels as a field
 /// and one carrying more would make "nothing else" harder to check than to say.
 #[tauri::command]
-pub async fn send_checkin(
-    app: tauri::AppHandle,
+pub async fn send_checkin<R: tauri::Runtime>(
+    app: tauri::AppHandle<R>,
     id: String,
     date: String,
     last: bool,
 ) -> Result<(), String> {
-    let version = app.package_info().version.to_string();
-    let body = message(&id, &version, std::env::consts::OS, &date, last);
+    // Through the same gate as the screen, and before anything opens a socket: a webview
+    // that was already open, or a caller that skips the screen entirely, gets the same
+    // refusal. It also happens to be where the version comes from.
+    let CheckinFields { version, os } = fields(&app)?;
+    let body = message(&id, &version, os, &date, last);
     tauri::async_runtime::spawn_blocking(move || {
         ureq::post(URL)
             .set("User-Agent", "Daylo")
@@ -106,6 +142,46 @@ mod tests {
         keys.sort_unstable();
         assert_eq!(keys, ["date", "id", "last", "os", "version"]);
         assert_eq!(farewell["payload"]["data"]["last"], serde_json::json!(true));
+    }
+
+    /// The switch, from the two ends that matter: the helper reads it, and both commands
+    /// go through the helper. One test and not two, because the variable is process wide
+    /// and Rust runs tests in threads: two tests setting and clearing it race, and the
+    /// one that lost said the check-in was available with the switch on, which is the
+    /// exact lie this is here to prevent.
+    ///
+    /// `send_checkin` is called on purpose while it is off: if the gate were missing, the
+    /// test would try to reach the network, which fails the test either way.
+    #[test]
+    fn the_environment_turns_the_whole_thing_off() {
+        // SAFETY: the variable is set and removed inside this one test, and nothing else
+        // in this file reads it.
+        unsafe { std::env::set_var("DAYLO_DISABLE_CHECKIN", "") };
+        let empty_counts = super::disabled();
+
+        unsafe { std::env::set_var("DAYLO_DISABLE_CHECKIN", "1") };
+        let app = tauri::test::mock_app();
+        let fields = super::checkin_fields(app.handle().clone());
+        let sent = tauri::async_runtime::block_on(super::send_checkin(
+            app.handle().clone(),
+            "4f9c2a7e1b60d3a8c5e2f1b74a9d0c6e".into(),
+            "2026-09-16".into(),
+            false,
+        ));
+
+        unsafe { std::env::remove_var("DAYLO_DISABLE_CHECKIN") };
+        let unset_is_the_ordinary_case = !super::disabled();
+
+        assert!(empty_counts, "an empty value still means off");
+        assert!(
+            fields.is_err(),
+            "the screen must not be told there is a check-in here"
+        );
+        assert!(sent.is_err(), "nothing may leave the machine");
+        assert!(
+            unset_is_the_ordinary_case,
+            "unset is the ordinary case: the check-in exists"
+        );
     }
 
     /// Nothing about the person, the device or the habits rides along in the envelope

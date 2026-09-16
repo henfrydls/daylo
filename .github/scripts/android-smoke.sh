@@ -37,6 +37,23 @@ fail() {
   exit 1
 }
 
+# No network for the emulator, before the app is ever started.
+#
+# Since 1.3 a fresh profile is a new installation: the app turns the check-in on and sends
+# one, and this job installs a fresh profile every time it runs. The server counted a
+# runner as a person more than once before anybody noticed. The desktop jobs set
+# DAYLO_DISABLE_CHECKIN, which an Android app cannot read: it is started by the zygote and
+# inherits nothing from this shell. Cutting the radio is the lever that does exist here.
+#
+# It also buys something the job did not have: the app is now shown to start with no
+# network at all, which is how a phone opens it in a lift.
+echo "::group::Cut the network"
+adb shell cmd connectivity airplane-mode enable || true
+adb shell svc wifi disable || true
+adb shell svc data disable || true
+echo "airplane_mode_on=$(adb shell settings get global airplane_mode_on | tr -d '\r')"
+echo "::endgroup::"
+
 echo "::group::Install"
 adb install -r "$APK"
 echo "::endgroup::"
