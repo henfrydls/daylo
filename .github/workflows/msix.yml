@@ -1,0 +1,138 @@
+# Packs the Microsoft Store package.
+#
+# Tauri has no msix target, so this assembles one from what the Windows release build
+# already produces: the executable, the logo set that `tauri icon` generated, and
+# packaging/msix/AppxManifest.xml, which carries the identity Partner Center assigned.
+#
+# It is not signed, and that is not an oversight: the Store re-signs MSIX packages with a
+# Microsoft certificate during certification, so no code signing certificate is needed and
+# none is bought. That is the whole reason this route exists, because an .exe submission
+# would need one, and would also have to be an offline installer, which ours is not: it
+# downloads the WebView2 bootstrapper while installing.
+#
+# WHAT IT CLAIMS: a package is produced and makeappx accepts the manifest.
+# WHAT IT DOES NOT CLAIM: that the Store accepts it, or that the app runs from it. Nobody
+# on the team has a Windows machine; the first install of this package will be somebody
+# else's, and the first certification is the real experiment.
+name: MSIX
+
+# Manual, and also on a pull request that touches the packaging, which is not a nicety:
+# workflow_dispatch only offers a workflow that already exists on the default branch, so
+# without this trigger the first run of this file would be after it was merged, with
+# nobody watching. The same reason the Flatpak job carries a path filter.
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - 'packaging/msix/**'
+      - '.github/workflows/msix.yml'
+      - 'src-tauri/icons/Square*.png'
+      - 'src-tauri/icons/StoreLogo.png'
+
+jobs:
+  pack:
+    name: Pack MSIX
+    runs-on: windows-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install Rust stable
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+
+      - name: Cache Rust dependencies
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: './src-tauri -> target'
+
+      - name: Install Node.js dependencies
+        run: npm ci
+
+      # The binary only. No NSIS, no MSI: the installer is the package itself, and asking
+      # the bundler for one would only spend minutes on an artifact nobody uploads.
+      - name: Build the app
+        run: npx tauri build --no-bundle
+
+      - name: Lay the package out
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $version = (Get-Content package.json | ConvertFrom-Json).version
+          # The Store owns the fourth part and requires it to be 0.
+          $packageVersion = "$version.0"
+          Write-Host "Packaging Daylo $version as $packageVersion"
+
+          New-Item -ItemType Directory -Force -Path msix\Assets | Out-Null
+          Copy-Item src-tauri\target\release\Daylo.exe msix\
+
+          # The logo set tauri icon already generates. Only the four the manifest names
+          # are copied: an asset nobody references is weight in a package the Store
+          # downloads.
+          foreach ($logo in 'StoreLogo', 'Square44x44Logo', 'Square71x71Logo',
+                            'Square150x150Logo') {
+            Copy-Item "src-tauri\icons\$logo.png" msix\Assets\
+          }
+
+          $manifest = Get-Content packaging\msix\AppxManifest.xml -Raw
+          $manifest = $manifest -replace 'Version="0\.0\.0\.0"', "Version=`"$packageVersion`""
+          Set-Content msix\AppxManifest.xml $manifest -Encoding UTF8
+
+          # Said out loud, because a version that quietly stayed at 0.0.0.0 would be
+          # rejected on upload with a message about identity and nothing about versions.
+          if ($manifest -notmatch [regex]::Escape("Version=`"$packageVersion`"")) {
+            throw "The manifest still carries the placeholder version"
+          }
+          Get-ChildItem -Recurse msix | Select-Object FullName, Length
+
+      - name: Pack it
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+
+          # Sorted by [version] rather than by name: bin\ also holds 'x86' and 'x64'
+          # folders, which beat any '10.0.xxxxx.0' in text order, and 10.0.9.0 would beat
+          # 10.0.17763.0. Learned from the tooling probe, which found four copies of
+          # makeappx on the image and could have picked the wrong one.
+          $roots = @("${env:ProgramFiles(x86)}\Windows Kits\10\bin", "$env:ProgramFiles\Windows Kits\10\bin") |
+                   Where-Object { $_ -and (Test-Path $_) }
+          $makeappx = $null
+          foreach ($root in $roots) {
+            $versions = Get-ChildItem $root -Directory -ErrorAction SilentlyContinue |
+                        Where-Object { $_.Name -as [version] } |
+                        Sort-Object { [version]$_.Name } -Descending
+            foreach ($v in $versions) {
+              $candidate = Join-Path $v.FullName 'x64\makeappx.exe'
+              if (Test-Path $candidate) { $makeappx = $candidate; break }
+            }
+            if ($makeappx) { break }
+          }
+          if (-not $makeappx) { throw 'makeappx.exe is not on this image' }
+          Write-Host "Using $makeappx"
+
+          & $makeappx pack /d msix /p Daylo.msix /o
+          if ($LASTEXITCODE -ne 0) { throw "makeappx failed with $LASTEXITCODE" }
+
+          # makeappx validates the manifest while packing, so a package that exists is a
+          # manifest the schema accepted. What it cannot say is whether Partner Center
+          # agrees that the identity is ours.
+          $size = (Get-Item Daylo.msix).Length
+          Write-Host "Packed Daylo.msix ($size bytes)"
+          "Packed **Daylo.msix**, $size bytes, unsigned as the Store expects." |
+            Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append
+
+      - name: Upload the package
+        uses: actions/upload-artifact@v4
+        with:
+          name: daylo-msix
+          path: Daylo.msix
+          retention-days: 14
