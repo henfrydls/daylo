@@ -96,7 +96,12 @@ mod windows_only {
                 .spawn();
         }
 
-        std::process::exit(0)
+        // Not zero. A person who reads the window and closes it has had a normal
+        // afternoon, but an exit code is not for people: it is what a launcher, an
+        // installer or a script reads, and telling those that Daylo ran fine when it
+        // never opened a window is a lie they would act on. Windows shows nothing either
+        // way for a windowed application.
+        std::process::exit(1)
     }
 }
 
