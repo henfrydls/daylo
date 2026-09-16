@@ -96,16 +96,41 @@ pub async fn send_checkin<R: tauri::Runtime>(
     // refusal. It also happens to be where the version comes from.
     let CheckinFields { version, os } = fields(&app)?;
     let body = message(&id, &version, os, &date, last);
-    tauri::async_runtime::spawn_blocking(move || {
-        ureq::post(URL)
-            .set("User-Agent", "Daylo")
-            .timeout(std::time::Duration::from_secs(10))
-            .send_json(body)
-            .map(|_| ())
-            .map_err(|error| error.to_string())
-    })
-    .await
-    .map_err(|error| error.to_string())?
+    tauri::async_runtime::spawn_blocking(move || post(body))
+        .await
+        .map_err(|error| error.to_string())?
+}
+
+/// The only thing in this file that opens a socket, and the only place the address is
+/// written. The user agent is the bare word Daylo, because the version already travels as
+/// a field and one carrying more would make "nothing else" harder to check than to say.
+#[cfg(not(test))]
+fn post(body: serde_json::Value) -> Result<(), String> {
+    ureq::post(URL)
+        .set("User-Agent", "Daylo")
+        .timeout(std::time::Duration::from_secs(10))
+        .send_json(body)
+        .map(|_| ())
+        .map_err(|error| error.to_string())
+}
+
+/// In the test binary there is no network at all, and the substitution is not a nicety.
+/// The test below calls the real command with the switch on, which is the only way to
+/// prove the gate is where it should be; the first time somebody breaks that gate, the
+/// test would otherwise write rows into the live server. It did: four of them, from a
+/// mutation run, carrying the mock app's version and the example number.
+///
+/// Remembering the call rather than only refusing it is what keeps the test honest. A
+/// stub that merely returned an error would let a broken gate pass, because the assertion
+/// would still be looking at a failure.
+#[cfg(test)]
+static REACHED_THE_NETWORK: std::sync::atomic::AtomicBool =
+    std::sync::atomic::AtomicBool::new(false);
+
+#[cfg(test)]
+fn post(_body: serde_json::Value) -> Result<(), String> {
+    REACHED_THE_NETWORK.store(true, std::sync::atomic::Ordering::SeqCst);
+    Err("the tests do not reach the network".into())
 }
 
 #[cfg(test)]
@@ -178,6 +203,10 @@ mod tests {
             "the screen must not be told there is a check-in here"
         );
         assert!(sent.is_err(), "nothing may leave the machine");
+        assert!(
+            !super::REACHED_THE_NETWORK.load(std::sync::atomic::Ordering::SeqCst),
+            "the gate is not where it should be: the sender was reached"
+        );
         assert!(
             unset_is_the_ordinary_case,
             "unset is the ordinary case: the check-in exists"
