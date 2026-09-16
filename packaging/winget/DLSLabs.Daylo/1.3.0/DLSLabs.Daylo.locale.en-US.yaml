@@ -24,8 +24,9 @@ Description: |-
   date, and nothing else. The app tells you the first time it opens. You can export a backup whenever
   you want and import it on another machine.
 
-  Runs on Windows, Mac, Linux and Android. The first launch needs an internet connection if the
-  WebView2 runtime is not already installed, which it usually is on Windows 10 and 11.
+  Runs on Windows, Mac, Linux and Android. Installing on Windows needs an internet connection the
+  first time, to fetch a Microsoft component called WebView2, unless the PC already has it, which
+  most Windows 10 and 11 machines do.
 Moniker: daylo
 Tags:
   - calendar
