@@ -171,11 +171,22 @@ jobs:
           # The first attempt got 'DRI3 error: Could not get DRI3 device' and no window.
           # WebKitGTK's dmabuf renderer needs a real GPU, so it is turned off here and
           # rendering forced to software. This is about this runner, not about the app.
+          # The fifth variable is not about this runner, it is about the server. This
+          # starts the real app with an empty profile, which since 1.3 is a new
+          # installation: it turned the check-in on and sent one, twice today, from a
+          # machine with nobody at it. The desktop smoke runs in ci.yml were closed in
+          # #70 and this one was missed, because it does not look like a smoke run.
+          #
+          # --unshare=network would also do it, and more bluntly. This is preferred for
+          # two reasons: the sandbox stays exactly as it ships, so what is inspected here
+          # is the app people get; and it is the only place that exercises the switch
+          # inside a packaged build rather than against a bare binary.
           flatpak run \
             --env=WEBKIT_DISABLE_DMABUF_RENDERER=1 \
             --env=WEBKIT_DISABLE_COMPOSITING_MODE=1 \
             --env=LIBGL_ALWAYS_SOFTWARE=1 \
             --env=GDK_BACKEND=x11 \
+            --env=DAYLO_DISABLE_CHECKIN=1 \
             io.github.henfrydls.daylo >app.log 2>&1 &
           app_pid=$!
 
