@@ -157,6 +157,24 @@ jobs:
       #
       #    Last on purpose: a mismatch is worth failing the job over, and a
       #    failure here must not stop the three answers above from being printed.
+      # Does the switch actually reach the app, and not only the command line?
+      #
+      # The server cannot answer that. The send is asynchronous with a ten second timeout,
+      # and the step below kills the app two or three seconds after its window appears, so
+      # whether a row arrives is a race the app usually loses: on the day this was found,
+      # two runs of four wrote one. A run with no row proves nothing on its own, which is
+      # exactly the kind of evidence that gets mistaken for a fix.
+      #
+      # So this asks the sandbox itself, and fails if the answer is wrong, before anything
+      # is started. What it deliberately does not test is whether the app honours the
+      # variable: that is pinned by cargo test against both commands, and without a clock.
+      - name: The check-in switch reaches the sandbox
+        run: |
+          flatpak run \
+            --env=DAYLO_DISABLE_CHECKIN=1 \
+            --command=sh io.github.henfrydls.daylo \
+            -c 'echo "DAYLO_DISABLE_CHECKIN=[$DAYLO_DISABLE_CHECKIN]"; [ "$DAYLO_DISABLE_CHECKIN" = 1 ] || exit 1'
+
       - name: What WM_CLASS the app really sets
         run: |
           set -uo pipefail
