@@ -22,7 +22,7 @@
 
 Your data stays on your device. No account, and nothing you track is ever uploaded. What the app sends, and how to turn it off, is in the [privacy policy](https://daylo.henfrydls.com/privacy/).
 
-- **[Desktop app](#desktop-app)** (Windows, macOS, Linux): Download from GitHub Releases
+- **[Desktop app](#desktop-app)** (Windows, macOS, Linux): On Windows, [get it from the Microsoft Store](https://apps.microsoft.com/detail/9NJM37WMMC5Z). Otherwise download from GitHub Releases
 - **[Android app](#android-app)** (arm64 phones and tablets): Download the APK from GitHub Releases
 - **[Docker](#docker)**: Self-hosted via `docker compose`
 - **[From source](#from-source)**: Clone and build
@@ -74,10 +74,13 @@ Your data stays on your device. No account, and nothing you track is ever upload
 
 ### Desktop App
 
-Download the latest release for your platform from the [Releases](../../releases) page:
+On Windows, the easiest way is the **[Microsoft Store](https://apps.microsoft.com/detail/9NJM37WMMC5Z)**: it installs and updates Daylo with no security warning.
+
+For everything else, download the latest release for your platform from the [Releases](../../releases) page:
 
 | Platform | Direct download (always the latest version) |
 |----------|------|
+| Windows (Store) | [Microsoft Store](https://apps.microsoft.com/detail/9NJM37WMMC5Z) |
 | Windows (x64) | [`Daylo-windows-x64-setup.exe`](../../releases/latest/download/Daylo-windows-x64-setup.exe) |
 | Windows (ARM64) | [`Daylo-windows-arm64-setup.exe`](../../releases/latest/download/Daylo-windows-arm64-setup.exe) |
 | macOS (Apple Silicon) | [`Daylo-macos-apple-silicon.dmg`](../../releases/latest/download/Daylo-macos-apple-silicon.dmg) |
@@ -95,7 +98,7 @@ Just install and open: no setup, no accounts, no internet required.
 
 #### About the security warning
 
-The desktop installers are not code-signed yet, so your operating system will warn you the first time you open Daylo:
+The desktop installers are not code-signed yet, so your operating system will warn you the first time you open Daylo. **The Microsoft Store version does not: Microsoft signs it, so Windows installs it without a warning.** If you use the installer instead:
 
 - **Windows** shows "Windows protected your PC". Click **More info**, then **Run anyway**. On a work-managed PC that button can be hidden by policy; ask your administrator.
 - **macOS** will say it could not verify the app the first time. Click **Done** (not Move to Trash), then go to **System Settings → Privacy & Security**, scroll down and click **Open Anyway** next to Daylo, then enter your password. The button appears for about an hour after your first attempt to open the app; if it's gone, try opening Daylo again first. On macOS 15 and later, right-click → Open no longer bypasses this.
