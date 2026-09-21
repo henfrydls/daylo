@@ -246,7 +246,11 @@ describe('the check-in on a device updating from an earlier version', () => {
 
     expect(startCheckinOnNewInstall).not.toHaveBeenCalled()
     expect(sendCheckinIfDue).toHaveBeenCalled()
-    expect(await screen.findByTestId('checkin-notice')).toHaveTextContent('See and turn on')
+    // What a phone shows of this line is the first three words and the link, so those
+    // three words are the ones that have to be true.
+    const notice = await screen.findByTestId('checkin-notice')
+    expect(notice).toHaveTextContent('Anonymous check-in is off.')
+    expect(notice).toHaveTextContent('See and turn on')
     expect(useCalendarStore.getState().checkinEnabled).toBe(false)
   })
 
