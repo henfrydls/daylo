@@ -19,7 +19,10 @@ interface CheckinNoticeProps {
  *
  * Somebody updating from an earlier version reads the other half. They installed Daylo
  * when it said it sent nothing anywhere, so the check-in stays off for them and the line
- * invites rather than informs. Same shape, opposite verb.
+ * offers rather than warns. Both halves name the state in their first three words, and
+ * for the same reason: a phone keeps those words and the link, and drops the sentence
+ * between them, so a title that only said the name would leave "turn on" as the loudest
+ * word on a screen where the check-in is off.
  *
  * A line and not a dialog, for the reason the invitation is one: a person opening their
  * calendar should not have to answer something first. The X closes it and changes
@@ -47,10 +50,11 @@ export function CheckinNotice({ on, onOpen }: CheckinNoticeProps) {
       <div className="flex items-start gap-3">
         <p className="min-w-0 flex-1 text-sm text-gray-600">
           <span id="checkin-notice-title" className="font-medium text-gray-900">
-            {on ? 'Anonymous check-in is on.' : 'Anonymous check-in.'}
+            {on ? 'Anonymous check-in is on.' : 'Anonymous check-in is off.'}
           </span>{' '}
-          {/* The middle sentence is the first thing a narrow screen loses. On a phone the
-              line has to stay one line, and what survives is the name and the way in. */}
+          {/* The middle sentence is the first thing a narrow screen loses. What is left
+              on a phone is the state and the way in, over two lines, which is why the
+              state has to be in the title and not in the sentence. */}
           <span className="hidden sm:inline">
             {on
               ? 'It tells us the app is still in use, nothing about what you track. '

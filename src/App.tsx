@@ -429,8 +429,8 @@ function App() {
               screen without scrolling, and the same place on a phone and on a desktop. */}
           {/* A new installation is on by the time anybody can read this: the effect that
               turns it on runs in the same tick, but effects run after the first paint, and
-              a line that said "Anonymous check-in." for one frame and then corrected
-              itself would be the app hesitating in public. */}
+              a line that said "Anonymous check-in is off." for one frame and then
+              corrected itself would be the app contradicting itself in public. */}
           {noticeIsOpen ? (
             <CheckinNotice
               on={checkinEnabled || checkinStart === 'new'}

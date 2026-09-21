@@ -31,7 +31,7 @@ describe('what it says', () => {
     render(<CheckinNotice on={false} onOpen={onOpen} />)
 
     expect(line()).toHaveTextContent(
-      'Anonymous check-in. It would tell us the app is still in use, nothing about what you track.'
+      'Anonymous check-in is off. It would tell us the app is still in use, nothing about what you track.'
     )
     expect(screen.getByTestId('checkin-notice-open')).toHaveTextContent('See and turn on')
   })
