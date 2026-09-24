@@ -133,6 +133,16 @@ fn envelope(name: &str, data: serde_json::Value) -> serde_json::Value {
 /// turned off exactly this, a lasting number leaving their device, and slipping it into
 /// another message because it suits us would undo their decision without telling them.
 /// Its absence also says, by itself, that this answer came from somebody who had it off.
+///
+/// Neither the version nor the system rides with an answer, and that is a decision and not
+/// an omission. With the check-in on they already travelled in that day's check-in, and the
+/// number above is what lets the two be read together, so repeating them here would be
+/// copying a field from the message next door. With the check-in off, that person decided
+/// not to give us their version or their system, and putting them in an answer would be
+/// collecting through the back door exactly what they switched off. The rule holds in one
+/// sentence, and it is the sentence to read before adding a field here because it would be
+/// useful: **of somebody who turned the check-in off we know only what they chose to write
+/// to us.**
 fn with_ids(answer: &str, id: Option<&str>) -> serde_json::Map<String, serde_json::Value> {
     let mut data = serde_json::Map::new();
     data.insert("answer".into(), serde_json::Value::String(answer.into()));
