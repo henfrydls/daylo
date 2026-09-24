@@ -1115,11 +1115,11 @@ test.describe('a window that is not tall @webkit', () => {
   })
 })
 
-// ── The two-week invitation ───────────────────────────────
+// ── The invitation to write ───────────────────────────────
 
 /**
- * Two weeks in, Daylo asks once how it went. The band is the only part of that piece a
- * browser can see: the check-in's consent and sheet need the native app, so they are
+ * Once past the gate, Daylo asks once how it is going. The band is the only part of that
+ * piece a browser can see: the check-in's consent and sheet need the native app, so they are
  * covered by unit tests and by hand.
  *
  * What these check is the part a person meets: that it is not there on the first day of
@@ -1127,7 +1127,7 @@ test.describe('a window that is not tall @webkit', () => {
  * thumb, that it sits where it was designed to sit, and that closing it closes it for
  * good and not just for now.
  */
-async function seedTwoWeeksIn(
+async function seedPastTheGate(
   page: import('@playwright/test').Page,
   { firstOpenedAt }: { firstOpenedAt: 'today' | 'yesterday' }
 ) {
@@ -1141,8 +1141,10 @@ async function seedTwoWeeksIn(
         String(d.getDate()).padStart(2, '0'),
       ].join('-')
     }
-    // Twenty days of use, one record each, so both the fourteen days and the eight
-    // distinct days are well past.
+    // Twenty days of use, one record each, which clears the gate several times over.
+    // These tests are about where the band sits and how it goes away, not about the
+    // threshold, so they are seeded well past it on purpose; the threshold itself is
+    // pinned day by day in the unit tests.
     const logs = Array.from({ length: 20 }, (_, i) => ({
       id: `l${i}`,
       activityId: 'a1',
@@ -1203,9 +1205,9 @@ async function tickADay(page: import('@playwright/test').Page) {
   await page.waitForFunction(() => document.getAnimations().every((a) => a.playState !== 'running'))
 }
 
-test.describe('the two-week invitation @webkit', () => {
+test.describe('the invitation to write @webkit', () => {
   test('is not there until something has been ticked', async ({ page }) => {
-    await seedTwoWeeksIn(page, { firstOpenedAt: 'yesterday' })
+    await seedPastTheGate(page, { firstOpenedAt: 'yesterday' })
 
     await expect(page.getByTestId('feedback-invite')).toHaveCount(0)
 
@@ -1217,7 +1219,7 @@ test.describe('the two-week invitation @webkit', () => {
   // Under the header and above the calendar, which is the only place visible on every
   // screen without scrolling.
   test('sits between the header and the calendar', async ({ page }) => {
-    await seedTwoWeeksIn(page, { firstOpenedAt: 'yesterday' })
+    await seedPastTheGate(page, { firstOpenedAt: 'yesterday' })
     await tickADay(page)
 
     const band = (await page.getByTestId('feedback-invite').boundingBox())!
@@ -1234,7 +1236,7 @@ test.describe('the two-week invitation @webkit', () => {
   // Somebody setting up a new phone is not the person to ask for a favour, however long
   // the records they restored say they have been here.
   test('stays away on the first day of an installation', async ({ page }) => {
-    await seedTwoWeeksIn(page, { firstOpenedAt: 'today' })
+    await seedPastTheGate(page, { firstOpenedAt: 'today' })
 
     await tickADay(page)
 
@@ -1242,7 +1244,7 @@ test.describe('the two-week invitation @webkit', () => {
   })
 
   test('goes for good when it is dismissed', async ({ page }) => {
-    await seedTwoWeeksIn(page, { firstOpenedAt: 'yesterday' })
+    await seedPastTheGate(page, { firstOpenedAt: 'yesterday' })
     await tickADay(page)
 
     await page.getByTestId('feedback-invite-dismiss').click()
@@ -1280,7 +1282,7 @@ test.describe('the two-week invitation @webkit', () => {
  */
 test.describe('the check-in in a browser @webkit', () => {
   test('is not in the menu', async ({ page }) => {
-    await seedTwoWeeksIn(page, { firstOpenedAt: 'yesterday' })
+    await seedPastTheGate(page, { firstOpenedAt: 'yesterday' })
 
     await page.locator('[aria-label="More options"]:visible').click()
 
@@ -1293,7 +1295,7 @@ test.describe('the check-in in a browser @webkit', () => {
   // menu and that is the whole of it. This watches the moment a question would have been
   // put, and the moment is a real one, because the band takes it.
   test('nothing asks when the day sheet closes on a later day', async ({ page }) => {
-    await seedTwoWeeksIn(page, { firstOpenedAt: 'yesterday' })
+    await seedPastTheGate(page, { firstOpenedAt: 'yesterday' })
 
     await tickADay(page)
 

@@ -12,7 +12,13 @@ interface FeedbackInviteProps {
 }
 
 /**
- * Two weeks in, one invitation to say how it went.
+ * One invitation, once, to say how it is going.
+ *
+ * It says no number of weeks, and that is deliberate: the gate it sits behind can be met
+ * on one day and the band only drawn much later, because it also waits for a record in
+ * the session and for the other two offers to be out of the way. Any sentence that
+ * counted the time would be true on the first day it could appear and false on every
+ * other one. Present tense has nothing to go stale.
  *
  * A band and not a dialog. The reminder already spends the app's one modal, and that one
  * earns it by giving something the person asked for; this one asks a favour, and a modal
@@ -75,9 +81,9 @@ export function FeedbackInvite({ onThanked }: FeedbackInviteProps) {
         <div className="min-w-0 flex-1">
           <p className="text-sm text-gray-600">
             <span id="feedback-invite-title" className="font-medium text-gray-900">
-              Two weeks in.
+              How is it going?
             </span>{' '}
-            How did it go?{' '}
+            Tell me at{' '}
             <a
               href={FEEDBACK_MAILTO}
               onClick={(event) => void open(event)}

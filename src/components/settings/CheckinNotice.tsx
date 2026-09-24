@@ -14,7 +14,7 @@ interface CheckinNoticeProps {
  *
  * A new installation has it on, which is the owner's decision. What the code owes that
  * decision is that nobody finds out later: this appears on the first launch, before
- * anything has to be tapped, in the place the two-week invitation uses, and it says the
+ * anything has to be tapped, in the place the invitation to write uses, and it says the
  * state in its first three words. The way out is the same line.
  *
  * Somebody updating from an earlier version reads the other half. They installed Daylo
