@@ -209,6 +209,12 @@ interface CalendarState {
    * that put it there would answer no a moment later and take it off the screen.
    */
   _checkinNoticeShown: boolean
+  /**
+   * Whether the question has been put in this session. Not persisted, and it is here for
+   * the same reason as the flag above: putting the question is what spends it, so the
+   * condition that opened it answers no a moment later and would close it again.
+   */
+  _feedbackAsked: boolean
 
   // Activity actions
   addActivity: (name: string, color: string) => void
@@ -233,6 +239,8 @@ interface CalendarState {
   /** Records the first day, once. Called when the store finishes hydrating. */
   markOpened: () => void
   markFeedbackInviteSeen: () => void
+  /** The question was put. Spends it for good and keeps it open for this session. */
+  markFeedbackAsked: () => void
   /** Takes this session's offer slot, if nobody has taken it. */
   claimOffer: (kind: 'reminder' | 'checkin') => void
 
@@ -292,6 +300,7 @@ export const useCalendarStore = create<CalendarState>()(
       // there is something to merge.
       _checkinStart: 'new',
       _checkinNoticeShown: false,
+      _feedbackAsked: false,
 
       setReminder: (enabled, hour, minute) =>
         set((state) => ({
@@ -311,6 +320,8 @@ export const useCalendarStore = create<CalendarState>()(
         ),
 
       markFeedbackInviteSeen: () => set({ feedbackInviteSeen: true }),
+
+      markFeedbackAsked: () => set({ feedbackInviteSeen: true, _feedbackAsked: true }),
 
       claimOffer: (kind) =>
         set((state) => (state._offerThisSession === null ? { _offerThisSession: kind } : {})),

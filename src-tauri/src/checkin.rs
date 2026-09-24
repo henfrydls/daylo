@@ -1,10 +1,17 @@
-//! The anonymous check-in: the whole of what Daylo ever sends anywhere.
+//! The whole of what Daylo ever sends anywhere: the anonymous check-in, and the answers
+//! to the question it asks once.
 //!
 //! It is here and not in the webview for the reason that is also the point. The app's CSP
 //! is `default-src 'none'` with `connect-src 'self' ipc: tauri:`, so the page can reach no
 //! host at all, and anyone can check that in tauri.conf.json without trusting us. Nothing
-//! checks the native side for them, so this file is short enough to read instead: four
-//! fields, one address, no retry, no queue, no state.
+//! checks the native side for them, so this file is short enough to read instead: one
+//! address, four kinds of message, no retry, no queue, no state.
+//!
+//! Each kind is built by its own function with its keys written out, and each has a test
+//! asserting exactly those keys and no others. That is the shape on purpose: a single
+//! builder with optional fields would let a key appear in a message nobody meant to put it
+//! in, and the promise this file carries is about what leaves, not about what was
+//! intended.
 
 /// Both are named in the privacy policy, and scripts/check-no-analytics.sh checks that this
 /// is the only file under src-tauri/ naming a host, with exactly one URL, equal to this one.
@@ -37,10 +44,15 @@ fn disabled() -> bool {
 /// Both commands go through here, so the switch cannot be honoured by the one that draws
 /// the screen and forgotten by the one that opens a socket: there is nothing to forget,
 /// because there is only one of it.
-fn fields<R: tauri::Runtime>(app: &tauri::AppHandle<R>) -> Result<CheckinFields, String> {
+fn gate() -> Result<(), String> {
     if disabled() {
         return Err("the check-in is off: DAYLO_DISABLE_CHECKIN is set".into());
     }
+    Ok(())
+}
+
+fn fields<R: tauri::Runtime>(app: &tauri::AppHandle<R>) -> Result<CheckinFields, String> {
+    gate()?;
 
     Ok(CheckinFields {
         version: app.package_info().version.to_string(),
@@ -68,16 +80,7 @@ pub fn message(id: &str, version: &str, os: &str, date: &str, last: bool) -> ser
     if last {
         data["last"] = serde_json::Value::Bool(true);
     }
-    serde_json::json!({
-        "type": "event",
-        "payload": {
-            "website": WEBSITE,
-            "hostname": "app",
-            "url": "/",
-            "name": "check-in",
-            "data": data
-        }
-    })
+    envelope("check-in", data)
 }
 
 /// Send one check-in. A failure is reported to the caller and forgotten: no queue, no
@@ -96,6 +99,100 @@ pub async fn send_checkin<R: tauri::Runtime>(
     // refusal. It also happens to be where the version comes from.
     let CheckinFields { version, os } = fields(&app)?;
     let body = message(&id, &version, os, &date, last);
+    tauri::async_runtime::spawn_blocking(move || post(body))
+        .await
+        .map_err(|error| error.to_string())?
+}
+
+/// The envelope every message in this file travels in. Only the name and the data differ,
+/// so they are the only two things this takes.
+fn envelope(name: &str, data: serde_json::Value) -> serde_json::Value {
+    serde_json::json!({
+        "type": "event",
+        "payload": {
+            "website": WEBSITE,
+            "hostname": "app",
+            "url": "/",
+            "name": name,
+            "data": data
+        }
+    })
+}
+
+/// Two numbers ride with an answer, and they are not the same number, which is the part
+/// worth writing down because in six months it will look like one too many.
+///
+/// `answer` is made when the question opens and dies when it closes. It is not stored, it
+/// does not come back in another session, and it identifies nobody between one time and
+/// the next. Its whole job is to say that a rating and a comment are two halves of the
+/// same answer, because the server records events and never updates them.
+///
+/// `id` is the check-in's number, and it only travels when the check-in is on. It is what
+/// lets a rating be read next to whether that installation is still here. When the check-in
+/// is off it is absent, and that is not an oversight: somebody who turned the check-in off
+/// turned off exactly this, a lasting number leaving their device, and slipping it into
+/// another message because it suits us would undo their decision without telling them.
+/// Its absence also says, by itself, that this answer came from somebody who had it off.
+fn with_ids(answer: &str, id: Option<&str>) -> serde_json::Map<String, serde_json::Value> {
+    let mut data = serde_json::Map::new();
+    data.insert("answer".into(), serde_json::Value::String(answer.into()));
+    if let Some(id) = id {
+        data.insert("id".into(), serde_json::Value::String(id.into()));
+    }
+    data
+}
+
+/// That the question was put. Without it, no answers means either "nobody wanted to" or
+/// "nobody ever saw it", and those two ask for opposite things to be done next.
+///
+/// `origin` separates the two ways it can arrive: somebody who opened it from the menu went
+/// looking for it, and somebody the app interrupted did not.
+pub fn shown(answer: &str, id: Option<&str>, origin: &str) -> serde_json::Value {
+    let mut data = with_ids(answer, id);
+    data.insert("origin".into(), serde_json::Value::String(origin.into()));
+    envelope("feedback-shown", serde_json::Value::Object(data))
+}
+
+/// The star, sent the moment it is pressed rather than when a form is completed.
+pub fn rating(answer: &str, id: Option<&str>, stars: u8) -> serde_json::Value {
+    let mut data = with_ids(answer, id);
+    data.insert("stars".into(), serde_json::Value::Number(stars.into()));
+    envelope("feedback-rating", serde_json::Value::Object(data))
+}
+
+/// What somebody wrote, and the only message Daylo sends that carries anything typed.
+pub fn comment(answer: &str, id: Option<&str>, text: &str) -> serde_json::Value {
+    let mut data = with_ids(answer, id);
+    data.insert("text".into(), serde_json::Value::String(text.into()));
+    envelope("feedback-comment", serde_json::Value::Object(data))
+}
+
+/// Send one answer, through the same gate and the same socket as the check-in.
+///
+/// One command for the three kinds rather than three, because they differ only in what
+/// they carry and the webview already knows which it is sending. The builders are separate
+/// so each one's keys can be pinned; the door is one so there is one place to guard.
+#[tauri::command]
+pub async fn send_feedback<R: tauri::Runtime>(
+    app: tauri::AppHandle<R>,
+    kind: String,
+    answer: String,
+    id: Option<String>,
+    stars: Option<u8>,
+    text: Option<String>,
+    origin: Option<String>,
+) -> Result<(), String> {
+    let _ = &app;
+    gate()?;
+
+    let id = id.as_deref();
+    let body = match kind.as_str() {
+        "shown" => shown(&answer, id, origin.as_deref().unwrap_or("automatic")),
+        "rating" => rating(&answer, id, stars.ok_or("a rating with no stars")?),
+        "comment" => comment(&answer, id, text.as_deref().ok_or("a comment with no text")?),
+        other => return Err(format!("no such answer: {other}")),
+    };
+
     tauri::async_runtime::spawn_blocking(move || post(body))
         .await
         .map_err(|error| error.to_string())?
@@ -193,6 +290,18 @@ mod tests {
             "2026-09-16".into(),
             false,
         ));
+        // The answers go through the same gate, and are asserted here rather than in a
+        // test of their own for the reason this test exists at all: a second test setting
+        // and clearing this variable would race this one.
+        let answered = tauri::async_runtime::block_on(super::send_feedback(
+            app.handle().clone(),
+            "rating".into(),
+            "0a1b2c3d4e5f60718293a4b5c6d7e8f9".into(),
+            None,
+            Some(5),
+            None,
+            None,
+        ));
 
         unsafe { std::env::remove_var("DAYLO_DISABLE_CHECKIN") };
         let unset_is_the_ordinary_case = !super::disabled();
@@ -203,6 +312,7 @@ mod tests {
             "the screen must not be told there is a check-in here"
         );
         assert!(sent.is_err(), "nothing may leave the machine");
+        assert!(answered.is_err(), "an answer may not leave it either");
         assert!(
             !super::REACHED_THE_NETWORK.load(std::sync::atomic::Ordering::SeqCst),
             "the gate is not where it should be: the sender was reached"
@@ -211,6 +321,82 @@ mod tests {
             unset_is_the_ordinary_case,
             "unset is the ordinary case: the check-in exists"
         );
+    }
+
+    /// The three answers, key by key. Each one is written out rather than derived, so a
+    /// field that appears in a message nobody meant to put it in fails here.
+    #[test]
+    fn an_answer_carries_only_what_it_is() {
+        let id = "4f9c2a7e1b60d3a8c5e2f1b74a9d0c6e";
+        let answer = "0a1b2c3d4e5f60718293a4b5c6d7e8f9";
+
+        let cases: [(serde_json::Value, &str, Vec<&str>); 3] = [
+            (
+                super::shown(answer, Some(id), "menu"),
+                "feedback-shown",
+                vec!["answer", "id", "origin"],
+            ),
+            (
+                super::rating(answer, Some(id), 4),
+                "feedback-rating",
+                vec!["answer", "id", "stars"],
+            ),
+            (
+                super::comment(answer, Some(id), "the year view"),
+                "feedback-comment",
+                vec!["answer", "id", "text"],
+            ),
+        ];
+
+        for (message, name, mut expected) in cases {
+            assert_eq!(message["payload"]["name"], serde_json::json!(name));
+            let data = message["payload"]["data"].as_object().unwrap();
+            let mut keys: Vec<&str> = data.keys().map(String::as_str).collect();
+            keys.sort_unstable();
+            expected.sort_unstable();
+            assert_eq!(keys, expected, "in {name}");
+        }
+    }
+
+    /// The check-in's number travels only when the check-in is on, and its absence is the
+    /// whole point: somebody who turned it off turned off exactly this.
+    #[test]
+    fn the_lasting_number_is_absent_when_the_check_in_is_off() {
+        let answer = "0a1b2c3d4e5f60718293a4b5c6d7e8f9";
+
+        for message in [
+            super::shown(answer, None, "automatic"),
+            super::rating(answer, None, 1),
+            super::comment(answer, None, "anything"),
+        ] {
+            let data = message["payload"]["data"].as_object().unwrap();
+            assert!(!data.contains_key("id"), "the id rode along with it off");
+            assert_eq!(data["answer"], serde_json::json!(answer));
+        }
+    }
+
+    /// What somebody typed goes in one message and one key, and nowhere else. A comment
+    /// that leaked into another kind would be text arriving where the policy says none
+    /// does.
+    #[test]
+    fn what_was_typed_travels_in_the_comment_and_nowhere_else() {
+        let answer = "0a1b2c3d4e5f60718293a4b5c6d7e8f9";
+        let typed = "it eats my evenings";
+
+        assert_eq!(
+            super::comment(answer, None, typed)["payload"]["data"]["text"],
+            serde_json::json!(typed)
+        );
+        for other in [
+            super::shown(answer, None, "menu"),
+            super::rating(answer, None, 5),
+        ] {
+            assert!(
+                !other.to_string().contains(typed),
+                "typed text turned up in {}",
+                other["payload"]["name"]
+            );
+        }
     }
 
     /// Nothing about the person, the device or the habits rides along in the envelope

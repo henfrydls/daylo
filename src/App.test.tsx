@@ -3,6 +3,7 @@ import { act, render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import App from './App'
 import { useCalendarStore } from './store'
+import { formatDate } from './lib/dates'
 
 const NOW = '2026-09-01T00:00:00.000Z'
 
@@ -11,6 +12,16 @@ const openMailto = vi.hoisted(() => vi.fn())
 const checkinFields = vi.hoisted(() => vi.fn())
 const sendCheckinIfDue = vi.hoisted(() => vi.fn())
 const startCheckinOnNewInstall = vi.hoisted(() => vi.fn())
+const sendShown = vi.hoisted(() => vi.fn())
+const sendRating = vi.hoisted(() => vi.fn())
+const sendComment = vi.hoisted(() => vi.fn())
+
+vi.mock('./lib/feedback', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('./lib/feedback')>()),
+  sendShown,
+  sendRating,
+  sendComment,
+}))
 
 vi.mock('./lib/checkin', async (importOriginal) => ({
   ...(await importOriginal<typeof import('./lib/checkin')>()),
@@ -45,6 +56,9 @@ beforeEach(() => {
   checkinFields.mockReset().mockResolvedValue(null)
   sendCheckinIfDue.mockReset().mockResolvedValue(undefined)
   startCheckinOnNewInstall.mockReset().mockResolvedValue(undefined)
+  sendShown.mockReset().mockResolvedValue(true)
+  sendRating.mockReset().mockResolvedValue(true)
+  sendComment.mockReset().mockResolvedValue(true)
   // The ordinary case for most of this file: a device that has run Daylo before and has
   // a decision on disk. The tests about the first launch say otherwise for themselves.
   useCalendarStore.setState({ _checkinStart: 'decided' })
@@ -83,9 +97,10 @@ describe('the daily reminder in the menu', () => {
   })
 })
 
-// The invitation asks once, on day fourteen. This is for the rest of the time: somebody
-// with something to say on day three should not have to wait to be asked.
-describe('writing without being asked', () => {
+// In a browser there is no command to send through, and a browser is the one place a
+// mailto: actually opens something, so there the letter stays. The app's half of this is
+// the describe below.
+describe('writing without being asked, in a browser', () => {
   beforeEach(() => {
     openMailto.mockReset().mockResolvedValue('opened')
     useCalendarStore.setState({ feedbackInviteSeen: false })
@@ -103,7 +118,7 @@ describe('writing without being asked', () => {
   // It opens the letter and marks nothing. Pressing this out of curiosity and backing out
   // of the chooser would otherwise take the invitation away for good, and take it away
   // silently: the person would never learn there had been one. The cost the other way is
-  // that somebody who did write may still be invited on day fourteen, and that one they
+  // that somebody who did write may still be asked later, and that one they
   // can see and close.
   it('opens the letter without spending the invitation', async () => {
     render(<App />)
@@ -129,6 +144,149 @@ describe('writing without being asked', () => {
 
     expect(await screen.findByText(/Could not open an email app/)).toBeInTheDocument()
     expect(useCalendarStore.getState().feedbackInviteSeen).toBe(false)
+  })
+})
+
+// Everything below is the app: checkinFields answers, so there is a platform to send
+// through and the question is a dialog rather than a letter.
+describe('the question, in the app', () => {
+  const pastTheGate = () => {
+    // Counted from the real clock, because the gate reads it. Today is one of the three
+    // days on purpose: the gate wants a record in this session, so the day it could
+    // appear is always in the set.
+    const day = (back: number) => {
+      const d = new Date()
+      d.setDate(d.getDate() - back)
+      return formatDate(d)
+    }
+    useCalendarStore.setState({
+      logs: [day(7), day(4), day(0)].map((date) => ({
+        id: date,
+        activityId: 'a1',
+        date,
+        completed: true,
+        createdAt: date,
+      })),
+      firstOpenedAt: day(7),
+      feedbackInviteSeen: false,
+      _loggedThisSession: true,
+      _offerThisSession: null,
+      reminderOffered: true,
+      checkinEnabled: false,
+      checkinId: null,
+      checkinNoticeSeen: true,
+      _checkinNoticeShown: false,
+      _checkinStart: 'decided',
+    })
+  }
+
+  beforeEach(() => {
+    checkinFields.mockResolvedValue({ version: '1.3.0', os: 'linux' })
+    openMailto.mockReset().mockResolvedValue('opened')
+    // _feedbackAsked is a session flag and a session is one run of the app; between tests
+    // it has to go back, or a test inherits an open question from the one before it and
+    // reports its origin as automatic.
+    useCalendarStore.setState({
+      feedbackInviteSeen: false,
+      _loggedThisSession: false,
+      _feedbackAsked: false,
+    })
+  })
+
+  it('is what the menu opens here, and the letter is not', async () => {
+    render(<App />)
+    await act(async () => {})
+    await openTheMenu()
+
+    await userEvent.click(screen.getByText('Send feedback'))
+
+    expect(await screen.findByTestId('feedback-rating')).toBeInTheDocument()
+    expect(openMailto).not.toHaveBeenCalled()
+  })
+
+  // Two ways in, and they are not the same person: one went looking for it, the other was
+  // interrupted. Reading them together would average a volunteer with a bystander.
+  it('says the menu is where it came from', async () => {
+    render(<App />)
+    await act(async () => {})
+    await openTheMenu()
+
+    await userEvent.click(screen.getByText('Send feedback'))
+
+    expect(sendShown).toHaveBeenCalledExactlyOnceWith(expect.any(String), 'menu')
+  })
+
+  it('opens by itself once the gate is past, and says so', async () => {
+    pastTheGate()
+
+    render(<App />)
+    await act(async () => {})
+
+    expect(await screen.findByTestId('feedback-rating')).toBeInTheDocument()
+    expect(sendShown).toHaveBeenCalledExactlyOnceWith(expect.any(String), 'automatic')
+    expect(screen.queryByTestId('feedback-invite')).not.toBeInTheDocument()
+  })
+
+  // Showing it is what spends it. A question that came back tomorrow because nobody
+  // answered would be the app asking a favour twice.
+  it('is spent by being shown', async () => {
+    pastTheGate()
+
+    render(<App />)
+    await act(async () => {})
+    await screen.findByTestId('feedback-rating')
+
+    expect(useCalendarStore.getState().feedbackInviteSeen).toBe(true)
+  })
+
+  it('sends the star on the tap and the comment on the button', async () => {
+    pastTheGate()
+    sendComment.mockResolvedValue(true)
+    render(<App />)
+    await act(async () => {})
+    await screen.findByTestId('feedback-rating')
+
+    await userEvent.click(screen.getByLabelText('3 stars'))
+    expect(sendRating).toHaveBeenCalledExactlyOnceWith(expect.any(String), 3)
+
+    await userEvent.type(screen.getByPlaceholderText('Anything to add? Optional'), 'the year view')
+    await userEvent.click(screen.getByRole('button', { name: 'Send' }))
+
+    expect(sendComment).toHaveBeenCalledExactlyOnceWith(expect.any(String), 'the year view')
+  })
+
+  // The server records events and never updates them, so the two halves arrive as two
+  // messages and something has to say they are one answer.
+  it('gives both halves of one answer the same number', async () => {
+    pastTheGate()
+    sendComment.mockResolvedValue(true)
+    render(<App />)
+    await act(async () => {})
+    await screen.findByTestId('feedback-rating')
+
+    await userEvent.click(screen.getByLabelText('3 stars'))
+    await userEvent.type(screen.getByPlaceholderText('Anything to add? Optional'), 'a note')
+    await userEvent.click(screen.getByRole('button', { name: 'Send' }))
+
+    const shownWith = sendShown.mock.calls[0][0]
+    expect(sendRating.mock.calls[0][0]).toBe(shownWith)
+    expect(sendComment.mock.calls[0][0]).toBe(shownWith)
+  })
+
+  // The channel this replaced failed without saying so, which is the whole reason it was
+  // replaced. Somebody who wrote something and pressed a button is owed the truth.
+  it('says so when what was written did not go', async () => {
+    pastTheGate()
+    sendComment.mockResolvedValue(false)
+    render(<App />)
+    await act(async () => {})
+    await screen.findByTestId('feedback-rating')
+
+    await userEvent.click(screen.getByLabelText('3 stars'))
+    await userEvent.type(screen.getByPlaceholderText('Anything to add? Optional'), 'a note')
+    await userEvent.click(screen.getByRole('button', { name: 'Send' }))
+
+    expect(await screen.findByText(/That did not send/)).toBeInTheDocument()
   })
 })
 

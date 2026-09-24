@@ -125,7 +125,8 @@ pub fn run() {
                 write_text_file,
                 save_dialog_available,
                 checkin::checkin_fields,
-                checkin::send_checkin
+                checkin::send_checkin,
+                checkin::send_feedback
             ]);
 
     // Android writes through the filesystem plugin rather than through write_text_file:
@@ -148,7 +149,8 @@ pub fn run() {
             save_dialog_available,
             reminders_available,
             checkin::checkin_fields,
-            checkin::send_checkin
+            checkin::send_checkin,
+            checkin::send_feedback
         ]);
 
     // iOS registers neither, so the frontend falls back to the browser download, which is
