@@ -14,6 +14,8 @@ import {
 import { useCalendarStore } from './store'
 import { useAppVersion, useCheckinFields, useRemindersAvailable, useSwipeGesture } from './hooks'
 import { FeedbackInvite } from './components/feedback/FeedbackInvite'
+import { FeedbackRating } from './components/feedback/FeedbackRating'
+import { sendComment, sendRating, sendShown } from './lib/feedback'
 import { FEEDBACK_MAILTO, openMailto, shouldInviteFeedback } from './lib/feedbackInvite'
 import { formatDate } from './lib/dates'
 import { sendCheckinIfDue, startCheckinOnNewInstall } from './lib/checkin'
@@ -83,6 +85,11 @@ function App() {
   const [isBottomSheetOpen, setIsBottomSheetOpen] = useState(false)
   const [isReminderOpen, setIsReminderOpen] = useState(false)
   const [isCheckinOpen, setIsCheckinOpen] = useState(false)
+  // Whether somebody went looking for the question, and whether they have closed it. The
+  // question's own number lives in the dialog, because it lives exactly as long as the
+  // dialog does.
+  const [askedFromMenu, setAskedFromMenu] = useState(false)
+  const [questionClosed, setQuestionClosed] = useState(false)
   const appVersion = useAppVersion()
   // Android only: nowhere else can a notification arrive with the app closed, so nowhere
   // else is there a setting to show.
@@ -102,6 +109,9 @@ function App() {
   const checkinEnabled = useCalendarStore((state) => state.checkinEnabled)
   const checkinStart = useCalendarStore((state) => state._checkinStart)
   const markOpened = useCalendarStore((state) => state.markOpened)
+  const checkinId = useCalendarStore((state) => state.checkinId)
+  const markFeedbackAsked = useCalendarStore((state) => state.markFeedbackAsked)
+  const feedbackAsked = useCalendarStore((state) => state._feedbackAsked)
   const { showToast } = useToast()
   // The slot stays open once the band has thanked, so the line can outlive the condition
   // that put the band there. Set from the click, not from an effect.
@@ -162,6 +172,13 @@ function App() {
       checkinNoticeShown,
     ]
   )
+
+  // Where there is a platform, the question opens itself. Derived and not set from an
+  // effect, and the session flag is why it can be: putting the question spends it, so
+  // `shouldInvite` answers no a moment later, and reading only that would close the dialog
+  // on the frame after it opened. The check-in's line learned this the hard way.
+  const questionIsOpen =
+    canCheckIn && !questionClosed && (askedFromMenu || shouldInvite || feedbackAsked)
 
   // Today's check-in, if the switch is on and today has not been tried. Twice, because
   // there are two kinds of device: a phone is closed and opened again, which remounts
@@ -283,13 +300,24 @@ function App() {
         </svg>
       ),
       // Here on every platform and from the first day, so that somebody with something to
-      // say on day three does not have to wait to be asked on day fourteen.
-      // It marks nothing. Opening the letter is not writing it, and this entry is easy to
-      // press out of curiosity: somebody who did that and backed out would never be
-      // invited on day fourteen, and would never know there had been an invitation. The
-      // cost the other way is that somebody who did write may still be asked, and that
-      // one they can see and close.
+      // say on day three does not have to wait for the app to ask.
+      //
+      // In the app it spends the question, because here pressing it *is* being asked: the
+      // dialog opens, the fact that it was put is reported, and asking again later would
+      // be asking a favour twice. On the web it spends nothing, and that difference is
+      // not an inconsistency: opening a letter is not writing one, and this entry is easy
+      // to press out of curiosity, so somebody who backed out of the chooser would lose
+      // an invitation they never saw.
       onClick: () => {
+        // In the app the question is the way in, and somebody who came looking for it is
+        // not the same as somebody the app interrupted, which is why the origin travels.
+        // In a browser there is no command to send through, and a browser is the one
+        // place a mailto: actually opens something, so there the letter stays.
+        if (canCheckIn) {
+          setAskedFromMenu(true)
+          setQuestionClosed(false)
+          return
+        }
         void openMailto(FEEDBACK_MAILTO).then((result) => {
           if (result === 'failed') {
             showToast('Could not open an email app. You can write to daylo@henfrydls.com.', 'error')
@@ -438,7 +466,9 @@ function App() {
             />
           ) : null}
 
-          {shouldInvite || inviteThanked ? (
+          {/* The band belongs to the web now: in the app the same moment opens the
+              question instead, and there is no platform here to send one through. */}
+          {!canCheckIn && (shouldInvite || inviteThanked) ? (
             <FeedbackInvite onThanked={() => setInviteThanked(true)} />
           ) : null}
 
@@ -525,6 +555,33 @@ function App() {
         <DailyReminder />
         {isReminderOpen && (
           <ReminderSettings isOpen={isReminderOpen} onClose={() => setIsReminderOpen(false)} />
+        )}
+
+        {/* The question, wherever it came from. Unmounted when it closes, so the number
+            it carries goes with it rather than being cleared by anybody. */}
+        {questionIsOpen && (
+          <FeedbackRating
+            isOpen
+            onShown={(answer) => {
+              markFeedbackAsked()
+              void sendShown(answer, askedFromMenu ? 'menu' : 'automatic')
+            }}
+            onClose={() => {
+              setQuestionClosed(true)
+              setAskedFromMenu(false)
+            }}
+            onRate={(answer, stars) => void sendRating(answer, stars)}
+            // The star left the moment it was pressed and needs no receipt. This one was
+            // asked for, by somebody who wrote something and pressed a button, and the
+            // reason this dialog exists at all is a channel that failed without saying so.
+            onComment={(answer, text) => {
+              void sendComment(answer, text).then((ok) => {
+                if (!ok)
+                  showToast('That did not send. You can write to daylo@henfrydls.com.', 'error')
+              })
+            }}
+            withCheckinId={checkinEnabled && checkinId !== null}
+          />
         )}
 
         {/* The check-in: the switch behind the menu, and nothing else. It never asks. */}

@@ -6,7 +6,10 @@
 #
 #   1. The part of the app that draws the screen names no analytics, tracking or
 #      error-reporting service, in its code, its dependencies or its built files.
-#   2. The native part names no address other than the one the check-in sends to.
+#   2. The native part names no address other than the one src-tauri/src/checkin.rs sends
+#      to. That file carries the check-in and, since 1.4, the answers to the question the
+#      app asks once. Four kinds of message, one address: what this checks is the address,
+#      because the address is what decides where anything goes.
 #
 # Until 1.3 there was one claim and it was shorter: nothing in this repository phones
 # home. The check-in made that false on purpose, and a guard that keeps asserting
@@ -131,8 +134,8 @@ if [ "$found" -eq 1 ]; then
   echo "::error::Analytics or telemetry code was found in the application."
   echo "::error::Daylo promises that nothing about a person leaves their device, and that"
   echo "::error::only holds if this repository contains none of this."
-  echo "::error::The one exception is the anonymous check-in, and it lives in exactly one"
-  echo "::error::file: src-tauri/src/$CHECKIN_FILE. Nothing else may name a host."
+  echo "::error::Everything Daylo sends lives in exactly one file: src-tauri/src/$CHECKIN_FILE."
+  echo "::error::Nothing else may name a host."
   echo "::error::The landing page's analytics script is injected when the website is"
   echo "::error::deployed, over the already built artifact, not here."
   exit 1
@@ -156,7 +159,7 @@ for target in "$@"; do
       printf '%s\n' "${urls:-(no address at all)}" | sed 's/^/::error::  /'
       echo "::error::This file is the whole of what Daylo ever sends anywhere, and the"
       echo "::error::privacy policy names that address. Changing it here changes where"
-      echo "::error::people's check-ins go, so it cannot be changed here alone."
+      echo "::error::people's check-ins and answers go, so it cannot be changed here alone."
       exit 1
     fi
   done < <(find "$target" -type f -name "$CHECKIN_FILE")
