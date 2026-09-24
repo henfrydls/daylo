@@ -155,7 +155,7 @@ interface CalendarState {
    * lived with Daylo", the other half being the oldest record they hold.
    */
   firstOpenedAt: string | null
-  /** Whether the two-week invitation has been put. One invitation, not one drawing. */
+  /** Whether the invitation to write has been put. One invitation, not one drawing. */
   feedbackInviteSeen: boolean
 
   /**

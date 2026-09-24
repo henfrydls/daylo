@@ -384,7 +384,7 @@ describe('useCalendarStore', () => {
   })
 })
 
-// The three fields the two-week invitation and the check-in are built on. They are here
+// The three fields the invitation to write and the check-in are built on. They are here
 // rather than beside the feature because what matters about them is where they live:
 // which survive a restart, which do not, and which are written once and never again.
 describe('what the store remembers about how long somebody has been here', () => {

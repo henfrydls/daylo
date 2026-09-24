@@ -16,7 +16,7 @@ import type { ActivityLog } from '../types'
  * character shows the reader a body full of percent signs.
  */
 const MAILTO_TO = 'daylo@henfrydls.com'
-const MAILTO_SUBJECT = 'Two weeks with Daylo'
+const MAILTO_SUBJECT = 'How Daylo is going'
 const MAILTO_BODY = 'What I am tracking:\r\n\r\nWhat works:\r\n\r\nWhat I wish it did:\r\n'
 
 export const FEEDBACK_MAILTO =
@@ -40,20 +40,33 @@ export interface FeedbackInviteInput {
 const dayOf = (log: ActivityLog) => formatDate(parseISO(log.createdAt))
 
 /**
- * Whether to ask this person, in this session, how their two weeks went.
+ * Whether to ask this person, in this session, how it is going.
  *
  * Seven conditions, and every one of them is there to stop the app asking a favour of
  * somebody who has not earned the question or is in the middle of something else.
  *
- * The two weeks are counted from the earliest of the first day this installation was
- * opened and the oldest record it holds. Somebody who restored a backup onto a new phone
- * has lived with Daylo for a year, and should not be treated as new because the handset
- * is. The same person is still not asked on their first day here, because that day they
- * are setting a phone up, not using the app.
+ * The week is counted from the earliest of the first day this installation was opened and
+ * the oldest record it holds. Somebody who restored a backup onto a new phone has lived
+ * with Daylo for a year, and should not be treated as new because the handset is. The same
+ * person is still not asked on their first day here, because that day they are setting a
+ * phone up, not using the app.
  *
- * The eight days are days the app was *used* — distinct days of `createdAt`, not of
+ * The three days are days the app was *used* — distinct days of `createdAt`, not of
  * `date`. Filling thirty boxes in one afternoon is one afternoon of living with it, and
- * the question is about living with it.
+ * the question is about living with it. Today is always one of the three, because nothing
+ * gets asked in a session with no record in it.
+ *
+ * It asked for fourteen days and eight days of use until 2026-09-23, and the numbers came
+ * down because that gate looks unreachable, not because we want more mail. The check-in
+ * has seen five devices and only one of them is still reporting; that one has used Daylo
+ * on two days out of four. At that rate eight days of use is sixteen calendar days at the
+ * very best, and nothing we can measure suggests anybody has ever got there. Nobody can
+ * answer a question nobody is asked. Seven and three is the smallest gate that still means
+ * somebody came back after deciding whether the app was for them.
+ *
+ * Worth saying plainly, because the paragraph above will outlive its numbers: the app does
+ * not report whether this band was ever drawn, so "nobody has seen it" is inference from
+ * how much the one live device is used, not a measurement of the band.
  */
 export function shouldInviteFeedback(input: FeedbackInviteInput): boolean {
   if (input.feedbackInviteSeen) return false
@@ -73,9 +86,9 @@ export function shouldInviteFeedback(input: FeedbackInviteInput): boolean {
   const oldestRecord = days.reduce((a, b) => (a < b ? a : b))
   const start = input.firstOpenedAt < oldestRecord ? input.firstOpenedAt : oldestRecord
 
-  if (differenceInCalendarDays(parseISO(input.today), parseISO(start)) < 14) return false
+  if (differenceInCalendarDays(parseISO(input.today), parseISO(start)) < 7) return false
 
-  return new Set(days).size >= 8
+  return new Set(days).size >= 3
 }
 
 /**

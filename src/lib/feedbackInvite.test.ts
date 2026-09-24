@@ -19,20 +19,15 @@ const on = (days: string[]): ActivityLog[] =>
     createdAt: day,
   }))
 
-/** Everything true, so each test can say what it is about by changing one thing. */
+/**
+ * Everything true and no more than true, so each test can say what it is about by
+ * changing one thing. Seven calendar days from the first open to today, and three days
+ * with a record on them, which is exactly the gate and not a day over it.
+ */
 const ready = {
   today: '2026-03-01',
-  firstOpenedAt: '2026-02-10',
-  logs: on([
-    '2026-02-10',
-    '2026-02-11',
-    '2026-02-12',
-    '2026-02-13',
-    '2026-02-14',
-    '2026-02-15',
-    '2026-02-16',
-    '2026-02-17',
-  ]),
+  firstOpenedAt: '2026-02-22',
+  logs: on(['2026-02-22', '2026-02-24', '2026-02-26']),
   feedbackInviteSeen: false,
   loggedThisSession: true,
   offerThisSession: null,
@@ -51,7 +46,7 @@ afterEach(() => {
 })
 
 describe('when the invitation is offered', () => {
-  it('after two weeks and eight days of use', () => {
+  it('after a week and three days of use', () => {
     expect(shouldInviteFeedback(ready)).toBe(true)
   })
 
@@ -81,39 +76,30 @@ describe('when the invitation is offered', () => {
   })
 })
 
-describe('the two weeks it asks about', () => {
-  it('are not there at thirteen days', () => {
-    expect(shouldInviteFeedback({ ...ready, today: '2026-02-23' })).toBe(false)
+describe('the week it asks about', () => {
+  it('is not there at six days', () => {
+    expect(shouldInviteFeedback({ ...ready, today: '2026-02-28' })).toBe(false)
   })
 
-  it('are there at fourteen', () => {
-    expect(shouldInviteFeedback({ ...ready, today: '2026-02-24' })).toBe(true)
+  it('is there at seven', () => {
+    expect(shouldInviteFeedback({ ...ready, today: '2026-03-01' })).toBe(true)
   })
 
   // Somebody who restored a backup onto a new phone has lived with Daylo for a year, and
   // the oldest record says so even though this installation is two days old.
-  it('count from the oldest record when a backup was restored', () => {
+  it('counts from the oldest record when a backup was restored', () => {
     const restored = {
       ...ready,
       today: '2026-03-01',
       firstOpenedAt: '2026-02-27',
-      logs: on([
-        '2025-05-01',
-        '2025-05-02',
-        '2025-05-03',
-        '2025-05-04',
-        '2025-05-05',
-        '2025-05-06',
-        '2025-05-07',
-        '2025-05-08',
-      ]),
+      logs: on(['2025-05-01', '2025-05-02', '2025-05-03']),
     }
 
     expect(shouldInviteFeedback(restored)).toBe(true)
   })
 })
 
-describe('the eight days it counts', () => {
+describe('the three days it counts', () => {
   it('are days the app was used, not days that were ticked', () => {
     // Thirty days filled in one afternoon is one afternoon of living with it.
     const oneSitting = Array.from({ length: 30 }, (_, i) => ({
@@ -127,39 +113,29 @@ describe('the eight days it counts', () => {
     expect(shouldInviteFeedback({ ...ready, logs: oneSitting })).toBe(false)
   })
 
-  it('are not enough at seven', () => {
-    expect(
-      shouldInviteFeedback({
-        ...ready,
-        logs: on([
-          '2026-02-10',
-          '2026-02-11',
-          '2026-02-12',
-          '2026-02-13',
-          '2026-02-14',
-          '2026-02-15',
-          '2026-02-16',
-        ]),
-      })
-    ).toBe(false)
+  it('are not enough at two', () => {
+    expect(shouldInviteFeedback({ ...ready, logs: on(['2026-02-22', '2026-02-24']) })).toBe(false)
+  })
+
+  // The gate asks for a record in this session, so the day the band could appear is
+  // always one of the three. Three days of use is today and two days before it, which is
+  // the smallest number that still means "came back".
+  it('include today, because something was recorded this session', () => {
+    const untilYesterday = on(['2026-02-22', '2026-02-24', '2026-02-26'])
+    const todayToo = [...untilYesterday, ...on(['2026-03-01'])]
+
+    expect(new Set(untilYesterday.map((l) => l.createdAt)).size).toBe(3)
+    expect(shouldInviteFeedback({ ...ready, logs: todayToo })).toBe(true)
   })
 
   it('count a day that was unticked as well, because the app was still opened', () => {
-    const withNotes = on([
-      '2026-02-10',
-      '2026-02-11',
-      '2026-02-12',
-      '2026-02-13',
-      '2026-02-14',
-      '2026-02-15',
-      '2026-02-16',
-    ])
+    const withNotes = on(['2026-02-22', '2026-02-24'])
     withNotes.push({
       id: 'x',
       activityId: 'a1',
-      date: '2026-02-17',
+      date: '2026-02-26',
       completed: false,
-      createdAt: '2026-02-17',
+      createdAt: '2026-02-26',
     })
 
     expect(shouldInviteFeedback({ ...ready, logs: withNotes })).toBe(true)
@@ -189,7 +165,7 @@ describe('giving way to the other two offers', () => {
 describe('the letter it opens', () => {
   it('is addressed and filled in, and says nothing about the person', () => {
     expect(FEEDBACK_MAILTO).toBe(
-      'mailto:daylo@henfrydls.com?subject=Two%20weeks%20with%20Daylo&body=What%20I%20am%20tracking%3A%0D%0A%0D%0AWhat%20works%3A%0D%0A%0D%0AWhat%20I%20wish%20it%20did%3A%0D%0A'
+      'mailto:daylo@henfrydls.com?subject=How%20Daylo%20is%20going&body=What%20I%20am%20tracking%3A%0D%0A%0D%0AWhat%20works%3A%0D%0A%0D%0AWhat%20I%20wish%20it%20did%3A%0D%0A'
     )
   })
 

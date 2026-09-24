@@ -35,7 +35,7 @@ describe('what it says', () => {
     show()
 
     expect(screen.getByTestId('feedback-invite')).toHaveTextContent(
-      'Two weeks in. How did it go? daylo@henfrydls.com'
+      'How is it going? Tell me at daylo@henfrydls.com'
     )
     expect(link()).toHaveAttribute('href', FEEDBACK_MAILTO)
     // Nothing else: no explanation of the email, and no note until there is one to give.
