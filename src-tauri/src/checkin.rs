@@ -199,7 +199,11 @@ pub async fn send_feedback<R: tauri::Runtime>(
     let body = match kind.as_str() {
         "shown" => shown(&answer, id, origin.as_deref().unwrap_or("automatic")),
         "rating" => rating(&answer, id, stars.ok_or("a rating with no stars")?),
-        "comment" => comment(&answer, id, text.as_deref().ok_or("a comment with no text")?),
+        "comment" => comment(
+            &answer,
+            id,
+            text.as_deref().ok_or("a comment with no text")?,
+        ),
         other => return Err(format!("no such answer: {other}")),
     };
 
