@@ -730,6 +730,13 @@ jobs:
             # "Alive" is not "started": with no interactive desktop, if WebView2 fails and
             # Tauri opens a modal dialog, the process stays up with the app broken.
             #
+            # Waited for, not sampled once. Until 2026-09-25 this looked exactly once, at
+            # t=10s, and that day it failed on a pull request that changed two lines of
+            # YAML while the same code had passed on main fourteen hours earlier. The
+            # re-run passed with one child, so the process tree is the shape this expects
+            # and what ran out was time. A single sample cannot tell "not yet" from
+            # "never", which is precisely what whoever reads the failure needs to know.
+            #
             # Filtered by ParentProcessId rather than looking for msedgewebview2 across the
             # whole machine: a runner with any other WebView2 process open would give a
             # false positive.
@@ -738,15 +745,53 @@ jobs:
             # so the .exe is a console one and Start-Process without -NoNewWindow gives it a
             # child conhost.exe. Counting children plainly would give >=1 even if WebView2
             # never starts: green with a broken application.
-            $children = @(Get-CimInstance Win32_Process -Filter "ParentProcessId = $($p.Id)" -ErrorAction SilentlyContinue |
-                          Where-Object { $_.Name -eq 'msedgewebview2.exe' })
+            $waited = 0
+            $children = @()
+            while ($waited -lt 50) {
+              $children = @(Get-CimInstance Win32_Process -Filter "ParentProcessId = $($p.Id)" -ErrorAction SilentlyContinue |
+                            Where-Object { $_.Name -eq 'msedgewebview2.exe' })
+              if ($children.Count -gt 0) { break }
+              if ($p.HasExited) {
+                Write-Output "::error::The binary died while the webview was awaited, after"
+                Write-Output "::error::$(10 + $waited)s, with code $($p.ExitCode)"
+                if (Test-Path $err) { Get-Content $err }
+                exit 1
+              }
+              Start-Sleep -Seconds 1
+              $waited = $waited + 1
+            }
+
             if ($children.Count -eq 0) {
-              Write-Output "::error::The main process is alive but has launched no"
-              Write-Output "::error::msedgewebview2 process: it did not start and the window would be empty."
+              Write-Output "::error::The main process is alive but launched no msedgewebview2"
+              Write-Output "::error::process in $(10 + $waited)s: it did not start and the window would be empty."
+              # Everything the next reader would otherwise have to guess at. The first two
+              # say whether the webview started somewhere else in the tree, which is what a
+              # change in how WebView2 is spawned would look like and what this filter
+              # would then be wrong about; the third says whether the runtime is installed
+              # at all, read where src-tauri/src/webview2.rs reads it.
+              Write-Output "Processes whose parent is the app:"
+              Get-CimInstance Win32_Process -Filter "ParentProcessId = $($p.Id)" -ErrorAction SilentlyContinue |
+                ForEach-Object { Write-Output "  - $($_.ProcessId) $($_.Name)" }
+              Write-Output "Every msedgewebview2 on the machine, with its parent:"
+              Get-CimInstance Win32_Process -Filter "Name = 'msedgewebview2.exe'" -ErrorAction SilentlyContinue |
+                ForEach-Object { Write-Output "  - $($_.ProcessId) parent $($_.ParentProcessId)" }
+              Write-Output "WebView2 runtime, where the app looks for it:"
+              foreach ($key in @(
+                'HKLM:\SOFTWARE\WOW6432Node\Microsoft\EdgeUpdate\Clients\{F3017226-FE2A-4295-8BDF-00C3A9A7E4C5}',
+                'HKLM:\SOFTWARE\Microsoft\EdgeUpdate\Clients\{F3017226-FE2A-4295-8BDF-00C3A9A7E4C5}',
+                'HKCU:\SOFTWARE\Microsoft\EdgeUpdate\Clients\{F3017226-FE2A-4295-8BDF-00C3A9A7E4C5}')) {
+                $pv = (Get-ItemProperty -Path $key -Name pv -ErrorAction SilentlyContinue).pv
+                if ($pv) { Write-Output "  - $key -> $pv" } else { Write-Output "  - $key -> absent" }
+              }
+              Write-Output "Standard output:"
+              if (Test-Path $out) { Get-Content $out }
+              Write-Output "Standard error:"
               if (Test-Path $err) { Get-Content $err }
               exit 1
             }
-            Write-Output "The webview started: $($children.Count) child processes of the binary"
+            # The time is printed on success too, so the next person arguing about this
+            # number has the distribution instead of one data point from the day it broke.
+            Write-Output "The webview started after $(10 + $waited)s: $($children.Count) child processes of the binary"
             $children | ForEach-Object { Write-Output "  - $($_.ProcessId) $($_.Name)" }
           }
           finally {
