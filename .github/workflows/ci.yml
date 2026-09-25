@@ -745,25 +745,28 @@ jobs:
             # so the .exe is a console one and Start-Process without -NoNewWindow gives it a
             # child conhost.exe. Counting children plainly would give >=1 even if WebView2
             # never starts: green with a broken application.
+            # Looked at once straight away and then slept before each further look, which
+            # is the convention of the loop above and for its reason: with look-then-sleep
+            # the last second passes unwatched, and the message at the end would claim a
+            # second of waiting that never happened. Here the first look is at t=10, the
+            # last at t=60, and $waited is the truth in both.
             $waited = 0
-            $children = @()
-            while ($waited -lt 50) {
-              $children = @(Get-CimInstance Win32_Process -Filter "ParentProcessId = $($p.Id)" -ErrorAction SilentlyContinue |
-                            Where-Object { $_.Name -eq 'msedgewebview2.exe' })
-              if ($children.Count -gt 0) { break }
+            $children = @(Get-CimInstance Win32_Process -Filter "ParentProcessId = $($p.Id)" -ErrorAction SilentlyContinue |
+                          Where-Object { $_.Name -eq 'msedgewebview2.exe' })
+            while ($children.Count -eq 0 -and $waited -lt 50) {
+              Start-Sleep -Seconds 1
+              $waited = $waited + 1
               if ($p.HasExited) {
-                Write-Output "::error::The binary died while the webview was awaited, after"
-                Write-Output "::error::$(10 + $waited)s, with code $($p.ExitCode)"
+                Write-Output "::error::The binary died after $(10 + $waited)s, while the webview was being awaited, with code $($p.ExitCode)."
                 if (Test-Path $err) { Get-Content $err }
                 exit 1
               }
-              Start-Sleep -Seconds 1
-              $waited = $waited + 1
+              $children = @(Get-CimInstance Win32_Process -Filter "ParentProcessId = $($p.Id)" -ErrorAction SilentlyContinue |
+                            Where-Object { $_.Name -eq 'msedgewebview2.exe' })
             }
 
             if ($children.Count -eq 0) {
-              Write-Output "::error::The main process is alive but launched no msedgewebview2"
-              Write-Output "::error::process in $(10 + $waited)s: it did not start and the window would be empty."
+              Write-Output "::error::The main process is alive but launched no msedgewebview2 process in $(10 + $waited)s: it did not start and the window would be empty."
               # Everything the next reader would otherwise have to guess at. The first two
               # say whether the webview started somewhere else in the tree, which is what a
               # change in how WebView2 is spawned would look like and what this filter
