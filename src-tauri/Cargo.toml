@@ -51,6 +51,18 @@ tauri-plugin-dialog = { version = "~2.7", default-features = false, features = [
 [target.'cfg(not(any(target_os = "android", target_os = "ios")))'.dependencies]
 tauri-plugin-opener = "2"
 
+# The updater, and the relaunch that finishes it. Desktop only, and not by preference:
+# Tauri's updater does not exist on Android or iOS, where the store is the only route.
+#
+# Both are held to a tilde for the same reason as tauri itself, and the constraint that
+# decides is the npm side rather than this one. Measured on 2026-09-26: the crate
+# tauri-plugin-updater 2.12 still asks only for tauri ^2.10, but @tauri-apps/plugin-updater
+# 2.12.0 requires @tauri-apps/api ^2.11, and this repository is pinned to 2.10.1 because
+# that is the newest api the 2.10 tauri crate accepts. Taking the newest plugin would break
+# `tauri build` at the version check, with an error about the api and not about the plugin.
+tauri-plugin-updater = "~2.10"
+tauri-plugin-process = "~2.3"
+
 # Both of these are already compiled on Linux as dependencies of the dialog plugin (zbus
 # arrives through ashpd and through tauri-plugin-opener, tokio through rfd), so declaring
 # them adds nothing to the build. They are here to ask the desktop portal directly whether
@@ -106,6 +118,10 @@ tauri-plugin-notification = "~2.3"
 # Only for the tests: it brings tauri::test::mock_app, which is what lets the commands be
 # called for real instead of testing a helper next to them and hoping they use it.
 tauri = { version = "~2.10", features = ["test"] }
+# The integration test drives the updater directly. An integration test links only
+# against the library and the dev-dependencies, so the plugin has to be named here as
+# well as in the target section above.
+tauri-plugin-updater = "~2.10"
 
 [profile.dev]
 incremental = true

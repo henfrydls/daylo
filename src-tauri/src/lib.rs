@@ -116,18 +116,27 @@ pub fn run() {
     // cannot drift. See chooseSaveTarget() in src/lib/fileSave.ts.
     let builder = builder.plugin(tauri_plugin_dialog::init());
 
+    // The updater and the relaunch that finishes it, desktop only. Not a preference:
+    // Tauri's updater does not exist on Android or iOS, where the store is the only route
+    // an update can take. Whatever the screen says about updates has to say that too.
+    //
+    // The request this plugin makes is the second address this app ever contacts, and it
+    // is made here, in Rust. The webview cannot make it: the app's CSP is
+    // `default-src 'none'` with `connect-src 'self' ipc: tauri:`, so the page can reach no
+    // host at all. That sentence is in the privacy policy and it stays true.
     #[cfg(not(any(target_os = "android", target_os = "ios")))]
-    let builder =
-        builder
-            .plugin(tauri_plugin_opener::init())
-            .invoke_handler(tauri::generate_handler![
-                greet,
-                write_text_file,
-                save_dialog_available,
-                checkin::checkin_fields,
-                checkin::send_checkin,
-                checkin::send_feedback
-            ]);
+    let builder = builder
+        .plugin(tauri_plugin_updater::Builder::new().build())
+        .plugin(tauri_plugin_process::init())
+        .plugin(tauri_plugin_opener::init())
+        .invoke_handler(tauri::generate_handler![
+            greet,
+            write_text_file,
+            save_dialog_available,
+            checkin::checkin_fields,
+            checkin::send_checkin,
+            checkin::send_feedback
+        ]);
 
     // Android writes through the filesystem plugin rather than through write_text_file:
     // the picker returns a content:// URI and std::fs cannot open one. The notification

@@ -15,6 +15,10 @@
 
 /// Both are named in the privacy policy, and scripts/check-no-analytics.sh checks that this
 /// is the only file under src-tauri/ naming a host, with exactly one URL, equal to this one.
+// Absent from the test binary, like the one function that reads it. Without this,
+// `cargo clippy --all-targets` calls it dead code in the lib's test build and refuses to
+// run, which is what kept the tests/ directory unlinted.
+#[cfg(not(test))]
 const URL: &str = "https://checkin.henfrydls.com/api/send";
 const WEBSITE: &str = "b382ce66-26f7-4bc7-9a0a-34d4c5e730f2";
 
