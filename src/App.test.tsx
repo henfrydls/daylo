@@ -229,6 +229,55 @@ describe('the question, in the app', () => {
 
   // Showing it is what spends it. A question that came back tomorrow because nobody
   // answered would be the app asking a favour twice.
+  // The tick that opens the gate happens inside the day sheet, so without waiting the
+  // question would arrive on top of it: two modals, two focus traps, and Escape closing
+  // both, in the one gesture the app is for.
+  it('waits while the day sheet is up, and does not lose its turn', async () => {
+    const day = (back: number) => {
+      const d = new Date()
+      d.setDate(d.getDate() - back)
+      return formatDate(d)
+    }
+    // Two days of use and the sheet open on today: the state of somebody about to make the
+    // third. _loggedThisSession is deliberately NOT seeded, because the tick is what sets
+    // it and the tick is the gesture being tested.
+    pastTheGate()
+    useCalendarStore.setState({
+      logs: [day(7), day(4)].map((date) => ({
+        id: date,
+        activityId: 'a1',
+        date,
+        completed: true,
+        createdAt: date,
+      })),
+      activities: [{ id: 'a1', name: 'Read', color: '#10B981', createdAt: NOW, updatedAt: NOW }],
+      _loggedThisSession: false,
+      selectedDate: day(0),
+    })
+
+    render(<App />)
+    await act(async () => {})
+
+    // The gesture, not the flag it sets. Seeding _loggedThisSession would leave the one
+    // claim this fix rests on untested: that the flag survives the sheet closing. Somebody
+    // "tidying state on close" would turn the wait into a silent cancellation and a test
+    // written against the flag would stay green.
+    await act(async () => {
+      useCalendarStore.getState().toggleLog('a1', day(0))
+    })
+
+    expect(screen.queryByTestId('feedback-rating')).not.toBeInTheDocument()
+
+    // Closed through the action the app uses, not by writing the field. Writing it would
+    // walk past setSelectedDate, which is exactly where somebody "tidying state on close"
+    // would put the line that turns this wait into a cancellation.
+    await act(async () => {
+      useCalendarStore.getState().setSelectedDate(null)
+    })
+
+    expect(await screen.findByTestId('feedback-rating')).toBeInTheDocument()
+  })
+
   it('is spent by being shown', async () => {
     pastTheGate()
 
