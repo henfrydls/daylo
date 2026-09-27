@@ -591,12 +591,10 @@ function App() {
             // The star left the moment it was pressed and needs no receipt. This one was
             // asked for, by somebody who wrote something and pressed a button, and the
             // reason this dialog exists at all is a channel that failed without saying so.
-            onComment={(answer, text) => {
-              void sendComment(answer, text).then((ok) => {
-                if (!ok)
-                  showToast('That did not send. You can write to daylo@henfrydls.com.', 'error')
-              })
-            }}
+            // The dialog waits on this and says so itself. It used to raise a toast, which
+            // the dialog's own portal draws over, so the one message that mattered
+            // appeared behind the thing covering it.
+            onComment={sendComment}
             withCheckinId={checkinEnabled && checkinId !== null}
           />
         )}

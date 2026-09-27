@@ -14,8 +14,12 @@ interface FeedbackRatingProps {
   onClose: () => void
   /** Called the moment a star is pressed, with 1 to 5, and the answer's number. */
   onRate: (answer: string, stars: number) => void
-  /** Called on Send, and only when something was actually written. */
-  onComment: (answer: string, text: string) => void
+  /**
+   * Called on Send, and only when something was actually written. Resolves true if it
+   * left and false if it did not, and the dialog waits on that: the whole reason this
+   * replaced a mailto: link is that the old one failed without saying so.
+   */
+  onComment: (answer: string, text: string) => Promise<boolean>
   /**
    * Whether the message this dialog produces will carry the check-in's random number,
    * which it does when the check-in is on and never when it is off. The line at the
@@ -62,6 +66,14 @@ export function FeedbackRating({
   const [answer] = useState(newAnswer)
   const [rated, setRated] = useState<number | null>(null)
   const [text, setText] = useState('')
+  // 'idle' until Send, 'sending' while it is in the air, 'failed' when it did not go.
+  // There is no 'sent': that one closes.
+  const [sending, setSending] = useState<'idle' | 'sending' | 'failed'>('idle')
+  // Only after a wait worth reporting. Measured: a cold request is 200 to 550ms and a
+  // warm one about 60, and by the time Send is pressed two messages have already gone, so
+  // most of the time nothing is shown at all. Saying "Sending…" instantly would put a
+  // word on screen for a tenth of a second on the common path.
+  const [slow, setSlow] = useState(false)
 
   useEffect(() => {
     onShown(answer)
@@ -78,11 +90,31 @@ export function FeedbackRating({
     onRate(answer, stars)
   }
 
-  const send = () => {
+  const send = async () => {
     const written = text.trim()
     // Nothing typed is not an empty message, it is no message: the star already went.
-    if (written !== '') onComment(answer, written)
-    onClose()
+    if (written === '') {
+      onClose()
+      return
+    }
+
+    setSending('sending')
+    setSlow(false)
+    const sayItIsSlow = setTimeout(() => setSlow(true), 300)
+
+    const left = await onComment(answer, written)
+    clearTimeout(sayItIsSlow)
+
+    if (left) {
+      onClose()
+      return
+    }
+
+    // It stays, with what was written still in the box. The toast this used to raise was
+    // drawn underneath the dialog's own portal, so the one message that mattered appeared
+    // behind the thing covering it, and the dialog was gone by then anyway.
+    setSending('failed')
+    setSlow(false)
   }
 
   return (
@@ -93,8 +125,16 @@ export function FeedbackRating({
       data-testid="feedback-rating"
       footer={
         rated === null ? undefined : (
-          <Button onClick={send} size="lg" className="w-full" data-testid="feedback-rating-send">
-            Send
+          <Button
+            onClick={() => void send()}
+            size="lg"
+            className="w-full"
+            // Pressing twice during the wait would send the comment twice, and two rows
+            // in the panel read as two people rather than one double tap.
+            disabled={sending === 'sending'}
+            data-testid="feedback-rating-send"
+          >
+            {slow ? 'Sending…' : 'Send'}
           </Button>
         )
       }
@@ -147,6 +187,15 @@ export function FeedbackRating({
               turned the check-in off turned off exactly this: a persistent number leaving
               their device. Putting that number in another message because it suits us
               would undo their decision without telling them. */}
+          {sending === 'failed' ? (
+            <p
+              className="mt-2 text-xs text-red-600"
+              aria-live="polite"
+              data-testid="feedback-rating-failed"
+            >
+              That did not send. You can try again, or write to daylo@henfrydls.com.
+            </p>
+          ) : null}
           <p className="mt-2 text-xs text-gray-500" data-testid="feedback-rating-note">
             {withCheckinId
               ? 'It arrives without your name, with the same random number as the check-in.'

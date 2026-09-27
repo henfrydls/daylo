@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { render, screen } from '@testing-library/react'
+import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { FeedbackRating } from './FeedbackRating'
 
@@ -12,7 +12,8 @@ beforeEach(() => {
   onShown.mockReset()
   onClose.mockReset()
   onRate.mockReset()
-  onComment.mockReset()
+  // The dialog waits on this now, so it has to answer.
+  onComment.mockReset().mockResolvedValue(true)
 })
 
 const show = (props: Partial<Parameters<typeof FeedbackRating>[0]> = {}) =>
@@ -80,17 +81,57 @@ describe('what comes after the star', () => {
     expect(screen.getByRole('button', { name: 'Send' })).toBeInTheDocument()
   })
 
-  it('sends what was written', async () => {
+  it('sends what was written, and closes once it has gone', async () => {
     await rate()
 
     await userEvent.type(screen.getByPlaceholderText('Anything to add? Optional'), 'the year view')
     await userEvent.click(screen.getByRole('button', { name: 'Send' }))
 
     expect(onComment).toHaveBeenCalledExactlyOnceWith(expect.any(String), 'the year view')
-    expect(onClose).toHaveBeenCalled()
+    await waitFor(() => expect(onClose).toHaveBeenCalled())
   })
 
-  // Nothing typed is not an empty message, it is no message. The star is already sent.
+  // The failure this whole dialog exists because of. The mailto: it replaced reported
+  // success and opened nothing, so the one thing this may not do is close on a send that
+  // did not happen.
+  it('stays where it is when the send fails, with what was written still there', async () => {
+    onComment.mockResolvedValue(false)
+    await rate()
+
+    const box = screen.getByPlaceholderText('Anything to add? Optional')
+    await userEvent.type(box, 'the year view')
+    await userEvent.click(screen.getByRole('button', { name: 'Send' }))
+
+    expect(await screen.findByTestId('feedback-rating-failed')).toBeInTheDocument()
+    expect(onClose).not.toHaveBeenCalled()
+    expect(box).toHaveValue('the year view')
+  })
+
+  // Two taps during the wait would put two rows in the panel, and two rows read as two
+  // people rather than one double tap. A duplicate in the data, not a rough edge.
+  it('cannot be pressed twice while it is in the air', async () => {
+    let letItFinish: (ok: boolean) => void = () => {}
+    onComment.mockReturnValue(
+      new Promise<boolean>((resolve) => {
+        letItFinish = resolve
+      })
+    )
+    await rate()
+    await userEvent.type(screen.getByPlaceholderText('Anything to add? Optional'), 'a note')
+
+    const send = screen.getByRole('button', { name: 'Send' })
+    await userEvent.click(send)
+
+    expect(send).toBeDisabled()
+    await userEvent.click(send)
+    expect(onComment).toHaveBeenCalledOnce()
+
+    letItFinish(true)
+    await waitFor(() => expect(onClose).toHaveBeenCalled())
+  })
+
+  // Nothing typed is not an empty message, it is no message. The star is already sent, so
+  // there is nothing to wait for and it closes at once.
   it('sends nothing when nothing was written', async () => {
     await rate()
 
