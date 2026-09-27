@@ -187,6 +187,10 @@ function App() {
   // the moment the sheet is out of the way, and somebody who only ever ticks from the
   // sheet is still asked. Losing those people would undo #79, which lowered this gate
   // precisely because almost nobody reached it.
+  // It also covers the way in from the menu, which is deliberate. Today it cannot be
+  // reached with the sheet up, because the sheet covers the header, so nothing is lost.
+  // If that ever changes, "Send feedback" would do nothing and say nothing, and this is
+  // the line to come back to.
   const questionIsOpen =
     canCheckIn &&
     !questionClosed &&
