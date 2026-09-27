@@ -108,11 +108,22 @@ export function FeedbackRating({
             disabled={rated !== null}
             aria-pressed={rated !== null && value <= rated}
             aria-label={value === 1 ? '1 star' : `${value} stars`}
-            // 42px because a star is the whole answer and it is pressed once, with a
-            // thumb, on the first screen a person meets after being interrupted.
-            className="flex h-[42px] w-[42px] items-center justify-center rounded-lg text-gray-300 transition-colors hover:text-amber-400 focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 disabled:cursor-default disabled:hover:text-inherit aria-pressed:text-amber-400"
+            // 56px, and the number is not a preference. Measured on a real phone at
+            // 1080/420dpi: the first version drew a 42px button whose visible star came
+            // out at about 24dp, half of Android's 48dp minimum for anything you touch.
+            // The button is the target and it is now 56dp; the glyph below fills it.
+            className="flex h-14 w-14 items-center justify-center rounded-lg text-gray-300 transition-colors hover:text-amber-400 focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 disabled:cursor-default disabled:hover:text-inherit aria-pressed:text-amber-400"
           >
-            <svg viewBox="0 0 24 24" fill="currentColor" className="h-8 w-8" aria-hidden="true">
+            {/* The viewBox is cropped to the path rather than left at 0 0 24 24. With the
+                square box the drawing filled about three quarters of it, so a 32px svg
+                showed a 24dp star: the glyph was small for a reason nobody could see in
+                the CSS. Cropped, what is asked for is what appears. */}
+            <svg
+              viewBox="1.5 2.5 21 18"
+              fill="currentColor"
+              className="h-11 w-11"
+              aria-hidden="true"
+            >
               <path d="M12 2.5l2.9 5.9 6.5.95-4.7 4.58 1.11 6.47L12 17.37l-5.81 3.03 1.11-6.47-4.7-4.58 6.5-.95L12 2.5z" />
             </svg>
           </button>
