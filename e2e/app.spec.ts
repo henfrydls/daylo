@@ -1145,6 +1145,92 @@ test.describe('writing from the menu @webkit', () => {
  * self-hosted Docker build have no code path that sends anything, on top of a CSP that
  * would refuse it.
  */
+/**
+ * A store past the invitation gate, with the day sheet reachable. It used to sit with
+ * the band that invited people to write, and went with it; these check-in tests were
+ * calling it from here all along, which the deletion did not notice because e2e/ is
+ * not under tsc and only Playwright ever sees a missing name.
+ *
+ * Unchanged otherwise: same seeding, same twenty days.
+ */
+async function seedPastTheGate(
+  page: import('@playwright/test').Page,
+  { firstOpenedAt }: { firstOpenedAt: 'today' | 'yesterday' }
+) {
+  await page.addInitScript((when) => {
+    const day = (back: number) => {
+      const d = new Date()
+      d.setDate(d.getDate() - back)
+      return [
+        d.getFullYear(),
+        String(d.getMonth() + 1).padStart(2, '0'),
+        String(d.getDate()).padStart(2, '0'),
+      ].join('-')
+    }
+    // Twenty days of use, one record each, which clears the gate several times over.
+    // These tests are about where the band sits and how it goes away, not about the
+    // threshold, so they are seeded well past it on purpose; the threshold itself is
+    // pinned day by day in the unit tests.
+    const logs = Array.from({ length: 20 }, (_, i) => ({
+      id: `l${i}`,
+      activityId: 'a1',
+      date: day(20 - i),
+      completed: true,
+      createdAt: day(20 - i),
+    }))
+    localStorage.setItem(
+      'simple-calendar-storage',
+      JSON.stringify({
+        state: {
+          activities: [
+            {
+              id: 'a1',
+              name: 'Read',
+              color: '#10B981',
+              createdAt: '2026-01-01T00:00:00.000Z',
+              updatedAt: '2026-01-01T00:00:00.000Z',
+            },
+          ],
+          logs,
+          selectedYear: new Date().getFullYear(),
+          selectedDate: null,
+          currentView: 'month',
+          yearMode: 'all',
+          selectedMonth: new Date().getMonth(),
+          reminderEnabled: false,
+          reminderHour: 21,
+          reminderMinute: 0,
+          reminderOffered: true,
+          firstOpenedAt: when === 'today' ? day(0) : day(1),
+          feedbackInviteSeen: false,
+        },
+        version: 0,
+      })
+    )
+  }, firstOpenedAt)
+  await page.goto('/')
+  await page.waitForSelector('[data-testid="month-title-button"]')
+  await page.waitForFunction(() => document.getAnimations().every((a) => a.playState !== 'running'))
+}
+
+/**
+ * Open today, tick it, close the sheet — which is when the band is allowed to appear.
+ * Today by its own label rather than the first cell in the grid: the first cell is the
+ * tail of the previous month, and the bar that says "Today" is only drawn on a phone.
+ */
+async function tickADay(page: import('@playwright/test').Page) {
+  const d = new Date()
+  const today = [
+    d.getFullYear(),
+    String(d.getMonth() + 1).padStart(2, '0'),
+    String(d.getDate()).padStart(2, '0'),
+  ].join('-')
+  await page.getByRole('button', { name: new RegExp(`^${today},`) }).click()
+  await page.getByTestId('quicklog-activity-checkbox').first().click()
+  await page.getByTestId('quicklog-done-button').click()
+  await page.waitForFunction(() => document.getAnimations().every((a) => a.playState !== 'running'))
+}
+
 test.describe('the check-in in a browser @webkit', () => {
   test('is not in the menu', async ({ page }) => {
     await seedPastTheGate(page, { firstOpenedAt: 'yesterday' })
@@ -1158,13 +1244,21 @@ test.describe('the check-in in a browser @webkit', () => {
 
   // Daylo does not ask about the check-in on any platform any more: the switch is in the
   // menu and that is the whole of it. This watches the moment a question would have been
-  // put, and the moment is a real one, because the band takes it.
+  // put, which is the one that closes the day sheet.
+  //
+  // What proves the moment happened used to be the invitation band appearing. The band is
+  // gone, so the proof is the record the tick left: without something positive here, this
+  // would be an absence asserted after a gesture that might never have run.
   test('nothing asks when the day sheet closes on a later day', async ({ page }) => {
     await seedPastTheGate(page, { firstOpenedAt: 'yesterday' })
 
     await tickADay(page)
 
+    const marked = await page.evaluate(
+      () => JSON.parse(localStorage.getItem('simple-calendar-storage')!).state.logs.length
+    )
+    expect(marked, 'the tick left no record, so the moment never happened').toBeGreaterThan(20)
+
     await expect(page.getByText(/check-in/i)).toHaveCount(0)
-    await expect(page.getByTestId('feedback-invite')).toBeVisible()
   })
 })
