@@ -61,6 +61,11 @@ fn inside_a_store_package() -> bool {
     // SAFETY: the call is being asked for the length it would need, which is what a null
     // buffer means here. Nothing is written through the pointer.
     let result = unsafe { GetCurrentPackageFullName(&mut length, std::ptr::null_mut()) };
+    // Anything other than APPMODEL_ERROR_NO_PACKAGE counts as a package, including an
+    // error this does not expect, and that lopsidedness is the point. Being wrong here
+    // means saying nothing to somebody who could have been told; being wrong the other way
+    // means telling somebody to go and install what their store is already installing. Of
+    // the two, silence is the one that cannot leave anybody with two Daylos.
     result != APPMODEL_ERROR_NO_PACKAGE
 }
 

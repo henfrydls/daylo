@@ -134,7 +134,11 @@ export function previousNoteFrom({ status, body }) {
 export const LONGEST_NOTE = 200
 
 /**
- * The one line the app shows about a release, checked rather than trusted.
+ * The one line the app will show about a release, checked rather than trusted.
+ *
+ * Will, not does: the band that draws it is not written yet, so today this goes into the
+ * manifest and nothing reads it. It is checked anyway, because the day something does
+ * read it is the day a missing or stale one would be seen by everybody at once.
  *
  * Written by hand, once per version, and deliberately not assembled from changelog.d. The
  * fragments there are written to be read on a page: each spends its best sentences on

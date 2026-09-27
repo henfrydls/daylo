@@ -25,9 +25,11 @@ this was introduced is already written straight into `CHANGELOG.md`; leave it th
 
 ### 1b. Write the one line the update dialog shows
 
-`changelog.d/RELEASE-NOTE.md`, one line, at most 200 characters. It is what somebody sees
-in the update dialog, and for most people it is the only thing they will ever read about
-the release.
+`changelog.d/RELEASE-NOTE.md`, one line, at most 200 characters. It is what somebody will see
+in the update dialog, and for most people it will be the only thing they ever read about
+the release. Nothing displays it yet: the band that will is still being designed, and this
+is checked ahead of it because a missing or stale note would be seen by everybody at once
+on the day something does.
 
 It is written by hand rather than taken from `changelog.d/`, and that is not laziness. The
 fragments are written to be read on a page: each spends its best sentences on *why*

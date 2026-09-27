@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { collect, nameOf } from './collect-changelog.js'
+import { collect, isFragment, nameOf } from './collect-changelog.js'
 
 const CHANGELOG = `# Changelog
 
@@ -112,5 +112,27 @@ describe('naming a fragment', () => {
 
   it('does not run on forever', () => {
     expect(nameOf(7, 'a'.repeat(80)).length).toBeLessThanOrEqual(60)
+  })
+})
+
+// Two files in changelog.d/ are not fragments, and one of them stopped a release.
+describe('which files are fragments', () => {
+  it('takes a file named after its pull request', () => {
+    expect(isFragment('80-ask-with-stars-instead-of-a-letter.md')).toBe(true)
+  })
+
+  it('leaves the README alone', () => {
+    expect(isFragment('README.md')).toBe(false)
+  })
+
+  // The one that mattered. RELEASE-NOTE.md arrived in 1.4 and went straight into collect(),
+  // which refuses any name that is not a pull request's. The first step of publishing a
+  // version failed, on the day of a publication, over a file that is meant to be there.
+  it('leaves the release note alone', () => {
+    expect(isFragment('RELEASE-NOTE.md')).toBe(false)
+  })
+
+  it('ignores what is not markdown', () => {
+    expect(isFragment('80-something.txt')).toBe(false)
   })
 })
