@@ -107,8 +107,11 @@ export function FeedbackInvite({ onThanked }: FeedbackInviteProps) {
         </div>
         <button
           onClick={dismiss}
+          // gray-500 and not gray-400. Measured against the white it sits on: gray-400 is
+          // 2.60:1 and 1.4.11 asks 3:1 for a control, gray-500 is 4.84:1. It is the only
+          // thing in this row a person can press, and it was the hardest thing to see.
           aria-label="Dismiss"
-          className="-m-2 flex min-h-[44px] min-w-[44px] shrink-0 items-center justify-center rounded-lg p-2 text-gray-400 hover:bg-gray-100 hover:text-gray-600 focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500"
+          className="-m-2 flex min-h-[44px] min-w-[44px] shrink-0 items-center justify-center rounded-lg p-2 text-gray-500 hover:bg-gray-100 hover:text-gray-600 focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500"
           data-testid="feedback-invite-dismiss"
         >
           <XIcon className="h-5 w-5" />
