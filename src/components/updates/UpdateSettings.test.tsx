@@ -21,12 +21,13 @@ const action = () => screen.queryByTestId('update-settings-action')
 
 describe('what the sheet says', () => {
   it('says what the switch is doing when there is nothing else to say', () => {
-    show()
+    const { unmount } = show()
     expect(status()).toHaveTextContent('Checking is on.')
+    unmount()
 
     useCalendarStore.setState({ updatesEnabled: false })
     show()
-    expect(screen.getAllByTestId('update-status')[1]).toHaveTextContent('Checking is off.')
+    expect(status()).toHaveTextContent('Checking is off.')
   })
 
   it('answers a check that found nothing', () => {
