@@ -215,6 +215,15 @@ interface CalendarState {
    * condition that opened it answers no a moment later and would close it again.
    */
   _feedbackAsked: boolean
+  /**
+   * The version whose update card has already been shown, or null. Persisted, and by
+   * version rather than as a flag: the card is put once per release, so dismissing 1.5.0
+   * must not also dismiss 1.5.1.
+   *
+   * Showing it is what spends it, the way the check-in's line works. The X means "later",
+   * and later is the dot on the menu, not the card coming back.
+   */
+  updateNoticeSeenFor: string | null
 
   // Activity actions
   addActivity: (name: string, color: string) => void
@@ -241,6 +250,8 @@ interface CalendarState {
   markFeedbackInviteSeen: () => void
   /** The question was put. Spends it for good and keeps it open for this session. */
   markFeedbackAsked: () => void
+  /** The update card for this version has been put. */
+  markUpdateNoticeSeen: (version: string) => void
   /** Takes this session's offer slot, if nobody has taken it. */
   claimOffer: (kind: 'reminder' | 'checkin') => void
 
@@ -301,6 +312,7 @@ export const useCalendarStore = create<CalendarState>()(
       _checkinStart: 'new',
       _checkinNoticeShown: false,
       _feedbackAsked: false,
+      updateNoticeSeenFor: null,
 
       setReminder: (enabled, hour, minute) =>
         set((state) => ({
@@ -322,6 +334,8 @@ export const useCalendarStore = create<CalendarState>()(
       markFeedbackInviteSeen: () => set({ feedbackInviteSeen: true }),
 
       markFeedbackAsked: () => set({ feedbackInviteSeen: true, _feedbackAsked: true }),
+
+      markUpdateNoticeSeen: (version) => set({ updateNoticeSeenFor: version }),
 
       claimOffer: (kind) =>
         set((state) => (state._offerThisSession === null ? { _offerThisSession: kind } : {})),
@@ -482,6 +496,7 @@ export const useCalendarStore = create<CalendarState>()(
         checkinNoticeSeen: state.checkinNoticeSeen,
         checkinId: state.checkinId,
         checkinLastAttempt: state.checkinLastAttempt,
+        updateNoticeSeenFor: state.updateNoticeSeenFor,
       }),
       // The default merge would do, except that it cannot say whether a field was absent
       // or merely false: by the time anything else can look, the default has filled the
