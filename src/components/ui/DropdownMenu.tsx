@@ -8,6 +8,12 @@ export interface DropdownMenuActionItem {
   icon?: ReactNode
   onClick: () => void
   disabled?: boolean
+  /**
+   * Drawn after the label. It exists for the dot that says an update is waiting, and it is
+   * a node rather than a flag so the menu does not have to know what any particular entry
+   * wants to say about itself.
+   */
+  trailing?: ReactNode
 }
 
 export interface DropdownMenuDivider {
@@ -250,6 +256,7 @@ export function DropdownMenu({ trigger, items, 'data-testid': testId }: Dropdown
                   </span>
                 )}
                 <span>{item.label}</span>
+                {item.trailing}
               </button>
             )
           })}

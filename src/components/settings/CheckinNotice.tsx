@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { XIcon } from '../ui'
+import { BroadcastIcon, XIcon } from '../ui'
 import { useCalendarStore } from '../../store'
 
 interface CheckinNoticeProps {
@@ -47,7 +47,11 @@ export function CheckinNotice({ on, onOpen }: CheckinNoticeProps) {
       data-testid="checkin-notice"
       className="mb-4 sm:mb-6 rounded-xl border border-gray-200 bg-white px-4 py-3 sm:px-5 sm:py-4"
     >
-      <div className="flex items-start gap-3">
+      {/* min-h-7 and the icon for the same reason as the update card: one way of telling
+          somebody something, so the two cards are recognisably the same thing. The icon is
+          the one on this line's own menu entry. */}
+      <div className="flex min-h-7 items-start gap-3">
+        <BroadcastIcon className="mt-0.5 h-4 w-4 shrink-0 text-gray-500" aria-hidden="true" />
         <p className="min-w-0 flex-1 text-sm text-gray-600">
           <span id="checkin-notice-title" className="font-medium text-gray-900">
             {on ? 'Anonymous check-in is on.' : 'Anonymous check-in is off.'}

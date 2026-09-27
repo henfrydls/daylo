@@ -2,7 +2,15 @@ import { useState, useEffect, useMemo, lazy, Suspense } from 'react'
 import { YearView, MonthView } from './components/calendar'
 import { ActivityList, QuickLog } from './components/activities'
 import { StatsPanel } from './components/stats'
-import { BottomSheet, DropdownMenu, ErrorBoundary, ToastContainer, useToast } from './components/ui'
+import {
+  BottomSheet,
+  BroadcastIcon,
+  RefreshIcon,
+  DropdownMenu,
+  ErrorBoundary,
+  ToastContainer,
+  useToast,
+} from './components/ui'
 import type { DropdownMenuItem } from './components/ui'
 import { AppSkeleton } from './components/skeletons'
 import {
@@ -12,8 +20,17 @@ import {
   ReminderSettings,
 } from './components/settings'
 import { useCalendarStore } from './store'
-import { useAppVersion, useCheckinFields, useRemindersAvailable, useSwipeGesture } from './hooks'
+import {
+  useAppVersion,
+  useCheckinFields,
+  useRemindersAvailable,
+  useSwipeGesture,
+  useUpdates,
+} from './hooks'
 import { FeedbackRating } from './components/feedback/FeedbackRating'
+import { UpdateDot } from './components/updates/UpdateDot'
+import { UpdateNotice } from './components/updates/UpdateNotice'
+import { UpdateSettings } from './components/updates/UpdateSettings'
 import { sendComment, sendRating, sendShown } from './lib/feedback'
 import { FEEDBACK_MAILTO, openMailto, shouldInviteFeedback } from './lib/feedbackInvite'
 import { formatDate } from './lib/dates'
@@ -84,6 +101,7 @@ function App() {
   const [isBottomSheetOpen, setIsBottomSheetOpen] = useState(false)
   const [isReminderOpen, setIsReminderOpen] = useState(false)
   const [isCheckinOpen, setIsCheckinOpen] = useState(false)
+  const [isUpdatesOpen, setIsUpdatesOpen] = useState(false)
   // Whether somebody went looking for the question, and whether they have closed it. The
   // question's own number lives in the dialog, because it lives exactly as long as the
   // dialog does.
@@ -110,6 +128,12 @@ function App() {
   const markOpened = useCalendarStore((state) => state.markOpened)
   const checkinId = useCalendarStore((state) => state.checkinId)
   const markFeedbackAsked = useCalendarStore((state) => state.markFeedbackAsked)
+  // Everything about a newer version: whether this copy can be told about one at all,
+  // what the card says, what the sheet says, and the one action behind both.
+  const updates = useUpdates()
+  // The version still waiting once the card is no longer the one saying it, or null. The
+  // cross means later, and this is where later lives.
+  const updateWaiting = updates.waiting
   const feedbackAsked = useCalendarStore((state) => state._feedbackAsked)
   const { showToast } = useToast()
 
@@ -342,23 +366,26 @@ function App() {
       ? [
           {
             label: 'Anonymous check-in',
-            icon: (
-              <svg
-                className="w-4 h-4"
-                fill="none"
-                viewBox="0 0 24 24"
-                stroke="currentColor"
-                aria-hidden="true"
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2}
-                  d="M9.348 14.652a3.75 3.75 0 010-5.304m5.304 0a3.75 3.75 0 010 5.304m-7.425 2.121a6.75 6.75 0 010-9.546m9.546 0a6.75 6.75 0 010 9.546M5.106 18.894c-3.808-3.807-3.808-9.98 0-13.788m13.788 0c3.808 3.807 3.808 9.98 0 13.788M12 12h.008v.008H12V12zm.375 0a.375.375 0 11-.75 0 .375.375 0 01.75 0z"
-                />
-              </svg>
-            ),
+            icon: <BroadcastIcon className="w-4 h-4" aria-hidden="true" />,
             onClick: () => setIsCheckinOpen(true),
+          } satisfies DropdownMenuItem,
+        ]
+      : []),
+    ...(updates.supported
+      ? [
+          {
+            label: 'Check for new versions',
+            icon: <RefreshIcon className="w-4 h-4" aria-hidden="true" />,
+            // The dot is repeated here, and the words beside it are what a screen reader
+            // gets: a dot on its own says nothing to anybody not looking at it.
+            trailing:
+              updateWaiting === null ? undefined : (
+                <span className="ml-auto flex items-center gap-2">
+                  <span className="sr-only">{`${updateWaiting} is out`}</span>
+                  <UpdateDot />
+                </span>
+              ),
+            onClick: () => setIsUpdatesOpen(true),
           } satisfies DropdownMenuItem,
         ]
       : []),
@@ -402,9 +429,16 @@ function App() {
                     <DropdownMenu
                       trigger={
                         <span
-                          className="p-2.5 rounded-lg text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition-colors min-h-[44px] min-w-[44px] flex items-center justify-center"
-                          aria-label="More options"
+                          className="relative p-2.5 rounded-lg text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition-colors min-h-[44px] min-w-[44px] flex items-center justify-center"
+                          aria-label={
+                            updateWaiting === null
+                              ? 'More options'
+                              : 'More options, update available'
+                          }
                         >
+                          {updateWaiting === null ? null : (
+                            <UpdateDot className="absolute right-1.5 top-1.5" />
+                          )}
                           <svg
                             className="w-5 h-5"
                             fill="none"
@@ -432,9 +466,16 @@ function App() {
                     <DropdownMenu
                       trigger={
                         <span
-                          className="p-2 rounded-lg text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition-colors min-h-[44px] min-w-[44px] flex items-center justify-center"
-                          aria-label="More options"
+                          className="relative p-2 rounded-lg text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition-colors min-h-[44px] min-w-[44px] flex items-center justify-center"
+                          aria-label={
+                            updateWaiting === null
+                              ? 'More options'
+                              : 'More options, update available'
+                          }
                         >
+                          {updateWaiting === null ? null : (
+                            <UpdateDot className="absolute right-1.5 top-1.5" />
+                          )}
                           <svg
                             className="w-5 h-5"
                             fill="none"
@@ -478,6 +519,15 @@ function App() {
               onOpen={() => setIsCheckinOpen(true)}
             />
           ) : null}
+
+          {/* Under the check-in's line on the rare launch that has both, because that one
+              is about what the app is already doing and this one is about something it
+              could do. Neither waits for the other: they are lines to be read past, not
+              questions, and the rule against two at once is the invitation's, which does
+              ask something. */}
+          {updates.notice === null ? null : (
+            <UpdateNotice state={updates.notice} onAct={updates.act} onLater={updates.later} />
+          )}
 
           <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
             {/* Calendar Section */}
@@ -586,6 +636,20 @@ function App() {
             // appeared behind the thing covering it.
             onComment={sendComment}
             withCheckinId={checkinEnabled && checkinId !== null}
+          />
+        )}
+
+        {isUpdatesOpen && (
+          <UpdateSettings
+            isOpen={isUpdatesOpen}
+            onClose={() => setIsUpdatesOpen(false)}
+            status={updates.status}
+            // Closing first, because the answer to "Update" is the card's progress and
+            // this sheet is drawn over it. Nothing is lost: the card is where it happens.
+            onAct={() => {
+              if (updates.status.kind === 'available') setIsUpdatesOpen(false)
+              updates.act()
+            }}
           />
         )}
 
