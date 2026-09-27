@@ -96,6 +96,12 @@ Every release from v1.1.1 onward ships a [`SHA256SUMS.txt`](../../releases/lates
 
 Just install and open: no setup, no accounts, no internet required.
 
+#### Updates
+
+From version 1.4.0, Daylo tells you when a newer version is out. On Windows, on macOS and on the Linux AppImage it downloads the new version, installs it and opens itself again. The Debian package needs your administrator password to install, which Daylo does not ask anyone for, so there it points you to the [downloads page](https://daylo.henfrydls.com/#download) instead. Copies from the Microsoft Store are updated by the Store, so they say nothing at all.
+
+You can check by hand, or stop the automatic check, from the menu under **Check for new versions**. The check asks GitHub for one small file that lists the latest release and sends nothing about you; the [privacy policy](https://daylo.henfrydls.com/privacy/) has the details.
+
 #### About the security warning
 
 The desktop installers are not code-signed yet, so your operating system will warn you the first time you open Daylo. **The Microsoft Store version does not: Microsoft signs it, so Windows installs it without a warning.** If you use the installer instead:
