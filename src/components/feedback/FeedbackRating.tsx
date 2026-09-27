@@ -14,8 +14,12 @@ interface FeedbackRatingProps {
   onClose: () => void
   /** Called the moment a star is pressed, with 1 to 5, and the answer's number. */
   onRate: (answer: string, stars: number) => void
-  /** Called on Send, and only when something was actually written. */
-  onComment: (answer: string, text: string) => void
+  /**
+   * Called on Send, and only when something was actually written. Resolves true if it
+   * left and false if it did not, and the dialog waits on that: the whole reason this
+   * replaced a mailto: link is that the old one failed without saying so.
+   */
+  onComment: (answer: string, text: string) => Promise<boolean>
   /**
    * Whether the message this dialog produces will carry the check-in's random number,
    * which it does when the check-in is on and never when it is off. The line at the
@@ -62,6 +66,14 @@ export function FeedbackRating({
   const [answer] = useState(newAnswer)
   const [rated, setRated] = useState<number | null>(null)
   const [text, setText] = useState('')
+  // 'idle' until Send, 'sending' while it is in the air, 'failed' when it did not go.
+  // There is no 'sent': that one closes.
+  const [sending, setSending] = useState<'idle' | 'sending' | 'failed'>('idle')
+  // Only after a wait worth reporting. Measured: a cold request is 200 to 550ms and a
+  // warm one about 60, and by the time Send is pressed two messages have already gone, so
+  // most of the time nothing is shown at all. Saying "Sending…" instantly would put a
+  // word on screen for a tenth of a second on the common path.
+  const [slow, setSlow] = useState(false)
 
   useEffect(() => {
     onShown(answer)
@@ -78,11 +90,31 @@ export function FeedbackRating({
     onRate(answer, stars)
   }
 
-  const send = () => {
+  const send = async () => {
     const written = text.trim()
     // Nothing typed is not an empty message, it is no message: the star already went.
-    if (written !== '') onComment(answer, written)
-    onClose()
+    if (written === '') {
+      onClose()
+      return
+    }
+
+    setSending('sending')
+    setSlow(false)
+    const sayItIsSlow = setTimeout(() => setSlow(true), 300)
+
+    const left = await onComment(answer, written)
+    clearTimeout(sayItIsSlow)
+
+    if (left) {
+      onClose()
+      return
+    }
+
+    // It stays, with what was written still in the box. The toast this used to raise was
+    // drawn underneath the dialog's own portal, so the one message that mattered appeared
+    // behind the thing covering it, and the dialog was gone by then anyway.
+    setSending('failed')
+    setSlow(false)
   }
 
   return (
@@ -93,8 +125,16 @@ export function FeedbackRating({
       data-testid="feedback-rating"
       footer={
         rated === null ? undefined : (
-          <Button onClick={send} size="lg" className="w-full" data-testid="feedback-rating-send">
-            Send
+          <Button
+            onClick={() => void send()}
+            size="lg"
+            className="w-full"
+            // Pressing twice during the wait would send the comment twice, and two rows
+            // in the panel read as two people rather than one double tap.
+            disabled={sending === 'sending'}
+            data-testid="feedback-rating-send"
+          >
+            {slow ? 'Sending…' : 'Send'}
           </Button>
         )
       }
@@ -108,11 +148,22 @@ export function FeedbackRating({
             disabled={rated !== null}
             aria-pressed={rated !== null && value <= rated}
             aria-label={value === 1 ? '1 star' : `${value} stars`}
-            // 42px because a star is the whole answer and it is pressed once, with a
-            // thumb, on the first screen a person meets after being interrupted.
-            className="flex h-[42px] w-[42px] items-center justify-center rounded-lg text-gray-300 transition-colors hover:text-amber-400 focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 disabled:cursor-default disabled:hover:text-inherit aria-pressed:text-amber-400"
+            // 56px, and the number is not a preference. Measured on a real phone at
+            // 1080/420dpi: the first version drew a 42px button whose visible star came
+            // out at about 24dp, half of Android's 48dp minimum for anything you touch.
+            // The button is the target and it is now 56dp; the glyph below fills it.
+            className="flex h-14 w-14 items-center justify-center rounded-lg text-gray-300 transition-colors hover:text-amber-400 focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 disabled:cursor-default disabled:hover:text-inherit aria-pressed:text-amber-400"
           >
-            <svg viewBox="0 0 24 24" fill="currentColor" className="h-8 w-8" aria-hidden="true">
+            {/* The viewBox is cropped to the path rather than left at 0 0 24 24. With the
+                square box the drawing filled about three quarters of it, so a 32px svg
+                showed a 24dp star: the glyph was small for a reason nobody could see in
+                the CSS. Cropped, what is asked for is what appears. */}
+            <svg
+              viewBox="1.5 2.5 21 18"
+              fill="currentColor"
+              className="h-11 w-11"
+              aria-hidden="true"
+            >
               <path d="M12 2.5l2.9 5.9 6.5.95-4.7 4.58 1.11 6.47L12 17.37l-5.81 3.03 1.11-6.47-4.7-4.58 6.5-.95L12 2.5z" />
             </svg>
           </button>
@@ -136,6 +187,15 @@ export function FeedbackRating({
               turned the check-in off turned off exactly this: a persistent number leaving
               their device. Putting that number in another message because it suits us
               would undo their decision without telling them. */}
+          {sending === 'failed' ? (
+            <p
+              className="mt-2 text-xs text-red-600"
+              aria-live="polite"
+              data-testid="feedback-rating-failed"
+            >
+              That did not send. You can try again, or write to daylo@henfrydls.com.
+            </p>
+          ) : null}
           <p className="mt-2 text-xs text-gray-500" data-testid="feedback-rating-note">
             {withCheckinId
               ? 'It arrives without your name, with the same random number as the check-in.'

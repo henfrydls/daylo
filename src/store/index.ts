@@ -375,9 +375,14 @@ export const useCalendarStore = create<CalendarState>()(
       },
 
       toggleLog: (activityId, date) => {
-        // Whatever else this does, the session has now touched a day. The invitation
-        // needs that: it mounts behind the day sheet, and this is what says the sheet is
-        // open. Unticking counts too — the app was used either way.
+        // Whatever else this does, the session has now touched a day, and the invitation
+        // needs that. Unticking counts too: the app was used either way.
+        //
+        // This used to say the invitation "mounts behind the day sheet", which was true
+        // of the band and stopped being true in 1.4 when the band became a dialog: a
+        // dialog is drawn above the sheet, not behind it. The sentence outlived what it
+        // described. App.tsx is where that is handled now, by waiting for the sheet to
+        // close rather than by drawing underneath it.
         set({ _loggedThisSession: true })
         const existingLog = get().logs.find((l) => l.activityId === activityId && l.date === date)
 

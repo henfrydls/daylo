@@ -177,8 +177,25 @@ function App() {
   // effect, and the session flag is why it can be: putting the question spends it, so
   // `shouldInvite` answers no a moment later, and reading only that would close the dialog
   // on the frame after it opened. The check-in's line learned this the hard way.
+  // Not while the day sheet is up. The gate opens on the tick, and the tick happens inside
+  // that sheet, so without this the question arrives on top of it: two modals stacked, two
+  // focus traps, and Escape closing both, in the one gesture the whole app is for.
+  //
+  // This defers rather than cancels, which is the part worth being sure about. The sheet
+  // exists only while `selectedDate` is set, closing it clears that, and
+  // `_loggedThisSession` stays true for the rest of the session. So the question appears
+  // the moment the sheet is out of the way, and somebody who only ever ticks from the
+  // sheet is still asked. Losing those people would undo #79, which lowered this gate
+  // precisely because almost nobody reached it.
+  // It also covers the way in from the menu, which is deliberate. Today it cannot be
+  // reached with the sheet up, because the sheet covers the header, so nothing is lost.
+  // If that ever changes, "Send feedback" would do nothing and say nothing, and this is
+  // the line to come back to.
   const questionIsOpen =
-    canCheckIn && !questionClosed && (askedFromMenu || shouldInvite || feedbackAsked)
+    canCheckIn &&
+    !questionClosed &&
+    selectedDate === null &&
+    (askedFromMenu || shouldInvite || feedbackAsked)
 
   // Today's check-in, if the switch is on and today has not been tried. Twice, because
   // there are two kinds of device: a phone is closed and opened again, which remounts
@@ -574,12 +591,10 @@ function App() {
             // The star left the moment it was pressed and needs no receipt. This one was
             // asked for, by somebody who wrote something and pressed a button, and the
             // reason this dialog exists at all is a channel that failed without saying so.
-            onComment={(answer, text) => {
-              void sendComment(answer, text).then((ok) => {
-                if (!ok)
-                  showToast('That did not send. You can write to daylo@henfrydls.com.', 'error')
-              })
-            }}
+            // The dialog waits on this and says so itself. It used to raise a toast, which
+            // the dialog's own portal draws over, so the one message that mattered
+            // appeared behind the thing covering it.
+            onComment={sendComment}
             withCheckinId={checkinEnabled && checkinId !== null}
           />
         )}
