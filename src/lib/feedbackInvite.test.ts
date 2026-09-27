@@ -21,13 +21,13 @@ const on = (days: string[]): ActivityLog[] =>
 
 /**
  * Everything true and no more than true, so each test can say what it is about by
- * changing one thing. Seven calendar days from the first open to today, and three days
- * with a record on them, which is exactly the gate and not a day over it.
+ * changing one thing. Seven calendar days from the first record to today, which is the
+ * whole gate.
  */
 const ready = {
   today: '2026-03-01',
   firstOpenedAt: '2026-02-22',
-  logs: on(['2026-02-22', '2026-02-24', '2026-02-26']),
+  logs: on(['2026-02-22']),
   feedbackInviteSeen: false,
   loggedThisSession: true,
   offerThisSession: null,
@@ -46,7 +46,7 @@ afterEach(() => {
 })
 
 describe('when the invitation is offered', () => {
-  it('after a week and three days of use', () => {
+  it('a week after the first record', () => {
     expect(shouldInviteFeedback(ready)).toBe(true)
   })
 
@@ -92,53 +92,35 @@ describe('the week it asks about', () => {
       ...ready,
       today: '2026-03-01',
       firstOpenedAt: '2026-02-27',
-      logs: on(['2025-05-01', '2025-05-02', '2025-05-03']),
+      logs: on(['2025-05-01']),
     }
 
     expect(shouldInviteFeedback(restored)).toBe(true)
   })
 })
 
-describe('the three days it counts', () => {
-  it('are days the app was used, not days that were ticked', () => {
-    // Thirty days filled in one afternoon is one afternoon of living with it.
+describe('how many days were used no longer counts', () => {
+  // It asked for three distinct days of use as well, and that condition is gone. A week
+  // between the first record and today already means somebody came back, which is the
+  // only thing the three days were measuring, and it means it with one condition less to
+  // explain and one less to get wrong.
+  it('one day of use is enough, a week later', () => {
+    expect(shouldInviteFeedback({ ...ready, logs: on(['2026-02-22']) })).toBe(true)
+  })
+
+  // Thirty days filled in one afternoon used to be refused for being one afternoon. It is
+  // accepted now, and deliberately: what is being asked is whether a week has passed with
+  // this person still here, not how busy they were.
+  it('so does a month filled in one sitting, once the week has passed', () => {
     const oneSitting = Array.from({ length: 30 }, (_, i) => ({
       id: `l${i}`,
       activityId: 'a1',
       date: `2026-02-${String(i + 1).padStart(2, '0')}`,
       completed: true,
-      createdAt: '2026-02-28',
+      createdAt: '2026-02-22',
     }))
 
-    expect(shouldInviteFeedback({ ...ready, logs: oneSitting })).toBe(false)
-  })
-
-  it('are not enough at two', () => {
-    expect(shouldInviteFeedback({ ...ready, logs: on(['2026-02-22', '2026-02-24']) })).toBe(false)
-  })
-
-  // The gate asks for a record in this session, so the day the band could appear is
-  // always one of the three. Three days of use is today and two days before it, which is
-  // the smallest number that still means "came back".
-  it('include today, because something was recorded this session', () => {
-    const untilYesterday = on(['2026-02-22', '2026-02-24', '2026-02-26'])
-    const todayToo = [...untilYesterday, ...on(['2026-03-01'])]
-
-    expect(new Set(untilYesterday.map((l) => l.createdAt)).size).toBe(3)
-    expect(shouldInviteFeedback({ ...ready, logs: todayToo })).toBe(true)
-  })
-
-  it('count a day that was unticked as well, because the app was still opened', () => {
-    const withNotes = on(['2026-02-22', '2026-02-24'])
-    withNotes.push({
-      id: 'x',
-      activityId: 'a1',
-      date: '2026-02-26',
-      completed: false,
-      createdAt: '2026-02-26',
-    })
-
-    expect(shouldInviteFeedback({ ...ready, logs: withNotes })).toBe(true)
+    expect(shouldInviteFeedback({ ...ready, logs: oneSitting })).toBe(true)
   })
 
   it('needs at least one record at all', () => {

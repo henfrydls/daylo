@@ -51,22 +51,21 @@ const dayOf = (log: ActivityLog) => formatDate(parseISO(log.createdAt))
  * person is still not asked on their first day here, because that day they are setting a
  * phone up, not using the app.
  *
- * The three days are days the app was *used* — distinct days of `createdAt`, not of
- * `date`. Filling thirty boxes in one afternoon is one afternoon of living with it, and
- * the question is about living with it. Today is always one of the three, because nothing
- * gets asked in a session with no record in it.
+ * How many days the app was used no longer counts, and the history is the point. It asked
+ * for fourteen calendar days and eight distinct days of use until 2026-09-23, then seven
+ * and three, and since 2026-09-27 only the week. Each cut had the same reason: at the
+ * usage the check-in can see, the gate was beyond where anybody had been. Of the fourteen
+ * devices on the panel, four have had the chance to cross seven days and none did; the
+ * other ten are younger than that and have no verdict yet.
  *
- * It asked for fourteen days and eight days of use until 2026-09-23, and the numbers came
- * down because that gate looks unreachable, not because we want more mail. The check-in
- * has seen five devices and only one of them is still reporting; that one has used Daylo
- * on two days out of four. At that rate eight days of use is sixteen calendar days at the
- * very best, and nothing we can measure suggests anybody has ever got there. Nobody can
- * answer a question nobody is asked. Seven and three is the smallest gate that still means
- * somebody came back after deciding whether the app was for them.
+ * Dropping the days of use is not another loosening, it is a condition that was measuring
+ * something the week already says: if seven days have passed between the first record and
+ * today, that person came back. That is the whole question. One condition less to explain
+ * and one less to get wrong.
  *
  * Worth saying plainly, because the paragraph above will outlive its numbers: the app does
- * not report whether this band was ever drawn, so "nobody has seen it" is inference from
- * how much the one live device is used, not a measurement of the band.
+ * not report whether this was ever shown, so what we know is who could have crossed and
+ * did not, never who saw it.
  */
 export function shouldInviteFeedback(input: FeedbackInviteInput): boolean {
   if (input.feedbackInviteSeen) return false
@@ -86,9 +85,7 @@ export function shouldInviteFeedback(input: FeedbackInviteInput): boolean {
   const oldestRecord = days.reduce((a, b) => (a < b ? a : b))
   const start = input.firstOpenedAt < oldestRecord ? input.firstOpenedAt : oldestRecord
 
-  if (differenceInCalendarDays(parseISO(input.today), parseISO(start)) < 7) return false
-
-  return new Set(days).size >= 3
+  return differenceInCalendarDays(parseISO(input.today), parseISO(start)) >= 7
 }
 
 /**
