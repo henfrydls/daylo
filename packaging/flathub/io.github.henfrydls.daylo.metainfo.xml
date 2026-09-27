@@ -38,6 +38,12 @@
   </branding>
   <content_rating type="oars-1.1" />
   <releases>
+    <release version="1.4.0" date="2026-09-30">
+      <url>https://github.com/henfrydls/daylo/releases/tag/v1.4.0</url>
+      <description>
+        <p>Daylo now tells you when a new version is out. A line under the header says which version it is, and on Windows, Mac and the Linux AppImage the app downloads it, installs it and opens itself again; the Debian and Ubuntu package needs an administrator password that Daylo does not ask anyone for, so it points you at the downloads page instead. Check for new versions is in the menu if you would rather look yourself, and it is also where you can stop Daylo looking on its own. Asking how it has been going is now five stars rather than an email, and it comes after a week of use instead of two. The line about the anonymous check-in says when it is off.</p>
+      </description>
+    </release>
     <release version="1.3.0" date="2026-09-16">
       <url>https://github.com/henfrydls/daylo/releases/tag/v1.3.0</url>
       <description>
