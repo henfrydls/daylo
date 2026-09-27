@@ -1,4 +1,8 @@
 mod checkin;
+// Desktop only, like the updater it serves: on Android and iOS nothing asks, because
+// there is no updater to ask for.
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
+mod packaging;
 mod webview2;
 
 // Learn more about Tauri commands at https://tauri.app/develop/calling-rust/
@@ -135,7 +139,8 @@ pub fn run() {
             save_dialog_available,
             checkin::checkin_fields,
             checkin::send_checkin,
-            checkin::send_feedback
+            checkin::send_feedback,
+            packaging::install_format
         ]);
 
     // Android writes through the filesystem plugin rather than through write_text_file:
@@ -198,7 +203,15 @@ mod plugin_config {
     /// Every plugin this app registers, on any platform. The list is here so that a block
     /// for something we do not register cannot sit in the config being ignored until the
     /// day somebody registers it.
-    const REGISTERED: [&str; 5] = ["shell", "dialog", "opener", "fs", "notification"];
+    const REGISTERED: [&str; 7] = [
+        "shell",
+        "dialog",
+        "opener",
+        "fs",
+        "notification",
+        "updater",
+        "process",
+    ];
 
     fn conf() -> Value {
         serde_json::from_str(include_str!("../tauri.conf.json"))
@@ -264,6 +277,13 @@ mod plugin_config {
             accepts(&tauri_plugin_opener::init::<Wry>(), "opener"),
             accepts(&tauri_plugin_fs::init::<Wry>(), "fs"),
             accepts(&tauri_plugin_notification::init::<Wry>(), "notification"),
+            // The updater is the only one of these with a block in the config, so it is
+            // the only one where "the plugin accepts what we wrote" is a real question
+            // rather than a formality.
+            accepts(
+                &tauri_plugin_updater::Builder::new().build::<Wry>(),
+                "updater",
+            ),
         ] {
             if let Err(why) = result {
                 refused.push(why);
