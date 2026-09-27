@@ -13,6 +13,23 @@ import { fileURLToPath } from 'url'
 
 const FRAGMENT = /^(\d+)-[a-z0-9-]+\.md$/
 
+/**
+ * Which files in `changelog.d/` are fragments of the changelog.
+ *
+ * Two files live there that are not, and each would break this differently. `README.md`
+ * explains what belongs in a fragment. `RELEASE-NOTE.md` is the one line the update
+ * dialog shows, added in 1.4, and before this function existed it went straight into
+ * `collect()` and stopped the release with "RELEASE-NOTE.md is not named after a pull
+ * request" — the first step of a publication, failing on the day of one, over a file that
+ * is supposed to be there.
+ *
+ * Named and exported rather than written inline in main() so it can be tested. It was
+ * inline, which is why nothing caught this.
+ */
+export function isFragment(name) {
+  return name.endsWith('.md') && name !== 'README.md' && name !== 'RELEASE-NOTE.md'
+}
+
 /** Where a fragment's name comes from: the pull request it belongs to, and its title. */
 export function nameOf(pullRequest, title) {
   const slug = title
@@ -74,7 +91,7 @@ function main() {
   const directory = join(root, 'changelog.d')
   const changelogPath = join(root, 'CHANGELOG.md')
 
-  const names = readdirSync(directory).filter((name) => name.endsWith('.md') && name !== 'README.md')
+  const names = readdirSync(directory).filter(isFragment)
   const fragments = names.map((name) => ({
     name,
     body: readFileSync(join(directory, name), 'utf8'),

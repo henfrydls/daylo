@@ -87,9 +87,14 @@ jobs:
         working-directory: src-tauri
         run: cargo fmt --check
 
+      # --all-targets, and it is not decoration: without it clippy looks at the library
+      # and nothing else, so everything under src-tauri/tests/ went unreviewed. That
+      # directory was empty until the updater's signature test arrived, which is to say
+      # the first integration test this repository ever had would have been the first
+      # file no automatic check looked at.
       - name: Rust clippy
         working-directory: src-tauri
-        run: cargo clippy -- -D warnings
+        run: cargo clippy --all-targets -- -D warnings
 
       # Reads tauri.conf.json and checks every `plugins.<name>` block against the config
       # type that plugin's own init() declares. Cheap, and it covers a gap the build

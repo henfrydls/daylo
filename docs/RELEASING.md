@@ -23,6 +23,26 @@ written about it.
 See `changelog.d/README.md` for what belongs in a fragment. Anything that arrived before
 this was introduced is already written straight into `CHANGELOG.md`; leave it there.
 
+### 1b. Write the one line the update dialog shows
+
+`changelog.d/RELEASE-NOTE.md`, one line, at most 200 characters. It is what somebody will see
+in the update dialog, and for most people it will be the only thing they ever read about
+the release. Nothing displays it yet: the band that will is still being designed, and this
+is checked ahead of it because a missing or stale note would be seen by everybody at once
+on the day something does.
+
+It is written by hand rather than taken from `changelog.d/`, and that is not laziness. The
+fragments are written to be read on a page: each spends its best sentences on *why*
+something changed, which is what makes a changelog worth reading and the first thing that
+does not fit in a small box. Measured for 1.4.0: those fragments came to 1379 characters
+over three paragraphs, about thirty-four lines on a phone, and two of the three described
+the same change from different angles.
+
+The publication refuses three things, so none of them can be forgotten: a note that is
+missing or empty, one over 200 characters, and one **word for word the same as the
+previous version's**. That last one is the reason this is checked at all: a stale note
+publishes cleanly, looks cared for, and tells people about a release they already have.
+
 ### 2. Bump the version, in a pull request
 
 ```bash
@@ -58,6 +78,43 @@ git push origin v1.3.0
 GitHub Actions (`.github/workflows/release.yml`) automatically:
 - Builds for Windows (x64, ARM64), macOS (Intel, Apple Silicon), and Linux (x64)
 - Creates a GitHub Release with all installers attached
+- Signs the updater artifacts and, once every platform has finished, writes the one
+  `latest.json` the updater reads
+- Asks the address the app actually reads whether it gives back the version just published
+
+Nothing on this page has to be remembered for the updater to be correct: each of those is
+a step that fails the publication rather than a note somebody checks. What is worth knowing
+is what each failure means.
+
+**"No signature for: …"** means a platform did not finish, or its artifact is not named
+the way the manifest expects. Publishing without it would leave that platform's people never
+offered an update again, with nothing going red, which is why it stops instead.
+
+**"The release note is …"**: see step 1b.
+
+**"$url says X and this release is Y"** means the manifest was not replaced, or this is
+not the release GitHub considers latest. `/releases/latest` skips prereleases and is also whatever
+has been marked latest, which can be moved by hand, so this asks the question that covers
+both: does the address the app reads give back what was just published?
+
+### The signing key
+
+The updater refuses any download not signed by the key whose public half is in
+`src-tauri/tauri.conf.json`. The private half is in the repository's secrets as
+`TAURI_SIGNING_PRIVATE_KEY` and `TAURI_SIGNING_PRIVATE_KEY_PASSWORD`, and a copy is on the
+USB stick beside the Android keystore.
+
+**If that key is lost, every installed copy of Daylo stops being updatable, for good.** The
+public half is inside each one, so nothing else can sign something they will accept, and
+the only way out is asking every person to reinstall by hand. Regenerating it has exactly
+the same effect as losing it.
+
+To check that the secret still signs, on the day it is set, the day it is rotated, and any
+day there is doubt, run the **"Does the signing secret sign?"** workflow by hand. It takes
+about a minute, publishes nothing, and prints nothing of the key. It exists because whoever
+sets the secret has only checked that *their file* signs: between that file and the secret
+there is a `gh secret set` that can add a stray byte, and that byte fails with a message
+about base64 that names nothing.
 
 ## Adding a Tauri plugin on Android
 

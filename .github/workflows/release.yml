@@ -31,27 +31,27 @@ jobs:
         include:
           # Windows x64
           - platform: windows-latest
-            args: --target x86_64-pc-windows-msvc --bundles nsis
+            args: --target x86_64-pc-windows-msvc --bundles nsis --config updater-artifacts.json
             target: x86_64-pc-windows-msvc
             name: windows-x64
           # Windows ARM64
           - platform: windows-latest
-            args: --target aarch64-pc-windows-msvc --bundles nsis
+            args: --target aarch64-pc-windows-msvc --bundles nsis --config updater-artifacts.json
             target: aarch64-pc-windows-msvc
             name: windows-arm64
           # Linux x64
           - platform: ubuntu-22.04
-            args: --target x86_64-unknown-linux-gnu --bundles deb,appimage
+            args: --target x86_64-unknown-linux-gnu --bundles deb,appimage --config updater-artifacts.json
             target: x86_64-unknown-linux-gnu
             name: linux-x64
           # macOS x64 (Intel)
           - platform: macos-latest
-            args: --target x86_64-apple-darwin --bundles dmg
+            args: --target x86_64-apple-darwin --bundles app,dmg --config updater-artifacts.json
             target: x86_64-apple-darwin
             name: macos-x64
           # macOS ARM64 (Apple Silicon)
           - platform: macos-latest
-            args: --target aarch64-apple-darwin --bundles dmg
+            args: --target aarch64-apple-darwin --bundles app,dmg --config updater-artifacts.json
             target: aarch64-apple-darwin
             name: macos-arm64
 
@@ -101,7 +101,20 @@ jobs:
         uses: tauri-apps/tauri-action@v0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # The updater refuses anything not signed by the key whose public half is in
+          # tauri.conf.json. If these are missing the build fails here rather than
+          # publishing an update nobody can install.
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         with:
+          # The signatures are uploaded; the manifest is not. Five platforms writing one
+          # latest.json means five writes to the same name, the last one wins, and the
+          # manifest ends up describing whichever platform finished last. That is the race
+          # Skima has been living with, reported as "none of the fallback platforms were
+          # found". It is composed once, afterwards, by the updater-manifest job below,
+          # from the signatures every platform has by then uploaded.
+          uploadUpdaterJson: false
+          uploadUpdaterSignatures: true
           tagName: ${{ github.ref_name }}
           releaseName: '${{ github.ref_name }}'
           releaseBody: |
@@ -114,6 +127,8 @@ jobs:
             | macOS | `.dmg` | Disk image. Apple Silicon (M1 and later) or Intel. |
             | Linux | `.deb`, `.AppImage` | Debian package or portable AppImage, for Intel and AMD computers. |
             | Android | `.apk` | Direct install. Works on phones and tablets from about 2017 onwards. |
+
+            The list below also has files ending in `.sig` and `.app.tar.gz`. Those are for the updater inside Daylo, not for you: pick the file from the table above.
 
             ### First time opening Daylo
 
@@ -305,6 +320,75 @@ jobs:
           if-no-files-found: error
 
   # Create a summary job that runs after all builds complete
+  # Composed once, after every platform has uploaded its signature, and the only writer of
+  # latest.json. See scripts/updater-manifest.js for why the action is told not to write
+  # one itself.
+  updater-manifest:
+    if: startsWith(github.ref, 'refs/tags/')
+    needs: [build]
+    runs-on: ubuntu-22.04
+    name: Updater manifest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      # Refuses if a platform is missing, if two artifacts claim one platform, if the
+      # release note is absent, too long, or word for word the one the previous version
+      # shipped with. A manifest written without every platform publishes cleanly and
+      # leaves one platform's worth of people never offered an update again.
+      - name: Compose it
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+        run: node scripts/updater-manifest.js "${{ github.ref_name }}"
+
+      - name: Publish it
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: gh release upload "${{ github.ref_name }}" latest.json --clobber --repo "${{ github.repository }}"
+
+      # The question that covers both ways /releases/latest can surprise us, and it asks
+      # the URL the app itself uses rather than the API. It skips prereleases, and it is
+      # also whatever GitHub has marked as latest, which can be moved by hand. So it does
+      # not ask "is this a prerelease?", it asks "does the address the app reads give back
+      # the version I just published?".
+      #
+      # Written as a step and not as a line in docs/RELEASING.md on purpose: a step runs
+      # whether or not anyone remembers it.
+      - name: The address the app reads gives back this version
+        env:
+          TAG: ${{ github.ref_name }}
+        run: |
+          url="https://github.com/${{ github.repository }}/releases/latest/download/latest.json"
+          for attempt in 1 2 3 4 5; do
+            served=$(curl -fsSL "$url" | python3 -c 'import json,sys; print(json.load(sys.stdin)["version"])' 2>/dev/null) || served=""
+            [ -n "$served" ] && break
+            echo "Attempt $attempt: the manifest is not being served yet."
+            sleep 10
+          done
+
+          expected="${TAG#v}"
+          if [ -z "$served" ]; then
+            echo "::error::$url served nothing readable after five tries."
+            echo "::error::Everyone on an earlier version will keep being told they are up to date."
+            exit 1
+          fi
+          if [ "$served" != "$expected" ]; then
+            echo "::error::$url says $served and this release is $expected."
+            echo "::error::Either it is not the latest release GitHub knows about, or the"
+            echo "::error::manifest did not replace the previous one. Nobody will be offered $expected."
+            exit 1
+          fi
+          echo "The address the app reads gives back $served."
+
   release-summary:
     needs: [build, build-android, build-demo]
     runs-on: ubuntu-latest
