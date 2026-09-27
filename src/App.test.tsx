@@ -229,6 +229,28 @@ describe('the question, in the app', () => {
 
   // Showing it is what spends it. A question that came back tomorrow because nobody
   // answered would be the app asking a favour twice.
+  // The tick that opens the gate happens inside the day sheet, so without waiting the
+  // question would arrive on top of it: two modals, two focus traps, and Escape closing
+  // both, in the one gesture the app is for.
+  it('waits while the day sheet is up, and does not lose its turn', async () => {
+    pastTheGate()
+    useCalendarStore.setState({ selectedDate: formatDate(new Date()) })
+
+    render(<App />)
+    await act(async () => {})
+
+    expect(screen.queryByTestId('feedback-rating')).not.toBeInTheDocument()
+
+    // Closing the sheet is what clears the date, and the session flag outlives it, so the
+    // question is deferred rather than cancelled. Somebody who only ever ticks from the
+    // sheet still gets asked.
+    await act(async () => {
+      useCalendarStore.setState({ selectedDate: null })
+    })
+
+    expect(await screen.findByTestId('feedback-rating')).toBeInTheDocument()
+  })
+
   it('is spent by being shown', async () => {
     pastTheGate()
 

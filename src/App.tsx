@@ -177,8 +177,21 @@ function App() {
   // effect, and the session flag is why it can be: putting the question spends it, so
   // `shouldInvite` answers no a moment later, and reading only that would close the dialog
   // on the frame after it opened. The check-in's line learned this the hard way.
+  // Not while the day sheet is up. The gate opens on the tick, and the tick happens inside
+  // that sheet, so without this the question arrives on top of it: two modals stacked, two
+  // focus traps, and Escape closing both, in the one gesture the whole app is for.
+  //
+  // This defers rather than cancels, which is the part worth being sure about. The sheet
+  // exists only while `selectedDate` is set, closing it clears that, and
+  // `_loggedThisSession` stays true for the rest of the session. So the question appears
+  // the moment the sheet is out of the way, and somebody who only ever ticks from the
+  // sheet is still asked. Losing those people would undo #79, which lowered this gate
+  // precisely because almost nobody reached it.
   const questionIsOpen =
-    canCheckIn && !questionClosed && (askedFromMenu || shouldInvite || feedbackAsked)
+    canCheckIn &&
+    !questionClosed &&
+    selectedDate === null &&
+    (askedFromMenu || shouldInvite || feedbackAsked)
 
   // Today's check-in, if the switch is on and today has not been tried. Twice, because
   // there are two kinds of device: a phone is closed and opened again, which remounts
