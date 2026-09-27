@@ -13,7 +13,6 @@ import {
 } from './components/settings'
 import { useCalendarStore } from './store'
 import { useAppVersion, useCheckinFields, useRemindersAvailable, useSwipeGesture } from './hooks'
-import { FeedbackInvite } from './components/feedback/FeedbackInvite'
 import { FeedbackRating } from './components/feedback/FeedbackRating'
 import { sendComment, sendRating, sendShown } from './lib/feedback'
 import { FEEDBACK_MAILTO, openMailto, shouldInviteFeedback } from './lib/feedbackInvite'
@@ -113,9 +112,6 @@ function App() {
   const markFeedbackAsked = useCalendarStore((state) => state.markFeedbackAsked)
   const feedbackAsked = useCalendarStore((state) => state._feedbackAsked)
   const { showToast } = useToast()
-  // The slot stays open once the band has thanked, so the line can outlive the condition
-  // that put the band there. Set from the click, not from an effect.
-  const [inviteThanked, setInviteThanked] = useState(false)
 
   const reminderOfferOwed = hasReminders && !reminderOffered
 
@@ -481,12 +477,6 @@ function App() {
               on={checkinEnabled || checkinStart === 'new'}
               onOpen={() => setIsCheckinOpen(true)}
             />
-          ) : null}
-
-          {/* The band belongs to the web now: in the app the same moment opens the
-              question instead, and there is no platform here to send one through. */}
-          {!canCheckIn && (shouldInvite || inviteThanked) ? (
-            <FeedbackInvite onThanked={() => setInviteThanked(true)} />
           ) : null}
 
           <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
