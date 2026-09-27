@@ -77,7 +77,10 @@ export function Modal({
           </h2>
           <button
             onClick={onClose}
-            className="p-2.5 sm:p-1 rounded-lg text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 min-h-[44px] min-w-[44px] sm:min-h-0 sm:min-w-0 flex items-center justify-center"
+            // gray-500 and not gray-400, measured against the white behind it: gray-400
+            // is 2.60:1 where 1.4.11 asks 3:1 for a control, and gray-500 is 4.84:1. Same
+            // change as the two bands, same reason.
+            className="p-2.5 sm:p-1 rounded-lg text-gray-500 hover:text-gray-600 hover:bg-gray-100 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 min-h-[44px] min-w-[44px] sm:min-h-0 sm:min-w-0 flex items-center justify-center"
             aria-label="Close modal"
           >
             <XIcon className="w-5 h-5" />
