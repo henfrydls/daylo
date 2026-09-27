@@ -34,9 +34,48 @@ pub fn installed_as(bundle: Option<BundleType>) -> Option<&'static str> {
     }
 }
 
+/// Whether this process is running inside an MSIX package, which is what an install from
+/// the Microsoft Store is.
+///
+/// It has to be asked separately, and the reason is a gap rather than a preference: the
+/// MSIX is built by packaging `target/release/Daylo.exe`, the binary as the compiler left
+/// it, never the NSIS installer. The bundler's format stamp is applied to the copies
+/// inside each bundle and not to that original — measured locally: after building the deb
+/// and the AppImage, the binary in target/ still answers None. So a Store install looks
+/// exactly like an unpackaged binary to `bundle_type`, and our rule for None is to say
+/// there is a new version without offering to install it.
+///
+/// That rule is right for an unknown desktop format and wrong here. The Store updates
+/// these copies itself, so an offer is noise at best, and at worst somebody downloads the
+/// .exe and ends up with two Daylos. Henfry asked the question before any of us thought
+/// of it.
+///
+/// `GetCurrentPackageFullName` is how Windows answers it. Outside a package it fails with
+/// APPMODEL_ERROR_NO_PACKAGE, and that failure is the answer rather than an error.
+#[cfg(target_os = "windows")]
+fn inside_a_store_package() -> bool {
+    use windows_sys::Win32::Foundation::APPMODEL_ERROR_NO_PACKAGE;
+    use windows_sys::Win32::Storage::Packaging::Appx::GetCurrentPackageFullName;
+
+    let mut length: u32 = 0;
+    // SAFETY: the call is being asked for the length it would need, which is what a null
+    // buffer means here. Nothing is written through the pointer.
+    let result = unsafe { GetCurrentPackageFullName(&mut length, std::ptr::null_mut()) };
+    result != APPMODEL_ERROR_NO_PACKAGE
+}
+
 /// What the screen asks before offering anything.
+///
+/// `"store"` means the copy is managed by somebody else and Daylo says nothing at all:
+/// not an offer, not a notice. It is the one answer that means silence rather than a
+/// different sentence.
 #[tauri::command]
 pub fn install_format() -> Option<&'static str> {
+    #[cfg(target_os = "windows")]
+    if inside_a_store_package() {
+        return Some("store");
+    }
+
     installed_as(tauri::utils::platform::bundle_type())
 }
 
@@ -55,6 +94,17 @@ mod tests {
         assert_eq!(installed_as(Some(BundleType::Nsis)), Some("nsis"));
         assert_eq!(installed_as(Some(BundleType::App)), Some("macos"));
         assert_eq!(installed_as(Some(BundleType::Dmg)), Some("macos"));
+    }
+
+    /// The Store's copy is not one of the words above and is not the absence of one
+    /// either: it is its own answer, and the only one that means the screen says nothing
+    /// at all. Pinned here because the mapping cannot say it — the Store install has no
+    /// bundle type to map, which is exactly the problem it solves.
+    #[test]
+    fn a_store_install_is_not_a_missing_answer() {
+        assert_ne!(installed_as(Some(BundleType::Msi)), Some("store"));
+        assert_ne!(installed_as(Some(BundleType::Nsis)), Some("store"));
+        assert_ne!(installed_as(None), Some("store"));
     }
 
     /// A binary nobody packaged, which is what a `cargo run` and the smoke run in CI are.

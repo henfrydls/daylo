@@ -101,6 +101,11 @@ tauri-plugin-notification = "~2.3"
 # that point, and common-controls-v6 is what lets that window have buttons that say what
 # they do instead of OK and Cancel.
 winreg = "0.55"
+# Also already in the tree through tauri, and named here for one call:
+# GetCurrentPackageFullName, which is how a process asks whether it is running
+# inside an MSIX package. A copy installed from the Microsoft Store is updated by
+# the Store, so Daylo has nothing to say to it. See src/packaging.rs.
+windows-sys = { version = "0.61", features = ["Win32_Foundation", "Win32_Storage_Packaging_Appx"] }
 rfd = { version = "0.16", features = ["common-controls-v6"] }
 
 # Only for the test that reads tauri.conf.json and checks each `plugins.<name>` block
