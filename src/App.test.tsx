@@ -224,7 +224,6 @@ describe('the question, in the app', () => {
 
     expect(await screen.findByTestId('feedback-rating')).toBeInTheDocument()
     expect(sendShown).toHaveBeenCalledExactlyOnceWith(expect.any(String), 'automatic')
-    expect(screen.queryByTestId('feedback-invite')).not.toBeInTheDocument()
   })
 
   // Showing it is what spends it. A question that came back tomorrow because nobody

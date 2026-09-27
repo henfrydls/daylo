@@ -4,7 +4,11 @@ import { formatDate } from './dates'
 import type { ActivityLog } from '../types'
 
 /**
- * The letter the invitation opens, already addressed and already started.
+ * The letter the menu opens, already addressed and already started.
+ *
+ * "Send feedback" is what opens it, and in a browser that entry is the only way in: the
+ * band that used to invite people on its own is gone, and the question with stars that
+ * replaced it in the app needs a platform a browser does not have.
  *
  * Three headings and nothing else: no version, no platform, no name, nothing the app
  * knows about the person. That is what lets the band say "nothing leaves your device

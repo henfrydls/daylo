@@ -1115,17 +1115,43 @@ test.describe('a window that is not tall @webkit', () => {
   })
 })
 
-// ── The invitation to write ───────────────────────────────
+// ── Writing from the menu ─────────────────────────────────
 
 /**
- * Once past the gate, Daylo asks once how it is going. The band is the only part of that
- * piece a browser can see: the check-in's consent and sheet need the native app, so they are
- * covered by unit tests and by hand.
+ * In a browser this is the only way to say anything. The band that used to invite people
+ * on its own is gone, and the question with stars that replaced it in the app needs a
+ * platform a browser does not have, so "Send feedback" is it.
  *
- * What these check is the part a person meets: that it is not there on the first day of
- * an installation, that it arrives behind the day sheet rather than jumping under a
- * thumb, that it sits where it was designed to sit, and that closing it closes it for
- * good and not just for now.
+ * Which makes this the whole of that piece a browser can see, and the reason the test
+ * stayed when the four around it went.
+ */
+test.describe('writing from the menu @webkit', () => {
+  test('is offered at any time', async ({ page }) => {
+    await page.goto('/')
+    await page.locator('[aria-label="More options"]:visible').click()
+
+    await expect(page.getByText('Send feedback')).toBeVisible()
+  })
+})
+
+// ── The check-in, where it does not exist ─────────────────
+
+/**
+ * In a browser there is no check-in at all, and this is what says so.
+ *
+ * The sheet only exists where `checkin_fields` answers, which is desktop and Android, so
+ * everything else about it is covered by unit tests and by hand on a device. What a
+ * browser can prove is the absence, and the absence is the promise: the demo and the
+ * self-hosted Docker build have no code path that sends anything, on top of a CSP that
+ * would refuse it.
+ */
+/**
+ * A store past the invitation gate, with the day sheet reachable. It used to sit with
+ * the band that invited people to write, and went with it; these check-in tests were
+ * calling it from here all along, which the deletion did not notice because e2e/ is
+ * not under tsc and only Playwright ever sees a missing name.
+ *
+ * Unchanged otherwise: same seeding, same twenty days.
  */
 async function seedPastTheGate(
   page: import('@playwright/test').Page,
@@ -1205,81 +1231,6 @@ async function tickADay(page: import('@playwright/test').Page) {
   await page.waitForFunction(() => document.getAnimations().every((a) => a.playState !== 'running'))
 }
 
-test.describe('the invitation to write @webkit', () => {
-  test('is not there until something has been ticked', async ({ page }) => {
-    await seedPastTheGate(page, { firstOpenedAt: 'yesterday' })
-
-    await expect(page.getByTestId('feedback-invite')).toHaveCount(0)
-
-    await tickADay(page)
-
-    await expect(page.getByTestId('feedback-invite')).toBeVisible()
-  })
-
-  // Under the header and above the calendar, which is the only place visible on every
-  // screen without scrolling.
-  test('sits between the header and the calendar', async ({ page }) => {
-    await seedPastTheGate(page, { firstOpenedAt: 'yesterday' })
-    await tickADay(page)
-
-    const band = (await page.getByTestId('feedback-invite').boundingBox())!
-    const card = (await page.locator('#main-content .lg\\:col-span-3').boundingBox())!
-    const header = (await page.locator('header').first().boundingBox())!
-
-    expect(
-      band.y + band.height,
-      `band ${JSON.stringify(band)} card ${JSON.stringify(card)}`
-    ).toBeLessThanOrEqual(card.y + 1)
-    expect(band.y).toBeGreaterThanOrEqual(header.y + header.height - 1)
-  })
-
-  // Somebody setting up a new phone is not the person to ask for a favour, however long
-  // the records they restored say they have been here.
-  test('stays away on the first day of an installation', async ({ page }) => {
-    await seedPastTheGate(page, { firstOpenedAt: 'today' })
-
-    await tickADay(page)
-
-    await expect(page.getByTestId('feedback-invite')).toHaveCount(0)
-  })
-
-  test('goes for good when it is dismissed', async ({ page }) => {
-    await seedPastTheGate(page, { firstOpenedAt: 'yesterday' })
-    await tickADay(page)
-
-    await page.getByTestId('feedback-invite-dismiss').click()
-
-    await expect(page.getByTestId('feedback-invite')).toHaveCount(0)
-    expect(
-      await page.evaluate(
-        () => JSON.parse(localStorage.getItem('simple-calendar-storage')!).state.feedbackInviteSeen
-      )
-    ).toBe(true)
-
-    await page.reload()
-    await page.waitForSelector('[data-testid="month-title-button"]')
-    await expect(page.getByTestId('feedback-invite')).toHaveCount(0)
-  })
-
-  test('and writing is offered from the menu at any time', async ({ page }) => {
-    await page.goto('/')
-    await page.locator('[aria-label="More options"]:visible').click()
-
-    await expect(page.getByText('Send feedback')).toBeVisible()
-  })
-})
-
-// ── The check-in, where it does not exist ─────────────────
-
-/**
- * In a browser there is no check-in at all, and this is what says so.
- *
- * The sheet only exists where `checkin_fields` answers, which is desktop and Android, so
- * everything else about it is covered by unit tests and by hand on a device. What a
- * browser can prove is the absence, and the absence is the promise: the demo and the
- * self-hosted Docker build have no code path that sends anything, on top of a CSP that
- * would refuse it.
- */
 test.describe('the check-in in a browser @webkit', () => {
   test('is not in the menu', async ({ page }) => {
     await seedPastTheGate(page, { firstOpenedAt: 'yesterday' })
@@ -1293,13 +1244,21 @@ test.describe('the check-in in a browser @webkit', () => {
 
   // Daylo does not ask about the check-in on any platform any more: the switch is in the
   // menu and that is the whole of it. This watches the moment a question would have been
-  // put, and the moment is a real one, because the band takes it.
+  // put, which is the one that closes the day sheet.
+  //
+  // What proves the moment happened used to be the invitation band appearing. The band is
+  // gone, so the proof is the record the tick left: without something positive here, this
+  // would be an absence asserted after a gesture that might never have run.
   test('nothing asks when the day sheet closes on a later day', async ({ page }) => {
     await seedPastTheGate(page, { firstOpenedAt: 'yesterday' })
 
     await tickADay(page)
 
+    const marked = await page.evaluate(
+      () => JSON.parse(localStorage.getItem('simple-calendar-storage')!).state.logs.length
+    )
+    expect(marked, 'the tick left no record, so the moment never happened').toBeGreaterThan(20)
+
     await expect(page.getByText(/check-in/i)).toHaveCount(0)
-    await expect(page.getByTestId('feedback-invite')).toBeVisible()
   })
 })
