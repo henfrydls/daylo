@@ -105,13 +105,16 @@ describe('checking for a newer version', () => {
     await expect(checkForUpdate(true)).resolves.toEqual({ kind: 'failed' })
   })
 
-  // The manifest caught while a release is still being assembled. It reads like a broken
-  // release and is a few minutes of a publication, so it is not reported even to somebody
-  // who asked.
-  it('stays quiet about a release still being assembled, even when asked', async () => {
+  // The manifest caught while a release is still being assembled says "none of the
+  // fallback platforms were found", which reads like a broken release and is a few minutes
+  // of a publication. It used to be swallowed even from somebody who asked, which left the
+  // button looking dead. There is one rule instead: whoever asked is told, and the words
+  // they are told ("Could not check just now.") are true of exactly this.
+  it('tells whoever asked, even about a release still being assembled', async () => {
     check.mockRejectedValue(new Error('none of the fallback platforms were found'))
 
-    await expect(checkForUpdate(true)).resolves.toEqual({ kind: 'quiet' })
+    await expect(checkForUpdate(true)).resolves.toEqual({ kind: 'failed' })
+    await expect(checkForUpdate(false)).resolves.toEqual({ kind: 'quiet' })
   })
 
   it('never writes anything about the machine into the log', async () => {

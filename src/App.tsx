@@ -318,24 +318,6 @@ function App() {
           } satisfies DropdownMenuItem,
         ]
       : []),
-    ...(updates.supported
-      ? [
-          {
-            label: 'Check for new versions',
-            icon: <RefreshIcon className="w-4 h-4" aria-hidden="true" />,
-            // The dot is repeated here, and the words beside it are what a screen reader
-            // gets: a dot on its own says nothing to anybody not looking at it.
-            trailing:
-              updateWaiting === null ? undefined : (
-                <span className="ml-auto flex items-center gap-2">
-                  <span className="sr-only">{`${updateWaiting} is out`}</span>
-                  <UpdateDot />
-                </span>
-              ),
-            onClick: () => setIsUpdatesOpen(true),
-          } satisfies DropdownMenuItem,
-        ]
-      : []),
     {
       label: 'Send feedback',
       icon: (
@@ -386,6 +368,24 @@ function App() {
             label: 'Anonymous check-in',
             icon: <BroadcastIcon className="w-4 h-4" aria-hidden="true" />,
             onClick: () => setIsCheckinOpen(true),
+          } satisfies DropdownMenuItem,
+        ]
+      : []),
+    ...(updates.supported
+      ? [
+          {
+            label: 'Check for new versions',
+            icon: <RefreshIcon className="w-4 h-4" aria-hidden="true" />,
+            // The dot is repeated here, and the words beside it are what a screen reader
+            // gets: a dot on its own says nothing to anybody not looking at it.
+            trailing:
+              updateWaiting === null ? undefined : (
+                <span className="ml-auto flex items-center gap-2">
+                  <span className="sr-only">{`${updateWaiting} is out`}</span>
+                  <UpdateDot />
+                </span>
+              ),
+            onClick: () => setIsUpdatesOpen(true),
           } satisfies DropdownMenuItem,
         ]
       : []),

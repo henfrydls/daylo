@@ -84,34 +84,24 @@ export async function restartApp(): Promise<boolean> {
 export type UpdateCheck =
   | { kind: 'none' }
   | { kind: 'available'; version: string; update: Update }
-  /** Something went wrong and nobody is told. See `isPassing`. */
+  /** Something went wrong and nobody is told, because nobody asked. */
   | { kind: 'quiet' }
   /** Somebody asked for this and it failed, so somebody is owed an answer. */
   | { kind: 'failed' }
 
 /**
- * Failures that are not worth a word on screen.
- *
- * The one that matters is the manifest arriving while a release is still being assembled:
- * the plugin says "none of the fallback platforms were found", which reads like a broken
- * release and is a few minutes of a publication. Our own release workflow writes the
- * manifest once, at the end, so this should not happen to us; it is recognised anyway
- * because the window belongs to GitHub's caches as much as to us, and because an automatic
- * check that nobody asked for has no business reporting anything.
- *
- * Text and not a type, because the plugin gives no code for it.
- */
-function isPassing(error: unknown): boolean {
-  const said = String(error).toLowerCase()
-  return said.includes('none of the fallback platforms') || said.includes('platforms were found')
-}
-
-/**
  * Ask whether there is something newer.
  *
- * `asked` says whether a person pressed something. Nobody is told about a failed automatic
- * check: it runs when it runs, and a person who did not ask for it should not be shown an
- * error about it. Somebody who pressed "Check now" is owed an answer either way.
+ * `asked` says whether a person pressed something, and it is the whole of the rule about
+ * failures. Nobody is told about a failed automatic check: it runs when it runs, and a
+ * person who did not ask for it should not be shown an error about it. Somebody who
+ * pressed "Check now" is told, whatever went wrong.
+ *
+ * There used to be a second rule, for the manifest caught while a release is still being
+ * assembled: the plugin says "none of the fallback platforms were found", which reads like
+ * a broken release and is a few minutes of a publication. Swallowing that from somebody
+ * who had just pressed a button left the button looking dead, and the words they get,
+ * "Could not check just now.", are true of exactly that window and claim nothing about it.
  */
 export async function checkForUpdate(asked: boolean): Promise<UpdateCheck> {
   if (!isTauri()) return { kind: 'none' }
@@ -124,7 +114,7 @@ export async function checkForUpdate(asked: boolean): Promise<UpdateCheck> {
     // Without the version or anything about the machine: this line exists to be read in a
     // log, not to describe whoever hit it.
     console.error('[Daylo] could not check for updates', error)
-    if (!asked || isPassing(error)) return { kind: 'quiet' }
+    if (!asked) return { kind: 'quiet' }
     return { kind: 'failed' }
   }
 }
