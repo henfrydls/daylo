@@ -111,7 +111,10 @@ export function useUpdates(): Updates {
           setShowCard(useCalendarStore.getState().updateNoticeSeenFor !== result.version)
         } else if (result.kind === 'none') {
           setFound(null)
-          if (asked) setAnswered('up-to-date')
+          // Kept even when nobody asked. Nothing appears on screen for it, but it is what
+          // the sheet says when somebody opens it, and a sheet that knows nothing has only
+          // its own buttons to show. A failure is different and is not kept: see 'quiet'.
+          setAnswered('up-to-date')
         } else if (result.kind === 'failed') {
           setAnswered('failed')
         }

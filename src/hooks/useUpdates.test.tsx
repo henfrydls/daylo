@@ -128,12 +128,25 @@ describe('what a check turns into', () => {
     })
   })
 
-  it('shows nothing and says nothing when there is nothing newer', async () => {
+  // Nothing on screen, because nobody asked for anything to appear. The answer is kept
+  // all the same: it is what the sheet says when somebody opens it, and without it a sheet
+  // opened out of the blue would have nothing to show but its own buttons.
+  it('shows nothing, and keeps what it found out for the sheet', async () => {
     const { result } = renderHook(() => useUpdates())
     await settle()
 
     expect(result.current.notice).toBeNull()
-    // Nobody asked, so nobody is told. "Up to date" belongs to a question that was put.
+    expect(result.current.status).toEqual({ kind: 'up-to-date' })
+  })
+
+  // A failure is the other half of this, and it is not kept. An automatic check that went
+  // wrong has nothing to tell anybody: nobody asked it a question.
+  it('keeps nothing from an automatic check that failed', async () => {
+    check.mockRejectedValue(new Error('offline'))
+
+    const { result } = renderHook(() => useUpdates())
+    await settle()
+
     expect(result.current.status).toEqual({ kind: 'idle' })
   })
 

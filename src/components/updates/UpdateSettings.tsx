@@ -2,20 +2,21 @@ import { Button, Modal } from '../ui'
 import { useCalendarStore } from '../../store'
 
 /**
- * The switch for looking, and the way to look right now.
+ * What Daylo knows about a newer version, and the two things that can be done about it.
  *
- * Same shape as the check-in's sheet, which is the point: two settings that behave the
- * same way are easier to trust than two that each do their own thing. What is new here is
- * one line, the action in the body, and it is new because the check-in has nothing to do
- * on request and this does.
+ * Two lines and two buttons, and that is the whole sheet. It used to have a dot, a
+ * sentence about the switch and a paragraph explaining the request; Henfry read it and
+ * called it invasive, which it was: somebody who opens this wants to know whether there is
+ * an update, and everything else was the app talking about itself.
  *
- * The action is in the body rather than the footer. That footer is one button aligned
- * right; a second one there turns it into a row of two and asks which is the important
- * one, when one changes a setting and the other runs an errand.
+ * So the switch stopped being a state to read and became a thing to do. Its words say what
+ * pressing it does, and the words changing is the whole acknowledgement: there is no
+ * sentence about it any more, no toast and no confirmation, which is why the row it sits
+ * in is spoken.
  *
- * There is no toast. The sentence rewriting itself is the whole reply, the way it is in
- * the check-in's sheet, and a message that appeared over this sheet would be drawn under
- * it anyway: the dialog renders through a portal that paints above the toast layer.
+ * The one line that stayed is the one about what leaves the machine. It is the only thing
+ * here that answers what pressing a button sends about somebody, and it is short because
+ * the long version was part of what made this sheet a lecture.
  */
 
 /** What the sheet has to say, which is the same question the card answers differently. */
@@ -34,11 +35,12 @@ interface UpdateSettingsProps {
   isOpen: boolean
   onClose: () => void
   status: UpdateStatus
-  /** "Check now", or "Update" when there is one and this copy can take it. */
+  /** "Check now", or what there is to do instead when there is something. */
   onAct: () => void
 }
 
-function sentence(status: UpdateStatus, enabled: boolean): string {
+/** Null when nothing is known, because a sheet that opens knowing nothing claims nothing. */
+function sentence(status: UpdateStatus): string | null {
   switch (status.kind) {
     case 'checking':
       return 'Checking…'
@@ -53,14 +55,15 @@ function sentence(status: UpdateStatus, enabled: boolean): string {
     case 'failed':
       return 'Could not check just now.'
     case 'idle':
-      return enabled ? 'Checking is on.' : 'Checking is off.'
+      return null
   }
 }
 
 /** One action at a time, never two, and its words depend on what there is to do. */
 function actionWords(status: UpdateStatus): string | null {
-  // Nothing to offer while it is happening: the work carries on either way, and a button
-  // there would be a second Update over an update already running.
+  // Gone rather than greyed out while something is happening. A disabled primary is white
+  // on emerald at half opacity, which measures 1.6:1, and taking it out costs no height
+  // because the row keeps the other button.
   if (status.kind === 'checking' || status.kind === 'working') return null
   if (status.kind === 'restart') return 'Restart'
   if (status.kind !== 'available') return 'Check now'
@@ -70,6 +73,7 @@ function actionWords(status: UpdateStatus): string | null {
 export function UpdateSettings({ isOpen, onClose, status, onAct }: UpdateSettingsProps) {
   const enabled = useCalendarStore((s) => s.updatesEnabled)
   const setEnabled = useCalendarStore((s) => s.setUpdatesEnabled)
+  const said = sentence(status)
   const action = actionWords(status)
 
   return (
@@ -79,44 +83,37 @@ export function UpdateSettings({ isOpen, onClose, status, onAct }: UpdateSetting
       title="Check for new versions"
       data-testid="update-settings"
       footer={
-        <div className="flex justify-end">
+        // Spoken, because the buttons are the only acknowledgement left: pressing the
+        // first one changes nothing on screen except its own words.
+        <div className="flex justify-end gap-3" aria-live="polite">
           <Button
-            variant={enabled ? 'secondary' : 'primary'}
+            variant="secondary"
             onClick={() => setEnabled(!enabled)}
             data-testid="update-toggle"
           >
-            {enabled ? 'Turn it off' : 'Turn it on'}
+            {enabled ? 'Stop checking automatically' : 'Start checking automatically'}
           </Button>
+          {action === null ? null : (
+            <Button onClick={onAct} data-testid="update-settings-action">
+              {action}
+            </Button>
+          )}
         </div>
       }
     >
-      <div className="space-y-4">
-        <p className="text-sm text-gray-600">
-          Daylo asks GitHub whether a newer version exists. It sends nothing about you.
-        </p>
-
-        <div className="flex items-start gap-2" data-testid="update-status">
-          <span
-            className={`mt-[7px] h-2 w-2 shrink-0 rounded-full ${
-              enabled ? 'bg-emerald-500' : 'bg-gray-400'
-            }`}
-            aria-hidden="true"
-          />
-          {/* Spoken, because the switch and the check have no other acknowledgement: no
-              toast, no confirmation, and this sentence rewriting itself is the reply. */}
-          <div className="min-w-0" aria-live="polite">
-            <p className="font-medium text-gray-900">{sentence(status, enabled)}</p>
-            {action === null ? null : (
-              <button
-                onClick={onAct}
-                className="mt-1 rounded text-sm font-medium text-emerald-700 underline underline-offset-2 hover:text-emerald-800 focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500"
-                data-testid="update-settings-action"
-              >
-                {action}
-              </button>
-            )}
-          </div>
+      <div>
+        {/* The region is always here even when it has nothing in it: a live region that
+            arrives at the same moment as its text is a live region most screen readers do
+            not read. */}
+        <div aria-live="polite">
+          {said === null ? null : (
+            <p className="font-medium text-gray-900" data-testid="update-status">
+              {said}
+            </p>
+          )}
         </div>
+
+        <p className="mt-4 text-sm text-gray-600">Daylo asks GitHub and sends nothing about you.</p>
       </div>
     </Modal>
   )

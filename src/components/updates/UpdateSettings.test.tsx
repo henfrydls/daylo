@@ -16,24 +16,15 @@ beforeEach(() => {
 const show = (status: UpdateStatus = { kind: 'idle' }) =>
   render(<UpdateSettings isOpen onClose={onClose} status={status} onAct={onAct} />)
 
-const status = () => screen.getByTestId('update-status')
+const sentence = () => screen.queryByTestId('update-status')
 const action = () => screen.queryByTestId('update-settings-action')
+const toggle = () => screen.getByTestId('update-toggle')
 
 describe('what the sheet says', () => {
-  it('says what the switch is doing when there is nothing else to say', () => {
-    const { unmount } = show()
-    expect(status()).toHaveTextContent('Checking is on.')
-    unmount()
-
-    useCalendarStore.setState({ updatesEnabled: false })
-    show()
-    expect(status()).toHaveTextContent('Checking is off.')
-  })
-
   it('answers a check that found nothing', () => {
     show({ kind: 'up-to-date' })
 
-    expect(status()).toHaveTextContent('Daylo is up to date.')
+    expect(sentence()).toHaveTextContent('Daylo is up to date.')
   })
 
   // Opened from the dot, it already says what the dot was about. Making somebody press
@@ -42,7 +33,7 @@ describe('what the sheet says', () => {
   it('names the version when one is waiting', () => {
     show({ kind: 'available', version: '1.5.0', canInstall: true })
 
-    expect(status()).toHaveTextContent('Daylo 1.5.0 is out.')
+    expect(sentence()).toHaveTextContent('Daylo 1.5.0 is out.')
   })
 
   // In the sentence, not in a toast. A toast raised over this sheet would be painted
@@ -50,23 +41,52 @@ describe('what the sheet says', () => {
   it('says a failed check in the same place as everything else', () => {
     show({ kind: 'failed' })
 
-    expect(status()).toHaveTextContent('Could not check just now.')
+    expect(sentence()).toHaveTextContent('Could not check just now.')
   })
 
-  it('explains what leaves the machine, without being asked', () => {
+  it('says what is happening while it happens', () => {
+    const { unmount } = show({ kind: 'working' })
+    expect(sentence()).toHaveTextContent('Daylo is updating itself.')
+    unmount()
+
+    show({ kind: 'restart' })
+    expect(sentence()).toHaveTextContent('Done. Restart Daylo to finish.')
+  })
+
+  // Nothing known yet, so nothing is claimed. The hook keeps what the automatic check
+  // found out, which is why a sheet opened out of the blue almost never looks like this.
+  it('says nothing at all when nothing is known', () => {
     show()
 
+    expect(sentence()).toBeNull()
+  })
+
+  // What leaves the machine, in one line, without being asked. It is the only thing here
+  // that answers "what does pressing this send about me".
+  it('says what it asks and what it sends, always', () => {
+    show({ kind: 'working' })
+
     expect(screen.getByTestId('update-settings')).toHaveTextContent(
-      'Daylo asks GitHub whether a newer version exists. It sends nothing about you.'
+      'Daylo asks GitHub and sends nothing about you.'
     )
   })
 })
 
-// One action, never two. Its words say what there is to do, so nobody has to work out
-// which of two buttons is the one they want.
+// One action at a time, never two, and its words say what there is to do so nobody has to
+// work out which button is the one they want.
 describe('the one action', () => {
-  it('offers a check when nothing is known', () => {
-    show()
+  it('offers a check when nothing is known, and after one that found nothing', () => {
+    const { unmount } = show()
+    expect(action()).toHaveTextContent('Check now')
+    unmount()
+
+    show({ kind: 'up-to-date' })
+    expect(action()).toHaveTextContent('Check now')
+  })
+
+  it('offers a check again after one that failed', () => {
+    show({ kind: 'failed' })
+
     expect(action()).toHaveTextContent('Check now')
   })
 
@@ -85,11 +105,23 @@ describe('the one action', () => {
     expect(action()).not.toHaveTextContent(/^Update$/)
   })
 
-  it('offers nothing while it is looking', () => {
-    show({ kind: 'checking' })
+  it('offers the restart that did not happen by itself', () => {
+    show({ kind: 'restart' })
 
-    expect(status()).toHaveTextContent('Checking…')
+    expect(action()).toHaveTextContent('Restart')
+  })
+
+  // Gone, not greyed out. A disabled primary is white on emerald at half opacity, which
+  // measures 1.6:1, and taking it out costs no height because the row keeps the other one.
+  it('takes the action away while it is working, rather than dimming it', () => {
+    const { unmount } = show({ kind: 'checking' })
     expect(action()).toBeNull()
+    expect(toggle()).toBeInTheDocument()
+    unmount()
+
+    show({ kind: 'working' })
+    expect(action()).toBeNull()
+    expect(toggle()).toBeInTheDocument()
   })
 
   it('reports the press', async () => {
@@ -101,40 +133,32 @@ describe('the one action', () => {
   })
 })
 
-// The sheet can be opened while the update is already happening, and the card behind it
-// is the one telling the story. What the sheet may not do is offer "Update" again there,
-// as if nothing were going on.
-describe('while it is already happening', () => {
-  it('says so and offers nothing', () => {
-    show({ kind: 'working' })
-
-    expect(status()).toHaveTextContent('Daylo is updating itself.')
-    expect(action()).toBeNull()
-  })
-
-  it('offers the restart that did not happen by itself', () => {
-    show({ kind: 'restart' })
-
-    expect(status()).toHaveTextContent('Done. Restart Daylo to finish.')
-    expect(action()).toHaveTextContent('Restart')
-  })
-})
-
+// The switch says what it does rather than what it is, and the words changing is the
+// acknowledgement: there is no sentence about it any more, no toast and no confirmation.
 describe('the switch', () => {
-  it('turns it off and says so', async () => {
+  it('offers to stop, and stops', async () => {
     show()
+    expect(toggle()).toHaveTextContent('Stop checking automatically')
 
-    await userEvent.click(screen.getByTestId('update-toggle'))
+    await userEvent.click(toggle())
 
     expect(useCalendarStore.getState().updatesEnabled).toBe(false)
   })
 
-  it('turns it back on', async () => {
+  it('offers to start again, and starts', async () => {
     useCalendarStore.setState({ updatesEnabled: false })
     show()
+    expect(toggle()).toHaveTextContent('Start checking automatically')
 
-    await userEvent.click(screen.getByTestId('update-toggle'))
+    await userEvent.click(toggle())
 
     expect(useCalendarStore.getState().updatesEnabled).toBe(true)
+  })
+
+  // Said out loud, because the button's own words are the whole reply now.
+  it('is in a row that says itself', () => {
+    show()
+
+    expect(toggle().closest('[aria-live]')).toHaveAttribute('aria-live', 'polite')
   })
 })
