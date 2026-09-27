@@ -214,6 +214,24 @@ export function DownloadIcon(props: IconProps) {
 }
 
 /** Refresh/Reload icon - Used for refresh/reload actions */
+/**
+ * The waves of the anonymous check-in. Used by its menu entry and by the card that
+ * announces it, which is the whole reason it is here rather than inline in one of them: a
+ * copy of a path in two files is two paths the day somebody redraws one.
+ */
+export function BroadcastIcon(props: IconProps) {
+  return (
+    <svg {...createIconProps(props)}>
+      <path
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        strokeWidth={2}
+        d="M9.348 14.652a3.75 3.75 0 010-5.304m5.304 0a3.75 3.75 0 010 5.304m-7.425 2.121a6.75 6.75 0 010-9.546m9.546 0a6.75 6.75 0 010 9.546M5.106 18.894c-3.808-3.807-3.808-9.98 0-13.788m13.788 0c3.808 3.807 3.808 9.98 0 13.788M12 12h.008v.008H12V12zm.375 0a.375.375 0 11-.75 0 .375.375 0 01.75 0z"
+      />
+    </svg>
+  )
+}
+
 export function RefreshIcon(props: IconProps) {
   return (
     <svg {...createIconProps(props)}>

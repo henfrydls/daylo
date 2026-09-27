@@ -2,7 +2,14 @@ import { useState, useEffect, useMemo, lazy, Suspense } from 'react'
 import { YearView, MonthView } from './components/calendar'
 import { ActivityList, QuickLog } from './components/activities'
 import { StatsPanel } from './components/stats'
-import { BottomSheet, DropdownMenu, ErrorBoundary, ToastContainer, useToast } from './components/ui'
+import {
+  BottomSheet,
+  BroadcastIcon,
+  DropdownMenu,
+  ErrorBoundary,
+  ToastContainer,
+  useToast,
+} from './components/ui'
 import type { DropdownMenuItem } from './components/ui'
 import { AppSkeleton } from './components/skeletons'
 import {
@@ -342,22 +349,7 @@ function App() {
       ? [
           {
             label: 'Anonymous check-in',
-            icon: (
-              <svg
-                className="w-4 h-4"
-                fill="none"
-                viewBox="0 0 24 24"
-                stroke="currentColor"
-                aria-hidden="true"
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2}
-                  d="M9.348 14.652a3.75 3.75 0 010-5.304m5.304 0a3.75 3.75 0 010 5.304m-7.425 2.121a6.75 6.75 0 010-9.546m9.546 0a6.75 6.75 0 010 9.546M5.106 18.894c-3.808-3.807-3.808-9.98 0-13.788m13.788 0c3.808 3.807 3.808 9.98 0 13.788M12 12h.008v.008H12V12zm.375 0a.375.375 0 11-.75 0 .375.375 0 01.75 0z"
-                />
-              </svg>
-            ),
+            icon: <BroadcastIcon className="w-4 h-4" aria-hidden="true" />,
             onClick: () => setIsCheckinOpen(true),
           } satisfies DropdownMenuItem,
         ]

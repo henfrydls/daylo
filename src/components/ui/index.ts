@@ -13,6 +13,7 @@ export type {
 } from './DropdownMenu'
 export { ErrorBoundary } from './ErrorBoundary'
 export {
+  BroadcastIcon,
   CheckCircleIcon,
   CheckIcon,
   ChevronLeftIcon,
