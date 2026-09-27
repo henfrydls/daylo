@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { checkForUpdate, installFormat, whatWeMayDo } from './updater'
+import { checkForUpdate, installFormat, takeUpdate, whatWeMayDo } from './updater'
 
 const invoke = vi.hoisted(() => vi.fn())
 const check = vi.hoisted(() => vi.fn())
@@ -130,5 +130,88 @@ describe('checking for a newer version', () => {
 
     await expect(checkForUpdate(true)).resolves.toEqual({ kind: 'none' })
     expect(check).not.toHaveBeenCalled()
+  })
+})
+
+// Taking the update. The steps matter because the card shows them, and the failures are
+// told apart because they mean different things to whoever is reading.
+describe('taking an update', () => {
+  const anUpdate = (over: Record<string, unknown> = {}) =>
+    ({
+      version: '1.5.0',
+      download: vi.fn().mockResolvedValue(undefined),
+      install: vi.fn().mockResolvedValue(undefined),
+      ...over,
+    }) as never
+
+  it('counts while it downloads, and stops short of a hundred', async () => {
+    const said: unknown[] = []
+    const update = anUpdate({
+      download: vi.fn(async (onEvent: (p: unknown) => void) => {
+        onEvent({ event: 'Started', data: { contentLength: 200 } })
+        onEvent({ event: 'Progress', data: { chunkLength: 100 } })
+        onEvent({ event: 'Progress', data: { chunkLength: 100 } })
+      }),
+    })
+
+    await takeUpdate(update, (step) => said.push(step))
+
+    expect(said).toContainEqual({ step: 'downloading', percent: 50 })
+    // Not 100: the signature is still being checked, and a bar at 100 while something is
+    // still happening has stopped telling the truth.
+    expect(said).toContainEqual({ step: 'downloading', percent: 99 })
+  })
+
+  // No length in the Started event means nothing honest to count.
+  it('says it is downloading without a number when there is no total', async () => {
+    const said: unknown[] = []
+    const update = anUpdate({
+      download: vi.fn(async (onEvent: (p: unknown) => void) => {
+        onEvent({ event: 'Started', data: {} })
+        onEvent({ event: 'Progress', data: { chunkLength: 10 } })
+      }),
+    })
+
+    await takeUpdate(update, (step) => said.push(step))
+
+    expect(said).toContainEqual({ step: 'downloading', percent: null })
+  })
+
+  // The one failure worth naming. download() checks the signature before handing the
+  // bytes back, so this is where an artifact signed by somebody else is refused.
+  it('names an update that was not signed by our key', async () => {
+    const said: { step: string }[] = []
+    const update = anUpdate({
+      download: vi.fn().mockRejectedValue(new Error('signature verification failed')),
+    })
+
+    await takeUpdate(update, (step) => said.push(step))
+
+    expect(said.at(-1)).toEqual({ step: 'unverified' })
+  })
+
+  it('tells a download that did not arrive from an install that did not happen', async () => {
+    const first: { step: string }[] = []
+    await takeUpdate(
+      anUpdate({ download: vi.fn().mockRejectedValue(new Error('error sending request')) }),
+      (step) => first.push(step)
+    )
+    expect(first.at(-1)).toEqual({ step: 'download-failed' })
+
+    const second: { step: string }[] = []
+    await takeUpdate(anUpdate({ install: vi.fn().mockRejectedValue(new Error('no')) }), (step) =>
+      second.push(step)
+    )
+    expect(second.at(-1)).toEqual({ step: 'install-failed' })
+  })
+
+  it('does not try to install what did not download', async () => {
+    const update = anUpdate({ download: vi.fn().mockRejectedValue(new Error('no')) })
+
+    await takeUpdate(update, () => {})
+
+    expect(
+      (update as unknown as { install: ReturnType<typeof vi.fn> }).install
+    ).not.toHaveBeenCalled()
   })
 })

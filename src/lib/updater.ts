@@ -45,6 +45,42 @@ export async function installFormat(): Promise<InstallFormat | null> {
   }
 }
 
+/**
+ * Where somebody goes when this copy cannot replace itself.
+ *
+ * The page that explains the formats, not the list of files: whoever reads this is being
+ * asked to pick one, and the releases page asks them to know which of eight is theirs.
+ */
+export const DOWNLOADS_URL = 'https://daylo.henfrydls.com/#download'
+
+/**
+ * Open it through the platform, because a webview told to navigate anywhere does nothing:
+ * the app's CSP has no host in it at all. The command is the opener plugin's, the same one
+ * the feedback letter uses.
+ */
+export async function openDownloads(): Promise<void> {
+  try {
+    await invoke('plugin:opener|open_url', { url: DOWNLOADS_URL })
+  } catch (error) {
+    console.error('[Daylo] the downloads page did not open', error)
+  }
+}
+
+/**
+ * Come back on the new version. Says whether it happened, because the card has a sentence
+ * for the case where it did not.
+ */
+export async function restartApp(): Promise<boolean> {
+  try {
+    const { relaunch } = await import('@tauri-apps/plugin-process')
+    await relaunch()
+    return true
+  } catch (error) {
+    console.error('[Daylo] the relaunch did not happen', error)
+    return false
+  }
+}
+
 export type UpdateCheck =
   | { kind: 'none' }
   | { kind: 'available'; version: string; update: Update }
@@ -91,4 +127,75 @@ export async function checkForUpdate(asked: boolean): Promise<UpdateCheck> {
     if (!asked || isPassing(error)) return { kind: 'quiet' }
     return { kind: 'failed' }
   }
+}
+
+/**
+ * Take the update: download it, install it, and come back on the new version.
+ *
+ * `relaunch` on every system, and not only where it is needed. On Windows the installer
+ * closes the app and opens it again by itself, so this never runs there; on macOS and the
+ * AppImage nothing would happen without it, and the card has already said the app will
+ * close and open again. Making that sentence true everywhere was the decision.
+ *
+ * The steps are reported as they happen because the card shows them, and the failures are
+ * told apart because they mean different things to whoever is reading: a download that did
+ * not arrive is worth trying again later, an install that did not happen leaves the app
+ * exactly as it was, and something that arrived unsigned is the one case where the app
+ * refused on purpose.
+ */
+export type TakeStep =
+  | { step: 'downloading'; percent: number | null }
+  | { step: 'installing' }
+  | { step: 'restart' }
+  | { step: 'unverified' }
+  | { step: 'download-failed' }
+  | { step: 'install-failed' }
+
+export async function takeUpdate(update: Update, say: (step: TakeStep) => void): Promise<void> {
+  let total: number | null = null
+  let got = 0
+
+  try {
+    await update.download((progress) => {
+      // The plugin reports three moments, and only the first carries a length. It is
+      // optional there, which is why the card has a percentless "Downloading…" at all:
+      // without a total there is nothing honest to count.
+      if (progress.event === 'Started') {
+        total = progress.data.contentLength ?? null
+        say({ step: 'downloading', percent: total === null ? null : 0 })
+        return
+      }
+      if (progress.event !== 'Progress') return
+
+      got += progress.data.chunkLength
+      say({
+        step: 'downloading',
+        // Capped at 99: the last step is the signature being checked, and a bar sitting
+        // at 100 while something is still happening is a bar that has stopped telling
+        // the truth.
+        percent: total === null ? null : Math.min(99, Math.floor((got / total) * 100)),
+      })
+    })
+  } catch (error) {
+    // The signature is checked inside download, before the bytes are handed back, so this
+    // is where an unsigned artifact is refused. It is the one failure worth naming.
+    console.error('[Daylo] the update did not download', error)
+    const said = String(error).toLowerCase()
+    say({ step: said.includes('signature') ? 'unverified' : 'download-failed' })
+    return
+  }
+
+  say({ step: 'installing' })
+
+  try {
+    await update.install()
+  } catch (error) {
+    console.error('[Daylo] the update did not install', error)
+    say({ step: 'install-failed' })
+    return
+  }
+
+  // A net, not a step. Windows never gets here because its installer has already closed
+  // the app; anywhere else, the install worked and only the coming back did not.
+  if (!(await restartApp())) say({ step: 'restart' })
 }

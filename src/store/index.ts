@@ -224,6 +224,12 @@ interface CalendarState {
    * and later is the dot on the menu, not the card coming back.
    */
   updateNoticeSeenFor: string | null
+  /**
+   * Whether Daylo asks GitHub about newer versions. On by default, and that default is
+   * the decision: the alternative needed a line offering to turn it on, which is the kind
+   * of line this app was told not to have.
+   */
+  updatesEnabled: boolean
 
   // Activity actions
   addActivity: (name: string, color: string) => void
@@ -252,6 +258,7 @@ interface CalendarState {
   markFeedbackAsked: () => void
   /** The update card for this version has been put. */
   markUpdateNoticeSeen: (version: string) => void
+  setUpdatesEnabled: (enabled: boolean) => void
   /** Takes this session's offer slot, if nobody has taken it. */
   claimOffer: (kind: 'reminder' | 'checkin') => void
 
@@ -313,6 +320,7 @@ export const useCalendarStore = create<CalendarState>()(
       _checkinNoticeShown: false,
       _feedbackAsked: false,
       updateNoticeSeenFor: null,
+      updatesEnabled: true,
 
       setReminder: (enabled, hour, minute) =>
         set((state) => ({
@@ -336,6 +344,8 @@ export const useCalendarStore = create<CalendarState>()(
       markFeedbackAsked: () => set({ feedbackInviteSeen: true, _feedbackAsked: true }),
 
       markUpdateNoticeSeen: (version) => set({ updateNoticeSeenFor: version }),
+
+      setUpdatesEnabled: (enabled) => set({ updatesEnabled: enabled }),
 
       claimOffer: (kind) =>
         set((state) => (state._offerThisSession === null ? { _offerThisSession: kind } : {})),
@@ -497,6 +507,7 @@ export const useCalendarStore = create<CalendarState>()(
         checkinId: state.checkinId,
         checkinLastAttempt: state.checkinLastAttempt,
         updateNoticeSeenFor: state.updateNoticeSeenFor,
+        updatesEnabled: state.updatesEnabled,
       }),
       // The default merge would do, except that it cannot say whether a field was absent
       // or merely false: by the time anything else can look, the default has filled the
