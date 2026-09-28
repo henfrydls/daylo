@@ -221,7 +221,7 @@ export function DropdownMenu({ trigger, items, 'data-testid': testId }: Dropdown
                       {item.icon}
                     </span>
                   )}
-                  <span>{item.label}</span>
+                  <span className="whitespace-nowrap">{item.label}</span>
                 </div>
               )
             }
@@ -255,7 +255,12 @@ export function DropdownMenu({ trigger, items, 'data-testid': testId }: Dropdown
                     {item.icon}
                   </span>
                 )}
-                <span>{item.label}</span>
+                {/* The menu grows to fit the entry; the entry does not shrink to fit the
+                    menu. Without this the label is allowed to shrink inside the flex row
+                    and the box sizes itself to the shrunk label: "Check for new versions"
+                    came out as three lines, measured at 1440 and again at 800, and worse
+                    with the dot beside it. */}
+                <span className="whitespace-nowrap">{item.label}</span>
                 {item.trailing}
               </button>
             )
