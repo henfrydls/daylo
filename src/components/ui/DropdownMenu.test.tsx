@@ -518,6 +518,41 @@ describe('DropdownMenu', () => {
     })
   })
 
+  // The menu grows to fit its entries; the entries do not shrink to fit the menu. Measured
+  // in the real engine before this existed: "Check for new versions" came out as three
+  // lines at 1440 and again at 800, because the label span was allowed to shrink inside
+  // the flex row and the box sized itself to the shrunk label. jsdom lays nothing out, so
+  // this guards the instruction rather than the result; the result is a capture.
+  describe('Labels on one line', () => {
+    it('keeps an action item on one line', async () => {
+      const user = userEvent.setup()
+      render(
+        <DropdownMenu
+          trigger={<span>Open Menu</span>}
+          items={[{ label: 'Check for new versions', onClick: vi.fn() }]}
+        />
+      )
+
+      await user.click(screen.getByText('Open Menu'))
+
+      expect(screen.getByText('Check for new versions')).toHaveClass('whitespace-nowrap')
+    })
+
+    it('keeps an info item on one line too', async () => {
+      const user = userEvent.setup()
+      render(
+        <DropdownMenu
+          trigger={<span>Open Menu</span>}
+          items={[{ type: 'info', label: 'v1.4.0' }]}
+        />
+      )
+
+      await user.click(screen.getByText('Open Menu'))
+
+      expect(screen.getByText('v1.4.0')).toHaveClass('whitespace-nowrap')
+    })
+  })
+
   describe('Edge Cases', () => {
     it('should handle empty items array', async () => {
       const user = userEvent.setup()
