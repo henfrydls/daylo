@@ -11,11 +11,11 @@ on, which on a phone left the word "on" as the loudest thing on screen and read 
 opposite of the truth. It now says "Anonymous check-in is off.", and the check-in itself
 has not changed: it stays off until you turn it on.
 
-**Daylo asks how it is going after a week, not after two.** The invitation to write needed
-fourteen days and eight days with something marked on them, which almost nobody reaches,
-so it now needs seven days and three days of use. It still appears once, still waits until
-you have marked something that day, and closing it still closes it for good. The line
-itself no longer counts your weeks, because it could appear long after the count was true.
+**Daylo asks how it is going after a week, not after two.** It used to need fourteen days
+with something marked on eight of them, which almost nobody reaches. Now it is a week from
+your first record, or from the first time you opened Daylo if that came earlier, and no
+other count stands in the way. It still appears once, still waits until you have marked
+something that day, and closing it still closes it for good.
 
 **Daylo now asks how it is going with five stars instead of an email.** Tapping one is the
 whole answer, and there is a box afterwards if you want to add a line. The email link had a
