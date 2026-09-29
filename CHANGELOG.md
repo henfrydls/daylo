@@ -3,6 +3,47 @@
 What changed in each release, for the people who use Daylo. Earlier versions are not
 listed: this file starts at 1.1.2, when the first change worth warning about arrived.
 
+## 1.4.0
+
+**The line about the check-in now says whether it is on or off.** When you updated from a
+version that had no check-in, the line said "Anonymous check-in." and offered to turn it
+on, which on a phone left the word "on" as the loudest thing on screen and read like the
+opposite of the truth. It now says "Anonymous check-in is off.", and the check-in itself
+has not changed: it stays off until you turn it on.
+
+**Daylo asks how it is going after a week, not after two.** It used to need fourteen days
+with something marked on eight of them, which almost nobody reaches. Now it is a week from
+your first record, or from the first time you opened Daylo if that came earlier, and no
+other count stands in the way. It still appears once, still waits until you have marked
+something that day, and closing it still closes it for good.
+
+**Daylo now asks how it is going with five stars instead of an email.** Tapping one is the
+whole answer, and there is a box afterwards if you want to add a line. The email link had a
+habit of doing nothing on Linux and Android while telling you it had worked, so an answer
+you thought you had sent never arrived anywhere. What you tap arrives without your name, and
+if you write something and it does not go through, the app now says so instead of thanking
+you. In a browser the email link stays, because there it works.
+
+**The browser version no longer invites you to write on its own.** A short note used to
+appear there after a week asking how it was going; the app itself now asks with five stars
+instead, and the note was only ever the browser's stand-in for that. You can still write
+whenever you like: **Send feedback** is in the menu, as it always has been.
+
+**Daylo now tells you when a new version is out.** A line appears under the header with the
+new version in it and an Update button beside it, and the app downloads it, installs it and
+opens itself again. The cross puts the line away and leaves a dot on the menu, so the offer
+is still there when you want it.
+
+Not every copy can be updated this way. On Windows, on Mac and on the Linux AppImage, Daylo
+does the whole thing itself. The Debian and Ubuntu package needs your administrator password
+to install, which Daylo does not ask anyone for, so it points you at the downloads page
+instead. A copy from the Microsoft Store says nothing at all, because the Store is already
+keeping it up to date.
+
+**Check for new versions** is in the menu if you would rather look yourself, and it is also
+where you can stop Daylo from looking on its own. Looking asks GitHub whether a newer version
+exists and sends nothing about you, and nothing is installed unless it really came from us.
+
 ## 1.3.0
 
 **Daylo can ask how it is going.** After about two weeks of use, with days marked on at least
