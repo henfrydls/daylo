@@ -74,6 +74,10 @@ fn inside_a_store_package() -> bool {
 /// `"store"` means the copy is managed by somebody else and Daylo says nothing at all:
 /// not an offer, not a notice. It is the one answer that means silence rather than a
 /// different sentence.
+///
+/// Registered as a command on desktop only, like the updater it serves, but compiled
+/// everywhere: the check-in reaches the same fact through `checkin_source`. On Android and
+/// iOS it answers None, because no bundler stamps a mobile build.
 #[tauri::command]
 pub fn install_format() -> Option<&'static str> {
     #[cfg(target_os = "windows")]
@@ -113,7 +117,12 @@ pub fn installed_from(format: Option<&str>) -> &'static str {
     }
 }
 
-/// Where this copy came from, for the check-in.
+/// Where this copy came from, for the check-in, on every platform.
+///
+/// No cfg anywhere in this path, which is the point: on Android the answer is None and the
+/// table above turns that into "apk", so the branch written for Android is the branch
+/// Android runs. The first attempt gated this module to desktop, and the Android build
+/// found it in a minute: the code for that platform had been compiled out of it.
 pub fn checkin_source() -> &'static str {
     installed_from(install_format())
 }

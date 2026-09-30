@@ -1,7 +1,8 @@
 mod checkin;
-// Desktop only, like the updater it serves: on Android and iOS nothing asks, because
-// there is no updater to ask for.
-#[cfg(not(any(target_os = "android", target_os = "ios")))]
+// The module compiles everywhere, because the check-in asks it on every platform which
+// word describes this copy. The command inside it is still desktop only, like the updater
+// it serves: on Android and iOS nothing offers an update, so nothing asks how to install
+// one.
 mod packaging;
 mod webview2;
 
