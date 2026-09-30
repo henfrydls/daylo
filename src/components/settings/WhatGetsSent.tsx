@@ -10,7 +10,7 @@ import { today } from '../../lib/checkin'
 export const EXAMPLE_ID = '4f9c2a7e1b60d3a8c5e2f1b74a9d0c6e'
 
 interface WhatGetsSentProps {
-  /** The real version and system, or null while they are still being asked for. */
+  /** The real version, system and packaging, or null while they are still being asked for. */
   fields: CheckinFields | null
   /** The real number once there is one. Null means this is showing an example. */
   id: string | null
@@ -20,7 +20,7 @@ interface WhatGetsSentProps {
  * The whole message, written out, behind a row that has to be opened.
  *
  * Closed by default and not a link: a decision about what a program sends should be
- * answerable without leaving the decision, and the four lines are short enough to put
+ * answerable without leaving the decision, and the five lines are short enough to put
  * here. The same row appears in the dialog and in the settings sheet, with the same
  * words, so that what was agreed to and what is happening are visibly the same thing.
  */
@@ -59,6 +59,10 @@ export function WhatGetsSent({ fields, id }: WhatGetsSentProps) {
               ['Random number', id ?? EXAMPLE_ID],
               ['App version', fields?.version ?? ''],
               ['System', fields?.os ?? ''],
+              // Where the copy came from, in the same order the message carries it. Two
+              // people who installed the same file send the same word, which is why it
+              // can be here at all.
+              ['How it was installed', fields?.source ?? ''],
               ['Date', today()],
             ].map(([label, value]) => (
               <div key={label} className="flex flex-wrap gap-x-3">

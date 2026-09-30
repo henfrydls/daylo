@@ -16,6 +16,12 @@ import { formatDate } from './dates'
 export interface CheckinFields {
   version: string
   os: string
+  /**
+   * One word for the way this copy was installed: store, installer, appimage, deb, rpm,
+   * macos, apk, or unknown where nothing packaged it. Added in 1.4.1, because the panel
+   * could see twenty copies on Windows and not know how many came from the Store.
+   */
+  source: string
 }
 
 /**

@@ -38,7 +38,7 @@ const isOn = (lastAttempt: { date: string; at: string; ok: boolean } | null) =>
 
 beforeEach(() => {
   invoke.mockReset().mockResolvedValue(undefined)
-  checkinFields.mockReset().mockResolvedValue({ version: '1.3.0', os: 'android' })
+  checkinFields.mockReset().mockResolvedValue({ version: '1.3.0', os: 'android', source: 'apk' })
   onClose.mockReset()
   useCalendarStore.setState({
     checkinEnabled: false,
@@ -69,6 +69,26 @@ describe('with the check-in off', () => {
     expect(screen.getByTestId('checkin-settings').textContent ?? '').toContain(
       'Made on this device, tied to nothing'
     )
+  })
+
+  // Five rows since 1.4.1, and the list is the message. Somebody reading this row is
+  // being told what leaves, so a field that travels and is not here would make this
+  // screen a lie rather than an omission.
+  it('writes out every line of the message, in the order it is sent', async () => {
+    open()
+    await waitFor(() => expect(checkinFields).toHaveBeenCalled())
+
+    await userEvent.click(screen.getByTestId('checkin-what-gets-sent'))
+
+    const labels = screen.getAllByRole('term').map((node) => node.textContent)
+    expect(labels).toEqual([
+      'Random number',
+      'App version',
+      'System',
+      'How it was installed',
+      'Date',
+    ])
+    expect(screen.getByText('apk')).toBeInTheDocument()
   })
 })
 
