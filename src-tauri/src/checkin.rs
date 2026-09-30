@@ -26,6 +26,8 @@ const WEBSITE: &str = "b382ce66-26f7-4bc7-9a0a-34d4c5e730f2";
 pub struct CheckinFields {
     version: String,
     os: &'static str,
+    /// One word for the way this copy was installed. See `packaging::installed_from`.
+    source: &'static str,
 }
 
 /// The switch that turns the check-in off for a whole build, read from the environment.
@@ -61,6 +63,7 @@ fn fields<R: tauri::Runtime>(app: &tauri::AppHandle<R>) -> Result<CheckinFields,
     Ok(CheckinFields {
         version: app.package_info().version.to_string(),
         os: std::env::consts::OS,
+        source: crate::packaging::checkin_source(),
     })
 }
 
@@ -77,10 +80,22 @@ pub fn checkin_fields<R: tauri::Runtime>(
 }
 
 /// The message, and nothing but the message. `last` is added only when the switch is being
-/// turned off. Separate from the sending so that "exactly these four keys" is something a
+/// turned off. Separate from the sending so that "exactly these five keys" is something a
 /// test asserts rather than something a comment claims.
-pub fn message(id: &str, version: &str, os: &str, date: &str, last: bool) -> serde_json::Value {
-    let mut data = serde_json::json!({ "id": id, "version": version, "os": os, "date": date });
+///
+/// `source` is one word for the way this copy was installed, and it is here because the
+/// panel could count twenty copies on Windows without knowing how many came from the Store.
+/// It says nothing about the person: two people who both installed the same file send the
+/// same word.
+pub fn message(
+    id: &str,
+    version: &str,
+    os: &str,
+    source: &str,
+    date: &str,
+    last: bool,
+) -> serde_json::Value {
+    let mut data = serde_json::json!({ "id": id, "version": version, "os": os, "source": source, "date": date });
     if last {
         data["last"] = serde_json::Value::Bool(true);
     }
@@ -101,8 +116,12 @@ pub async fn send_checkin<R: tauri::Runtime>(
     // Through the same gate as the screen, and before anything opens a socket: a webview
     // that was already open, or a caller that skips the screen entirely, gets the same
     // refusal. It also happens to be where the version comes from.
-    let CheckinFields { version, os } = fields(&app)?;
-    let body = message(&id, &version, os, &date, last);
+    let CheckinFields {
+        version,
+        os,
+        source,
+    } = fields(&app)?;
+    let body = message(&id, &version, os, source, &date, last);
     tauri::async_runtime::spawn_blocking(move || post(body))
         .await
         .map_err(|error| error.to_string())?
@@ -252,15 +271,20 @@ fn post(_body: serde_json::Value) -> Result<(), String> {
 mod tests {
     use super::{message, WEBSITE};
 
-    /// The promise the privacy policy makes, as an assertion. Four keys, and a fifth only
+    /// The promise the privacy policy makes, as an assertion. Five keys, and a sixth only
     /// when the switch is being turned off — which the dialog announces before anyone can
     /// turn anything on.
+    ///
+    /// It was four until 1.4.1 added how the copy was installed. The list is written out
+    /// rather than counted, so adding a field is a decision somebody makes here and then
+    /// goes and writes into the policy, instead of something that slips out with a build.
     #[test]
-    fn carries_four_things_and_a_fifth_only_at_the_end() {
+    fn carries_five_things_and_a_sixth_only_at_the_end() {
         let ordinary = message(
             "4f9c2a7e1b60d3a8c5e2f1b74a9d0c6e",
             "1.3.0",
             "android",
+            "apk",
             "2026-09-14",
             false,
         );
@@ -268,19 +292,21 @@ mod tests {
 
         let mut keys: Vec<&str> = data.keys().map(String::as_str).collect();
         keys.sort_unstable();
-        assert_eq!(keys, ["date", "id", "os", "version"]);
+        assert_eq!(keys, ["date", "id", "os", "source", "version"]);
+        assert_eq!(data["source"], serde_json::json!("apk"));
 
         let farewell = message(
             "4f9c2a7e1b60d3a8c5e2f1b74a9d0c6e",
             "1.3.0",
             "android",
+            "apk",
             "2026-09-14",
             true,
         );
         let data = farewell["payload"]["data"].as_object().unwrap();
         let mut keys: Vec<&str> = data.keys().map(String::as_str).collect();
         keys.sort_unstable();
-        assert_eq!(keys, ["date", "id", "last", "os", "version"]);
+        assert_eq!(keys, ["date", "id", "last", "os", "source", "version"]);
         assert_eq!(farewell["payload"]["data"]["last"], serde_json::json!(true));
     }
 
@@ -421,7 +447,7 @@ mod tests {
     /// either. The values outside `data` are constants and are pinned as such.
     #[test]
     fn the_envelope_says_nothing_about_anyone() {
-        let m = message("id", "1.3.0", "linux", "2026-09-14", false);
+        let m = message("id", "1.3.0", "linux", "deb", "2026-09-14", false);
 
         assert_eq!(m["type"], serde_json::json!("event"));
         assert_eq!(m["payload"]["hostname"], serde_json::json!("app"));

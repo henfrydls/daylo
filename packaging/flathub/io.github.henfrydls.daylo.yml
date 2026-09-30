@@ -28,8 +28,8 @@ command: daylo
 # previous version of this comment demanded it be.
 #
 # Daylo can now send one message a day to a server, and only if the person turned the
-# anonymous check-in on: a random number made on the device, the app version, the system
-# and the date. It is off until somebody says otherwise, and what it sends is the whole of
+# anonymous check-in on: a random number made on the device, the app version, the system,
+# one word for how the copy was installed, and the date. It is off until somebody says otherwise, and what it sends is the whole of
 # src-tauri/src/checkin.rs, which is short enough to read.
 #
 # Hiding it instead was considered and rejected. The switch could have been compiled out

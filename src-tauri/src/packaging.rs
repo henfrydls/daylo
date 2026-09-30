@@ -84,9 +84,82 @@ pub fn install_format() -> Option<&'static str> {
     installed_as(tauri::utils::platform::bundle_type())
 }
 
+/// The one word the check-in carries about where a copy came from.
+///
+/// Coarser than `installed_as`, and on purpose. The updater has to tell an MSI from an
+/// NSIS because it installs them differently; nobody counting which door people came in
+/// by cares which of the two a Windows installer was. What is worth telling apart is the
+/// Store from everything else on Windows, because that is the question nobody can answer
+/// today, and one Linux package from another, because they are installed by different
+/// people for different reasons.
+///
+/// Takes the answer rather than asking for it, so every word can be pinned by a test.
+pub fn installed_from(format: Option<&str>) -> &'static str {
+    match format {
+        Some("store") => "store",
+        Some("nsis") | Some("msi") => "installer",
+        Some("appimage") => "appimage",
+        Some("deb") => "deb",
+        Some("rpm") => "rpm",
+        Some("macos") => "macos",
+        // No bundler patches an APK, so there is nothing to read there. Android is the one
+        // platform where an unstamped binary is not a development build: it is the only
+        // thing we ship for it.
+        None if cfg!(target_os = "android") => "apk",
+        // Everything else: a binary nobody packaged, and a format this version has never
+        // heard of. Both are "we do not know", and saying so is better than a guess that
+        // would be counted as if it were a fact.
+        _ => "unknown",
+    }
+}
+
+/// Where this copy came from, for the check-in.
+pub fn checkin_source() -> &'static str {
+    installed_from(install_format())
+}
+
 #[cfg(test)]
 mod tests {
-    use super::{installed_as, BundleType};
+    use super::{installed_as, installed_from, BundleType};
+
+    /// Every word the check-in can carry, and what it is for. A panel that counts these is
+    /// only as good as the day somebody adds a format and forgets this line.
+    #[test]
+    fn every_way_in_has_a_word() {
+        assert_eq!(installed_from(Some("store")), "store");
+        assert_eq!(installed_from(Some("nsis")), "installer");
+        assert_eq!(installed_from(Some("msi")), "installer");
+        assert_eq!(installed_from(Some("appimage")), "appimage");
+        assert_eq!(installed_from(Some("deb")), "deb");
+        assert_eq!(installed_from(Some("rpm")), "rpm");
+        assert_eq!(installed_from(Some("macos")), "macos");
+    }
+
+    /// The two Windows installers answer the same thing, which is the whole reason this
+    /// mapping exists apart from the updater's.
+    #[test]
+    fn windows_installers_are_one_door() {
+        assert_eq!(installed_from(Some("nsis")), installed_from(Some("msi")));
+        assert_ne!(installed_from(Some("nsis")), installed_from(Some("store")));
+    }
+
+    /// A word this version does not know is not silently folded into one it does.
+    #[test]
+    fn an_unknown_format_says_unknown() {
+        assert_eq!(installed_from(Some("flatpak")), "unknown");
+    }
+
+    /// Nothing packaged it. On Android that is every copy; everywhere else it is a build
+    /// somebody made themselves.
+    #[test]
+    fn nothing_packaged_it() {
+        let expected = if cfg!(target_os = "android") {
+            "apk"
+        } else {
+            "unknown"
+        };
+        assert_eq!(installed_from(None), expected);
+    }
 
     /// The mapping, spelled out. It exists so that a rename upstream is a compile error
     /// here rather than a word quietly changing under the frontend's feet.

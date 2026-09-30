@@ -181,7 +181,7 @@ describe('the question, in the app', () => {
   }
 
   beforeEach(() => {
-    checkinFields.mockResolvedValue({ version: '1.3.0', os: 'linux' })
+    checkinFields.mockResolvedValue({ version: '1.3.0', os: 'linux', source: 'deb' })
     openMailto.mockReset().mockResolvedValue('opened')
     // _feedbackAsked is a session flag and a session is one run of the app; between tests
     // it has to go back, or a test inherits an open question from the one before it and
@@ -351,7 +351,7 @@ describe('the check-in in the menu', () => {
   })
 
   it('is there in the app, and opens the sheet', async () => {
-    checkinFields.mockResolvedValue({ version: '1.3.0', os: 'android' })
+    checkinFields.mockResolvedValue({ version: '1.3.0', os: 'android', source: 'apk' })
     render(<App />)
     await act(async () => {})
 
@@ -366,7 +366,7 @@ describe('the check-in in the menu', () => {
 // left running for days and only the window coming back says a new day has started.
 describe('when the daily check-in is attempted', () => {
   it('asks once the store is there and the app can send', async () => {
-    checkinFields.mockResolvedValue({ version: '1.3.0', os: 'linux' })
+    checkinFields.mockResolvedValue({ version: '1.3.0', os: 'linux', source: 'deb' })
     render(<App />)
     await act(async () => {})
 
@@ -381,7 +381,7 @@ describe('when the daily check-in is attempted', () => {
   })
 
   it('asks again when the window comes back', async () => {
-    checkinFields.mockResolvedValue({ version: '1.3.0', os: 'linux' })
+    checkinFields.mockResolvedValue({ version: '1.3.0', os: 'linux', source: 'deb' })
     render(<App />)
     await act(async () => {})
     sendCheckinIfDue.mockClear()
@@ -398,7 +398,7 @@ describe('when the daily check-in is attempted', () => {
 // the screen in the same launch that starts sending, before anything has to be tapped.
 describe('the check-in on a device that has never had Daylo', () => {
   beforeEach(() => {
-    checkinFields.mockResolvedValue({ version: '1.3.0', os: 'android' })
+    checkinFields.mockResolvedValue({ version: '1.3.0', os: 'android', source: 'apk' })
     useCalendarStore.setState({
       _checkinStart: 'new',
       checkinEnabled: false,
@@ -435,7 +435,7 @@ describe('the check-in on a device that has never had Daylo', () => {
 // is not withdrawn behind their back.
 describe('the check-in on a device updating from an earlier version', () => {
   beforeEach(() => {
-    checkinFields.mockResolvedValue({ version: '1.3.0', os: 'android' })
+    checkinFields.mockResolvedValue({ version: '1.3.0', os: 'android', source: 'apk' })
     useCalendarStore.setState({
       _checkinStart: 'update',
       checkinEnabled: false,
@@ -484,7 +484,7 @@ describe('the check-in on a device updating from an earlier version', () => {
 // not allowed to do.
 describe('the line and the reminder, on a new Android installation', () => {
   beforeEach(() => {
-    checkinFields.mockResolvedValue({ version: '1.3.0', os: 'android' })
+    checkinFields.mockResolvedValue({ version: '1.3.0', os: 'android', source: 'apk' })
     remindersAvailable.mockResolvedValue(true)
     useCalendarStore.setState({
       _checkinStart: 'new',
