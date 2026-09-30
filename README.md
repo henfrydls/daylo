@@ -41,9 +41,16 @@ Your data stays on your device. No account, and nothing you track is ever upload
 ## Screenshots
 
 <p align="center">
-  <img src="docs/daylo-year-view.png" alt="Year view: twelve month heatmaps next to your activities and statistics" width="100%" />
+  <img src="docs/daylo-year-view.png" alt="Year view: the whole year as one strip of days, with each month's completion underneath, next to your activities and statistics" width="100%" />
 </p>
 <p align="center"><sub>Year view. See your entire year at a glance.</sub></p>
+
+<br/>
+
+<p align="center">
+  <img src="docs/daylo-year-by-activity.png" alt="Year view by activity: one strip of days per habit, each in its own color, and all of them together at the bottom" width="100%" />
+</p>
+<p align="center"><sub>By activity. Each habit gets its own strip, in its own color.</sub></p>
 
 <br/>
 
