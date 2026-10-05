@@ -11,6 +11,15 @@ const unlisten = vi.fn()
 const addPluginListener = vi.fn()
 let isTauri = true
 
+/** The webview's own answer to "what am I running on". */
+const sayAndroid = (yes: boolean) =>
+  Object.defineProperty(window.navigator, 'userAgent', {
+    value: yes
+      ? 'Mozilla/5.0 (Linux; Android 16; SM-S926B) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140 Mobile Safari/537.36'
+      : 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140 Safari/537.36',
+    configurable: true,
+  })
+
 vi.mock('@tauri-apps/api/core', () => ({
   isTauri: () => isTauri,
   addPluginListener: (plugin: string, event: string, cb: () => void) =>
@@ -27,6 +36,7 @@ const settle = () => new Promise((resolve) => setTimeout(resolve, 0))
 
 beforeEach(async () => {
   isTauri = true
+  sayAndroid(true)
   unlisten.mockReset()
   addPluginListener.mockReset().mockResolvedValue({ unregister: unlisten })
   vi.resetModules()
@@ -123,7 +133,7 @@ describe('while nothing is open, Android does what it always did', () => {
 })
 
 describe('anywhere that is not Android', () => {
-  it('asks for nothing at all', async () => {
+  it('asks for nothing in a browser', async () => {
     isTauri = false
 
     const stop = onAndroidBack(vi.fn())
@@ -131,5 +141,31 @@ describe('anywhere that is not Android', () => {
 
     expect(addPluginListener).not.toHaveBeenCalled()
     expect(() => stop()).not.toThrow()
+  })
+
+  // The event is Android's. On a desktop the registration is refused twice by the API's
+  // own fallback, so asking would be two round trips to be told no, once per dialog.
+  it('asks for nothing on a desktop either', async () => {
+    sayAndroid(false)
+
+    const stop = onAndroidBack(vi.fn())
+    await settle()
+
+    expect(addPluginListener).not.toHaveBeenCalled()
+    expect(() => stop()).not.toThrow()
+  })
+
+  // And if that reading were ever wrong, being told no costs nothing: Android keeps doing
+  // what it always did, which is what this replaces rather than a broken state.
+  it('carries on when the platform refuses', async () => {
+    vi.spyOn(console, 'error').mockImplementation(() => {})
+    addPluginListener.mockRejectedValue(new Error('no such command'))
+
+    const close = vi.fn()
+    const stop = onAndroidBack(close)
+    await settle()
+
+    expect(() => stop()).not.toThrow()
+    expect(close).not.toHaveBeenCalled()
   })
 })

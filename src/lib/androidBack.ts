@@ -16,6 +16,22 @@ import { addPluginListener, isTauri, type PluginListener } from '@tauri-apps/api
  * how an app ends up unable to be closed at all.
  */
 
+/**
+ * Android, by the one fact the webview already carries.
+ *
+ * It has to be asked, because the event is Android's. Measured in `@tauri-apps/api`: on
+ * any other system `addPluginListener` invokes `plugin:app|register_listener`, then
+ * `plugin:app|registerListener`, and both are refused, so every dialog opening on a
+ * desktop would make two round trips to be told no and leave a rejected promise behind.
+ *
+ * The user agent and not a plugin, because this is a question the page can answer by
+ * itself and the alternative is a dependency for one boolean. If it were ever wrong, the
+ * catch below is what keeps it harmless.
+ */
+function onAndroid(): boolean {
+  return isTauri() && /Android/i.test(navigator.userAgent)
+}
+
 /** Innermost last, the way they were opened. */
 const stack: (() => void)[] = []
 
@@ -34,6 +50,12 @@ async function startListening(): Promise<void> {
 
   try {
     listener = await registering
+  } catch (error) {
+    // Nothing is lost by failing here: without a listener, Android keeps doing what it
+    // always did, which is the behaviour this replaces rather than a broken state.
+    console.error('[Daylo] the back button could not be taken over', error)
+    listener = null
+    return
   } finally {
     registering = null
   }
@@ -59,10 +81,11 @@ async function stopListening(): Promise<void> {
 /**
  * Close this when the back button is pressed, until the returned function is called.
  *
- * Does nothing where there is no platform to ask, which is the browser and the tests.
+ * Does nothing anywhere but Android: a browser has no such button, and on a desktop the
+ * window manager closes windows.
  */
 export function onAndroidBack(close: () => void): () => void {
-  if (!isTauri()) return () => {}
+  if (!onAndroid()) return () => {}
 
   stack.push(close)
   void startListening()
