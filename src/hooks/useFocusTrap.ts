@@ -1,4 +1,5 @@
 import { useEffect, useRef, type RefObject } from 'react'
+import { onAndroidBack } from '../lib/androidBack'
 
 const FOCUSABLE_SELECTOR =
   'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])'
@@ -27,6 +28,26 @@ export function useFocusTrap(
 ): void {
   const { onEscape, restoreFocus = true, autoFocus = true } = options
   const previousActiveElement = useRef<HTMLElement | null>(null)
+
+  // Android's back button, in the same place as Escape and for the same reason: they are
+  // one gesture, "take away the thing in front of me". Here rather than in each dialog
+  // because everything that traps focus is something in front of you, so the ones that
+  // exist and the ones nobody has written yet are covered by the same line.
+  //
+  // The handler is kept in a ref so that a dialog whose onEscape changes identity between
+  // renders does not register and unregister on every render: the registration is what
+  // tells Android to stop handling the press, and it should last exactly as long as the
+  // dialog does.
+  const escape = useRef(onEscape)
+  // In an effect and not during render, which is both the rule and the right time: a press
+  // can only arrive after a render has been committed.
+  useEffect(() => {
+    escape.current = onEscape
+  })
+  useEffect(() => {
+    if (!isActive || escape.current === undefined) return
+    return onAndroidBack(() => escape.current?.())
+  }, [isActive])
 
   // Store the previously focused element and handle body scroll lock
   useEffect(() => {
