@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, lazy, Suspense } from 'react'
+import { useState, useEffect, useMemo, useRef, lazy, Suspense } from 'react'
 import { YearView, MonthView } from './components/calendar'
 import { ActivityList, QuickLog } from './components/activities'
 import { StatsPanel } from './components/stats'
@@ -23,10 +23,12 @@ import { useCalendarStore } from './store'
 import {
   useAppVersion,
   useCheckinFields,
+  useMediaQuery,
   useRemindersAvailable,
-  useSwipeGesture,
   useUpdates,
+  useViewCarousel,
 } from './hooks'
+import { TravelContext, useTravel } from './lib/travel'
 import { FeedbackRating } from './components/feedback/FeedbackRating'
 import { UpdateDot } from './components/updates/UpdateDot'
 import { UpdateNotice } from './components/updates/UpdateNotice'
@@ -50,6 +52,17 @@ const ImportModal = lazy(() =>
 
 function ViewToggle() {
   const { currentView, setCurrentView } = useCalendarStore()
+  // On the phone this walks the same rail a finger would, so that pressing the toggle and
+  // dragging are visibly one journey. Elsewhere it is the plain change it always was.
+  const travel = useTravel()
+  const go = (view: 'year' | 'month') => {
+    if (travel) {
+      if (view === 'year') travel.toYear()
+      else travel.toMonth()
+      return
+    }
+    setCurrentView(view, view === 'year' ? 'drill-up' : 'drill-down')
+  }
 
   return (
     <div
@@ -58,7 +71,7 @@ function ViewToggle() {
       aria-label="Calendar view toggle"
     >
       <button
-        onClick={() => setCurrentView('year', 'drill-up')}
+        onClick={() => go('year')}
         className={`
           px-3 py-2 sm:py-1.5 text-sm font-medium rounded-md transition-all duration-150
           focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 focus-visible:ring-offset-1
@@ -74,7 +87,7 @@ function ViewToggle() {
         Year
       </button>
       <button
-        onClick={() => setCurrentView('month', 'drill-down')}
+        onClick={() => go('month')}
         className={`
           px-3 py-2 sm:py-1.5 text-sm font-medium rounded-md transition-all duration-150
           focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 focus-visible:ring-offset-1
@@ -236,18 +249,34 @@ function App() {
     return () => document.removeEventListener('visibilitychange', onVisible)
   }, [hasHydrated, canCheckIn, checkinStart])
 
-  const swipeRef = useSwipeGesture<HTMLDivElement>({
-    onSwipeLeft: () =>
-      setCurrentView(
-        currentView === 'year' ? 'month' : 'year',
-        currentView === 'year' ? 'drill-down' : 'drill-up'
-      ),
-    onSwipeRight: () =>
-      setCurrentView(
-        currentView === 'month' ? 'year' : 'month',
-        currentView === 'month' ? 'drill-up' : 'drill-down'
-      ),
+  // The carousel is the phone's. On a wide screen there is no finger to follow and the
+  // sidebar is there instead, so the views keep changing the way they always did.
+  const onPhone = !useMediaQuery('(min-width: 1024px)')
+  const headerRef = useRef<HTMLElement>(null)
+  const { containerRef, railRef, otherRef, travelTo } = useViewCarousel({
+    view: currentView,
+    onChange: (view) => setCurrentView(view, view === 'year' ? 'drill-up' : 'drill-down'),
+    enabled: onPhone,
+    headerRef,
   })
+
+  // Null on the desktop, where every caller falls back to what it did before.
+  const travel = useMemo(
+    () =>
+      onPhone
+        ? {
+            toYear: () => travelTo('year'),
+            toMonth: (pick?: { year: number; month: number }) => {
+              if (pick) {
+                useCalendarStore.getState().setSelectedYear(pick.year)
+                useCalendarStore.getState().setSelectedMonth(pick.month)
+              }
+              travelTo('month')
+            },
+          }
+        : null,
+    [onPhone, travelTo]
+  )
 
   if (!hasHydrated) {
     return <AppSkeleton />
@@ -398,269 +427,297 @@ function App() {
 
   return (
     <ErrorBoundary>
-      <div className="min-h-screen bg-gray-50">
-        {/* Skip Link for keyboard users */}
-        <a
-          href="#main-content"
-          className="sr-only focus:not-sr-only focus:absolute focus:top-4 focus:left-4 focus:z-50 focus:px-4 focus:py-2 focus:bg-emerald-500 focus:text-white focus:rounded-lg focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-600"
-        >
-          Skip to main content
-        </a>
+      <TravelContext.Provider value={travel}>
+        <div className="min-h-screen bg-gray-50">
+          {/* Skip Link for keyboard users */}
+          <a
+            href="#main-content"
+            className="sr-only focus:not-sr-only focus:absolute focus:top-4 focus:left-4 focus:z-50 focus:px-4 focus:py-2 focus:bg-emerald-500 focus:text-white focus:rounded-lg focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-600"
+          >
+            Skip to main content
+          </a>
 
-        {/* Header */}
-        <header className="sticky top-0 z-30 bg-white pt-[env(safe-area-inset-top)]">
-          <div className="bg-white border-b border-gray-200">
-            <div className="max-w-7xl mx-auto px-3 sm:px-4 py-3 sm:py-4">
-              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-                <div
-                  className="flex items-center justify-between sm:justify-start gap-3"
-                  data-testid="app-header"
-                >
-                  <div className="flex items-center gap-3">
-                    <h1 className="text-lg sm:text-xl font-semibold text-gray-900">
-                      Daylo
-                      <span className="hidden md:inline text-sm font-normal text-gray-400 ml-2">
-                        · Simple Activity Tracking
-                      </span>
-                    </h1>
-                  </div>
-                  {/* Menu button visible on mobile next to title */}
-                  <div className="sm:hidden">
-                    <DropdownMenu
-                      trigger={
-                        <span
-                          className="relative p-2.5 rounded-lg text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition-colors min-h-[44px] min-w-[44px] flex items-center justify-center"
-                          aria-label={
-                            updateWaiting === null
-                              ? 'More options'
-                              : 'More options, update available'
-                          }
-                        >
-                          {updateWaiting === null ? null : (
-                            <UpdateDot className="absolute right-1.5 top-1.5" />
-                          )}
-                          <svg
-                            className="w-5 h-5"
-                            fill="none"
-                            viewBox="0 0 24 24"
-                            stroke="currentColor"
-                            aria-hidden="true"
-                          >
-                            <path
-                              strokeLinecap="round"
-                              strokeLinejoin="round"
-                              strokeWidth={2}
-                              d="M12 5v.01M12 12v.01M12 19v.01M12 6a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2z"
-                            />
-                          </svg>
+          {/* Header */}
+          <header
+            ref={headerRef}
+            className="sticky top-0 z-30 bg-white pt-[env(safe-area-inset-top)]"
+          >
+            <div className="bg-white border-b border-gray-200">
+              <div className="max-w-7xl mx-auto px-3 sm:px-4 py-3 sm:py-4">
+                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+                  <div
+                    className="flex items-center justify-between sm:justify-start gap-3"
+                    data-testid="app-header"
+                  >
+                    <div className="flex items-center gap-3">
+                      <h1 className="text-lg sm:text-xl font-semibold text-gray-900">
+                        Daylo
+                        <span className="hidden md:inline text-sm font-normal text-gray-400 ml-2">
+                          · Simple Activity Tracking
                         </span>
-                      }
-                      items={menuItems}
-                    />
-                  </div>
-                </div>
-                <div className="flex items-center justify-between sm:justify-end gap-3">
-                  <ViewToggle />
-                  {/* Menu button hidden on mobile, visible on larger screens */}
-                  <div className="hidden sm:block">
-                    <DropdownMenu
-                      trigger={
-                        <span
-                          className="relative p-2 rounded-lg text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition-colors min-h-[44px] min-w-[44px] flex items-center justify-center"
-                          aria-label={
-                            updateWaiting === null
-                              ? 'More options'
-                              : 'More options, update available'
-                          }
-                        >
-                          {updateWaiting === null ? null : (
-                            <UpdateDot className="absolute right-1.5 top-1.5" />
-                          )}
-                          <svg
-                            className="w-5 h-5"
-                            fill="none"
-                            viewBox="0 0 24 24"
-                            stroke="currentColor"
-                            aria-hidden="true"
+                      </h1>
+                    </div>
+                    {/* Menu button visible on mobile next to title */}
+                    <div className="sm:hidden">
+                      <DropdownMenu
+                        trigger={
+                          <span
+                            className="relative p-2.5 rounded-lg text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition-colors min-h-[44px] min-w-[44px] flex items-center justify-center"
+                            aria-label={
+                              updateWaiting === null
+                                ? 'More options'
+                                : 'More options, update available'
+                            }
                           >
-                            <path
-                              strokeLinecap="round"
-                              strokeLinejoin="round"
-                              strokeWidth={2}
-                              d="M12 5v.01M12 12v.01M12 19v.01M12 6a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2z"
-                            />
-                          </svg>
-                        </span>
-                      }
-                      items={menuItems}
-                    />
+                            {updateWaiting === null ? null : (
+                              <UpdateDot className="absolute right-1.5 top-1.5" />
+                            )}
+                            <svg
+                              className="w-5 h-5"
+                              fill="none"
+                              viewBox="0 0 24 24"
+                              stroke="currentColor"
+                              aria-hidden="true"
+                            >
+                              <path
+                                strokeLinecap="round"
+                                strokeLinejoin="round"
+                                strokeWidth={2}
+                                d="M12 5v.01M12 12v.01M12 19v.01M12 6a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2z"
+                              />
+                            </svg>
+                          </span>
+                        }
+                        items={menuItems}
+                      />
+                    </div>
+                  </div>
+                  <div className="flex items-center justify-between sm:justify-end gap-3">
+                    <ViewToggle />
+                    {/* Menu button hidden on mobile, visible on larger screens */}
+                    <div className="hidden sm:block">
+                      <DropdownMenu
+                        trigger={
+                          <span
+                            className="relative p-2 rounded-lg text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition-colors min-h-[44px] min-w-[44px] flex items-center justify-center"
+                            aria-label={
+                              updateWaiting === null
+                                ? 'More options'
+                                : 'More options, update available'
+                            }
+                          >
+                            {updateWaiting === null ? null : (
+                              <UpdateDot className="absolute right-1.5 top-1.5" />
+                            )}
+                            <svg
+                              className="w-5 h-5"
+                              fill="none"
+                              viewBox="0 0 24 24"
+                              stroke="currentColor"
+                              aria-hidden="true"
+                            >
+                              <path
+                                strokeLinecap="round"
+                                strokeLinejoin="round"
+                                strokeWidth={2}
+                                d="M12 5v.01M12 12v.01M12 19v.01M12 6a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2z"
+                              />
+                            </svg>
+                          </span>
+                        }
+                        items={menuItems}
+                      />
+                    </div>
                   </div>
                 </div>
               </div>
             </div>
-          </div>
-        </header>
+          </header>
 
-        {/* Main Content */}
-        <main
-          id="main-content"
-          className="max-w-7xl mx-auto px-3 sm:px-4 py-4 sm:py-6"
-          tabIndex={-1}
-        >
-          {/* Under the header and above the calendar: the only place visible on every
+          {/* Main Content */}
+          <main
+            id="main-content"
+            className="max-w-7xl mx-auto px-3 sm:px-4 py-4 sm:py-6"
+            tabIndex={-1}
+          >
+            {/* Under the header and above the calendar: the only place visible on every
               screen without scrolling, and the same place on a phone and on a desktop. */}
-          {/* A new installation is on by the time anybody can read this: the effect that
+            {/* A new installation is on by the time anybody can read this: the effect that
               turns it on runs in the same tick, but effects run after the first paint, and
               a line that said "Anonymous check-in is off." for one frame and then
               corrected itself would be the app contradicting itself in public. */}
-          {noticeIsOpen ? (
-            <CheckinNotice
-              on={checkinEnabled || checkinStart === 'new'}
-              onOpen={() => setIsCheckinOpen(true)}
-            />
-          ) : null}
+            {noticeIsOpen ? (
+              <CheckinNotice
+                on={checkinEnabled || checkinStart === 'new'}
+                onOpen={() => setIsCheckinOpen(true)}
+              />
+            ) : null}
 
-          {/* Under the check-in's line on the rare launch that has both, because that one
+            {/* Under the check-in's line on the rare launch that has both, because that one
               is about what the app is already doing and this one is about something it
               could do. Neither waits for the other: they are lines to be read past, not
               questions, and the rule against two at once is the invitation's, which does
               ask something. */}
-          {updates.notice === null ? null : (
-            <UpdateNotice state={updates.notice} onAct={updates.act} onLater={updates.later} />
-          )}
+            {updates.notice === null ? null : (
+              <UpdateNotice state={updates.notice} onAct={updates.act} onLater={updates.later} />
+            )}
 
-          <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
-            {/* Calendar Section */}
-            <div
-              ref={swipeRef}
-              className="lg:col-span-3 bg-white rounded-xl border border-gray-200 overflow-hidden"
-            >
+            <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
+              {/* Calendar Section */}
               <div
-                key={currentView}
-                style={{
-                  animation:
-                    _viewTransitionDirection === 'drill-down'
-                      ? 'view-drill-down 250ms var(--ease-emphasized-decel) both'
-                      : _viewTransitionDirection === 'drill-up'
-                        ? 'view-drill-up 200ms var(--ease-emphasized-decel) both'
-                        : 'view-fade 200ms ease both',
-                }}
+                ref={containerRef}
+                className="lg:col-span-3 bg-white rounded-xl border border-gray-200 overflow-hidden touch-pan-y"
               >
-                {currentView === 'year' ? <YearView /> : <MonthView />}
+                {onPhone ? (
+                  // Both views, side by side, in the order the toggle shows them: Year on the
+                  // left, Month on the right. The one that is not in flow sits beside it and
+                  // is hidden from everything, eyes and screen readers alike, until a gesture
+                  // reveals it. No key here on purpose: nothing remounts, because a view that
+                  // remounts cannot be dragged.
+                  <div ref={railRef} className="relative">
+                    <div>{currentView === 'year' ? <YearView /> : <MonthView />}</div>
+                    <div
+                      ref={otherRef}
+                      className="absolute w-full"
+                      style={{
+                        left: currentView === 'year' ? '100%' : '-100%',
+                        visibility: 'hidden',
+                      }}
+                      aria-hidden="true"
+                      inert
+                    >
+                      {currentView === 'year' ? <MonthView /> : <YearView />}
+                    </div>
+                  </div>
+                ) : (
+                  <div
+                    key={currentView}
+                    style={{
+                      animation:
+                        _viewTransitionDirection === 'drill-down'
+                          ? 'view-drill-down 250ms var(--ease-emphasized-decel) both'
+                          : _viewTransitionDirection === 'drill-up'
+                            ? 'view-drill-up 200ms var(--ease-emphasized-decel) both'
+                            : 'view-fade 200ms ease both',
+                    }}
+                  >
+                    {currentView === 'year' ? <YearView /> : <MonthView />}
+                  </div>
+                )}
+              </div>
+
+              {/* Sidebar - Hidden on mobile, visible on large screens */}
+              <div className="hidden lg:block space-y-6">
+                <ActivityList />
+                <StatsPanel />
               </div>
             </div>
+          </main>
 
-            {/* Sidebar - Hidden on mobile, visible on large screens */}
-            <div className="hidden lg:block space-y-6">
+          {/* FAB Button - Visible only on mobile (< lg) */}
+          <button
+            onClick={() => setIsBottomSheetOpen(true)}
+            className="fixed bottom-6 right-6 z-20 lg:hidden w-14 h-14 bg-emerald-500 hover:bg-emerald-600 active:bg-emerald-700 text-white rounded-full shadow-lg flex items-center justify-center transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 focus-visible:ring-offset-2"
+            aria-label="Open activities panel"
+            data-testid="fab-button"
+          >
+            <svg
+              className="w-6 h-6"
+              fill="none"
+              viewBox="0 0 24 24"
+              stroke="currentColor"
+              aria-hidden="true"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2}
+                d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4"
+              />
+            </svg>
+          </button>
+
+          {/* Bottom Sheet - Activities + Stats for mobile */}
+          <BottomSheet
+            isOpen={isBottomSheetOpen}
+            onClose={() => setIsBottomSheetOpen(false)}
+            aria-label="Activities and statistics"
+          >
+            <div className="space-y-6">
               <ActivityList />
               <StatsPanel />
             </div>
-          </div>
-        </main>
+          </BottomSheet>
 
-        {/* FAB Button - Visible only on mobile (< lg) */}
-        <button
-          onClick={() => setIsBottomSheetOpen(true)}
-          className="fixed bottom-6 right-6 z-20 lg:hidden w-14 h-14 bg-emerald-500 hover:bg-emerald-600 active:bg-emerald-700 text-white rounded-full shadow-lg flex items-center justify-center transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 focus-visible:ring-offset-2"
-          aria-label="Open activities panel"
-          data-testid="fab-button"
-        >
-          <svg
-            className="w-6 h-6"
-            fill="none"
-            viewBox="0 0 24 24"
-            stroke="currentColor"
-            aria-hidden="true"
-          >
-            <path
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              strokeWidth={2}
-              d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4"
-            />
-          </svg>
-        </button>
+          {/* Quick Log Modal */}
+          {selectedDate && <QuickLog />}
 
-        {/* Bottom Sheet - Activities + Stats for mobile */}
-        <BottomSheet
-          isOpen={isBottomSheetOpen}
-          onClose={() => setIsBottomSheetOpen(false)}
-          aria-label="Activities and statistics"
-        >
-          <div className="space-y-6">
-            <ActivityList />
-            <StatsPanel />
-          </div>
-        </BottomSheet>
+          {/* Export/Import Modals - Lazy loaded */}
+          <Suspense fallback={null}>
+            {isExportOpen && (
+              <ExportModal isOpen={isExportOpen} onClose={() => setIsExportOpen(false)} />
+            )}
+          </Suspense>
+          <Suspense fallback={null}>
+            {isImportOpen && (
+              <ImportModal isOpen={isImportOpen} onClose={() => setIsImportOpen(false)} />
+            )}
+          </Suspense>
 
-        {/* Quick Log Modal */}
-        {selectedDate && <QuickLog />}
-
-        {/* Export/Import Modals - Lazy loaded */}
-        <Suspense fallback={null}>
-          {isExportOpen && (
-            <ExportModal isOpen={isExportOpen} onClose={() => setIsExportOpen(false)} />
+          {/* Daily reminder: the one-time offer, and the setting behind the menu */}
+          <DailyReminder />
+          {isReminderOpen && (
+            <ReminderSettings isOpen={isReminderOpen} onClose={() => setIsReminderOpen(false)} />
           )}
-        </Suspense>
-        <Suspense fallback={null}>
-          {isImportOpen && (
-            <ImportModal isOpen={isImportOpen} onClose={() => setIsImportOpen(false)} />
-          )}
-        </Suspense>
 
-        {/* Daily reminder: the one-time offer, and the setting behind the menu */}
-        <DailyReminder />
-        {isReminderOpen && (
-          <ReminderSettings isOpen={isReminderOpen} onClose={() => setIsReminderOpen(false)} />
-        )}
-
-        {/* The question, wherever it came from. Unmounted when it closes, so the number
+          {/* The question, wherever it came from. Unmounted when it closes, so the number
             it carries goes with it rather than being cleared by anybody. */}
-        {questionIsOpen && (
-          <FeedbackRating
-            isOpen
-            onShown={(answer) => {
-              markFeedbackAsked()
-              void sendShown(answer, askedFromMenu ? 'menu' : 'automatic')
-            }}
-            onClose={() => {
-              setQuestionClosed(true)
-              setAskedFromMenu(false)
-            }}
-            onRate={(answer, stars) => void sendRating(answer, stars)}
-            // The star left the moment it was pressed and needs no receipt. This one was
-            // asked for, by somebody who wrote something and pressed a button, and the
-            // reason this dialog exists at all is a channel that failed without saying so.
-            // The dialog waits on this and says so itself. It used to raise a toast, which
-            // the dialog's own portal draws over, so the one message that mattered
-            // appeared behind the thing covering it.
-            onComment={sendComment}
-            withCheckinId={checkinEnabled && checkinId !== null}
-          />
-        )}
+          {questionIsOpen && (
+            <FeedbackRating
+              isOpen
+              onShown={(answer) => {
+                markFeedbackAsked()
+                void sendShown(answer, askedFromMenu ? 'menu' : 'automatic')
+              }}
+              onClose={() => {
+                setQuestionClosed(true)
+                setAskedFromMenu(false)
+              }}
+              onRate={(answer, stars) => void sendRating(answer, stars)}
+              // The star left the moment it was pressed and needs no receipt. This one was
+              // asked for, by somebody who wrote something and pressed a button, and the
+              // reason this dialog exists at all is a channel that failed without saying so.
+              // The dialog waits on this and says so itself. It used to raise a toast, which
+              // the dialog's own portal draws over, so the one message that mattered
+              // appeared behind the thing covering it.
+              onComment={sendComment}
+              withCheckinId={checkinEnabled && checkinId !== null}
+            />
+          )}
 
-        {isUpdatesOpen && (
-          <UpdateSettings
-            isOpen={isUpdatesOpen}
-            onClose={() => setIsUpdatesOpen(false)}
-            status={updates.status}
-            // Closing first, because the answer to "Update" is the card's progress and
-            // this sheet is drawn over it. Nothing is lost: the card is where it happens.
-            onAct={() => {
-              if (updates.status.kind === 'available') setIsUpdatesOpen(false)
-              updates.act()
-            }}
-          />
-        )}
+          {isUpdatesOpen && (
+            <UpdateSettings
+              isOpen={isUpdatesOpen}
+              onClose={() => setIsUpdatesOpen(false)}
+              status={updates.status}
+              // Closing first, because the answer to "Update" is the card's progress and
+              // this sheet is drawn over it. Nothing is lost: the card is where it happens.
+              onAct={() => {
+                if (updates.status.kind === 'available') setIsUpdatesOpen(false)
+                updates.act()
+              }}
+            />
+          )}
 
-        {/* The check-in: the switch behind the menu, and nothing else. It never asks. */}
-        {isCheckinOpen && (
-          <CheckinSettings isOpen={isCheckinOpen} onClose={() => setIsCheckinOpen(false)} />
-        )}
+          {/* The check-in: the switch behind the menu, and nothing else. It never asks. */}
+          {isCheckinOpen && (
+            <CheckinSettings isOpen={isCheckinOpen} onClose={() => setIsCheckinOpen(false)} />
+          )}
 
-        {/* Toast Notifications */}
-        <ToastContainer />
-      </div>
+          {/* Toast Notifications */}
+          <ToastContainer />
+        </div>
+      </TravelContext.Provider>
     </ErrorBoundary>
   )
 }

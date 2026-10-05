@@ -6,6 +6,7 @@ import { YearProgressBar } from './YearProgressBar'
 import { HeatmapLegend } from './HeatmapLegend'
 import { ActivityWeekStrip } from './ActivityWeekStrip'
 import { useCalendarStore } from '../../store'
+import { useTravel } from '../../lib/travel'
 import { getYearDays, formatDate } from '../../lib/dates'
 import { calculateHeatmapLevel } from '../../lib/colors'
 import { completedDates, summariseActivities } from '../../lib/activityYear'
@@ -23,6 +24,9 @@ export const YearView = memo(function YearView() {
   const setSelectedDate = useCalendarStore((state) => state.setSelectedDate)
   const setSelectedYear = useCalendarStore((state) => state.setSelectedYear)
   const navigateToMonth = useCalendarStore((state) => state.navigateToMonth)
+  // On the phone a month card walks the same rail the finger would, so the three ways into
+  // Month are one movement rather than three different ones.
+  const travel = useTravel()
   const yearMode = useCalendarStore((state) => state.yearMode)
   const setYearMode = useCalendarStore((state) => state.setYearMode)
 
@@ -253,7 +257,11 @@ export const YearView = memo(function YearView() {
                   month={month}
                   totalActivities={activities.length}
                   logsByDate={logsByDate}
-                  onSelect={(m) => navigateToMonth(selectedYear, m)}
+                  onSelect={(m) =>
+                    travel
+                      ? travel.toMonth({ year: selectedYear, month: m })
+                      : navigateToMonth(selectedYear, m)
+                  }
                 />
               ))}
             </div>
@@ -402,7 +410,11 @@ export const YearView = memo(function YearView() {
                   <button
                     key={month}
                     type="button"
-                    onClick={() => navigateToMonth(selectedYear, month)}
+                    onClick={() =>
+                      travel
+                        ? travel.toMonth({ year: selectedYear, month })
+                        : navigateToMonth(selectedYear, month)
+                    }
                     className="rounded-lg px-1 py-1 text-center hover:bg-gray-50 focus-visible:ring-2 focus-visible:ring-emerald-500 focus:outline-none"
                     aria-label={
                       percentage === null

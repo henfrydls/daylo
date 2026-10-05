@@ -1,5 +1,6 @@
 import { useMemo, useCallback, memo, useState } from 'react'
 import { useCalendarStore } from '../../store'
+import { useTravel } from '../../lib/travel'
 import { formatDate, formatMonthYear, checkIsToday } from '../../lib/dates'
 import { useMediaQuery } from '../../hooks/useMediaQuery'
 import type { Activity, ActivityLog } from '../../types'
@@ -74,6 +75,8 @@ export const MonthView = memo(function MonthView() {
   const selectedDate = useCalendarStore((state) => state.selectedDate)
   const setSelectedDate = useCalendarStore((state) => state.setSelectedDate)
   const setCurrentView = useCalendarStore((state) => state.setCurrentView)
+  // On the phone the title walks the rail back to Year, the same way the finger does.
+  const travel = useTravel()
   const activities = useCalendarStore(useShallow((state) => state.activities))
   const logs = useCalendarStore(useShallow((state) => state.logs))
 
@@ -163,7 +166,7 @@ export const MonthView = memo(function MonthView() {
       {/* Month Navigation */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 sm:gap-4 mb-4 sm:mb-6">
         <button
-          onClick={() => setCurrentView('year', 'drill-up')}
+          onClick={() => (travel ? travel.toYear() : setCurrentView('year', 'drill-up'))}
           className="text-xl sm:text-2xl font-bold text-gray-900 hover:text-emerald-600 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 focus-visible:ring-offset-1 rounded-lg px-1 -mx-1"
           aria-label={`Switch to year view for ${selectedYear}`}
           data-testid="month-title-button"
