@@ -34,6 +34,8 @@ export const YearProgressBar = memo(function YearProgressBar({
   totalActivities,
   currentStreak,
 }: YearProgressBarProps) {
+  const isThisYear = year === new Date().getFullYear()
+
   const { activeDays, totalDaysElapsed, percentage, bestMonth } = useMemo(() => {
     const yearDays = getYearDays(year)
     const today = new Date()
@@ -42,8 +44,8 @@ export const YearProgressBar = memo(function YearProgressBar({
     const elapsed = yearDays.filter((d) => d <= today).length
 
     // Count days with at least one completion
-    // Days gone by only: the bar reads "N/M days active", and M stops at today, so a day
-    // still to come on the left of that slash would be claiming the impossible.
+    // Days gone by only: the bar reads "N of M days", and M stops at today, so a day still
+    // to come counted on the left would be claiming the impossible.
     const limit = formatDate(today)
     const daysWithActivity = new Set<string>()
     logsByDate.forEach((count, dateStr) => {
@@ -102,9 +104,14 @@ export const YearProgressBar = memo(function YearProgressBar({
 
       {/* Stats row */}
       <div className="flex items-center justify-between text-xs text-gray-500">
+        {/* "N of M days so far" and not "N/M days active". The slash never said what the
+            second number was: Henfry read 20/277 on his phone and took the 277 for a
+            mistake, when it was the days of the year that had gone by. "So far" only while
+            the year is running; once it has ended every day of it has gone by, and the
+            words would be promising days that are never coming. */}
         <span>
-          <span className="font-semibold text-gray-700">{activeDays}</span>/{totalDaysElapsed} days
-          active
+          <span className="font-semibold text-gray-700">{activeDays}</span> of {totalDaysElapsed}{' '}
+          days{isThisYear ? ' so far' : ''}
         </span>
         <div className="flex items-center gap-3">
           {currentStreak > 0 && (
