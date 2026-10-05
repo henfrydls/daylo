@@ -21,6 +21,27 @@ describe('YearProgressBar', () => {
     currentStreak: 0,
   }
 
+  // Henfry read "20/277 days active" on his phone and took the 277 for a mistake. It was
+  // the days gone by in the year, which the slash never said. The count has not changed.
+  describe('what the two numbers are', () => {
+    it('says how many days have gone by, in this year', () => {
+      render(<YearProgressBar {...defaultProps} />)
+
+      // 1 January to 15 June 2024, inclusive.
+      expect(screen.getByText(/days so far/).textContent).toBe('0 of 167 days so far')
+    })
+
+    // A year that has ended has no "so far" about it: every day of it has gone by, and
+    // the sentence would be promising days that are never coming.
+    it('drops the "so far" once the year is over', () => {
+      render(<YearProgressBar {...defaultProps} year={2023} />)
+
+      const line = screen.getByText(/of 365 days/)
+      expect(line.textContent).toBe('0 of 365 days')
+      expect(line.textContent).not.toContain('so far')
+    })
+  })
+
   it('should not render when there are no activities', () => {
     const { container } = render(<YearProgressBar {...defaultProps} totalActivities={0} />)
 
@@ -38,7 +59,7 @@ describe('YearProgressBar', () => {
     render(<YearProgressBar {...defaultProps} />)
 
     expect(screen.getByText('0%')).toBeInTheDocument()
-    expect(screen.getByText(/days active/)).toBeInTheDocument()
+    expect(screen.getByText(/days so far/)).toBeInTheDocument()
   })
 
   it('should calculate percentage correctly', () => {
@@ -52,7 +73,7 @@ describe('YearProgressBar', () => {
 
     // 10 active days out of ~167 elapsed days (Jan 1 - Jun 15)
     expect(screen.getByText('10')).toBeInTheDocument()
-    expect(screen.getByText(/days active/)).toBeInTheDocument()
+    expect(screen.getByText(/days so far/)).toBeInTheDocument()
   })
 
   // The bar no longer works the run out for itself. It shows the one it is handed, which
@@ -71,7 +92,7 @@ describe('YearProgressBar', () => {
     expect(screen.queryByText(/d streak/)).not.toBeInTheDocument()
   })
 
-  // "N/M days active" has the days gone by on the right of the slash, so a day still to
+  // "N of M days" has the days gone by on the right, so a day still to
   // come on the left would be claiming more active days than there have been. An imported
   // file can carry dates in the future.
   it('does not count a day still to come among the active ones', () => {
@@ -81,7 +102,7 @@ describe('YearProgressBar', () => {
 
     render(<YearProgressBar {...defaultProps} logsByDate={logsByDate} />)
 
-    expect(screen.getByText(/days active/).textContent).toMatch(/^1\//)
+    expect(screen.getByText(/days so far/).textContent).toMatch(/^1 of /)
   })
 
   it('should show best month', () => {
