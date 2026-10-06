@@ -193,6 +193,24 @@ describe('QuickLog', () => {
       expect(screen.getByTestId('quicklog-create-first-activity')).toBeInTheDocument()
     })
 
+    // Done closes a sheet whose work is done, and there is no work here: nothing can be
+    // ticked yet. Two buttons where one of them does nothing make somebody read both to
+    // find out which, and the cross already closes it.
+    it('does not offer Done when there is nothing to be done', () => {
+      act(() => {
+        useCalendarStore.setState({
+          activities: [],
+          logs: [],
+          selectedDate: '2024-01-15',
+        })
+      })
+      render(<QuickLog />)
+
+      expect(screen.queryByTestId('quicklog-done-button')).not.toBeInTheDocument()
+      // The cross is still there, so there is still a way out.
+      expect(screen.getByLabelText('Close quick log')).toBeInTheDocument()
+    })
+
     it('should show create form when clicking "Create your first activity" in empty state', async () => {
       const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime })
       act(() => {

@@ -278,15 +278,22 @@ export const QuickLog = memo(function QuickLog() {
           ) : (
             <>
               {activities.length === 0 ? renderEmptyState() : renderActivityList()}
-              <div className="mt-4 sm:mt-6 flex justify-end">
-                <Button
-                  onClick={() => setSelectedDate(null)}
-                  data-testid="quicklog-done-button"
-                  className="w-full sm:w-auto"
-                >
-                  Done
-                </Button>
-              </div>
+              {/* Done closes a sheet whose work is done, and with no activities there is
+                  no work: nothing here can be ticked. The only thing to do is create the
+                  first one, and the cross in the corner is already the way out. Two
+                  buttons where one of them does nothing make somebody read both to find
+                  out which is which. */}
+              {activities.length > 0 && (
+                <div className="mt-4 sm:mt-6 flex justify-end">
+                  <Button
+                    onClick={() => setSelectedDate(null)}
+                    data-testid="quicklog-done-button"
+                    className="w-full sm:w-auto"
+                  >
+                    Done
+                  </Button>
+                </div>
+              )}
             </>
           )}
         </div>
