@@ -39,6 +39,12 @@
   </branding>
   <content_rating type="oars-1.1" />
   <releases>
+    <release version="1.4.1" date="2026-10-07">
+      <url>https://github.com/henfrydls/daylo/releases/tag/v1.4.1</url>
+      <description>
+        <p>Sliding between the year and the month now follows your finger: the two views move together instead of one being swapped for the other, and letting go halfway puts it back. On Android the back button closes whatever is open, a dialog or a sheet or the day you tapped, instead of closing Daylo. The year bar says what its second number is: it reads "20 of 277 days so far" rather than "20/277 days active", where 277 is how many days of the year have gone by. The anonymous check-in now also says in one word how the copy was installed, which is the same message with nothing new about you in it, and it is still one switch away in the menu.</p>
+      </description>
+    </release>
     <release version="1.4.0" date="2026-09-30">
       <url>https://github.com/henfrydls/daylo/releases/tag/v1.4.0</url>
       <description>
