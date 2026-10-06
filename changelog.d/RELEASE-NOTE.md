@@ -1,1 +1,1 @@
-Daylo now tells you when a new version is out, and installs it for you where it can. Asking how it has been going is five stars now, not an email.
+Sliding between Year and Month now follows your finger, and on Android the back button closes what is open instead of the app.
