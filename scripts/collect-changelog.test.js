@@ -146,8 +146,14 @@ describe('what counts as a version', () => {
     expect(versionFrom(['--dry-run', '1.4.1']).version).toBe('1.4.1')
   })
 
+  // The accident that started this: there is no --help, so it was taken as the version.
+  // It is refused by name now, which is a better answer than "no version given".
   it('refuses a flag where the version goes', () => {
-    expect(versionFrom(['--help']).error).toMatch(/No version/)
+    expect(versionFrom(['--help']).error).toMatch(/do not know/)
+  })
+
+  it('says a version is missing when the only thing given is the option it knows', () => {
+    expect(versionFrom(['--dry-run']).error).toMatch(/No version/)
   })
 
   it('refuses anything that is not a version', () => {
@@ -157,6 +163,18 @@ describe('what counts as a version', () => {
 
   it('refuses nothing at all', () => {
     expect(versionFrom([]).error).toMatch(/No version/)
+  })
+
+  // The same accident through a politer door. Somebody who types the typo believes they
+  // are looking before leaping, and ignoring the option is what makes them wrong.
+  it('refuses an option it does not know, rather than ignoring it', () => {
+    expect(versionFrom(['--dryrun', '1.4.1']).error).toMatch(/do not know/)
+    expect(versionFrom(['--halp', '1.4.1']).error).toMatch(/do not know/)
+    expect(versionFrom(['-n', '1.4.1']).error).toMatch(/do not know/)
+  })
+
+  it('knows the one option there is', () => {
+    expect(versionFrom(['--dry-run', '1.4.1']).version).toBe('1.4.1')
   })
 })
 

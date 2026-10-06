@@ -103,6 +103,14 @@ export function sectionOf(changelog, version) {
  * through git, and a fragment written minutes earlier is not in git yet.
  */
 export function versionFrom(args) {
+  // An option this does not know is refused rather than ignored. Ignoring it is the same
+  // accident through a politer door: `--dryrun 1.4.1`, with the typo, would have run for
+  // real while whoever typed it believed they were looking first.
+  const unknown = args.find((arg) => arg.startsWith('-') && arg !== '--dry-run')
+  if (unknown !== undefined) {
+    return { error: `I do not know the option "${unknown}". The only one is --dry-run.` }
+  }
+
   const version = args.find((arg) => !arg.startsWith('-'))
   if (version === undefined) return { error: 'No version given.' }
   if (!/^\d+\.\d+\.\d+$/.test(version)) {
