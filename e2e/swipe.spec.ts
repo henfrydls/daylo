@@ -136,7 +136,7 @@ test('a drag low down on a short view still crosses', async ({ page }) => {
     const saved = raw ? JSON.parse(raw) : { state: {}, version: 0 }
     saved.state.activities = []
     saved.state.logs = []
-    saved.state.yearMode = 'activity'
+    saved.state.yearMode = 'byActivity'
     localStorage.setItem('simple-calendar-storage', JSON.stringify(saved))
   })
   await page.reload()
