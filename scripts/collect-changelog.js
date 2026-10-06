@@ -80,10 +80,45 @@ export function collect({ changelog, version, fragments }) {
   return `${changelog.slice(0, firstSection)}${section}\n${changelog.slice(firstSection)}`
 }
 
+/**
+ * The section this version would get, pulled back out of the joined changelog.
+ *
+ * It exists for the dry run: the only honest way to show what would be written is to
+ * write it and read it back, rather than to describe it a second time and risk the
+ * description drifting from the thing.
+ */
+export function sectionOf(changelog, version) {
+  const start = changelog.indexOf(`## ${version}\n`)
+  if (start === -1) return ''
+  const next = changelog.indexOf('\n## ', start + 1)
+  return changelog.slice(start, next === -1 ? undefined : next).trimEnd()
+}
+
+/**
+ * A version, or a reason it is not one.
+ *
+ * It refuses a flag, and that is not pedantry: running this with `--help` wrote a section
+ * called `## --help` into the changelog and emptied changelog.d, because the script has no
+ * help and takes whatever it is handed as the version. Nothing is reversible here except
+ * through git, and a fragment written minutes earlier is not in git yet.
+ */
+export function versionFrom(args) {
+  const version = args.find((arg) => !arg.startsWith('-'))
+  if (version === undefined) return { error: 'No version given.' }
+  if (!/^\d+\.\d+\.\d+$/.test(version)) {
+    return { error: `"${version}" is not a version. It has to look like 1.4.1.` }
+  }
+  return { version }
+}
+
 function main() {
-  const version = process.argv[2]
-  if (!version) {
-    console.error('Usage: node scripts/collect-changelog.js <version>')
+  const args = process.argv.slice(2)
+  const dry = args.includes('--dry-run')
+  const { version, error } = versionFrom(args)
+  if (error) {
+    console.error(error)
+    console.error('Usage: node scripts/collect-changelog.js <version> [--dry-run]')
+    console.error('  --dry-run  print what it would do, and write nothing')
     process.exit(1)
   }
 
@@ -98,7 +133,18 @@ function main() {
   }))
 
   const changelog = readFileSync(changelogPath, 'utf8')
-  writeFileSync(changelogPath, collect({ changelog, version, fragments }))
+  const next = collect({ changelog, version, fragments })
+
+  if (dry) {
+    console.log(sectionOf(next, version))
+    console.log('')
+    console.log(`Would write that section and remove ${names.length} fragments:`)
+    for (const name of names) console.log(`  ${name}`)
+    console.log('Nothing was written.')
+    return
+  }
+
+  writeFileSync(changelogPath, next)
   for (const name of names) {
     unlinkSync(join(directory, name))
   }

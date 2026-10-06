@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { collect, isFragment, nameOf } from './collect-changelog.js'
+import { collect, isFragment, nameOf, sectionOf, versionFrom } from './collect-changelog.js'
 
 const CHANGELOG = `# Changelog
 
@@ -134,5 +134,55 @@ describe('which files are fragments', () => {
 
   it('ignores what is not markdown', () => {
     expect(isFragment('80-something.txt')).toBe(false)
+  })
+})
+
+// Running this with --help wrote a section called "## --help" into the changelog and
+// emptied changelog.d. Nothing here is reversible except through git, and a fragment
+// written minutes earlier is not in git yet.
+describe('what counts as a version', () => {
+  it('takes the first thing that is not a flag', () => {
+    expect(versionFrom(['1.4.1']).version).toBe('1.4.1')
+    expect(versionFrom(['--dry-run', '1.4.1']).version).toBe('1.4.1')
+  })
+
+  it('refuses a flag where the version goes', () => {
+    expect(versionFrom(['--help']).error).toMatch(/No version/)
+  })
+
+  it('refuses anything that is not a version', () => {
+    expect(versionFrom(['latest']).error).toMatch(/not a version/)
+    expect(versionFrom(['1.4']).error).toMatch(/not a version/)
+  })
+
+  it('refuses nothing at all', () => {
+    expect(versionFrom([]).error).toMatch(/No version/)
+  })
+})
+
+describe('reading a section back out', () => {
+  const changelog = [
+    '# Changelog',
+    '',
+    '## 1.4.1',
+    '',
+    'The new one.',
+    '',
+    '## 1.4.0',
+    '',
+    'The old one.',
+    '',
+  ].join('\n')
+
+  it('gives that version and stops at the next', () => {
+    expect(sectionOf(changelog, '1.4.1')).toBe('## 1.4.1\n\nThe new one.')
+  })
+
+  it('gives the last one to the end', () => {
+    expect(sectionOf(changelog, '1.4.0')).toBe('## 1.4.0\n\nThe old one.')
+  })
+
+  it('gives nothing for a version that is not there', () => {
+    expect(sectionOf(changelog, '9.9.9')).toBe('')
   })
 })

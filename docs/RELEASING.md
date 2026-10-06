@@ -12,11 +12,19 @@ The app version lives in **one source of truth**: `package.json`.
 ### 1. Gather the changelog
 
 ```bash
-node scripts/collect-changelog.js 1.3.0
+node scripts/collect-changelog.js 1.3.0 --dry-run   # print what it would do
+node scripts/collect-changelog.js 1.3.0             # do it
 ```
 
 Joins the fragments in `changelog.d/` into a new section of `CHANGELOG.md`, in the order
-their pull requests landed, and empties the directory. It refuses to run with no fragments
+their pull requests landed, and empties the directory. `--dry-run` prints the section it
+would write and the files it would remove, and writes nothing: worth doing first, because
+the real run is the one thing in this procedure that cannot be undone except through git,
+and a fragment written minutes ago is not in git yet.
+
+It refuses a version that does not look like one, which includes a flag. That rule exists
+because `--help`, which this script does not have, was once taken as the version and wrote
+a section called `## --help`. It refuses to run with no fragments
 or with a version the changelog already has, so a release cannot quietly ship with nothing
 written about it.
 
