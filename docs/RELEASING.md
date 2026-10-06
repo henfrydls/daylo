@@ -40,7 +40,7 @@ is checked ahead of it because a missing or stale note would be seen by everybod
 on the day something does.
 
 It is written by hand rather than taken from `changelog.d/`, and that is not laziness. The
-fragments are written to be read on a page: each spends its best sentences on *why*
+fragments are written to be read on a page: each spends its best sentences on _why_
 something changed, which is what makes a changelog worth reading and the first thing that
 does not fit in a small box. Measured for 1.4.0: those fragments came to 1379 characters
 over three paragraphs, about thirty-four lines on a phone, and two of the three described
@@ -84,6 +84,7 @@ git push origin v1.3.0
 ### 4. CI builds and publishes
 
 GitHub Actions (`.github/workflows/release.yml`) automatically:
+
 - Builds for Windows (x64, ARM64), macOS (Intel, Apple Silicon), and Linux (x64)
 - Creates a GitHub Release with all installers attached
 - Signs the updater artifacts and, once every platform has finished, writes the one
@@ -120,7 +121,7 @@ the same effect as losing it.
 To check that the secret still signs, on the day it is set, the day it is rotated, and any
 day there is doubt, run the **"Does the signing secret sign?"** workflow by hand. It takes
 about a minute, publishes nothing, and prints nothing of the key. It exists because whoever
-sets the secret has only checked that *their file* signs: between that file and the secret
+sets the secret has only checked that _their file_ signs: between that file and the secret
 there is a `gh secret set` that can add a stray byte, and that byte fails with a message
 about base64 that names nothing.
 
@@ -173,6 +174,7 @@ debuggable by any process on the phone.
 ## Verifying the Version
 
 The app displays its version in the menu. In development:
+
 - Web mode: reads `__APP_VERSION__` injected by Vite from `package.json`
 - Desktop mode: reads from Tauri API (which reads `tauri.conf.json` → `package.json`)
 
