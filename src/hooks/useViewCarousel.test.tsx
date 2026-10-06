@@ -151,6 +151,24 @@ describe('crossing the rail', () => {
     expect(screen.getByTestId('other')).toHaveStyle({ visibility: 'hidden' })
   })
 
+  // Which curve goes where, because they are different gestures: one is a view being put
+  // down and the other is a view going back to where it was. Pinned here because nothing
+  // else can say it: jsdom lays nothing out, and the curve is the one thing about the
+  // movement that is written into the node rather than measured.
+  it('lands on the carousel curve and goes back on the other one', () => {
+    const onChange = vi.fn()
+    const { unmount } = render(<Harness onChange={onChange} />)
+
+    dragBy(-WIDTH * 0.6)
+    expect(rail().style.transition).toContain('var(--ease-carousel-finish)')
+    finish()
+    unmount()
+
+    render(<Harness onChange={vi.fn()} />)
+    dragBy(-WIDTH * 0.2, { holdFor: 200 })
+    expect(rail().style.transition).toContain('var(--ease-emphasized-decel)')
+  })
+
   it('goes back when the drag stops short and the finger is still', () => {
     const onChange = vi.fn()
     render(<Harness onChange={onChange} />)

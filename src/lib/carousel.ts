@@ -19,7 +19,7 @@ export const FLICK_SPEED = 0.4
 export const FLICK_AT = 24
 
 /** How far the end of the rail gives before it stops giving. */
-export const MOST_IT_GIVES = 64
+export const MOST_IT_GIVES = 24
 
 export type Axis = 'horizontal' | 'vertical' | 'undecided'
 
@@ -39,7 +39,7 @@ export function axisOf(dx: number, dy: number): Axis {
  *
  * It keeps moving, less and less, and never past `MOST_IT_GIVES`. A wall that does not
  * move at all reads as a broken screen; one that moves freely promises a view that is not
- * there.
+ * there. It was 64, which left a white gap wide enough to look at rather than feel.
  */
 export function rubberBand(dx: number, width: number): number {
   if (width <= 0) return 0
@@ -92,12 +92,24 @@ export function velocityOf(samples: { x: number; t: number }[], now: number, win
 /**
  * How long the rail takes, and the two numbers that bound it.
  *
- * They were 140 and 260 until Henfry held the first build: the view arrived, and arriving
- * is not the same as being put down. These are slower, and they are the sort of number
- * only a hand can choose, which is why they moved after a phone and not after an argument.
+ * 140 and 260 in the first build, then 280 and 400, and 320 and 450 after the second time
+ * Henfry held it. Arriving is not the same as being put down. These are the sort of number
+ * only a hand can choose, which is why they move after a phone and not after an argument.
  */
-export const FINISH_AT_LEAST = 280
-export const FINISH_AT_MOST = 400
+export const FINISH_AT_LEAST = 320
+export const FINISH_AT_MOST = 450
+
+/**
+ * The curve the landing follows, and the curve everything else keeps.
+ *
+ * The emphasized one leaves at speed and brakes hard, which is right for something
+ * appearing and wrong for something being put down: on a phone it reads as the view being
+ * thrown out of the way. The finish has its own token now; going back and the toggle still
+ * use the old one, because nobody has complained about those and changing three things at
+ * once makes the next round unreadable.
+ */
+export const FINISH_CURVE = 'var(--ease-carousel-finish)'
+export const RETURN_CURVE = 'var(--ease-emphasized-decel)'
 
 /**
  * And the way back, which is one length whatever the finger did.

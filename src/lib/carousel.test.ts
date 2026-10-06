@@ -37,13 +37,20 @@ describe('which way the gesture is going', () => {
 
 describe('the end of the rail', () => {
   it('keeps moving, less and less', () => {
-    const at100 = rubberBand(100, 364)
-    const at150 = rubberBand(150, 364)
+    const at40 = rubberBand(40, 364)
+    const at80 = rubberBand(80, 364)
 
-    expect(at100).toBeGreaterThan(20)
-    expect(at150).toBeGreaterThan(at100)
+    expect(at40).toBeGreaterThan(0)
+    expect(at80).toBeGreaterThan(at40)
     // Less than the finger: that is the whole message.
-    expect(at150).toBeLessThan(150)
+    expect(at80).toBeLessThan(80)
+  })
+
+  // 64 px of white was wide enough to look at instead of feel. A thumb's drag reaches the
+  // end of the give now and stays there.
+  it('gives no more than a sliver', () => {
+    expect(MOST_IT_GIVES).toBe(24)
+    expect(rubberBand(200, 364)).toBe(MOST_IT_GIVES)
   })
 
   it('stops giving', () => {
@@ -123,13 +130,13 @@ describe('how long the finish takes', () => {
   it('never snaps, and never dawdles', () => {
     // Thrown hard with little left to go, and crawling with a screen still to cross.
     expect(finishIn(300, 10)).toBe(FINISH_AT_LEAST)
-    expect(finishIn(500, 0.1)).toBe(FINISH_AT_MOST)
-    expect(FINISH_AT_LEAST).toBe(280)
-    expect(FINISH_AT_MOST).toBe(400)
+    expect(finishIn(600, 0.1)).toBe(FINISH_AT_MOST)
+    expect(FINISH_AT_LEAST).toBe(320)
+    expect(FINISH_AT_MOST).toBe(450)
   })
 
   it('follows the speed in between', () => {
-    const at = finishIn(480, 1.5)
+    const at = finishIn(480, 1.2)
 
     expect(at).toBeGreaterThan(FINISH_AT_LEAST)
     expect(at).toBeLessThan(FINISH_AT_MOST)

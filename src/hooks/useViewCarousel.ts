@@ -3,8 +3,10 @@ import {
   AXIS_AT,
   axisOf,
   confirms,
+  FINISH_CURVE,
   finishIn,
   GO_BACK_IN,
+  RETURN_CURVE,
   rubberBand,
   velocityOf,
 } from '../lib/carousel'
@@ -134,10 +136,10 @@ export function useViewCarousel({ view, onChange, enabled, headerRef }: Options)
     if (containerRef.current) containerRef.current.style.minHeight = ''
   }, [])
 
-  const moveTo = useCallback((x: number, ms: number | null) => {
+  const moveTo = useCallback((x: number, ms: number | null, curve = RETURN_CURVE) => {
     const rail = railRef.current
     if (!rail) return
-    rail.style.transition = ms === null ? 'none' : `transform ${ms}ms var(--ease-emphasized-decel)`
+    rail.style.transition = ms === null ? 'none' : `transform ${ms}ms ${curve}`
     rail.style.transform = `translate3d(${x}px, 0, 0)`
   }, [])
 
@@ -168,7 +170,7 @@ export function useViewCarousel({ view, onChange, enabled, headerRef }: Options)
 
   /** Finish, or go back, and then land. */
   const settle = useCallback(
-    (to: number, ms: number, changed: boolean) => {
+    (to: number, ms: number, changed: boolean, curve = RETURN_CURVE) => {
       const rail = railRef.current
       if (!rail || reduced.current) {
         arrive(changed)
@@ -188,7 +190,7 @@ export function useViewCarousel({ view, onChange, enabled, headerRef }: Options)
         arrive(changed)
       }
       rail.addEventListener('transitionend', done)
-      moveTo(to, ms)
+      moveTo(to, ms, curve)
       // A transition that never starts, because the distance was zero or the view was
       // hidden mid-gesture, would otherwise leave the rail stuck with the other one
       // showing.
@@ -305,7 +307,7 @@ export function useViewCarousel({ view, onChange, enabled, headerRef }: Options)
 
       if (changing) {
         const to = towards(latest.current.view) * g.width
-        settle(to, finishIn(to - dx, velocity), true)
+        settle(to, finishIn(to - dx, velocity), true, FINISH_CURVE)
       } else {
         settle(0, GO_BACK_IN, false)
       }

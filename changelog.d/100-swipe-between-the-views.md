@@ -9,5 +9,6 @@ same. It is the end of the line now, and it gives a little to say so. If your ph
 to reduce motion, nothing slides: the view changes at once, as before.
 
 When you let go, the view is put down rather than snapped into place: the last of the
-movement takes a little longer than it first did, because arriving and being put down are
-not the same thing.
+movement is slower and gentler than it first was, because arriving and being put down are
+not the same thing. The ends of the line give a few pixels and stop, enough to feel and not
+enough to look at.
