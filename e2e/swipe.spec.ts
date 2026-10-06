@@ -17,7 +17,11 @@ const MONTH = '[data-testid="month-title-button"]'
 async function drag(
   page: import('@playwright/test').Page,
   by: number,
-  { steps = 12, lowDown = false }: { steps?: number; lowDown?: boolean } = {}
+  {
+    steps = 12,
+    lowDown = false,
+    settleFor = 400,
+  }: { steps?: number; lowDown?: boolean; settleFor?: number } = {}
 ) {
   const card = page.locator('.lg\\:col-span-3').first()
   const box = await card.boundingBox()
@@ -40,7 +44,42 @@ async function drag(
     await page.waitForTimeout(16)
   }
   await client.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] })
-  await page.waitForTimeout(400)
+  await page.waitForTimeout(settleFor)
+}
+
+/**
+ * A finger you hold on to, for the tests that have to look at the screen mid-gesture.
+ *
+ * `drag` above starts and finishes in one call and then waits for the rail to come to
+ * rest, which is the right shape for asking what a gesture decided and the wrong one for
+ * asking what the screen looks like while a second gesture is under way.
+ */
+async function finger(page: import('@playwright/test').Page) {
+  const card = page.locator('.lg\\:col-span-3').first()
+  const box = await card.boundingBox()
+  if (!box) throw new Error('the calendar is not on the page')
+  const client = await page.context().newCDPSession(page)
+  const y = box.y + Math.min(120, box.height / 2)
+
+  return {
+    width: box.width,
+    async down(x: number) {
+      await client.send('Input.dispatchTouchEvent', {
+        type: 'touchStart',
+        touchPoints: [{ x: box.x + x, y }],
+      })
+    },
+    async to(x: number) {
+      await client.send('Input.dispatchTouchEvent', {
+        type: 'touchMove',
+        touchPoints: [{ x: box.x + x, y }],
+      })
+      await page.waitForTimeout(16)
+    },
+    async up() {
+      await client.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] })
+    },
+  }
 }
 
 test.beforeEach(async ({ page }) => {
@@ -182,4 +221,46 @@ test('and from Month, dragging right brings Year back', async ({ page }) => {
   await drag(page, width * 0.7)
 
   await expect(page.locator(BAR)).toBeVisible()
+})
+
+/**
+ * The one Henfry found in fourteen seconds with a phone in his hand and no test had.
+ *
+ * Slowly it was right; quickly the toggle said Month with Year still on the screen for
+ * about a third of a second, and there was white where the other view should have been.
+ * Both were the first landing arriving in the middle of the second gesture. Nothing here
+ * waits for the rail to come to rest before the second finger goes down, which is the
+ * whole point: the assertions are made while the second drag is still under way.
+ */
+test('a second drag before the first has landed finds everything where it should be', async ({
+  page,
+}) => {
+  const hand = await finger(page)
+
+  await drag(page, -hand.width * 0.7, { settleFor: 0 })
+
+  // Straight back the other way, without waiting. The landing of the first is still in
+  // flight at this point: it takes 320 to 450 ms and nothing has waited for it.
+  await hand.down(24)
+  await hand.to(24 + hand.width * 0.2)
+  await hand.to(24 + hand.width * 0.4)
+
+  // The toggle has to say what the first gesture did, not what it was before it.
+  await expect(page.getByRole('button', { name: 'Month', exact: true })).toHaveAttribute(
+    'aria-pressed',
+    'true'
+  )
+  // And the view the finger is pulling in has to be there to be pulled. This is the white
+  // gap: Year was hidden under a finger that was already dragging it into place.
+  await expect(page.locator(BAR)).toBeVisible()
+
+  await hand.to(24 + hand.width * 0.7)
+  await hand.up()
+  await page.waitForTimeout(600)
+
+  await expect(page.locator(BAR)).toBeVisible()
+  await expect(page.getByRole('button', { name: 'Year', exact: true })).toHaveAttribute(
+    'aria-pressed',
+    'true'
+  )
 })

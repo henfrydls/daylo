@@ -18,8 +18,11 @@ export const CONFIRM_AT = 0.4
 export const FLICK_SPEED = 0.4
 export const FLICK_AT = 24
 
-/** How far the end of the rail gives before it stops giving. */
-export const MOST_IT_GIVES = 24
+/** How far the end of the rail gives. It approaches this and never arrives. */
+export const MOST_IT_GIVES = 40
+
+/** How freely it gives at the start, before the rubber starts pulling back. */
+export const GIVES_AT_FIRST = 0.5
 
 export type Axis = 'horizontal' | 'vertical' | 'undecided'
 
@@ -37,14 +40,21 @@ export function axisOf(dx: number, dy: number): Axis {
 /**
  * How far the rail actually moves when there is nothing on the other side.
  *
- * It keeps moving, less and less, and never past `MOST_IT_GIVES`. A wall that does not
- * move at all reads as a broken screen; one that moves freely promises a view that is not
- * there. It was 64, which left a white gap wide enough to look at rather than feel.
+ * A wall that does not move at all reads as a broken screen; one that moves freely
+ * promises a view that is not there. What it must never do is stop while the finger is
+ * still going, and that is what the shape before this one did: it took the give of the
+ * whole width and then cut it off at a flat maximum, so from about 85 px of finger
+ * onwards the screen was simply still. Henfry read that as a jump, which is exactly what
+ * it is: a wall somebody is still pushing.
+ *
+ * So the maximum is where it tends rather than where it stops. It gives `GIVES_AT_FIRST`
+ * of the first pixels and less of every pixel after, approaching `MOST_IT_GIVES` and never
+ * reaching it, which is the whole of what rubber is.
  */
 export function rubberBand(dx: number, width: number): number {
   if (width <= 0) return 0
-  const give = width * (1 - 1 / (1 + (0.3 * Math.abs(dx)) / width))
-  return Math.sign(dx) * Math.min(MOST_IT_GIVES, give)
+  const pull = GIVES_AT_FIRST * Math.abs(dx)
+  return Math.sign(dx) * ((MOST_IT_GIVES * pull) / (MOST_IT_GIVES + pull))
 }
 
 /**

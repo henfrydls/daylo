@@ -10,5 +10,5 @@ to reduce motion, nothing slides: the view changes at once, as before.
 
 When you let go, the view is put down rather than snapped into place: the last of the
 movement is slower and gentler than it first was, because arriving and being put down are
-not the same thing. The ends of the line give a few pixels and stop, enough to feel and not
-enough to look at.
+not the same thing. The ends of the line give under your finger and keep giving, less and
+less the further you push, which is how you can tell a wall from a view that is not there.

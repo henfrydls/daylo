@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { useRef } from 'react'
+import { useRef, useState } from 'react'
 import { render, screen, act } from '@testing-library/react'
 import { useViewCarousel } from './useViewCarousel'
 
@@ -75,12 +75,12 @@ const send = (type: string, options?: Parameters<typeof pointer>[1]) =>
  * away is a flick and changes the view on speed alone, while the same distance held still
  * for longer than the speed window is somebody who thought better of it.
  */
-function dragBy(dx: number, { steps = 5, ms = 16, holdFor = 0 } = {}) {
-  send('pointerdown', { x: 0, t: 0 })
+function dragBy(dx: number, { steps = 5, ms = 16, holdFor = 0, id = 1 } = {}) {
+  send('pointerdown', { x: 0, t: 0, id })
   for (let i = 1; i <= steps; i++) {
-    send('pointermove', { x: (dx * i) / steps, t: ms * i })
+    send('pointermove', { x: (dx * i) / steps, t: ms * i, id })
   }
-  send('pointerup', { x: dx, t: ms * steps + holdFor })
+  send('pointerup', { x: dx, t: ms * steps + holdFor, id })
 }
 
 const finish = () =>
@@ -315,5 +315,145 @@ describe('the same journey without a finger', () => {
     })
 
     expect(onChange).not.toHaveBeenCalled()
+  })
+})
+
+/**
+ * A harness that answers like the application does: the view it is given comes from the
+ * store, so when the hook says it changed, the next render says so too.
+ *
+ * The one above holds the view still, which is fine for asking what a single gesture
+ * decided and useless for asking what the gesture after it does, because the second one
+ * reads the view to know which way the other panel is.
+ */
+function Travelling({ onChange }: { onChange: (view: 'year' | 'month') => void }) {
+  const [view, setView] = useState<'year' | 'month'>('year')
+  return (
+    <Harness
+      view={view}
+      onChange={(next) => {
+        setView(next)
+        onChange(next)
+      }}
+    />
+  )
+}
+
+/** The same, with the store answering a tick late, which is what a real one does. */
+function Lagging({ onChange }: { onChange: (view: 'year' | 'month') => void }) {
+  const [view, setView] = useState<'year' | 'month'>('year')
+  return (
+    <Harness
+      view={view}
+      onChange={(next) => {
+        onChange(next)
+        setTimeout(() => setView(next), 0)
+      }}
+    />
+  )
+}
+
+/**
+ * Two gestures, the second one starting before the first has finished landing.
+ *
+ * Henfry found this on a phone in fourteen seconds and no test had: slowly it was right,
+ * quickly the toggle said Month with Year on screen for about a third of a second, and
+ * there was white where the other view should have been. Both came from the same place:
+ * the first landing was still pending, and it arrived in the middle of the second gesture,
+ * changing the view and hiding the other panel under a finger that was using them.
+ */
+describe('a second gesture before the first has landed', () => {
+  it('finishes the landing the moment the finger comes down again', () => {
+    const onChange = vi.fn()
+    render(<Travelling onChange={onChange} />)
+
+    dragBy(-WIDTH * 0.6)
+    expect(onChange).not.toHaveBeenCalled()
+
+    // No move, no up: the touch alone has to settle what was in flight, because everything
+    // after it reads the view and the panel beside it.
+    send('pointerdown', { x: 0, t: 0, id: 2 })
+
+    expect(onChange).toHaveBeenCalledExactlyOnceWith('month')
+    expect(screen.getByTestId('other')).toHaveStyle({ visibility: 'hidden' })
+    expect(rail().style.transform).toBe('')
+  })
+
+  it('sends the second gesture the way the new view goes', () => {
+    const onChange = vi.fn()
+    render(<Travelling onChange={onChange} />)
+
+    // Year to Month, and then straight back without waiting for the first to land.
+    dragBy(-WIDTH * 0.6)
+    dragBy(WIDTH * 0.6, { id: 2 })
+    finish()
+
+    expect(onChange).toHaveBeenNthCalledWith(1, 'month')
+    expect(onChange).toHaveBeenNthCalledWith(2, 'year')
+  })
+
+  // The one that says why the hook keeps the view itself instead of reading the one it was
+  // rendered with. React batches an update made from a listener into a task of its own, and
+  // the next pointer event does not wait for it, so on a phone the second gesture can run
+  // before the render that carries the new view. Here that is modelled by a store that
+  // answers a tick late; with the view read from the render, the second drag is read as
+  // going against the rail and nothing happens.
+  it('goes the right way even when the store has not answered yet', () => {
+    const onChange = vi.fn()
+    render(<Lagging onChange={onChange} />)
+
+    dragBy(-WIDTH * 0.6)
+    dragBy(WIDTH * 0.6, { id: 2 })
+    finish()
+
+    expect(onChange).toHaveBeenNthCalledWith(1, 'month')
+    expect(onChange).toHaveBeenNthCalledWith(2, 'year')
+  })
+
+  // The other half of keeping the view by hand: it is kept, not owned. The toggle on a
+  // desktop and a store that has been reset both move the view with no gesture anywhere
+  // near it, and the next drag has to go the way the view that is actually there goes.
+  it('takes the view from outside when no gesture put it there', () => {
+    const onChange = vi.fn()
+    const { rerender } = render(<Harness view="year" onChange={onChange} />)
+
+    rerender(<Harness view="month" onChange={onChange} />)
+    dragBy(WIDTH * 0.6)
+    finish()
+
+    expect(onChange).toHaveBeenCalledExactlyOnceWith('year')
+  })
+
+  // And it keeps taking them. The hook stops trusting the prop only for as long as it is
+  // waiting for the store to repeat back what the gesture just did; once it has, the prop
+  // is in charge again. Without that it would hold the first answer it ever gave and
+  // ignore the toggle and the reset for the rest of the session.
+  it('takes an outside change again once the store has caught up', () => {
+    const onChange = vi.fn()
+    const { rerender } = render(<Harness view="year" onChange={onChange} />)
+
+    dragBy(-WIDTH * 0.6)
+    finish()
+    expect(onChange).toHaveBeenCalledExactlyOnceWith('month')
+
+    rerender(<Harness view="month" onChange={onChange} />)
+    rerender(<Harness view="year" onChange={onChange} />)
+    dragBy(-WIDTH * 0.6)
+    finish()
+
+    expect(onChange).toHaveBeenNthCalledWith(2, 'month')
+  })
+
+  it('does not land the first gesture twice when the second one takes over', () => {
+    const onChange = vi.fn()
+    render(<Travelling onChange={onChange} />)
+
+    dragBy(-WIDTH * 0.6)
+    send('pointerdown', { x: 0, t: 0, id: 2 })
+    act(() => {
+      vi.advanceTimersByTime(1000)
+    })
+
+    expect(onChange).toHaveBeenCalledExactlyOnceWith('month')
   })
 })
