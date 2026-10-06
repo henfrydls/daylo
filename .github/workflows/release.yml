@@ -154,7 +154,7 @@ jobs:
     permissions:
       contents: write
     runs-on: ubuntu-latest
-    name: Build (android-apk)
+    name: Build (android-apk-and-aab)
 
     steps:
       - name: Checkout repository
@@ -200,8 +200,11 @@ jobs:
       - name: Install Tauri CLI
         run: npm install --save-dev @tauri-apps/cli
 
-      - name: Build Android APK (arm64 only)
-        run: npx tauri android build --apk --target aarch64
+      # Both from one build. The APK is what the landing page links to and what anybody
+      # installs by hand; the AAB is the only format Play accepts, and it is built from the
+      # same sources in the same run so the two cannot be different software.
+      - name: Build Android APK and AAB (arm64 only)
+        run: npx tauri android build --apk --aab --target aarch64
         env:
           NDK_HOME: ${{ env.ANDROID_HOME }}/ndk/29.0.14206865
 
@@ -255,6 +258,54 @@ jobs:
           # up here and not six months later in a published APK.
           echo "--- signature of the APK about to be published ---"
           "$BT/apksigner" verify --print-certs "$ALIGNED_PATH" | grep -iE 'SHA-256|Subject'
+
+      # The same key as the APK, which is the point of doing it here rather than letting
+      # Play sign a fresh upload: it will be both the upload key and, because Henfry will
+      # hand it to Play when the app is created, the app signing key.
+      #
+      # jarsigner and not apksigner: apksigner signs APKs and refuses a bundle. Play
+      # re-signs what it receives, so this signature is what proves the upload is ours.
+      - name: Sign the AAB
+        env:
+          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          set -euo pipefail
+          AAB_PATH="$(find src-tauri/gen/android/app/build/outputs/bundle -name '*.aab' | head -1)"
+          if [ -z "$AAB_PATH" ]; then
+            echo "::error::No .aab came out of the build. Play takes nothing else, so this"
+            echo "::error::release would have no way into the closed test."
+            find src-tauri/gen/android/app/build/outputs -type d | head -20
+            exit 1
+          fi
+          echo "$ANDROID_KEYSTORE_BASE64" | base64 -d > release.jks
+          trap 'rm -f release.jks' EXIT
+
+          jarsigner -keystore release.jks \
+            -storepass "$ANDROID_KEYSTORE_PASSWORD" \
+            -keypass "$ANDROID_KEY_PASSWORD" \
+            -signedjar Daylo-android.aab \
+            "$AAB_PATH" "$ANDROID_KEY_ALIAS"
+
+          # The same fingerprint the APK prints two steps above. If these two ever differ,
+          # it means one of them was signed with something else, and that is the failure
+          # that cannot be undone once people have installed it.
+          echo "--- signature of the AAB ---"
+          jarsigner -verify -verbose:summary -certs Daylo-android.aab | grep -iE 'X.509|digest algorithm' | head -5
+
+      # An artifact and not a release asset: nobody can install an .aab, it exists only to
+      # be handed to Play, and a file on the release page that cannot be opened is a
+      # question for everybody who reads that page. Ninety days is longer than any
+      # submission takes, and it can be moved to the release the day that stops being true.
+      - name: Keep the AAB for Play
+        uses: actions/upload-artifact@v4
+        with:
+          name: daylo-android-aab
+          path: Daylo-android.aab
+          retention-days: 90
+          if-no-files-found: error
 
       - name: Upload APK to release
         uses: softprops/action-gh-release@v2
