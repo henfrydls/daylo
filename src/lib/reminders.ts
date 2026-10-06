@@ -128,14 +128,23 @@ async function putOnTheQueue(hour: number, minute: number): Promise<string | nul
  * further than that out of a deep doze. Two deliveries measured on the same phone, a
  * Galaxy S24+ on Android 16:
  *
- *   set for 11:00, arrived 12:19 — 79 minutes late, phone asleep since the night before
- *   set for 19:00, arrived 19:00 — on time, phone in use
+ *   set for 11:00, arrived 12:19, 79 minutes late, phone asleep since the night before
+ *   set for 19:00, arrived 19:00, on the minute, phone in use
+ *   arrived 4 minutes late, phone in use
  *
  * Which is the behaviour the documentation describes rather than a fault: close when the
- * device is awake, stretched when it has not been. Asking for the exact-alarm permission
- * would fix the second case and is not worth it — it is the permission Android warns
- * about by name, for a notification nobody is waiting on to the minute. The wording in
- * the sheet says as much, so nobody has to discover it by being late.
+ * device is awake, stretched when it has not been. The two on a phone in use came out
+ * differently, on the minute once and four minutes late the next, which is what inexact
+ * means even at its best, and why the wording says "usually close" rather than a number.
+ *
+ * Asking for the exact-alarm permission was weighed and refused here, and that decision
+ * has since been reversed: Henfry saw other apps arrive on the minute, and it is going in
+ * a later version. When it does, two things have to be true before this paragraph can
+ * promise anything. The permission comes denied by default on Android 14 and up, so the
+ * sheet has to tell the truth when it is not granted. And the plugin re-arms the following
+ * days in its receiver with `setExact(RTC, ...)`, without RTC_WAKEUP and without
+ * allowWhileIdle, so without a fix there the permission buys one punctual reminder rather
+ * than punctual reminders.
  *
  * It will fire whether or not anything was logged that day. Suppressing it on a day
  * already logged would mean cancelling and re-arming from inside the app, and then a
