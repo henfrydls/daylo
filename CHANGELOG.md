@@ -3,6 +3,49 @@
 What changed in each release, for the people who use Daylo. Earlier versions are not
 listed: this file starts at 1.1.2, when the first change worth warning about arrived.
 
+## 1.4.1
+
+**Daylo now says how it was installed when it checks in.** One word, such as store or
+installer, so we can tell which door people come in by. It is still the same anonymous
+message, it still says nothing about you or what you track, and it is still one switch
+away in the menu. The whole message is written out in **What gets sent**, where it now has
+five lines instead of four.
+
+**On Android the back button now closes what is open, instead of closing Daylo.** A dialog,
+a sheet or the day you tapped goes away with one press, the way the back button works
+everywhere else on the phone, and the one underneath stays if there was one. On the main
+screen it still closes Daylo, because that is what it is for.
+
+**The year bar says what its second number means.** It read "20/277 days active", and the
+277 looked like a mistake; it is how many days of the year have gone by. It now reads "20
+of 277 days so far", and on a year that has ended it drops the "so far", because every day
+of that one has gone by already. The counting has not changed.
+
+**Sliding between Year and Month now follows your finger.** The two views sit side by side,
+Year on the left and Month on the right, the way the toggle shows them, and dragging moves
+them together instead of swapping one for the other when you let go. A drag that is short
+and slow goes back where it was. Tapping the toggle or a month card travels the same way,
+so the three ways between the views look like one thing.
+
+Dragging right in Year used to go to Month as well, which left both directions meaning the
+same. It is the end of the line now, and it gives a little to say so. If your phone is set
+to reduce motion, nothing slides: the view changes at once, as before.
+
+When you let go, the view carries on at the speed your hand had and is then put down
+rather than snapped into place. Letting go of a slow drag and letting go mid-flick are
+different things, and they now look it. The ends of the line give under your finger and
+keep giving, less and less the further you push, which is how you can tell a wall from a
+view that is not there.
+
+**The day sheet no longer offers Done when there is nothing to do.** Opening a day before
+you have created any activity showed two buttons, Create your first activity and Done, when
+only the first one does anything. The cross in the corner still closes it, as it always did.
+
+**On a phone the calendar now fills the screen.** A year with nothing in it used to end
+halfway down, leaving grey below it where sliding between the views did nothing, and the
+card jumped to a taller size the moment you started to drag. It reaches the bottom now, so
+there is nowhere on it that does nothing and nothing moves that you did not move.
+
 ## 1.4.0
 
 **The line about the check-in now says whether it is on or off.** When you updated from a
