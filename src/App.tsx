@@ -29,7 +29,6 @@ import {
   useViewCarousel,
 } from './hooks'
 import { TravelContext, useTravel } from './lib/travel'
-import { FeedbackRating } from './components/feedback/FeedbackRating'
 import { UpdateDot } from './components/updates/UpdateDot'
 import { UpdateNotice } from './components/updates/UpdateNotice'
 import { UpdateSettings } from './components/updates/UpdateSettings'
@@ -47,6 +46,15 @@ const ExportModal = lazy(() =>
 const ImportModal = lazy(() =>
   import('./components/data/ImportModal').then((module) => ({
     default: module.ImportModal,
+  }))
+)
+
+// Asked for once, after a week, and never again. Loading it with everything else meant
+// every session paid for a dialog almost none of them open, which is what the export and
+// import modals are already lazy for.
+const FeedbackRating = lazy(() =>
+  import('./components/feedback/FeedbackRating').then((module) => ({
+    default: module.FeedbackRating,
   }))
 )
 
@@ -671,29 +679,34 @@ function App() {
           )}
 
           {/* The question, wherever it came from. Unmounted when it closes, so the number
-            it carries goes with it rather than being cleared by anybody. */}
-          {questionIsOpen && (
-            <FeedbackRating
-              isOpen
-              onShown={(answer) => {
-                markFeedbackAsked()
-                void sendShown(answer, askedFromMenu ? 'menu' : 'automatic')
-              }}
-              onClose={() => {
-                setQuestionClosed(true)
-                setAskedFromMenu(false)
-              }}
-              onRate={(answer, stars) => void sendRating(answer, stars)}
-              // The star left the moment it was pressed and needs no receipt. This one was
-              // asked for, by somebody who wrote something and pressed a button, and the
-              // reason this dialog exists at all is a channel that failed without saying so.
-              // The dialog waits on this and says so itself. It used to raise a toast, which
-              // the dialog's own portal draws over, so the one message that mattered
-              // appeared behind the thing covering it.
-              onComment={sendComment}
-              withCheckinId={checkinEnabled && checkinId !== null}
-            />
-          )}
+            it carries goes with it rather than being cleared by anybody. Behind a Suspense
+            with no fallback: it is asked for by a gate that has already waited a week, so
+            a few milliseconds more while it loads are nothing, and a spinner in its place
+            would announce a question nobody asked for yet. */}
+          <Suspense fallback={null}>
+            {questionIsOpen && (
+              <FeedbackRating
+                isOpen
+                onShown={(answer) => {
+                  markFeedbackAsked()
+                  void sendShown(answer, askedFromMenu ? 'menu' : 'automatic')
+                }}
+                onClose={() => {
+                  setQuestionClosed(true)
+                  setAskedFromMenu(false)
+                }}
+                onRate={(answer, stars) => void sendRating(answer, stars)}
+                // The star left the moment it was pressed and needs no receipt. This one was
+                // asked for, by somebody who wrote something and pressed a button, and the
+                // reason this dialog exists at all is a channel that failed without saying so.
+                // The dialog waits on this and says so itself. It used to raise a toast, which
+                // the dialog's own portal draws over, so the one message that mattered
+                // appeared behind the thing covering it.
+                onComment={sendComment}
+                withCheckinId={checkinEnabled && checkinId !== null}
+              />
+            )}
+          </Suspense>
 
           {isUpdatesOpen && (
             <UpdateSettings
