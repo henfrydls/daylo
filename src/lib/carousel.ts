@@ -18,8 +18,11 @@ export const CONFIRM_AT = 0.4
 export const FLICK_SPEED = 0.4
 export const FLICK_AT = 24
 
-/** How far the end of the rail gives before it stops giving. */
-export const MOST_IT_GIVES = 64
+/** How far the end of the rail gives. It approaches this and never arrives. */
+export const MOST_IT_GIVES = 40
+
+/** How freely it gives at the start, before the rubber starts pulling back. */
+export const GIVES_AT_FIRST = 0.5
 
 export type Axis = 'horizontal' | 'vertical' | 'undecided'
 
@@ -37,14 +40,21 @@ export function axisOf(dx: number, dy: number): Axis {
 /**
  * How far the rail actually moves when there is nothing on the other side.
  *
- * It keeps moving, less and less, and never past `MOST_IT_GIVES`. A wall that does not
- * move at all reads as a broken screen; one that moves freely promises a view that is not
- * there.
+ * A wall that does not move at all reads as a broken screen; one that moves freely
+ * promises a view that is not there. What it must never do is stop while the finger is
+ * still going, and that is what the shape before this one did: it took the give of the
+ * whole width and then cut it off at a flat maximum, so from about 85 px of finger
+ * onwards the screen was simply still. Henfry read that as a jump, which is exactly what
+ * it is: a wall somebody is still pushing.
+ *
+ * So the maximum is where it tends rather than where it stops. It gives `GIVES_AT_FIRST`
+ * of the first pixels and less of every pixel after, approaching `MOST_IT_GIVES` and never
+ * reaching it, which is the whole of what rubber is.
  */
 export function rubberBand(dx: number, width: number): number {
   if (width <= 0) return 0
-  const give = width * (1 - 1 / (1 + (0.3 * Math.abs(dx)) / width))
-  return Math.sign(dx) * Math.min(MOST_IT_GIVES, give)
+  const pull = GIVES_AT_FIRST * Math.abs(dx)
+  return Math.sign(dx) * ((MOST_IT_GIVES * pull) / (MOST_IT_GIVES + pull))
 }
 
 /**
@@ -92,12 +102,53 @@ export function velocityOf(samples: { x: number; t: number }[], now: number, win
 /**
  * How long the rail takes, and the two numbers that bound it.
  *
- * They were 140 and 260 until Henfry held the first build: the view arrived, and arriving
- * is not the same as being put down. These are slower, and they are the sort of number
- * only a hand can choose, which is why they moved after a phone and not after an argument.
+ * 140 and 260 in the first build, then 280 and 400, and 320 and 450 after the second time
+ * Henfry held it. Arriving is not the same as being put down. These are the sort of number
+ * only a hand can choose, which is why they move after a phone and not after an argument.
  */
-export const FINISH_AT_LEAST = 280
-export const FINISH_AT_MOST = 400
+export const FINISH_AT_LEAST = 320
+export const FINISH_AT_MOST = 450
+
+/**
+ * How much of the landing is spent leaving, as the first handle of its curve.
+ *
+ * Fixed, so that the only thing that moves with the finger is the handle's height, and so
+ * that a finger which had stopped gets exactly the curve the design asked for on
+ * 2026-10-05: `cubic-bezier(0.4, 0, 0.2, 1)`.
+ */
+export const FINISH_HOLDS_BACK = 0.4
+
+/** Where the curve is going: all the way there, braking into it. */
+const FINISH_EASES_INTO = '0.2, 1'
+
+/**
+ * The curve the landing follows, drawn to leave at the speed the finger let go at.
+ *
+ * The emphasized curve this replaced left at speed and braked hard, which is right for
+ * something appearing and wrong for something being put down: it read as the view being
+ * thrown out of the way. The gentle one that replaced it leaves at a slope of **zero**,
+ * which is worse in the other direction, and measurable: on the 1.4.7 lab build the finger
+ * crossed at 34 to 80 video pixels a frame and the first frame after letting go moved 4.
+ * The view stopped dead and set off again. "Al soltar rápido se nota que de inmediato se
+ * pone más lento."
+ *
+ * So the curve leaves at whatever speed the hand had. For a cubic-bezier the slope at the
+ * start is `y1 / x1`, and the rail covers `remaining` pixels in `ms`, so the speed it
+ * leaves at is `(y1 / x1) * remaining / ms`. Fix `x1` and `y1` is what the finger decides.
+ *
+ * It is capped at 1, because a handle above that is not a curve a browser will take: past
+ * that speed the landing leaves as fast as it can be drawn. A little slower than the finger
+ * is nothing like stopping. A finger that was still, or already coming back the other way,
+ * gets a slope of zero, which is the gentle curve unchanged.
+ */
+export function finishCurve(remaining: number, velocity: number, ms: number): string {
+  const d = Math.abs(remaining)
+  const v = Math.sign(remaining) === Math.sign(velocity) ? Math.abs(velocity) : 0
+  const slope = d === 0 || ms <= 0 ? 0 : (v * ms) / d
+  const y1 = Math.min(1, FINISH_HOLDS_BACK * slope)
+  return `cubic-bezier(${FINISH_HOLDS_BACK}, ${Number(y1.toFixed(4))}, ${FINISH_EASES_INTO})`
+}
+export const RETURN_CURVE = 'var(--ease-emphasized-decel)'
 
 /**
  * And the way back, which is one length whatever the finger did.

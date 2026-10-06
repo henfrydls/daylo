@@ -3,8 +3,10 @@ import {
   AXIS_AT,
   axisOf,
   confirms,
+  finishCurve,
   finishIn,
   GO_BACK_IN,
+  RETURN_CURVE,
   rubberBand,
   velocityOf,
 } from '../lib/carousel'
@@ -91,10 +93,35 @@ export function useViewCarousel({ view, onChange, enabled, headerRef }: Options)
     moved: boolean
   } | null>(null)
 
-  const latest = useRef({ view, onChange })
+  /** The callback as it is now, so the listeners below never hold yesterday's. */
+  const announce = useRef(onChange)
   useEffect(() => {
-    latest.current = { view, onChange }
+    announce.current = onChange
   })
+
+  /**
+   * Which view the rail is on, kept here rather than read from the store.
+   *
+   * The store's answer arrives a render later, and a second gesture can start before that
+   * render has happened: React batches an update made from a listener like these into a
+   * task of its own, and the next pointer event does not wait for it. A gesture that read
+   * the stale view sent the rail the wrong way and put the panel on the wrong side, which
+   * is half of what Henfry saw. `arrive` moves this the instant the journey is over, and
+   * `told` keeps the render that follows from putting the old answer back: between saying
+   * the journey is over and the store agreeing, every render still carries the old view.
+   *
+   * The view does change from elsewhere too, from the toggle where there is no finger and
+   * from the store being reset, so the prop still wins whenever we are not waiting.
+   */
+  const viewNow = useRef(view)
+  const told = useRef(false)
+  useEffect(() => {
+    if (view === viewNow.current) told.current = false
+    else if (!told.current) viewNow.current = view
+  })
+
+  /** The landing in flight, so that a finger coming down can end it rather than race it. */
+  const landing = useRef<(() => void) | null>(null)
 
   /** Set when a gesture travelled far enough to be a gesture, read by the click it ends. */
   const swallow = useRef(false)
@@ -134,10 +161,10 @@ export function useViewCarousel({ view, onChange, enabled, headerRef }: Options)
     if (containerRef.current) containerRef.current.style.minHeight = ''
   }, [])
 
-  const moveTo = useCallback((x: number, ms: number | null) => {
+  const moveTo = useCallback((x: number, ms: number | null, curve = RETURN_CURVE) => {
     const rail = railRef.current
     if (!rail) return
-    rail.style.transition = ms === null ? 'none' : `transform ${ms}ms var(--ease-emphasized-decel)`
+    rail.style.transition = ms === null ? 'none' : `transform ${ms}ms ${curve}`
     rail.style.transform = `translate3d(${x}px, 0, 0)`
   }, [])
 
@@ -158,7 +185,10 @@ export function useViewCarousel({ view, onChange, enabled, headerRef }: Options)
         const top = container ? container.getBoundingClientRect().top + window.scrollY : 0
         window.scrollTo(0, Math.min(window.scrollY, Math.max(0, top - header)))
         ;(document.activeElement as HTMLElement | null)?.blur?.()
-        latest.current.onChange(otherSideOf(latest.current.view))
+        const next = otherSideOf(viewNow.current)
+        viewNow.current = next
+        told.current = true
+        announce.current(next)
       }
       hide()
       setMoving(false)
@@ -168,9 +198,10 @@ export function useViewCarousel({ view, onChange, enabled, headerRef }: Options)
 
   /** Finish, or go back, and then land. */
   const settle = useCallback(
-    (to: number, ms: number, changed: boolean) => {
+    (to: number, ms: number, changed: boolean, curve = RETURN_CURVE) => {
       const rail = railRef.current
       if (!rail || reduced.current) {
+        landing.current = null
         arrive(changed)
         return
       }
@@ -183,12 +214,14 @@ export function useViewCarousel({ view, onChange, enabled, headerRef }: Options)
       const done = () => {
         if (landed) return
         landed = true
+        landing.current = null
         window.clearTimeout(net)
         rail.removeEventListener('transitionend', done)
         arrive(changed)
       }
+      landing.current = done
       rail.addEventListener('transitionend', done)
-      moveTo(to, ms)
+      moveTo(to, ms, curve)
       // A transition that never starts, because the distance was zero or the view was
       // hidden mid-gesture, would otherwise leave the rail stuck with the other one
       // showing.
@@ -199,11 +232,11 @@ export function useViewCarousel({ view, onChange, enabled, headerRef }: Options)
 
   const travelTo = useCallback(
     (to: CarouselView) => {
-      if (!enabled || to === latest.current.view) return
+      if (!enabled || to === viewNow.current) return
       const container = containerRef.current
       const rail = railRef.current
       if (!container || !rail) {
-        latest.current.onChange(to)
+        announce.current(to)
         return
       }
       setMoving(true)
@@ -217,7 +250,7 @@ export function useViewCarousel({ view, onChange, enabled, headerRef }: Options)
           // opposite of how the design had it, and that is a thing to feel rather than to
           // argue about.
           settle(
-            towards(latest.current.view) * container.getBoundingClientRect().width,
+            towards(viewNow.current) * container.getBoundingClientRect().width,
             TOGGLE_TAKES,
             true
           )
@@ -233,6 +266,12 @@ export function useViewCarousel({ view, onChange, enabled, headerRef }: Options)
 
     const down = (event: PointerEvent) => {
       if (event.pointerType === 'mouse' || gesture.current !== null) return
+      // Whatever was still landing is over now. Letting it finish on its own meant it
+      // arrived in the middle of this gesture: it changed the view under a finger that was
+      // already dragging the old one, and it hid the panel beside it, which is the white
+      // gap where the other view should have been. Ending it here costs the few pixels it
+      // had left to travel and leaves everything after this reading one answer.
+      landing.current?.()
       // Something that scrolls sideways under the finger owns this gesture. There is
       // nothing like that in Daylo today; the rule is here for the day there is.
       let node = event.target as HTMLElement | null
@@ -286,7 +325,7 @@ export function useViewCarousel({ view, onChange, enabled, headerRef }: Options)
       if (reduced.current) return
 
       // Towards the other view it follows exactly; against it, the wall gives a little.
-      const open = Math.sign(dx) === towards(latest.current.view)
+      const open = Math.sign(dx) === towards(viewNow.current)
       moveTo(open ? dx : rubberBand(dx, g.width), null)
     }
 
@@ -300,12 +339,16 @@ export function useViewCarousel({ view, onChange, enabled, headerRef }: Options)
       // Anything that travelled is a gesture, not a tap, whichever way it ends.
       if (Math.abs(dx) > AXIS_AT) swallow.current = true
       const velocity = velocityOf(g.samples, event.timeStamp)
-      const open = Math.sign(dx) === towards(latest.current.view)
+      const open = Math.sign(dx) === towards(viewNow.current)
       const changing = open && confirms({ dx, width: g.width, velocity })
 
       if (changing) {
-        const to = towards(latest.current.view) * g.width
-        settle(to, finishIn(to - dx, velocity), true)
+        const to = towards(viewNow.current) * g.width
+        // The curve is drawn for this gesture: it leaves at the speed the hand let go at,
+        // so the view carries on rather than stopping for a frame and setting off again.
+        const left = to - dx
+        const ms = finishIn(left, velocity)
+        settle(to, ms, true, finishCurve(left, velocity, ms))
       } else {
         settle(0, GO_BACK_IN, false)
       }
