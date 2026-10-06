@@ -34,6 +34,10 @@
   --ease-emphasized-decel: cubic-bezier(0.05, 0.7, 0.1, 1);
   --ease-emphasized-accel: cubic-bezier(0.3, 0, 0.8, 0.15);
   --ease-standard: cubic-bezier(0.2, 0, 0, 1);
+  /* The carousel's landing, and only that. The emphasized one leaves at speed and brakes,
+     which on a phone reads as the view being thrown rather than carried: Henfry said it
+     goes away fast and starts abruptly. This one leaves gently and still settles. */
+  --ease-carousel-finish: cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 /* View transition keyframes */
