@@ -46,16 +46,29 @@ describe('the end of the rail', () => {
     expect(at80).toBeLessThan(80)
   })
 
-  // 64 px of white was wide enough to look at instead of feel. A thumb's drag reaches the
-  // end of the give now and stays there.
-  it('gives no more than a sliver', () => {
-    expect(MOST_IT_GIVES).toBe(24)
-    expect(rubberBand(200, 364)).toBe(MOST_IT_GIVES)
+  // 64 px of white was a gap to look at; then 24 with a hard stop at about 85 px of finger,
+  // which on a phone reads as a jump and not as rubber. Forty now, and never quite reached.
+  it('never gives the whole of it', () => {
+    expect(MOST_IT_GIVES).toBe(40)
+    expect(rubberBand(10000, 364)).toBeLessThan(MOST_IT_GIVES)
+    expect(rubberBand(-10000, 364)).toBeGreaterThan(-MOST_IT_GIVES)
   })
 
-  it('stops giving', () => {
-    expect(rubberBand(10000, 364)).toBeLessThanOrEqual(MOST_IT_GIVES)
-    expect(rubberBand(-10000, 364)).toBeGreaterThanOrEqual(-MOST_IT_GIVES)
+  // The one the old shape failed. It capped, so from about 85 px on, the finger moved and
+  // the view did not: that is a wall somebody is still pushing, which is what made it look
+  // like a jump. It has to keep moving however far the finger goes.
+  it('keeps moving however far the finger goes', () => {
+    const far = [100, 200, 400, 800, 1600].map((x) => rubberBand(x, 364))
+
+    for (let i = 1; i < far.length; i++) {
+      expect(far[i]).toBeGreaterThan(far[i - 1])
+    }
+  })
+
+  // And it has to get most of the way there within a drag somebody would actually do,
+  // or the ceiling is a number nobody can feel.
+  it('is most of the way there within a drag somebody would do', () => {
+    expect(rubberBand(200, 364)).toBeGreaterThan(MOST_IT_GIVES * 0.6)
   })
 
   it('goes the way the finger goes', () => {
