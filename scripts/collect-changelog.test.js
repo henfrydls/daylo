@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { collect, isFragment, nameOf } from './collect-changelog.js'
+import { collect, isFragment, nameOf, sectionOf, versionFrom } from './collect-changelog.js'
 
 const CHANGELOG = `# Changelog
 
@@ -134,5 +134,73 @@ describe('which files are fragments', () => {
 
   it('ignores what is not markdown', () => {
     expect(isFragment('80-something.txt')).toBe(false)
+  })
+})
+
+// Running this with --help wrote a section called "## --help" into the changelog and
+// emptied changelog.d. Nothing here is reversible except through git, and a fragment
+// written minutes earlier is not in git yet.
+describe('what counts as a version', () => {
+  it('takes the first thing that is not a flag', () => {
+    expect(versionFrom(['1.4.1']).version).toBe('1.4.1')
+    expect(versionFrom(['--dry-run', '1.4.1']).version).toBe('1.4.1')
+  })
+
+  // The accident that started this: there is no --help, so it was taken as the version.
+  // It is refused by name now, which is a better answer than "no version given".
+  it('refuses a flag where the version goes', () => {
+    expect(versionFrom(['--help']).error).toMatch(/do not know/)
+  })
+
+  it('says a version is missing when the only thing given is the option it knows', () => {
+    expect(versionFrom(['--dry-run']).error).toMatch(/No version/)
+  })
+
+  it('refuses anything that is not a version', () => {
+    expect(versionFrom(['latest']).error).toMatch(/not a version/)
+    expect(versionFrom(['1.4']).error).toMatch(/not a version/)
+  })
+
+  it('refuses nothing at all', () => {
+    expect(versionFrom([]).error).toMatch(/No version/)
+  })
+
+  // The same accident through a politer door. Somebody who types the typo believes they
+  // are looking before leaping, and ignoring the option is what makes them wrong.
+  it('refuses an option it does not know, rather than ignoring it', () => {
+    expect(versionFrom(['--dryrun', '1.4.1']).error).toMatch(/do not know/)
+    expect(versionFrom(['--halp', '1.4.1']).error).toMatch(/do not know/)
+    expect(versionFrom(['-n', '1.4.1']).error).toMatch(/do not know/)
+  })
+
+  it('knows the one option there is', () => {
+    expect(versionFrom(['--dry-run', '1.4.1']).version).toBe('1.4.1')
+  })
+})
+
+describe('reading a section back out', () => {
+  const changelog = [
+    '# Changelog',
+    '',
+    '## 1.4.1',
+    '',
+    'The new one.',
+    '',
+    '## 1.4.0',
+    '',
+    'The old one.',
+    '',
+  ].join('\n')
+
+  it('gives that version and stops at the next', () => {
+    expect(sectionOf(changelog, '1.4.1')).toBe('## 1.4.1\n\nThe new one.')
+  })
+
+  it('gives the last one to the end', () => {
+    expect(sectionOf(changelog, '1.4.0')).toBe('## 1.4.0\n\nThe old one.')
+  })
+
+  it('gives nothing for a version that is not there', () => {
+    expect(sectionOf(changelog, '9.9.9')).toBe('')
   })
 })
