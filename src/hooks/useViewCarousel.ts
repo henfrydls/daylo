@@ -1,5 +1,13 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { AXIS_AT, axisOf, confirms, finishIn, rubberBand, velocityOf } from '../lib/carousel'
+import {
+  AXIS_AT,
+  axisOf,
+  confirms,
+  finishIn,
+  GO_BACK_IN,
+  rubberBand,
+  velocityOf,
+} from '../lib/carousel'
 
 /**
  * Year and Month on one rail, following the finger.
@@ -45,6 +53,9 @@ interface Carousel {
   /** Walk the same rail without a finger: the toggle, and a tap on a month card. */
   travelTo: (view: CarouselView) => void
 }
+
+/** How long the toggle takes to walk the rail, with no finger involved. */
+const TOGGLE_TAKES = 240
 
 /** Where the other view sits: Month to the right of Year, Year to the left of Month. */
 function otherSideOf(view: CarouselView): CarouselView {
@@ -201,7 +212,15 @@ export function useViewCarousel({ view, onChange, enabled, headerRef }: Options)
       // Two frames, so the browser has the rail at rest before it is asked to move.
       requestAnimationFrame(() =>
         requestAnimationFrame(() => {
-          settle(towards(latest.current.view) * container.getBoundingClientRect().width, 240, true)
+          // Still 240: a tap is not a drag, and nobody has held this one in a hand since
+          // the other two moved. It is now quicker than a confirmed drag, which is the
+          // opposite of how the design had it, and that is a thing to feel rather than to
+          // argue about.
+          settle(
+            towards(latest.current.view) * container.getBoundingClientRect().width,
+            TOGGLE_TAKES,
+            true
+          )
         })
       )
     },
@@ -288,7 +307,7 @@ export function useViewCarousel({ view, onChange, enabled, headerRef }: Options)
         const to = towards(latest.current.view) * g.width
         settle(to, finishIn(to - dx, velocity), true)
       } else {
-        settle(0, 180, false)
+        settle(0, GO_BACK_IN, false)
       }
     }
 
@@ -296,7 +315,7 @@ export function useViewCarousel({ view, onChange, enabled, headerRef }: Options)
       const g = gesture.current
       if (!g || event.pointerId !== g.id) return
       gesture.current = null
-      if (g.axis === 'horizontal') settle(0, 180, false)
+      if (g.axis === 'horizontal') settle(0, GO_BACK_IN, false)
     }
 
     // A tap that ends a drag is not a tap. Without this, letting go over a month card

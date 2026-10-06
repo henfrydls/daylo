@@ -6,6 +6,9 @@ import {
   rubberBand,
   velocityOf,
   AXIS_AT,
+  FINISH_AT_LEAST,
+  FINISH_AT_MOST,
+  GO_BACK_IN,
   MOST_IT_GIVES,
 } from './carousel'
 
@@ -114,16 +117,34 @@ describe('how fast it was going when it was let go', () => {
   })
 })
 
+// Henfry felt the first numbers on a phone and said the view arrived too abruptly. These
+// are the second ones, and they are the sort only a hand can choose.
 describe('how long the finish takes', () => {
   it('never snaps, and never dawdles', () => {
-    expect(finishIn(300, 10)).toBe(140)
-    expect(finishIn(300, 0.1)).toBe(260)
+    // Thrown hard with little left to go, and crawling with a screen still to cross.
+    expect(finishIn(300, 10)).toBe(FINISH_AT_LEAST)
+    expect(finishIn(500, 0.1)).toBe(FINISH_AT_MOST)
+    expect(FINISH_AT_LEAST).toBe(280)
+    expect(FINISH_AT_MOST).toBe(400)
   })
 
   it('follows the speed in between', () => {
-    const at = finishIn(300, 1.5)
+    const at = finishIn(480, 1.5)
 
-    expect(at).toBeGreaterThan(140)
-    expect(at).toBeLessThan(260)
+    expect(at).toBeGreaterThan(FINISH_AT_LEAST)
+    expect(at).toBeLessThan(FINISH_AT_MOST)
+  })
+
+  // The floor does most of the work now, and that is the point of raising it: an ordinary
+  // drag across an ordinary phone lands on it rather than finishing in whatever time the
+  // arithmetic happens to give.
+  it('puts an ordinary gesture on the floor', () => {
+    expect(finishIn(200, 1)).toBe(FINISH_AT_LEAST)
+  })
+
+  // Going back is one length whatever the finger did, because nothing was decided: it is
+  // the view putting itself back where it was.
+  it('takes one length to go back', () => {
+    expect(GO_BACK_IN).toBe(260)
   })
 })

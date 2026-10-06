@@ -89,8 +89,27 @@ export function velocityOf(samples: { x: number; t: number }[], now: number, win
   return (last.x - first.x) / dt
 }
 
+/**
+ * How long the rail takes, and the two numbers that bound it.
+ *
+ * They were 140 and 260 until Henfry held the first build: the view arrived, and arriving
+ * is not the same as being put down. These are slower, and they are the sort of number
+ * only a hand can choose, which is why they moved after a phone and not after an argument.
+ */
+export const FINISH_AT_LEAST = 280
+export const FINISH_AT_MOST = 400
+
+/**
+ * And the way back, which is one length whatever the finger did.
+ *
+ * Nothing was decided, so there is nothing to hurry: this is the view putting itself back
+ * where it was. Named and in one place, because it was two 180s in two handlers, and two
+ * copies of a number is a number that gets changed once.
+ */
+export const GO_BACK_IN = 260
+
 /** How long the rail takes to finish what the finger started. */
 export function finishIn(remaining: number, velocity: number): number {
   const at = Math.abs(remaining) / Math.max(Math.abs(velocity), 1)
-  return Math.min(260, Math.max(140, at))
+  return Math.min(FINISH_AT_MOST, Math.max(FINISH_AT_LEAST, at))
 }
