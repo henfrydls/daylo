@@ -56,10 +56,17 @@ jobs:
           if id=$(gh release view "$TAG" --repo "$GITHUB_REPOSITORY" --json databaseId -q .databaseId 2>/dev/null); then
             echo "the release is already there, id $id"
           else
+            # Looking and then creating is two steps, and anything can happen between them.
+            # On 2026-10-06 one push to the lab produced two identical runs of CI, same
+            # second, same commit, both attempt 1: GitHub dispatches a workflow twice now
+            # and then. Two runs of this job would both look, both find nothing, and one
+            # would lose the create. Losing is fine as long as the loser then uses what the
+            # winner made, which is what this job is for. If the create failed for any
+            # other reason the view below fails too, and the job still goes red.
             gh release create "$TAG" --repo "$GITHUB_REPOSITORY" --title "$TAG" \
-              --notes-file .github/release-body.md
+              --notes-file .github/release-body.md || echo "could not create it: looking for one somebody else made"
             id=$(gh release view "$TAG" --repo "$GITHUB_REPOSITORY" --json databaseId -q .databaseId)
-            echo "made it, id $id"
+            echo "the release is id $id"
           fi
           echo "id=$id" >> "$GITHUB_OUTPUT"
 
