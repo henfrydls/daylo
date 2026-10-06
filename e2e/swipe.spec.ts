@@ -14,12 +14,17 @@ const BAR = '[data-testid="year-progress-bar"]'
 const MONTH = '[data-testid="month-title-button"]'
 
 /** A finger, moving across the calendar and letting go. */
-async function drag(page: import('@playwright/test').Page, by: number, steps = 12) {
+async function drag(
+  page: import('@playwright/test').Page,
+  by: number,
+  { steps = 12, lowDown = false }: { steps?: number; lowDown?: boolean } = {}
+) {
   const card = page.locator('.lg\\:col-span-3').first()
   const box = await card.boundingBox()
   if (!box) throw new Error('the calendar is not on the page')
 
-  const y = box.y + Math.min(120, box.height / 2)
+  // Near the bottom of the card when asked, which is where the grey used to be.
+  const y = lowDown ? box.y + box.height - 60 : box.y + Math.min(120, box.height / 2)
   const from = by < 0 ? box.x + box.width - 24 : box.x + 24
   const client = await page.context().newCDPSession(page)
 
@@ -117,6 +122,56 @@ test('dragging right in Year goes nowhere', async ({ page }) => {
   await drag(page, width * 0.7)
 
   await expect(page.locator(BAR)).toBeVisible()
+})
+
+// A year with no activities is a short view: the card used to end under its own text and
+// leave grey below it, where the gesture did not live. The card fills the screen now, so
+// there is nowhere on it that does nothing.
+test('a drag low down on a short view still crosses', async ({ page }) => {
+  // A second init script, not an evaluate: the one in beforeEach runs again on every
+  // navigation, so anything written to localStorage after loading is overwritten by the
+  // reload rather than kept. Init scripts run in order, so this one has the last word.
+  await page.addInitScript(() => {
+    const raw = localStorage.getItem('simple-calendar-storage')
+    const saved = raw ? JSON.parse(raw) : { state: {}, version: 0 }
+    saved.state.activities = []
+    saved.state.logs = []
+    saved.state.yearMode = 'byActivity'
+    localStorage.setItem('simple-calendar-storage', JSON.stringify(saved))
+  })
+  await page.reload()
+  const card = page.locator('.lg\\:col-span-3').first()
+  const box = (await card.boundingBox())!
+  const screen = page.viewportSize()!
+
+  // The card reaches the bottom of the screen, which is the fix itself.
+  expect(box.y + box.height).toBeGreaterThan(screen.height - 40)
+
+  await drag(page, -box.width * 0.7, { lowDown: true })
+
+  await expect(page.locator(MONTH)).toBeVisible()
+})
+
+// The card filling the screen is a minimum, not a cage: a year with twelve months in it is
+// taller than any phone, and the page still has to scroll.
+test('a view taller than the screen still scrolls', async ({ page }) => {
+  const canScroll = await page.evaluate(
+    () => document.documentElement.scrollHeight > window.innerHeight + 20
+  )
+  expect(canScroll).toBe(true)
+
+  await page.mouse.wheel(0, 2000)
+  await page.waitForTimeout(200)
+
+  // All the way to the bottom rather than a number of pixels: how far there is to go
+  // depends on how much taller the content is than the phone, and the claim is that the
+  // page goes as far as it has.
+  const { y, most } = await page.evaluate(() => ({
+    y: Math.round(window.scrollY),
+    most: Math.round(document.documentElement.scrollHeight - window.innerHeight),
+  }))
+  expect(y).toBeGreaterThan(0)
+  expect(Math.abs(y - most)).toBeLessThan(4)
 })
 
 test('and from Month, dragging right brings Year back', async ({ page }) => {

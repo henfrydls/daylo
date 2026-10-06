@@ -436,7 +436,13 @@ function App() {
   return (
     <ErrorBoundary>
       <TravelContext.Provider value={travel}>
-        <div className="min-h-screen bg-gray-50">
+        {/* A column the height of the screen, so the calendar can be told to take what
+            is left of it. 100dvh and not 100vh: on a phone the browser's own bars come and
+            go, and vh would measure the screen as if they were never there. min-h and not
+            h, so a view taller than the screen still makes the page longer and still
+            scrolls. The bottom inset is padding here, which keeps the card clear of the
+            gesture bar on a phone that has one. */}
+        <div className="flex min-h-[100dvh] flex-col bg-gray-50 pb-[env(safe-area-inset-bottom)]">
           {/* Skip Link for keyboard users */}
           <a
             href="#main-content"
@@ -545,7 +551,7 @@ function App() {
           {/* Main Content */}
           <main
             id="main-content"
-            className="max-w-7xl mx-auto px-3 sm:px-4 py-4 sm:py-6"
+            className="flex w-full max-w-7xl flex-1 flex-col self-center px-3 sm:px-4 py-4 sm:py-6"
             tabIndex={-1}
           >
             {/* Under the header and above the calendar: the only place visible on every
@@ -570,11 +576,16 @@ function App() {
               <UpdateNotice state={updates.notice} onAct={updates.act} onLater={updates.later} />
             )}
 
-            <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
+            {/* flex-1 so the grid takes the rest of the column, and the card inside it
+                fills that on a phone. Before this, a short view left grey below the card:
+                the gesture does not live there, so dragging in it did nothing, and the
+                card jumped to the other view's height the moment a drag revealed it.
+                On a wide screen the sidebar sets the height and none of this applies. */}
+            <div className="grid flex-1 grid-cols-1 lg:grid-cols-4 gap-6">
               {/* Calendar Section */}
               <div
                 ref={containerRef}
-                className="lg:col-span-3 bg-white rounded-xl border border-gray-200 overflow-hidden touch-pan-y"
+                className="min-h-full lg:min-h-0 lg:col-span-3 bg-white rounded-xl border border-gray-200 overflow-hidden touch-pan-y"
               >
                 {onPhone ? (
                   // Both views, side by side, in the order the toggle shows them: Year on the
