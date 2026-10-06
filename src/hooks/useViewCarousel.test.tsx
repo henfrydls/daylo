@@ -155,14 +155,25 @@ describe('crossing the rail', () => {
   // down and the other is a view going back to where it was. Pinned here because nothing
   // else can say it: jsdom lays nothing out, and the curve is the one thing about the
   // movement that is written into the node rather than measured.
-  it('lands on the carousel curve and goes back on the other one', () => {
+  it('lands on a curve drawn for the gesture and goes back on the standing one', () => {
     const onChange = vi.fn()
     const { unmount } = render(<Harness onChange={onChange} />)
 
+    // Let go while the hand is still moving: the landing has to carry that speed, so the
+    // handle of its curve is lifted off the floor.
     dragBy(-WIDTH * 0.6)
-    expect(rail().style.transition).toContain('var(--ease-carousel-finish)')
+    const handle = Number(rail().style.transition.split(',')[1])
+    expect(rail().style.transition).toContain('cubic-bezier(0.4,')
+    expect(handle).toBeGreaterThan(0)
     finish()
     unmount()
+
+    // Far enough to change the view, but the hand had stopped: the gentle curve, unchanged.
+    const second = render(<Harness onChange={vi.fn()} />)
+    dragBy(-WIDTH * 0.6, { holdFor: 200 })
+    expect(rail().style.transition).toContain('cubic-bezier(0.4, 0, 0.2, 1)')
+    finish()
+    second.unmount()
 
     render(<Harness onChange={vi.fn()} />)
     dragBy(-WIDTH * 0.2, { holdFor: 200 })

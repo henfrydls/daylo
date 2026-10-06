@@ -264,3 +264,80 @@ test('a second drag before the first has landed finds everything where it should
     'true'
   )
 })
+
+/**
+ * How the landing starts, measured in the browser the way growth measured it off a video.
+ *
+ * The 1.4.7 lab build was filmed at 60 fps and read frame by frame: the finger crossed at
+ * 34 to 80 video pixels a frame, and the first frame after letting go moved 4. Then 16, 34,
+ * 56, 84. The view stopped dead for a frame and set off again, which is what "al soltar
+ * rápido se nota que de inmediato se pone más lento" is.
+ *
+ * Nothing in jsdom can see that: the curve is a string there. So this records the rail's
+ * own transform on every frame, from inside the page, and asks what the first 64 ms of the
+ * landing covered. The two drags are the same distance and the same duration, and differ
+ * only in whether the hand was still moving when it let go, so the comparison between them
+ * needs no absolute number and does not care how fast the machine is.
+ */
+async function landingProfile(page: import('@playwright/test').Page, hold: number) {
+  const hand = await finger(page)
+  const span = hand.width * 0.45
+
+  await page.evaluate(() => {
+    const card = document.querySelector('.lg\\:col-span-3')
+    const rail = card?.firstElementChild as HTMLElement
+    const w = window as unknown as { __frames: number[][]; __began: number | null }
+    w.__frames = []
+    w.__began = null
+    rail.addEventListener('transitionstart', () => {
+      if (w.__began === null) w.__began = performance.now()
+    })
+    const tick = (t: number) => {
+      const m = new DOMMatrixReadOnly(getComputedStyle(rail).transform)
+      w.__frames.push([t, m.m41])
+      requestAnimationFrame(tick)
+    }
+    requestAnimationFrame(tick)
+  })
+
+  await hand.down(hand.width - 24)
+  for (let i = 1; i <= 6; i++) await hand.to(hand.width - 24 - (span * i) / 6)
+  if (hold > 0) await page.waitForTimeout(hold)
+  await hand.up()
+  await page.waitForTimeout(500)
+
+  // Where the rail is going: one screen to the left, which is Month arriving from the right.
+  return page.evaluate((destination) => {
+    const w = window as unknown as { __frames: number[][]; __began: number | null }
+    const began = w.__began
+    if (began === null) throw new Error('the landing never started')
+    const after = w.__frames.filter(([t]) => t >= began)
+    const from = after[0]
+    const to = after.find(([t]) => t >= began + 64)
+    if (!from || !to) throw new Error('the landing was over before it could be read')
+    // How much of what was left it covered in the first 64 ms, which is four frames.
+    return (to[1] - from[1]) / (destination - from[1])
+  }, -hand.width)
+}
+
+test('the landing leaves at the speed the finger let go at', async ({ page }) => {
+  // Released in motion, and released after the hand had come to a stop. Same distance, so
+  // the same journey is left and the same time to do it in.
+  const moving = await landingProfile(page, 0)
+  await page.reload()
+  await expect(page.locator(BAR)).toBeVisible()
+  const still = await landingProfile(page, 300)
+
+  // Both are going somewhere: this is about how they start, not whether they work.
+  expect(moving).toBeGreaterThan(0)
+  expect(still).toBeGreaterThan(0)
+  // The one let go in motion has to be clearly ahead in the first four frames. Before the
+  // curve was drawn for the gesture these two were the **same number**, 0.2407 both, which
+  // is the whole complaint: letting go fast and letting go still began identically.
+  //
+  // Measured here at 0.40 against 0.24, a ratio of 1.66, and it barely moves between runs
+  // because a CSS transition is the compositor's work and not the clock's. A third is
+  // asked for, which is well clear of the 1.0 the old curve gave and leaves room for a
+  // slower machine.
+  expect(moving).toBeGreaterThan(still * 1.3)
+})

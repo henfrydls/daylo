@@ -110,15 +110,44 @@ export const FINISH_AT_LEAST = 320
 export const FINISH_AT_MOST = 450
 
 /**
- * The curve the landing follows, and the curve everything else keeps.
+ * How much of the landing is spent leaving, as the first handle of its curve.
  *
- * The emphasized one leaves at speed and brakes hard, which is right for something
- * appearing and wrong for something being put down: on a phone it reads as the view being
- * thrown out of the way. The finish has its own token now; going back and the toggle still
- * use the old one, because nobody has complained about those and changing three things at
- * once makes the next round unreadable.
+ * Fixed, so that the only thing that moves with the finger is the handle's height, and so
+ * that a finger which had stopped gets exactly the curve the design asked for on
+ * 2026-10-05: `cubic-bezier(0.4, 0, 0.2, 1)`.
  */
-export const FINISH_CURVE = 'var(--ease-carousel-finish)'
+export const FINISH_HOLDS_BACK = 0.4
+
+/** Where the curve is going: all the way there, braking into it. */
+const FINISH_EASES_INTO = '0.2, 1'
+
+/**
+ * The curve the landing follows, drawn to leave at the speed the finger let go at.
+ *
+ * The emphasized curve this replaced left at speed and braked hard, which is right for
+ * something appearing and wrong for something being put down: it read as the view being
+ * thrown out of the way. The gentle one that replaced it leaves at a slope of **zero**,
+ * which is worse in the other direction, and measurable: on the 1.4.7 lab build the finger
+ * crossed at 34 to 80 video pixels a frame and the first frame after letting go moved 4.
+ * The view stopped dead and set off again. "Al soltar rápido se nota que de inmediato se
+ * pone más lento."
+ *
+ * So the curve leaves at whatever speed the hand had. For a cubic-bezier the slope at the
+ * start is `y1 / x1`, and the rail covers `remaining` pixels in `ms`, so the speed it
+ * leaves at is `(y1 / x1) * remaining / ms`. Fix `x1` and `y1` is what the finger decides.
+ *
+ * It is capped at 1, because a handle above that is not a curve a browser will take: past
+ * that speed the landing leaves as fast as it can be drawn. A little slower than the finger
+ * is nothing like stopping. A finger that was still, or already coming back the other way,
+ * gets a slope of zero, which is the gentle curve unchanged.
+ */
+export function finishCurve(remaining: number, velocity: number, ms: number): string {
+  const d = Math.abs(remaining)
+  const v = Math.sign(remaining) === Math.sign(velocity) ? Math.abs(velocity) : 0
+  const slope = d === 0 || ms <= 0 ? 0 : (v * ms) / d
+  const y1 = Math.min(1, FINISH_HOLDS_BACK * slope)
+  return `cubic-bezier(${FINISH_HOLDS_BACK}, ${Number(y1.toFixed(4))}, ${FINISH_EASES_INTO})`
+}
 export const RETURN_CURVE = 'var(--ease-emphasized-decel)'
 
 /**

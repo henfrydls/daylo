@@ -3,7 +3,7 @@ import {
   AXIS_AT,
   axisOf,
   confirms,
-  FINISH_CURVE,
+  finishCurve,
   finishIn,
   GO_BACK_IN,
   RETURN_CURVE,
@@ -344,7 +344,11 @@ export function useViewCarousel({ view, onChange, enabled, headerRef }: Options)
 
       if (changing) {
         const to = towards(viewNow.current) * g.width
-        settle(to, finishIn(to - dx, velocity), true, FINISH_CURVE)
+        // The curve is drawn for this gesture: it leaves at the speed the hand let go at,
+        // so the view carries on rather than stopping for a frame and setting off again.
+        const left = to - dx
+        const ms = finishIn(left, velocity)
+        settle(to, ms, true, finishCurve(left, velocity, ms))
       } else {
         settle(0, GO_BACK_IN, false)
       }
