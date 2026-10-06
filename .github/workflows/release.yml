@@ -19,10 +19,55 @@ on:
         type: string
 
 jobs:
+  # One release, made once, before anything is built.
+  #
+  # Every job in the matrix used to hand tauri-action a tagName, and the action creates the
+  # release when it cannot find one. Five jobs start within a second of each other, so two
+  # can look, both find nothing, and both create: the loser gets "Validation Failed:
+  # Release already_exists" and the build it had just finished is thrown away. It happened
+  # on the lab's v1.4.4, and what fixed it there was somebody pressing re-run, which is not
+  # a fix, it is a person being available.
+  #
+  # The release exists before the matrix starts now, and every job uploads into it by id.
+  # What people read on the release page lives in .github/release-body.md, where it can be
+  # reviewed as prose instead of as thirty lines inside a workflow.
+  create-release:
+    if: startsWith(github.ref, 'refs/tags/')
+    permissions:
+      contents: write
+    runs-on: ubuntu-latest
+    name: Make the release
+    outputs:
+      id: ${{ steps.make.outputs.id }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Create it, or find the one an earlier attempt made
+        id: make
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          # A re-run of this workflow finds the release the first attempt made. Creating it
+          # again would fail for exactly the reason this job exists.
+          if id=$(gh release view "$TAG" --repo "$GITHUB_REPOSITORY" --json databaseId -q .databaseId 2>/dev/null); then
+            echo "the release is already there, id $id"
+          else
+            gh release create "$TAG" --repo "$GITHUB_REPOSITORY" --title "$TAG" \
+              --notes-file .github/release-body.md
+            id=$(gh release view "$TAG" --repo "$GITHUB_REPOSITORY" --json databaseId -q .databaseId)
+            echo "made it, id $id"
+          fi
+          echo "id=$id" >> "$GITHUB_OUTPUT"
+
   build:
     # Tags only: a manual dispatch must not publish a release, because the name comes
     # from github.ref_name and from a branch it would create a release named after it.
     if: startsWith(github.ref, 'refs/tags/')
+    needs: create-release
     permissions:
       contents: write
     strategy:
@@ -115,42 +160,17 @@ jobs:
           # from the signatures every platform has by then uploaded.
           uploadUpdaterJson: false
           uploadUpdaterSignatures: true
-          tagName: ${{ github.ref_name }}
-          releaseName: '${{ github.ref_name }}'
-          releaseBody: |
-            Download the installer for your platform below.
-            What changed in this version: [CHANGELOG](https://github.com/henfrydls/daylo/blob/main/CHANGELOG.md).
-
-            | Platform | File | Notes |
-            |----------|------|-------|
-            | Windows | `.exe` | Installer. Pick x64 unless you know your PC is ARM. |
-            | macOS | `.dmg` | Disk image. Apple Silicon (M1 and later) or Intel. |
-            | Linux | `.deb`, `.AppImage` | Debian package or portable AppImage, for Intel and AMD computers. |
-            | Android | `.apk` | Direct install. Works on phones and tablets from about 2017 onwards. |
-
-            The list below also has files ending in `.sig` and `.app.tar.gz`. Those are for the updater inside Daylo, not for you: pick the file from the table above.
-
-            ### First time opening Daylo
-
-            Daylo is not yet registered with Apple, Microsoft or Google, so each system shows a warning the first time. It is the same warning any small independent app gets. Here is how to get past it once:
-
-            **Windows.** If SmartScreen says "Windows protected your PC", click **More info**, then **Run anyway**.
-
-            **macOS.** Open the `.dmg`, drag Daylo to Applications and open it. macOS will say it could not verify the app. Click **Done** (not Move to Trash), then open **System Settings → Privacy & Security**, scroll down and click **Open Anyway**. You only do this once.
-
-            **Android.** Download `Daylo-android-arm64.apk` on your phone and open it. If Play Protect warns about an unknown developer, tap **More details** and then the small **Install anyway** link. Installing over Daylo 1.1.1 or later keeps your data.
-
-            **Linux.** The `.deb` installs with your package manager. The AppImage needs to be made executable first (right-click → Properties → allow executing, or `chmod +x`).
-
-            Your data stays on your device. Daylo has no account, and no server stores your habits or the days you marked. One thing leaves your device unless you turn it off: an anonymous daily check-in that tells us the app is still in use. It carries a random number, the app version, your system, how it was installed and the date, and nothing else. The app tells you the first time it opens, and you can turn it off from the menu at any time.
-          releaseDraft: false
-          prerelease: false
+          releaseId: ${{ needs.create-release.outputs.id }}
           args: ${{ matrix.args }}
 
   build-android:
     # Tags only: a manual dispatch must not publish a release, because the name comes
     # from github.ref_name and from a branch it would create a release named after it.
     if: startsWith(github.ref, 'refs/tags/')
+    # It uploads into the release too, so it waits for the one job that makes it. In
+    # practice it spends minutes building before it uploads anything, but "in practice"
+    # is what the race above was made of.
+    needs: create-release
     permissions:
       contents: write
     runs-on: ubuntu-latest
