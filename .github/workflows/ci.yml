@@ -256,10 +256,28 @@ jobs:
       # --debug on purpose: this job answers whether it assembles, and a debug build skips
       # minification and signing. The release build is what release.yml does, on tag, with
       # the real key.
-      - name: Build Android APK (debug, arm64)
-        run: npx tauri android build --apk --target aarch64 --debug
+      # The AAB as well as the APK, in debug, because the release workflow builds both and
+      # only a tag runs that. The flag and the output path are what break; the signing
+      # needs secrets a pull request does not have and is not checked here. A release that
+      # cannot produce the one format Play accepts would otherwise be discovered on the day
+      # of the tag, which is how the --config path was discovered.
+      - name: Build Android APK and AAB (debug, arm64)
+        run: npx tauri android build --apk --aab --target aarch64 --debug
         env:
           NDK_HOME: ${{ env.ANDROID_HOME }}/ndk/29.0.14206865
+
+      - name: The bundle Play would be given exists
+        run: |
+          set -uo pipefail
+          shopt -s nullglob globstar
+          aabs=( src-tauri/gen/android/app/build/outputs/bundle/**/*.aab )
+          if [ ${#aabs[@]} -eq 0 ]; then
+            echo "::error::The build reported success and produced no .aab. Play takes"
+            echo "::error::nothing else, so a release from here could not be submitted."
+            find src-tauri/gen/android/app/build/outputs -type d 2>/dev/null | head -20 || true
+            exit 1
+          fi
+          echo "AAB: ${aabs[0]} ($(stat -c%s "${aabs[0]}") bytes)"
 
       # The APK is checked for what is inside it, not for existing. A zero byte file, or a
       # zip without an AndroidManifest.xml, would satisfy a existence test and mean nothing.
