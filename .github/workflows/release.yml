@@ -283,8 +283,43 @@ jobs:
 
           # Leave the fingerprint in the build log. If the key ever changes again, it shows
           # up here and not six months later in a published APK.
+          #
+          # `DN` and not `Subject`: apksigner prints "Signer #1 certificate DN: ...". The
+          # grep asked for Subject, matched nothing, and quietly printed one line where it
+          # meant to print two, for as long as it had been there.
           echo "--- signature of the APK about to be published ---"
-          "$BT/apksigner" verify --print-certs "$ALIGNED_PATH" | grep -iE 'SHA-256|Subject'
+          "$BT/apksigner" verify --print-certs "$ALIGNED_PATH" | grep -iE 'SHA-256|DN:'
+
+          # And taken out as a number, so the AAB step can be made to agree with it rather
+          # than printed beside it for somebody to compare by eye. Read from the v1 block
+          # with openssl, which is the one way that works on an APK and on a bundle alike.
+          cert_of() {
+            local entry
+            entry="$(unzip -Z1 "$1" 'META-INF/*' | grep -iE '\.(RSA|DSA|EC)$' | head -1)"
+            if [ -z "$entry" ]; then
+              echo "::error::$1 carries no v1 signature block, so its certificate cannot be read here." >&2
+              return 1
+            fi
+            unzip -p "$1" "$entry" \
+              | openssl pkcs7 -inform DER -print_certs \
+              | openssl x509 -noout -fingerprint -sha256 \
+              | sed 's/.*=//; s/://g' | tr 'A-Z' 'a-z'
+          }
+          APK_CERT="$(cert_of "$ALIGNED_PATH")"
+          echo "APK certificate: $APK_CERT"
+
+          # The signature Android actually checks when installing is v2/v3, so the two
+          # halves of this file have to be the same key as well. They always are with one
+          # keystore; this is here because "always" is what the ephemeral key was too.
+          V3="$("$BT/apksigner" verify --print-certs "$ALIGNED_PATH" \
+            | grep -ioE 'certificate SHA-256 digest: [0-9a-f]+' | sed 's/.*: //' | sort -u)"
+          if [ "$(printf '%s\n' "$V3" | wc -l)" != "1" ] || [ "$V3" != "$APK_CERT" ]; then
+            echo "::error::The APK is signed by more than one certificate, or its v1 and its"
+            echo "::error::v2/v3 signatures disagree. v1 said $APK_CERT and the rest said:"
+            printf '::error::  %s\n' $V3
+            exit 1
+          fi
+          echo "APK_CERT=$APK_CERT" >> "$GITHUB_ENV"
 
       # The same key as the APK, which is the point of doing it here rather than letting
       # Play sign a fresh upload: it will be both the upload key and, because Henfry will
@@ -316,11 +351,36 @@ jobs:
             -signedjar Daylo-android.aab \
             "$AAB_PATH" "$ANDROID_KEY_ALIAS"
 
-          # The same fingerprint the APK prints two steps above. If these two ever differ,
-          # it means one of them was signed with something else, and that is the failure
-          # that cannot be undone once people have installed it.
+          # The same certificate as the APK, compared here rather than printed for somebody
+          # to compare by eye. Two prints in a log is not a check: that is what this was for
+          # as long as it has existed, while the comment above it said otherwise. Signing
+          # these two with different keys is the failure nobody can undo once somebody has
+          # installed one of them.
           echo "--- signature of the AAB ---"
           jarsigner -verify -verbose:summary -certs Daylo-android.aab | grep -iE 'X.509|digest algorithm' | head -5
+
+          cert_of() {
+            local entry
+            entry="$(unzip -Z1 "$1" 'META-INF/*' | grep -iE '\.(RSA|DSA|EC)$' | head -1)"
+            if [ -z "$entry" ]; then
+              echo "::error::$1 carries no v1 signature block, so its certificate cannot be read here." >&2
+              return 1
+            fi
+            unzip -p "$1" "$entry" \
+              | openssl pkcs7 -inform DER -print_certs \
+              | openssl x509 -noout -fingerprint -sha256 \
+              | sed 's/.*=//; s/://g' | tr 'A-Z' 'a-z'
+          }
+          AAB_CERT="$(cert_of Daylo-android.aab)"
+          echo "AAB certificate: $AAB_CERT"
+          if [ "$AAB_CERT" != "${APK_CERT:-}" ]; then
+            echo "::error::The APK and the AAB are signed by different certificates."
+            echo "::error::  APK: ${APK_CERT:-<the APK step reported none>}"
+            echo "::error::  AAB: $AAB_CERT"
+            echo "::error::Whichever of the two is wrong, publishing it means nobody can"
+            echo "::error::update over it later without uninstalling and losing their data."
+            exit 1
+          fi
 
       # An artifact and not a release asset: nobody can install an .aab, it exists only to
       # be handed to Play, and a file on the release page that cannot be opened is a
