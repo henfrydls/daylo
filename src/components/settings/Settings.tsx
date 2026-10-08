@@ -184,7 +184,7 @@ export function Settings({
         aria-modal="true"
         aria-label="Settings"
         data-testid="settings-surface"
-        className={`absolute inset-0 overflow-y-auto bg-white motion-safe:transition-[transform,opacity] motion-safe:duration-[250ms] motion-safe:ease-[var(--ease-emphasized-decel)] sm:inset-y-0 sm:left-auto sm:right-0 sm:w-[25rem] sm:border-l sm:border-gray-200 sm:shadow-xl ${
+        className={`absolute inset-0 overflow-y-auto bg-white motion-safe:transition-[translate,transform,opacity] motion-safe:duration-[250ms] motion-safe:ease-[var(--ease-emphasized-decel)] sm:inset-y-0 sm:left-auto sm:right-0 sm:w-[25rem] sm:border-l sm:border-gray-200 sm:shadow-xl ${
           arrived ? 'translate-x-0 opacity-100' : 'translate-x-6 opacity-0'
         }`}
       >
