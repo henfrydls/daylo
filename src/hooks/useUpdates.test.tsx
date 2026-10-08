@@ -377,3 +377,55 @@ describe('coming back to the window', () => {
     expect(check).toHaveBeenCalledTimes(2)
   })
 })
+
+/**
+ * Checking and installing are two things, and which one happens is decided by the control
+ * that was pressed and never by what has already been found.
+ *
+ * The settings screen has a whole row for the version. Somebody running a thumb down a
+ * list of settings presses it by accident, and installing closes the application and opens
+ * it again, so the row may only ever ask. Only the small word beside the version installs.
+ */
+describe('asking is not installing', () => {
+  it('asks again without installing the version it already found', async () => {
+    const update = anUpdate()
+    check.mockResolvedValue(update)
+    const { result } = renderHook(() => useUpdates())
+    await waitFor(() =>
+      expect(result.current.status).toEqual({
+        kind: 'available',
+        version: '1.5.0',
+        canInstall: true,
+      })
+    )
+
+    await act(async () => {
+      result.current.check()
+      await vi.advanceTimersByTimeAsync(50)
+    })
+
+    expect(update.download).not.toHaveBeenCalled()
+    expect(update.install).not.toHaveBeenCalled()
+    expect(relaunch).not.toHaveBeenCalled()
+  })
+
+  it('still installs when the word beside the version is the one pressed', async () => {
+    const update = anUpdate()
+    check.mockResolvedValue(update)
+    const { result } = renderHook(() => useUpdates())
+    await waitFor(() =>
+      expect(result.current.status).toEqual({
+        kind: 'available',
+        version: '1.5.0',
+        canInstall: true,
+      })
+    )
+
+    await act(async () => {
+      result.current.act()
+      await vi.advanceTimersByTimeAsync(50)
+    })
+
+    expect(update.install).toHaveBeenCalled()
+  })
+})
