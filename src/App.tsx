@@ -669,7 +669,10 @@ function App() {
           </BottomSheet>
 
           {/* Quick Log Modal */}
-          {selectedDate && <QuickLog />}
+          {/* Always mounted: it has to be on the page before the day is chosen, or there
+              is no frame for it to come up from, and it has to stay there after the day is
+              cleared, or it has nowhere to go back to. It renders nothing when closed. */}
+          <QuickLog />
 
           {/* Export/Import Modals - Lazy loaded */}
           <Suspense fallback={null}>

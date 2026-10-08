@@ -649,3 +649,121 @@ describe('QuickLog', () => {
     })
   })
 })
+
+/**
+ * Coming and going.
+ *
+ * Henfry, with 1.4.1 on his phone: the day sheet appears and disappears at once, with no
+ * slide either way. Two separate reasons, and fixing one alone changes nothing.
+ *
+ * The tests above all render this with a date already chosen, which is not how the
+ * application uses it any more and is exactly the sequence that hides the fault: a sheet
+ * that is already open has no first frame to be off the screen in. These mount it closed,
+ * the way the application does, and then open it.
+ */
+describe('arriving and leaving', () => {
+  beforeEach(() => {
+    resetStore()
+    vi.useFakeTimers({ shouldAdvanceTime: true })
+  })
+
+  afterEach(() => {
+    vi.useRealTimers()
+  })
+
+  const openOn = (date: string) =>
+    act(() => {
+      useCalendarStore.setState({ selectedDate: date })
+    })
+  const close = () =>
+    act(() => {
+      useCalendarStore.setState({ selectedDate: null })
+    })
+  const frames = () =>
+    act(() => {
+      vi.advanceTimersByTime(50)
+    })
+  const sheet = () => screen.getByTestId('quicklog-modal')
+
+  it('starts off the screen and then comes up', () => {
+    resetStore()
+    render(<QuickLog />)
+    expect(screen.queryByTestId('quicklog-modal')).not.toBeInTheDocument()
+
+    openOn('2024-01-15')
+
+    // The frame nobody could see before: on the page, under the bottom edge. Without one,
+    // there is no old value for the transition to run from and it is simply there.
+    expect(sheet().className).toContain('translate-y-full')
+
+    frames()
+
+    expect(sheet().className).toContain('translate-y-0')
+  })
+
+  // The other half, and the one that needed two changes: the component was unmounted by
+  // its parent the moment the date went, and it also returned null by itself.
+  it('stays on the page while it leaves, with the day still written on it', () => {
+    resetStore()
+    render(<QuickLog />)
+    openOn('2024-01-15')
+    frames()
+
+    close()
+
+    expect(sheet()).toBeInTheDocument()
+    expect(sheet().className).toContain('translate-y-full')
+    // Still says which day it was. The date is held for as long as the sheet is on screen,
+    // because a sheet that empties itself on the way out is worse than one that jumps.
+    expect(screen.getByText('Jan 15, 2024')).toBeInTheDocument()
+  })
+
+  it('is gone once it has left', () => {
+    resetStore()
+    render(<QuickLog />)
+    openOn('2024-01-15')
+    frames()
+    close()
+
+    act(() => {
+      vi.advanceTimersByTime(300)
+    })
+
+    expect(screen.queryByTestId('quicklog-modal')).not.toBeInTheDocument()
+  })
+
+  // Opened and shut faster than the two frames it waits for. The frames belong to the
+  // opening that scheduled them, and if they are allowed to land late they mark the sheet
+  // as arrived while it is shut, so the next opening has nowhere to come up from.
+  it('is not fooled by a sheet shut before it had arrived', () => {
+    resetStore()
+    render(<QuickLog />)
+    openOn('2024-01-15')
+    close()
+    act(() => {
+      vi.advanceTimersByTime(300)
+    })
+
+    openOn('2024-02-20')
+
+    expect(sheet().className).toContain('translate-y-full')
+  })
+
+  it('comes back from off the screen the second time too', () => {
+    resetStore()
+    render(<QuickLog />)
+    openOn('2024-01-15')
+    frames()
+    close()
+    act(() => {
+      vi.advanceTimersByTime(300)
+    })
+
+    openOn('2024-02-20')
+
+    expect(sheet().className).toContain('translate-y-full')
+    frames()
+    expect(sheet().className).toContain('translate-y-0')
+    expect(screen.getByText('Feb 20, 2024')).toBeInTheDocument()
+  })
+})

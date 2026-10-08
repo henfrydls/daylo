@@ -38,11 +38,63 @@ export const QuickLog = memo(function QuickLog() {
     }
   }, [isCreating])
 
+  const isOpen = !!selectedDate
+  const { shouldRender, isVisible } = useAnimatedPresence(isOpen, 250)
+
+  /**
+   * One frame under the bottom edge before it comes up.
+   *
+   * A transition only runs when the value it is leaving has been painted, and this sheet
+   * was being put into the page already arrived: `isVisible` is true on the very first
+   * render, so there was never a frame at `translate-y-full` for it to travel from. It
+   * appeared, and Henfry said so the first time he held 1.4.1. Two frames rather than one,
+   * the same as the bottom sheet, because one is not reliably enough for the first state
+   * to have been drawn.
+   */
+  const [hasEntered, setHasEntered] = useState(false)
+  useEffect(() => {
+    if (!isVisible) {
+      /* eslint-disable react-hooks/set-state-in-effect */
+      setHasEntered(false)
+      /* eslint-enable react-hooks/set-state-in-effect */
+      return
+    }
+    // The frames belong to this opening. A sheet shut before they land would otherwise be
+    // marked as arrived while it is closed, and the next opening would have nowhere to
+    // come up from: it would be back to appearing, which is the whole fault being fixed.
+    let thisOpening = true
+    requestAnimationFrame(() =>
+      requestAnimationFrame(() => {
+        if (thisOpening) setHasEntered(true)
+      })
+    )
+    return () => {
+      thisOpening = false
+    }
+  }, [isVisible])
+
+  const showing = hasEntered && isVisible
+
+  /**
+   * The day the sheet is showing, which outlives the day that is selected.
+   *
+   * Closing clears the selection at once and the sheet is still on the screen for a
+   * quarter of a second after that. Reading the selection here would empty the sheet
+   * halfway out, which is worse than the jump this is fixing.
+   */
+  const [dayShown, setDayShown] = useState<string | null>(null)
+  useEffect(() => {
+    /* eslint-disable react-hooks/set-state-in-effect */
+    if (selectedDate) setDayShown(selectedDate)
+    /* eslint-enable react-hooks/set-state-in-effect */
+  }, [selectedDate])
+  const day = selectedDate ?? dayShown
+
   // Memoize day logs to prevent recalculation on every render
   const dayLogs = useMemo(() => {
-    if (!selectedDate) return []
-    return logs.filter((l) => l.date === selectedDate)
-  }, [logs, selectedDate])
+    if (!day) return []
+    return logs.filter((l) => l.date === day)
+  }, [logs, day])
 
   // Memoize completed activity IDs set for O(1) lookups
   const completedActivityIds = useMemo(() => {
@@ -111,13 +163,12 @@ export const QuickLog = memo(function QuickLog() {
     [handleCreateActivity, handleCancelCreating]
   )
 
-  const isOpen = !!selectedDate
-  const { shouldRender, isVisible } = useAnimatedPresence(isOpen, 250)
+  // Early return after all hooks. On the way out `selectedDate` is already null and this
+  // used to return null with it, which is why mounting the sheet for longer would not have
+  // been enough on its own: it took itself off the page.
+  if (!shouldRender || !day) return null
 
-  // Early return after all hooks
-  if (!shouldRender || !selectedDate) return null
-
-  const date = parseDateString(selectedDate)
+  const date = parseDateString(day)
 
   const renderCreationForm = ({ centered, inputId }: { centered?: boolean; inputId: string }) => (
     <div className="space-y-3">
@@ -236,14 +287,14 @@ export const QuickLog = memo(function QuickLog() {
     <div className="fixed inset-0 z-40 flex items-end sm:items-center justify-center">
       {/* Backdrop */}
       <div
-        className={`absolute inset-0 bg-black/50 transition-opacity duration-250 ${isVisible ? 'opacity-100' : 'opacity-0'}`}
+        className={`absolute inset-0 bg-black/50 transition-opacity duration-250 ${showing ? 'opacity-100' : 'opacity-0'}`}
         onClick={() => setSelectedDate(null)}
         aria-hidden="true"
       />
       <div
         ref={modalRef}
         className={`relative bg-white rounded-t-xl sm:rounded-xl shadow-xl max-w-md w-full mx-0 sm:mx-4 px-6 py-4 sm:p-6 max-h-[85dvh] overflow-y-auto transition-all duration-[250ms] ease-[cubic-bezier(0.32,0.72,0,1)] ${
-          isVisible
+          showing
             ? 'translate-y-0 opacity-100 sm:scale-100'
             : 'translate-y-full opacity-0 sm:translate-y-0 sm:scale-95'
         }`}
