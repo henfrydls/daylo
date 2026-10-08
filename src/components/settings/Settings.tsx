@@ -1,13 +1,19 @@
 import { useRef, type ReactNode } from 'react'
 import { useCalendarStore } from '../../store'
 import { useShallow } from 'zustand/react/shallow'
-import { useAnimatedPresence, useArrival, useDailyReminder, useFocusTrap } from '../../hooks'
+import {
+  useAnimatedPresence,
+  useArrival,
+  useCheckinFields,
+  useDailyReminder,
+  useFocusTrap,
+} from '../../hooks'
 import { ChevronLeftIcon, ChevronRightIcon, Switch, XIcon } from '../ui'
 import { WhatGetsSent } from './WhatGetsSent'
 import { turnOffCheckin, turnOnCheckin } from '../../lib/checkin'
 import { isTauri } from '@tauri-apps/api/core'
 import { openLink } from '../../lib/openLink'
-import type { UpdateStatus } from '../updates/UpdateSettings'
+import type { UpdateStatus } from '../../hooks/useUpdates'
 
 /** How long the panel takes to arrive and to leave. */
 const TAKES = 250
@@ -151,6 +157,8 @@ export function Settings({
     useShallow((s) => ({ activities: s.activities.length, logs: s.logs.length }))
   )
   const checkinEnabled = useCalendarStore((s) => s.checkinEnabled)
+  const checkinId = useCalendarStore((s) => s.checkinId)
+  const checkinFields = useCheckinFields()
   const updatesEnabled = useCalendarStore((s) => s.updatesEnabled)
   const setUpdatesEnabled = useCalendarStore((s) => s.setUpdatesEnabled)
   const reminder = useDailyReminder()
@@ -249,7 +257,7 @@ export function Settings({
                   }}
                 />
                 <div className="py-1">
-                  <WhatGetsSent />
+                  <WhatGetsSent fields={checkinFields} id={checkinId} />
                 </div>
               </>
             ) : null}

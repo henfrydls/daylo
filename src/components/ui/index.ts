@@ -13,6 +13,7 @@ export type {
 } from './DropdownMenu'
 export { ErrorBoundary } from './ErrorBoundary'
 export {
+  BellIcon,
   BroadcastIcon,
   CheckCircleIcon,
   CheckIcon,
@@ -21,6 +22,7 @@ export {
   CloudUploadIcon,
   DownloadIcon,
   ExclamationCircleIcon,
+  GearIcon,
   InfoCircleIcon,
   PencilIcon,
   PlusIcon,

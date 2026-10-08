@@ -11,7 +11,6 @@ import {
   type TakeStep,
 } from '../lib/updater'
 import type { UpdateState } from '../components/updates/UpdateNotice'
-import type { UpdateStatus } from '../components/updates/UpdateSettings'
 import { useCalendarStore } from '../store'
 
 /**
@@ -30,6 +29,17 @@ import { useCalendarStore } from '../store'
 /** Once an hour at most. The window coming back is a poor clock; a person alt-tabbing is
  *  not news, and every ask is a request that leaves the machine. */
 const ASK_AGAIN_AFTER = 60 * 60 * 1000
+
+export type UpdateStatus =
+  | { kind: 'idle' }
+  | { kind: 'checking' }
+  | { kind: 'up-to-date' }
+  | { kind: 'available'; version: string; canInstall: boolean }
+  /** Being downloaded or installed right now, which the card behind this is narrating. */
+  | { kind: 'working' }
+  /** Installed, and the relaunch did not happen by itself. */
+  | { kind: 'restart' }
+  | { kind: 'failed' }
 
 export interface Updates {
   /** Whether this copy can be told about updates at all: the menu entry hangs off it. */

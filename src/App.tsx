@@ -4,8 +4,8 @@ import { ActivityList, QuickLog } from './components/activities'
 import { StatsPanel } from './components/stats'
 import {
   BottomSheet,
-  BroadcastIcon,
-  RefreshIcon,
+  BellIcon,
+  GearIcon,
   DropdownMenu,
   ErrorBoundary,
   ToastContainer,
@@ -13,12 +13,7 @@ import {
 } from './components/ui'
 import type { DropdownMenuItem } from './components/ui'
 import { AppSkeleton } from './components/skeletons'
-import {
-  CheckinNotice,
-  CheckinSettings,
-  DailyReminder,
-  ReminderSettings,
-} from './components/settings'
+import { CheckinNotice, DailyReminder, Settings } from './components/settings'
 import { useCalendarStore } from './store'
 import {
   useAppVersion,
@@ -31,7 +26,6 @@ import {
 import { TravelContext, useTravel } from './lib/travel'
 import { UpdateDot } from './components/updates/UpdateDot'
 import { UpdateNotice } from './components/updates/UpdateNotice'
-import { UpdateSettings } from './components/updates/UpdateSettings'
 import { sendComment, sendRating, sendShown } from './lib/feedback'
 import { FEEDBACK_MAILTO, openMailto, shouldInviteFeedback } from './lib/feedbackInvite'
 import { formatDate } from './lib/dates'
@@ -120,9 +114,9 @@ function App() {
   const [isExportOpen, setIsExportOpen] = useState(false)
   const [isImportOpen, setIsImportOpen] = useState(false)
   const [isBottomSheetOpen, setIsBottomSheetOpen] = useState(false)
-  const [isReminderOpen, setIsReminderOpen] = useState(false)
-  const [isCheckinOpen, setIsCheckinOpen] = useState(false)
-  const [isUpdatesOpen, setIsUpdatesOpen] = useState(false)
+  // One surface for everything there is to decide, and one flag for it. Reminders first
+  // when that is what was asked for, which is the only thing the menu still chooses.
+  const [settings, setSettings] = useState<'closed' | 'open'>('closed')
   // Whether somebody went looking for the question, and whether they have closed it. The
   // question's own number lives in the dialog, because it lives exactly as long as the
   // dialog does.
@@ -290,146 +284,96 @@ function App() {
     return <AppSkeleton />
   }
 
+  /**
+   * The question, asked because somebody went looking for it.
+   *
+   * Kept whole from the menu entry this replaced, including the difference between the
+   * application and the web. In the application pressing it **spends** the question: the
+   * dialog opening *is* being asked, and asking again later would be asking a favour
+   * twice. On the web it spends nothing, and that is not an inconsistency: opening a
+   * letter is not writing one, and somebody who backed out of the chooser would otherwise
+   * lose an invitation they never saw.
+   */
+  const askForFeedback = () => {
+    // In the app the question is the way in, and somebody who came looking for it is not
+    // the same as somebody the app interrupted, which is why the origin travels. In a
+    // browser there is no command to send through, and a browser is the one place a
+    // mailto: actually opens something, so there the letter stays.
+    if (canCheckIn) {
+      setAskedFromMenu(true)
+      setQuestionClosed(false)
+      return
+    }
+    void openMailto(FEEDBACK_MAILTO).then((result) => {
+      if (result === 'failed') {
+        showToast('Could not open an email app. You can write to daylo@henfrydls.com.', 'error')
+      }
+    })
+  }
+
+  /**
+   * Two entries, and only where the reminder exists.
+   *
+   * Everything else that used to be here is in Settings now. Where there is no reminder
+   * this list would have one item, and a menu with one item is a button wearing a hat: the
+   * header puts the gear there instead and Settings opens with one press.
+   */
+  /**
+   * What sits in the corner of the header: a gear, or the menu where there are two things.
+   *
+   * Not a width: the reminder is the only entry Settings does not swallow, and it exists
+   * on Android alone. So wherever there is no reminder the menu would be a list of one,
+   * which is a button with extra steps, and the gear opens Settings in a single press. The
+   * dot for a waiting version rides on whichever of the two is there.
+   */
+  const headerControl = (pad: string) => {
+    const label = updateWaiting === null ? 'Settings' : 'Settings, update available'
+    const inside = (
+      <>
+        {updateWaiting === null ? null : <UpdateDot className="absolute right-1.5 top-1.5" />}
+        <GearIcon className="w-5 h-5" aria-hidden="true" />
+      </>
+    )
+    const shape = `relative ${pad} rounded-lg text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition-colors min-h-[44px] min-w-[44px] flex items-center justify-center`
+
+    if (!hasReminders) {
+      return (
+        <button
+          type="button"
+          onClick={() => setSettings('open')}
+          className={`${shape} focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500`}
+          aria-label={label}
+          data-testid="settings-button"
+        >
+          {inside}
+        </button>
+      )
+    }
+    return (
+      <DropdownMenu
+        trigger={
+          <span
+            className={shape}
+            aria-label={updateWaiting === null ? 'More options' : 'More options, update available'}
+          >
+            {inside}
+          </span>
+        }
+        items={menuItems}
+      />
+    )
+  }
+
   const menuItems: DropdownMenuItem[] = [
     {
-      label: 'Export Data',
-      icon: (
-        <svg
-          className="w-4 h-4"
-          fill="none"
-          viewBox="0 0 24 24"
-          stroke="currentColor"
-          aria-hidden="true"
-        >
-          <path
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            strokeWidth={2}
-            d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"
-          />
-        </svg>
-      ),
-      onClick: () => setIsExportOpen(true),
+      label: 'Daily reminder',
+      icon: <BellIcon className="w-4 h-4" aria-hidden="true" />,
+      onClick: () => setSettings('open'),
     },
     {
-      label: 'Import Data',
-      icon: (
-        <svg
-          className="w-4 h-4"
-          fill="none"
-          viewBox="0 0 24 24"
-          stroke="currentColor"
-          aria-hidden="true"
-        >
-          <path
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            strokeWidth={2}
-            d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"
-          />
-        </svg>
-      ),
-      onClick: () => setIsImportOpen(true),
-    },
-    ...(hasReminders
-      ? [
-          {
-            label: 'Daily reminder',
-            icon: (
-              <svg
-                className="w-4 h-4"
-                fill="none"
-                viewBox="0 0 24 24"
-                stroke="currentColor"
-                aria-hidden="true"
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2}
-                  d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9"
-                />
-              </svg>
-            ),
-            onClick: () => setIsReminderOpen(true),
-          } satisfies DropdownMenuItem,
-        ]
-      : []),
-    {
-      label: 'Send feedback',
-      icon: (
-        <svg
-          className="w-4 h-4"
-          fill="none"
-          viewBox="0 0 24 24"
-          stroke="currentColor"
-          aria-hidden="true"
-        >
-          <path
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            strokeWidth={2}
-            d="M21.75 6.75v10.5a2.25 2.25 0 01-2.25 2.25h-15a2.25 2.25 0 01-2.25-2.25V6.75m19.5 0A2.25 2.25 0 0019.5 4.5h-15a2.25 2.25 0 00-2.25 2.25m19.5 0v.243a2.25 2.25 0 01-1.07 1.916l-7.5 4.615a2.25 2.25 0 01-2.36 0L3.32 8.91a2.25 2.25 0 01-1.07-1.916V6.75"
-          />
-        </svg>
-      ),
-      // Here on every platform and from the first day, so that somebody with something to
-      // say on day three does not have to wait for the app to ask.
-      //
-      // In the app it spends the question, because here pressing it *is* being asked: the
-      // dialog opens, the fact that it was put is reported, and asking again later would
-      // be asking a favour twice. On the web it spends nothing, and that difference is
-      // not an inconsistency: opening a letter is not writing one, and this entry is easy
-      // to press out of curiosity, so somebody who backed out of the chooser would lose
-      // an invitation they never saw.
-      onClick: () => {
-        // In the app the question is the way in, and somebody who came looking for it is
-        // not the same as somebody the app interrupted, which is why the origin travels.
-        // In a browser there is no command to send through, and a browser is the one
-        // place a mailto: actually opens something, so there the letter stays.
-        if (canCheckIn) {
-          setAskedFromMenu(true)
-          setQuestionClosed(false)
-          return
-        }
-        void openMailto(FEEDBACK_MAILTO).then((result) => {
-          if (result === 'failed') {
-            showToast('Could not open an email app. You can write to daylo@henfrydls.com.', 'error')
-          }
-        })
-      },
-    },
-    ...(canCheckIn
-      ? [
-          {
-            label: 'Anonymous check-in',
-            icon: <BroadcastIcon className="w-4 h-4" aria-hidden="true" />,
-            onClick: () => setIsCheckinOpen(true),
-          } satisfies DropdownMenuItem,
-        ]
-      : []),
-    ...(updates.supported
-      ? [
-          {
-            label: 'Check for new versions',
-            icon: <RefreshIcon className="w-4 h-4" aria-hidden="true" />,
-            // The dot is repeated here, and the words beside it are what a screen reader
-            // gets: a dot on its own says nothing to anybody not looking at it.
-            trailing:
-              updateWaiting === null ? undefined : (
-                <span className="ml-auto flex items-center gap-2">
-                  <span className="sr-only">{`${updateWaiting} is out`}</span>
-                  <UpdateDot />
-                </span>
-              ),
-            onClick: () => setIsUpdatesOpen(true),
-          } satisfies DropdownMenuItem,
-        ]
-      : []),
-    { type: 'divider' },
-    {
-      type: 'info',
-      label: `v${appVersion}`,
+      label: 'Settings',
+      icon: <GearIcon className="w-4 h-4" aria-hidden="true" />,
+      onClick: () => setSettings('open'),
     },
   ]
 
@@ -472,76 +416,12 @@ function App() {
                       </h1>
                     </div>
                     {/* Menu button visible on mobile next to title */}
-                    <div className="sm:hidden">
-                      <DropdownMenu
-                        trigger={
-                          <span
-                            className="relative p-2.5 rounded-lg text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition-colors min-h-[44px] min-w-[44px] flex items-center justify-center"
-                            aria-label={
-                              updateWaiting === null
-                                ? 'More options'
-                                : 'More options, update available'
-                            }
-                          >
-                            {updateWaiting === null ? null : (
-                              <UpdateDot className="absolute right-1.5 top-1.5" />
-                            )}
-                            <svg
-                              className="w-5 h-5"
-                              fill="none"
-                              viewBox="0 0 24 24"
-                              stroke="currentColor"
-                              aria-hidden="true"
-                            >
-                              <path
-                                strokeLinecap="round"
-                                strokeLinejoin="round"
-                                strokeWidth={2}
-                                d="M12 5v.01M12 12v.01M12 19v.01M12 6a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2z"
-                              />
-                            </svg>
-                          </span>
-                        }
-                        items={menuItems}
-                      />
-                    </div>
+                    <div className="sm:hidden">{headerControl('p-2.5')}</div>
                   </div>
                   <div className="flex items-center justify-between sm:justify-end gap-3">
                     <ViewToggle />
                     {/* Menu button hidden on mobile, visible on larger screens */}
-                    <div className="hidden sm:block">
-                      <DropdownMenu
-                        trigger={
-                          <span
-                            className="relative p-2 rounded-lg text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition-colors min-h-[44px] min-w-[44px] flex items-center justify-center"
-                            aria-label={
-                              updateWaiting === null
-                                ? 'More options'
-                                : 'More options, update available'
-                            }
-                          >
-                            {updateWaiting === null ? null : (
-                              <UpdateDot className="absolute right-1.5 top-1.5" />
-                            )}
-                            <svg
-                              className="w-5 h-5"
-                              fill="none"
-                              viewBox="0 0 24 24"
-                              stroke="currentColor"
-                              aria-hidden="true"
-                            >
-                              <path
-                                strokeLinecap="round"
-                                strokeLinejoin="round"
-                                strokeWidth={2}
-                                d="M12 5v.01M12 12v.01M12 19v.01M12 6a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2z"
-                              />
-                            </svg>
-                          </span>
-                        }
-                        items={menuItems}
-                      />
-                    </div>
+                    <div className="hidden sm:block">{headerControl('p-2')}</div>
                   </div>
                 </div>
               </div>
@@ -563,7 +443,7 @@ function App() {
             {noticeIsOpen ? (
               <CheckinNotice
                 on={checkinEnabled || checkinStart === 'new'}
-                onOpen={() => setIsCheckinOpen(true)}
+                onOpen={() => setSettings('open')}
               />
             ) : null}
 
@@ -686,11 +566,8 @@ function App() {
             )}
           </Suspense>
 
-          {/* Daily reminder: the one-time offer, and the setting behind the menu */}
+          {/* Daily reminder: the one-time offer. The setting itself is in Settings now. */}
           <DailyReminder />
-          {isReminderOpen && (
-            <ReminderSettings isOpen={isReminderOpen} onClose={() => setIsReminderOpen(false)} />
-          )}
 
           {/* The question, wherever it came from. Unmounted when it closes, so the number
             it carries goes with it rather than being cleared by anybody. Behind a Suspense
@@ -722,24 +599,31 @@ function App() {
             )}
           </Suspense>
 
-          {isUpdatesOpen && (
-            <UpdateSettings
-              isOpen={isUpdatesOpen}
-              onClose={() => setIsUpdatesOpen(false)}
-              status={updates.status}
+          {/* Everything there is to decide. Export and Import still open their own dialogs
+              over it, because they were dialogs before this existed and still ask a
+              question of their own. */}
+          <Settings
+            isOpen={settings === 'open'}
+            onClose={() => setSettings('closed')}
+            onExport={() => setIsExportOpen(true)}
+            onImport={() => setIsImportOpen(true)}
+            onFeedback={askForFeedback}
+            hasReminders={hasReminders}
+            canCheckIn={canCheckIn}
+            version={appVersion}
+            updates={{
+              supported: updates.supported,
+              status: updates.status,
+              waiting: updateWaiting,
+              check: updates.check,
               // Closing first, because the answer to "Update" is the card's progress and
-              // this sheet is drawn over it. Nothing is lost: the card is where it happens.
-              onAct={() => {
-                if (updates.status.kind === 'available') setIsUpdatesOpen(false)
+              // this panel is drawn over it. Nothing is lost: the card is where it happens.
+              install: () => {
+                setSettings('closed')
                 updates.act()
-              }}
-            />
-          )}
-
-          {/* The check-in: the switch behind the menu, and nothing else. It never asks. */}
-          {isCheckinOpen && (
-            <CheckinSettings isOpen={isCheckinOpen} onClose={() => setIsCheckinOpen(false)} />
-          )}
+              },
+            }}
+          />
 
           {/* Toast Notifications */}
           <ToastContainer />
