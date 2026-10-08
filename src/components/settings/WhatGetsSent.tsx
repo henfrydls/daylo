@@ -29,13 +29,13 @@ export function WhatGetsSent({ fields, id }: WhatGetsSentProps) {
   const contentId = useId()
 
   return (
-    <div className="mt-4 rounded-lg border border-gray-200">
+    <div>
       <button
         type="button"
         aria-expanded={open}
         aria-controls={contentId}
         onClick={() => setOpen((wasOpen) => !wasOpen)}
-        className="flex min-h-[44px] w-full items-center justify-between px-4 py-3 text-left text-sm text-gray-700"
+        className="flex min-h-[48px] w-full items-center justify-between py-3 text-left text-gray-900"
         data-testid="checkin-what-gets-sent"
       >
         What gets sent
@@ -53,7 +53,7 @@ export function WhatGetsSent({ fields, id }: WhatGetsSentProps) {
       </button>
 
       {open ? (
-        <div id={contentId} className="space-y-3 px-4 pb-4 text-sm text-gray-600">
+        <div id={contentId} className="space-y-3 pb-4 text-sm text-gray-600">
           <dl className="space-y-1">
             {[
               ['Random number', id ?? EXAMPLE_ID],

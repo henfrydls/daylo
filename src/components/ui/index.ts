@@ -24,6 +24,7 @@ export {
   ExclamationCircleIcon,
   GearIcon,
   InfoCircleIcon,
+  MoreIcon,
   PencilIcon,
   PlusIcon,
   QuestionCircleIcon,

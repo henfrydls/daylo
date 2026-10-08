@@ -7,6 +7,7 @@ import {
   useCheckinFields,
   useDailyReminder,
   useFocusTrap,
+  useKeyboardRing,
 } from '../../hooks'
 import { ChevronLeftIcon, ChevronRightIcon, Switch, XIcon } from '../ui'
 import { WhatGetsSent } from './WhatGetsSent'
@@ -162,6 +163,8 @@ export function Settings({
   const updatesEnabled = useCalendarStore((s) => s.updatesEnabled)
   const setUpdatesEnabled = useCalendarStore((s) => s.setUpdatesEnabled)
   const reminder = useDailyReminder()
+  // The time field decides its own ring: see useKeyboardRing for why the browser cannot.
+  const ring = useKeyboardRing(isOpen)
 
   if (!shouldRender) return null
 
@@ -188,7 +191,10 @@ export function Settings({
           arrived ? 'translate-x-0 opacity-100' : 'translate-x-6 opacity-0'
         }`}
       >
-        <div className="sticky top-0 z-10 flex items-center gap-2 border-b border-gray-200 bg-white px-4 py-3 sm:px-5">
+        {/* Clear of the notch at the top and of the system's gesture strip at the bottom:
+            this surface is fixed to the viewport, so it is outside the wrapper that keeps
+            the rest of the app clear of both. */}
+        <div className="sticky top-0 z-10 flex items-center gap-2 border-b border-gray-200 bg-white px-4 pb-3 pt-[calc(0.75rem+env(safe-area-inset-top))] sm:px-5 sm:pt-3">
           <button
             type="button"
             onClick={onClose}
@@ -202,7 +208,10 @@ export function Settings({
           <h2 className="text-lg font-semibold text-gray-900">Settings</h2>
         </div>
 
-        <div className="px-4 pb-16 pt-5 sm:px-5">
+        <div
+          data-testid="settings-scroller"
+          className="px-4 pb-[calc(4rem+env(safe-area-inset-bottom))] pt-5 sm:px-5"
+        >
           {hasReminders ? (
             <Section title="Reminders">
               <SwitchRow
@@ -228,8 +237,12 @@ export function Settings({
                     const [h, m] = e.target.value.split(':').map(Number)
                     if (Number.isFinite(h) && Number.isFinite(m)) reminder.changeTime(h, m)
                   }}
+                  onFocus={ring.onFocus}
+                  onBlur={ring.onBlur}
                   data-testid="reminder-time"
-                  className="rounded-lg bg-transparent px-2 py-1 text-right text-gray-500 focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500"
+                  className={`rounded-lg bg-transparent px-2 py-1 text-right text-gray-500 focus:outline-none ${
+                    ring.visible ? 'ring-2 ring-emerald-500' : ''
+                  }`}
                 />
               </div>
               {reminder.failure === null ? null : (
@@ -312,13 +325,20 @@ export function Settings({
                 </button>
               )}
             </div>
-            <p
-              className="py-3 text-sm text-gray-500"
-              aria-live="polite"
-              data-testid="settings-update-status"
-            >
-              {said(updates.status)}
-            </p>
+            {/* Under the version rather than beside it, and taking no room when there is
+                nothing to say: a row of its own left an empty band with a line above and
+                below it, which reads as something missing. The element stays in the page
+                either way, because a live region that arrives at the same moment as its
+                text is one most screen readers do not read. */}
+            <div className="py-3" hidden={said(updates.status) === ''}>
+              <p
+                className="text-sm text-gray-500"
+                aria-live="polite"
+                data-testid="settings-update-status"
+              >
+                {said(updates.status)}
+              </p>
+            </div>
             <div className="py-3">
               <p className="text-gray-900">Made by DLSLabs</p>
               <p className="mt-0.5 text-sm text-gray-500">Henfry De Los Santos</p>

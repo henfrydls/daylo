@@ -120,6 +120,20 @@ export function ChevronRightIcon(props: IconProps) {
   )
 }
 
+/** Three dots - a menu, where there is more than one thing behind it. */
+export function MoreIcon(props: IconProps) {
+  return (
+    <svg {...createIconProps(props)}>
+      <path
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        strokeWidth={2}
+        d="M12 5v.01M12 12v.01M12 19v.01M12 6a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2z"
+      />
+    </svg>
+  )
+}
+
 /** Bell - the daily reminder, in the menu that offers it. */
 export function BellIcon(props: IconProps) {
   return (

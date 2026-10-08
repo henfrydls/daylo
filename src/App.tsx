@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, useRef, lazy, Suspense } from 'react'
+import { useState, useEffect, useMemo, useRef, lazy, Suspense, type ReactNode } from 'react'
 import { YearView, MonthView } from './components/calendar'
 import { ActivityList, QuickLog } from './components/activities'
 import { StatsPanel } from './components/stats'
@@ -6,6 +6,7 @@ import {
   BottomSheet,
   BellIcon,
   GearIcon,
+  MoreIcon,
   DropdownMenu,
   ErrorBoundary,
   ToastContainer,
@@ -328,10 +329,12 @@ function App() {
    */
   const headerControl = (pad: string) => {
     const label = updateWaiting === null ? 'Settings' : 'Settings, update available'
-    const inside = (
+    // The gear is the control itself where it opens Settings in one press; where it opens a
+    // menu it is three dots, because the thing behind it is a choice and not a destination.
+    const inside = (icon: ReactNode) => (
       <>
         {updateWaiting === null ? null : <UpdateDot className="absolute right-1.5 top-1.5" />}
-        <GearIcon className="w-5 h-5" aria-hidden="true" />
+        {icon}
       </>
     )
     const shape = `relative ${pad} rounded-lg text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition-colors min-h-[44px] min-w-[44px] flex items-center justify-center`
@@ -345,7 +348,7 @@ function App() {
           aria-label={label}
           data-testid="settings-button"
         >
-          {inside}
+          {inside(<GearIcon className="w-5 h-5" aria-hidden="true" />)}
         </button>
       )
     }
@@ -356,7 +359,7 @@ function App() {
             className={shape}
             aria-label={updateWaiting === null ? 'More options' : 'More options, update available'}
           >
-            {inside}
+            {inside(<MoreIcon className="w-5 h-5" aria-hidden="true" />)}
           </span>
         }
         items={menuItems}
