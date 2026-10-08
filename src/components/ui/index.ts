@@ -13,6 +13,7 @@ export type {
 } from './DropdownMenu'
 export { ErrorBoundary } from './ErrorBoundary'
 export {
+  BellIcon,
   BroadcastIcon,
   CheckCircleIcon,
   CheckIcon,
@@ -21,7 +22,9 @@ export {
   CloudUploadIcon,
   DownloadIcon,
   ExclamationCircleIcon,
+  GearIcon,
   InfoCircleIcon,
+  MoreIcon,
   PencilIcon,
   PlusIcon,
   QuestionCircleIcon,
@@ -38,3 +41,4 @@ export { Checkbox } from './Checkbox'
 export { ToastContainer, useToast } from './Toast'
 export { Tooltip } from './Tooltip'
 export { Skeleton } from './Skeleton'
+export { Switch } from './Switch'

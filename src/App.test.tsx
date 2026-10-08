@@ -51,6 +51,24 @@ async function openTheMenu() {
   await userEvent.click(screen.getAllByLabelText('More options')[0])
 }
 
+/**
+ * Settings, by whichever way in this platform has.
+ *
+ * Where there is a reminder to offer there are two things to choose between and the corner
+ * holds a menu; where there is not, the corner is the gear itself. Both land here, which is
+ * the point of asking for it this way rather than naming one of them.
+ */
+async function openSettings() {
+  const gear = screen.queryAllByTestId('settings-button')
+  if (gear.length > 0) {
+    await userEvent.click(gear[0])
+  } else {
+    await openTheMenu()
+    await userEvent.click(screen.getAllByText('Settings')[0])
+  }
+  await screen.findByTestId('settings')
+}
+
 beforeEach(() => {
   remindersAvailable.mockReset().mockResolvedValue(false)
   checkinFields.mockReset().mockResolvedValue(null)
@@ -75,17 +93,20 @@ afterEach(() => {
   vi.restoreAllMocks()
 })
 
-describe('the daily reminder in the menu', () => {
-  it('is absent where a notification cannot arrive', async () => {
+describe('the way into settings', () => {
+  // A menu whose only entry is "Settings" is a button wearing a hat. Where the reminder
+  // does not exist there is nothing to choose between, so the corner is the gear itself.
+  it('is a gear where there is no reminder to choose between', async () => {
     render(<App />)
     await act(async () => {})
 
-    await openTheMenu()
+    expect(screen.queryAllByLabelText('More options')).toHaveLength(0)
+    await openSettings()
 
-    expect(screen.queryByText('Daily reminder')).not.toBeInTheDocument()
+    expect(screen.getByTestId('settings')).toBeInTheDocument()
   })
 
-  it('is there on Android, and opens the setting', async () => {
+  it('is a menu of two on Android, and both of them land in the same place', async () => {
     remindersAvailable.mockResolvedValue(true)
     render(<App />)
     await act(async () => {})
@@ -93,7 +114,19 @@ describe('the daily reminder in the menu', () => {
     await openTheMenu()
     await userEvent.click(screen.getByText('Daily reminder'))
 
-    expect(await screen.findByTestId('reminder-settings')).toBeInTheDocument()
+    // The reminder is a section of settings now, not a sheet of its own: one surface, and
+    // the entry is a way in rather than a different thing.
+    expect(await screen.findByTestId('settings')).toBeInTheDocument()
+    expect(screen.getByTestId('reminder-switch')).toBeInTheDocument()
+  })
+
+  it('has no reminders to show where a notification cannot arrive', async () => {
+    render(<App />)
+    await act(async () => {})
+
+    await openSettings()
+
+    expect(screen.queryByTestId('reminder-switch')).not.toBeInTheDocument()
   })
 })
 
@@ -106,13 +139,13 @@ describe('writing without being asked, in a browser', () => {
     useCalendarStore.setState({ feedbackInviteSeen: false })
   })
 
-  it('is in the menu, on every platform', async () => {
+  it('is in settings, on every platform', async () => {
     render(<App />)
     await act(async () => {})
 
-    await openTheMenu()
+    await openSettings()
 
-    expect(screen.getByText('Send feedback')).toBeInTheDocument()
+    expect(screen.getByTestId('settings-feedback')).toBeInTheDocument()
   })
 
   // It opens the letter and marks nothing. Pressing this out of curiosity and backing out
@@ -123,9 +156,9 @@ describe('writing without being asked, in a browser', () => {
   it('opens the letter without spending the invitation', async () => {
     render(<App />)
     await act(async () => {})
-    await openTheMenu()
+    await openSettings()
 
-    await userEvent.click(screen.getByText('Send feedback'))
+    await userEvent.click(screen.getByTestId('settings-feedback'))
 
     await act(async () => {})
     expect(openMailto).toHaveBeenCalledTimes(1)
@@ -138,9 +171,9 @@ describe('writing without being asked, in a browser', () => {
     openMailto.mockResolvedValue('failed')
     render(<App />)
     await act(async () => {})
-    await openTheMenu()
+    await openSettings()
 
-    await userEvent.click(screen.getByText('Send feedback'))
+    await userEvent.click(screen.getByTestId('settings-feedback'))
 
     expect(await screen.findByText(/Could not open an email app/)).toBeInTheDocument()
     expect(useCalendarStore.getState().feedbackInviteSeen).toBe(false)
@@ -193,12 +226,12 @@ describe('the question, in the app', () => {
     })
   })
 
-  it('is what the menu opens here, and the letter is not', async () => {
+  it('is what settings opens here, and the letter is not', async () => {
     render(<App />)
     await act(async () => {})
-    await openTheMenu()
+    await openSettings()
 
-    await userEvent.click(screen.getByText('Send feedback'))
+    await userEvent.click(screen.getByTestId('settings-feedback'))
 
     expect(await screen.findByTestId('feedback-rating')).toBeInTheDocument()
     expect(openMailto).not.toHaveBeenCalled()
@@ -206,12 +239,15 @@ describe('the question, in the app', () => {
 
   // Two ways in, and they are not the same person: one went looking for it, the other was
   // interrupted. Reading them together would average a volunteer with a bystander.
-  it('says the menu is where it came from', async () => {
+  // Two ways in, and they are not the same person. The word stays "menu" although the
+  // place is now a panel: it names where the question came from in the numbers that have
+  // already been gathered, and renaming it would split one measurement into two.
+  it('says it was gone looking for, not offered', async () => {
     render(<App />)
     await act(async () => {})
-    await openTheMenu()
+    await openSettings()
 
-    await userEvent.click(screen.getByText('Send feedback'))
+    await userEvent.click(screen.getByTestId('settings-feedback'))
 
     expect(sendShown).toHaveBeenCalledExactlyOnceWith(expect.any(String), 'menu')
   })
@@ -340,25 +376,26 @@ describe('the question, in the app', () => {
 
 // The check-in has no place outside the native app: the web build and the Docker image
 // have no command to call and a CSP that forbids the call anyway.
-describe('the check-in in the menu', () => {
+describe('the check-in in settings', () => {
   it('is absent where nothing can be sent', async () => {
     render(<App />)
     await act(async () => {})
 
-    await openTheMenu()
+    await openSettings()
 
-    expect(screen.queryByText('Anonymous check-in')).not.toBeInTheDocument()
+    expect(screen.queryByTestId('checkin-switch')).not.toBeInTheDocument()
   })
 
-  it('is there in the app, and opens the sheet', async () => {
+  // A switch on the surface rather than a sheet behind a menu entry: the decision and the
+  // thing it decides are now in the same place as everything else that is decided.
+  it('is a switch on the surface, in the app', async () => {
     checkinFields.mockResolvedValue({ version: '1.3.0', os: 'android', source: 'apk' })
     render(<App />)
     await act(async () => {})
 
-    await openTheMenu()
-    await userEvent.click(screen.getByText('Anonymous check-in'))
+    await openSettings()
 
-    expect(await screen.findByTestId('checkin-settings')).toBeInTheDocument()
+    expect(screen.getByTestId('checkin-switch')).toBeInTheDocument()
   })
 })
 

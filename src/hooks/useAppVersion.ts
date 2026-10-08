@@ -14,7 +14,10 @@ export function useAppVersion(): string {
         // Dynamic import to avoid errors in web mode
         const { getVersion } = await import('@tauri-apps/api/app')
         const tauriVersion = await getVersion()
-        setVersion(tauriVersion)
+        // Only when it said something. An empty answer would leave the About row reading
+        // "Version" with nothing beside it, which looks like a fault in Daylo rather than
+        // in whatever failed to answer.
+        if (tauriVersion) setVersion(tauriVersion)
       } catch {
         // Not running in Tauri, use the fallback version from package.json
         // This is expected in web/dev mode

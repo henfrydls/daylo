@@ -1,0 +1,109 @@
+import { test, expect } from '@playwright/test'
+
+/**
+ * The settings panel, on a screen with room for one beside the calendar.
+ *
+ * In a browser there is no updater and no check-in, so the corner is the gear: a menu whose
+ * only entry is "Settings" would be a button wearing a hat. What is measured here is the
+ * one thing jsdom cannot say, which is whether the panel travels: its own left edge, every
+ * frame, the same way the day sheet and the carousel's landing are measured.
+ */
+/** Both triggers are in the page at once, one per breakpoint; only one is on screen. */
+const GEAR = '[data-testid="settings-button"]:visible'
+const PANEL = '[data-testid="settings-surface"]'
+
+async function watch(page: import('@playwright/test').Page) {
+  await page.evaluate((selector) => {
+    const w = window as unknown as { __seen: number[] }
+    w.__seen = []
+    const tick = () => {
+      const node = document.querySelector(selector)
+      if (node) w.__seen.push(Math.round(node.getBoundingClientRect().left))
+      requestAnimationFrame(tick)
+    }
+    requestAnimationFrame(tick)
+  }, PANEL)
+}
+
+const seen = (page: import('@playwright/test').Page) =>
+  page.evaluate(() => (window as unknown as { __seen: number[] }).__seen)
+
+test.beforeEach(async ({ page }) => {
+  await page.addInitScript(() => {
+    localStorage.setItem(
+      'simple-calendar-storage',
+      JSON.stringify({
+        state: {
+          activities: [
+            {
+              id: 'a1',
+              name: 'Read',
+              color: '#10B981',
+              createdAt: '2026-01-01T00:00:00.000Z',
+              updatedAt: '2026-01-01T00:00:00.000Z',
+            },
+          ],
+          logs: [
+            {
+              id: 'l1',
+              activityId: 'a1',
+              date: '2026-02-02',
+              completed: true,
+              createdAt: '2026-02-02',
+            },
+          ],
+          selectedYear: 2026,
+          selectedMonth: 1,
+          selectedDate: null,
+          currentView: 'year',
+        },
+        version: 0,
+      })
+    )
+  })
+  await page.setViewportSize({ width: 1280, height: 900 })
+  await page.goto('/')
+  await expect(page.locator('[data-testid="app-header"]')).toBeVisible()
+})
+
+test('the gear opens a panel that slides in from the right', async ({ page }) => {
+  await watch(page)
+
+  await page.locator(GEAR).click()
+  await expect(page.locator(PANEL)).toBeVisible()
+  await page.waitForTimeout(500)
+
+  const frames = await seen(page)
+  const distinct = new Set(frames)
+
+  // More than one place: a panel that is simply there has one left edge for its whole life.
+  expect(distinct.size).toBeGreaterThan(2)
+  // It comes from the right and settles further left than it started.
+  expect(frames[0] - frames[frames.length - 1]).toBeGreaterThan(8)
+})
+
+test('the panel says what this copy can and cannot do', async ({ page }) => {
+  await page.locator(GEAR).click()
+  await expect(page.locator(PANEL)).toBeVisible()
+
+  // A browser: nothing is sent, nothing updates itself, and no notification can arrive.
+  await expect(page.getByText('Reminders')).toBeHidden()
+  await expect(page.getByTestId('checkin-switch')).toBeHidden()
+  await expect(page.getByTestId('updates-switch')).toBeHidden()
+
+  // What it does have: the data, the one sentence about feedback, and who made it.
+  await expect(page.getByText('1 activity, 1 entry')).toBeVisible()
+  await expect(page.getByTestId('settings-export')).toBeVisible()
+  await expect(page.getByText('What leaves your device')).toBeVisible()
+  await expect(page.getByText('Made by DLSLabs')).toBeVisible()
+})
+
+test('it closes with Escape and leaves the calendar where it was', async ({ page }) => {
+  await page.locator(GEAR).click()
+  await expect(page.locator(PANEL)).toBeVisible()
+
+  await page.keyboard.press('Escape')
+
+  await expect(page.locator(PANEL)).toBeHidden()
+  await expect(page.locator('[data-testid="app-header"]')).toBeVisible()
+})

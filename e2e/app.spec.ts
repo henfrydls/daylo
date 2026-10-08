@@ -1,13 +1,25 @@
 import { test, expect } from '@playwright/test'
 
 /**
- * The app renders a mobile and a desktop variant of several controls at once, and only
- * one of them is visible at a given width. Three tests used .first() and spent thirty
- * seconds waiting for a span that is never going to be visible, which is how this suite
- * rotted without anyone noticing: nothing runs it.
+ * Settings, by whichever way in this platform has.
+ *
+ * The app renders a phone and a desktop variant of its header controls at once and only
+ * one is on screen, so this asks for the visible one. Tests that used .first() spent
+ * thirty seconds waiting for something that was never going to be visible, which is how
+ * this suite rotted without anybody noticing.
+ *
+ * Where the daily reminder exists there are two things to choose between and the corner
+ * holds a menu; where it does not, the corner is the gear itself. Both land here.
  */
-function visibleMenuTrigger(page: import('@playwright/test').Page) {
-  return page.getByLabel('More options').filter({ visible: true }).first()
+async function openSettings(page: import('@playwright/test').Page) {
+  const gear = page.locator('[data-testid="settings-button"]:visible')
+  if ((await gear.count()) > 0) {
+    await gear.click()
+  } else {
+    await page.locator('[aria-label="More options"]:visible').click()
+    await page.getByRole('menu').getByText('Settings', { exact: true }).click()
+  }
+  await expect(page.getByTestId('settings-surface')).toBeVisible()
 }
 
 /**
@@ -416,12 +428,8 @@ test.describe('Activity Tracker App', () => {
   // ── Export ────────────────────────────────────────────────
 
   test('should open export modal from dropdown menu', async ({ page }) => {
-    // Open the dropdown menu (desktop version)
-    const menuTrigger = visibleMenuTrigger(page)
-    await menuTrigger.click()
-
-    // Click Export Data
-    await page.getByText('Export Data').click()
+    await openSettings(page)
+    await page.getByTestId('settings-export').click()
 
     // Export modal should be visible
     await expect(page.getByText('Export Your Data')).toBeVisible()
@@ -432,23 +440,19 @@ test.describe('Activity Tracker App', () => {
   })
 
   test('should show empty data warning in export modal', async ({ page }) => {
-    const menuTrigger = visibleMenuTrigger(page)
-    await menuTrigger.click()
-
-    await page.getByText('Export Data').click()
+    await openSettings(page)
+    await page.getByTestId('settings-export').click()
 
     await expect(page.getByText('No data to export')).toBeVisible()
   })
 
   // ── Import ────────────────────────────────────────────────
 
-  test('should open import modal from dropdown menu', async ({ page }) => {
-    const menuTrigger = visibleMenuTrigger(page)
-    await menuTrigger.click()
+  test('should open import from settings', async ({ page }) => {
+    await openSettings(page)
 
-    await page.getByText('Import Data').click()
+    await page.getByTestId('settings-import').click()
 
-    await expect(page.getByText('Import Data')).toBeVisible()
     await expect(page.getByText('Drop your backup file here')).toBeVisible()
   })
 
@@ -563,8 +567,8 @@ const SAMPLE_BACKUP = JSON.stringify({
 })
 
 async function openImportWithFile(page: import('@playwright/test').Page) {
-  await page.getByLabel('More options').filter({ visible: true }).first().click()
-  await page.getByRole('menu').getByText('Import Data', { exact: true }).click()
+  await openSettings(page)
+  await page.getByTestId('settings-import').click()
   await page.setInputFiles('input[type="file"]', {
     name: 'daylo-backup-2026-09-10.json',
     mimeType: 'application/json',
@@ -811,11 +815,9 @@ async function openTheReminderSheet(
   }, enabled)
 
   await page.goto('/')
-  // Two triggers are in the DOM at once, one for phones and one for wider screens.
-  await page.locator('[aria-label="More options"]:visible').click()
-  await page.getByText('Daily reminder').click()
-  await expect(page.getByTestId('reminder-settings')).toBeVisible()
-  // The sheet slides up; measuring through that returns a fraction of where things land.
+  await openSettings(page)
+  await expect(page.getByTestId('reminder-switch')).toBeVisible()
+  // The surface slides in; measuring through that returns a fraction of where things land.
   await page.waitForFunction(() => document.getAnimations().every((a) => a.playState !== 'running'))
 }
 
@@ -823,7 +825,7 @@ test.describe('the reminder sheet on a phone', () => {
   test.use({ viewport: { width: 412, height: 820 }, hasTouch: true })
 
   const ringOf = (page: import('@playwright/test').Page) =>
-    page.getByTestId('reminder-time-row').evaluate((el) => getComputedStyle(el).boxShadow)
+    page.getByTestId('reminder-time').evaluate((el) => getComputedStyle(el).boxShadow)
 
   /**
    * Reported from a phone: after tapping "Change ›" the time box kept a green ring, the
@@ -903,20 +905,30 @@ test.describe('the reminder sheet on a phone', () => {
    */
   test('clears the system bar at the bottom of the screen', async ({ page, context }) => {
     await openTheReminderSheet(page, { enabled: true })
-    const sheet = page.getByTestId('reminder-settings')
+    // Whatever is fixed to the viewport has to keep itself clear of the system's own strip,
+    // because it sits outside the wrapper that does that for the rest of the app.
+    const surface = page.getByTestId('settings-scroller')
+    const padding = () => surface.evaluate((el) => parseFloat(getComputedStyle(el).paddingBottom))
 
-    expect(await sheet.evaluate((el) => getComputedStyle(el).paddingBottom)).toBe('16px')
+    const resting = await padding()
 
     const devtools = await context.newCDPSession(page)
     await devtools.send('Emulation.setSafeAreaInsetsOverride', { insets: { bottom: 34 } })
 
-    // 34 for the system's strip, 16 of the sheet's own air above it.
-    expect(await sheet.evaluate((el) => getComputedStyle(el).paddingBottom)).toBe('50px')
+    // The difference and not the total: how much air the surface wants under its last row
+    // is a decision that may change, and what must not change is that the system's strip
+    // is added to it rather than eaten into. Zero without an override is the other half of
+    // the fix, which is that nothing moves on a desktop.
+    expect(await padding()).toBe(resting + 34)
 
-    const button = page.getByTestId('reminder-stop')
-    const box = (await button.boundingBox())!
+    // And the arithmetic has to reach the last row, which on a phone is only on screen
+    // once the list has been scrolled all the way down. That is where the complaint came
+    // from: the thing you press last, sitting flush against the bar.
+    await page.getByTestId('settings-surface').evaluate((el) => el.scrollTo(0, el.scrollHeight))
+    const last = page.getByTestId('settings-feedback')
+    const box = (await last.boundingBox())!
     const viewport = page.viewportSize()!
-    expect(viewport.height - (box.y + box.height)).toBeGreaterThanOrEqual(50)
+    expect(viewport.height - (box.y + box.height)).toBeGreaterThanOrEqual(34)
   })
 })
 
@@ -1128,9 +1140,9 @@ test.describe('a window that is not tall @webkit', () => {
 test.describe('writing from the menu @webkit', () => {
   test('is offered at any time', async ({ page }) => {
     await page.goto('/')
-    await page.locator('[aria-label="More options"]:visible').click()
+    await openSettings(page)
 
-    await expect(page.getByText('Send feedback')).toBeVisible()
+    await expect(page.getByTestId('settings-feedback')).toBeVisible()
   })
 })
 
@@ -1235,11 +1247,11 @@ test.describe('the check-in in a browser @webkit', () => {
   test('is not in the menu', async ({ page }) => {
     await seedPastTheGate(page, { firstOpenedAt: 'yesterday' })
 
-    await page.locator('[aria-label="More options"]:visible').click()
+    await openSettings(page)
 
-    await expect(page.getByText('Anonymous check-in')).toHaveCount(0)
-    // The one next to it is there, so this is not passing because the menu never opened.
-    await expect(page.getByText('Send feedback')).toBeVisible()
+    await expect(page.getByTestId('checkin-switch')).toHaveCount(0)
+    // The one next to it is there, so this is not passing because nothing opened.
+    await expect(page.getByTestId('settings-feedback')).toBeVisible()
   })
 
   // Daylo does not ask about the check-in on any platform any more: the switch is in the

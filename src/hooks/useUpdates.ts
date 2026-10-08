@@ -11,7 +11,6 @@ import {
   type TakeStep,
 } from '../lib/updater'
 import type { UpdateState } from '../components/updates/UpdateNotice'
-import type { UpdateStatus } from '../components/updates/UpdateSettings'
 import { useCalendarStore } from '../store'
 
 /**
@@ -31,6 +30,17 @@ import { useCalendarStore } from '../store'
  *  not news, and every ask is a request that leaves the machine. */
 const ASK_AGAIN_AFTER = 60 * 60 * 1000
 
+export type UpdateStatus =
+  | { kind: 'idle' }
+  | { kind: 'checking' }
+  | { kind: 'up-to-date' }
+  | { kind: 'available'; version: string; canInstall: boolean }
+  /** Being downloaded or installed right now, which the card behind this is narrating. */
+  | { kind: 'working' }
+  /** Installed, and the relaunch did not happen by itself. */
+  | { kind: 'restart' }
+  | { kind: 'failed' }
+
 export interface Updates {
   /** Whether this copy can be told about updates at all: the menu entry hangs off it. */
   supported: boolean
@@ -42,6 +52,15 @@ export interface Updates {
   waiting: string | null
   /** The one action: check, update, go to the downloads page, or restart. */
   act: () => void
+  /**
+   * Ask GitHub, and nothing else, whatever has already been found.
+   *
+   * Apart from `act` because the caller, and not the state, decides which one it wants. A
+   * whole row that can be pressed by somebody running a thumb down a list of settings must
+   * never install: installing closes the application and opens it again. Only the small
+   * word next to the version does that.
+   */
+  check: () => void
   /** The cross. Later, not no: the dot keeps the offer. */
   later: () => void
 }
@@ -162,6 +181,10 @@ export function useUpdates(): Updates {
     })
   }, [found, look, taking])
 
+  const check = useCallback(() => {
+    void look(true)
+  }, [look])
+
   const later = useCallback(() => {
     setShowCard(false)
     setTaking(null)
@@ -207,6 +230,7 @@ export function useUpdates(): Updates {
     // Exactly when there is something waiting and the card is not the one saying it.
     waiting: found !== null && notice === null ? found.version : null,
     act,
+    check,
     later,
   }
 }
