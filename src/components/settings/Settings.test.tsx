@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { render, screen, act } from '@testing-library/react'
+import { render, screen, act, fireEvent, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { Settings } from './Settings'
 import { useCalendarStore } from '../../store'
@@ -9,6 +9,15 @@ vi.mock('../../lib/checkin', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../../lib/checkin')>()),
   turnOnCheckin: vi.fn().mockResolvedValue(undefined),
   turnOffCheckin: vi.fn().mockResolvedValue('sent'),
+}))
+
+const enableReminder = vi.hoisted(() => vi.fn())
+const disableReminder = vi.hoisted(() => vi.fn())
+
+vi.mock('../../lib/reminders', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../../lib/reminders')>()),
+  enableReminder,
+  disableReminder,
 }))
 
 const check = vi.fn()
@@ -39,6 +48,8 @@ function show({
 beforeEach(() => {
   check.mockReset()
   install.mockReset()
+  enableReminder.mockReset().mockResolvedValue({ outcome: 'on' })
+  disableReminder.mockReset().mockResolvedValue(undefined)
   useCalendarStore.setState({
     activities: [],
     logs: [],
@@ -169,5 +180,120 @@ describe('arriving', () => {
     } finally {
       vi.useRealTimers()
     }
+  })
+})
+
+describe('the switches', () => {
+  it('turns the check-in on and off from the surface', async () => {
+    const user = userEvent.setup()
+    const { turnOnCheckin, turnOffCheckin } = await import('../../lib/checkin')
+    show()
+
+    await user.click(screen.getByTestId('checkin-switch'))
+    expect(turnOnCheckin).toHaveBeenCalledOnce()
+
+    useCalendarStore.setState({ checkinEnabled: true })
+    await user.click(screen.getByTestId('checkin-switch'))
+    expect(turnOffCheckin).toHaveBeenCalledOnce()
+  })
+
+  it('stops and starts the automatic check for versions', async () => {
+    const user = userEvent.setup()
+    show()
+
+    await user.click(screen.getByTestId('updates-switch'))
+
+    expect(useCalendarStore.getState().updatesEnabled).toBe(false)
+  })
+
+  // Each switch says what it turns on and what that costs, in the row itself, because a
+  // switch whose meaning is a paragraph away is a switch pressed without reading it.
+  it('say what they are for where they are', () => {
+    show()
+
+    expect(screen.getByText(/Nothing about what you track/)).toBeInTheDocument()
+    expect(screen.getByText('Asks GitHub. Nothing about you.')).toBeInTheDocument()
+  })
+})
+
+describe('what it says about a new version', () => {
+  const cases: [UpdateStatus, string][] = [
+    [{ kind: 'checking' }, 'Checking…'],
+    [{ kind: 'up-to-date' }, 'Daylo is up to date.'],
+    [{ kind: 'available', version: '1.5.0', canInstall: true }, 'Daylo 1.5.0 is out.'],
+    [{ kind: 'working' }, 'Daylo is updating itself.'],
+    [{ kind: 'restart' }, 'Done. Restart Daylo to finish.'],
+    [{ kind: 'failed' }, 'Could not check just now.'],
+  ]
+
+  for (const [status, words] of cases) {
+    it(`says "${words}" for ${status.kind}`, () => {
+      show({ status })
+
+      expect(screen.getByTestId('settings-update-status')).toHaveTextContent(words)
+    })
+  }
+
+  // Nothing at all before anybody has asked: a screen that opens knowing nothing should
+  // claim nothing, and "up to date" before a check is a claim.
+  it('says nothing at all when nothing is known', () => {
+    show({ status: { kind: 'idle' } })
+
+    expect(screen.getByTestId('settings-update-status')).toHaveTextContent('')
+  })
+})
+
+describe('the reminder row', () => {
+  it('says the time it is set for', () => {
+    useCalendarStore.setState({ reminderEnabled: true, reminderHour: 20, reminderMinute: 0 })
+
+    show({ hasReminders: true })
+
+    expect(screen.getByText('At 8:00 PM')).toBeInTheDocument()
+  })
+
+  it('says it is off when it is', () => {
+    useCalendarStore.setState({ reminderEnabled: false })
+
+    show({ hasReminders: true })
+
+    expect(screen.getByText('Off')).toBeInTheDocument()
+  })
+})
+
+describe('the reminder time, and the switch beside it', () => {
+  it('shows the stored time and asks for a new one when it is changed', async () => {
+    useCalendarStore.setState({ reminderEnabled: false, reminderHour: 21, reminderMinute: 0 })
+    show({ hasReminders: true })
+    const field = screen.getByTestId('reminder-time') as HTMLInputElement
+    expect(field.value).toBe('21:00')
+
+    fireEvent.change(field, { target: { value: '07:15' } })
+
+    // Off, so there is nothing to reschedule and the time is only remembered.
+    expect(useCalendarStore.getState().reminderHour).toBe(7)
+    expect(useCalendarStore.getState().reminderMinute).toBe(15)
+  })
+
+  it('turns it on at the time that is showing', async () => {
+    const user = userEvent.setup()
+    useCalendarStore.setState({ reminderEnabled: false, reminderHour: 21, reminderMinute: 0 })
+    show({ hasReminders: true })
+
+    await user.click(screen.getByTestId('reminder-switch'))
+
+    await waitFor(() => expect(enableReminder).toHaveBeenCalledWith(21, 0))
+  })
+
+  // What the phone said, where the switch is, rather than a toast that has gone by the time
+  // somebody looks for a reason.
+  it('quotes the phone where it refused', async () => {
+    const user = userEvent.setup()
+    enableReminder.mockResolvedValue({ outcome: 'failed', reason: 'exact alarms are off' })
+    show({ hasReminders: true })
+
+    await user.click(screen.getByTestId('reminder-switch'))
+
+    expect(await screen.findByText(/exact alarms are off/)).toBeInTheDocument()
   })
 })
