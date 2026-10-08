@@ -297,3 +297,42 @@ describe('the reminder time, and the switch beside it', () => {
     expect(await screen.findByText(/exact alarms are off/)).toBeInTheDocument()
   })
 })
+
+/**
+ * What each switch costs, said where the switch is.
+ *
+ * The sheets this screen replaced warned before turning the check-in off, because turning
+ * it off deletes the number and a thing that deletes something should say so before it is
+ * pressed and not after. The new design had no room for the warning it used to show, so
+ * the warning is a line under the switch instead of being quietly dropped.
+ */
+describe('what the switches cost', () => {
+  it('says the number goes when the check-in is turned off', () => {
+    show()
+
+    expect(screen.getByText('Turning it off deletes the random number.')).toBeInTheDocument()
+  })
+
+  it('says the reminder may arrive late, because Android decides when', () => {
+    show({ hasReminders: true })
+
+    expect(screen.getByText('Android may deliver it a few minutes late.')).toBeInTheDocument()
+  })
+
+  // Both lines are named by the switch, so somebody listening rather than looking is told
+  // the cost at the same moment as the choice.
+  it('reads them out with the switch they belong to', () => {
+    show({ hasReminders: true })
+
+    const described = screen
+      .getByRole('switch', { name: 'Anonymous check-in' })
+      .getAttribute('aria-describedby')
+    const said = (described ?? '')
+      .split(' ')
+      .map((id) => document.getElementById(id)?.textContent ?? '')
+      .join(' ')
+
+    expect(said).toContain('Nothing about what you track')
+    expect(said).toContain('deletes the random number')
+  })
+})

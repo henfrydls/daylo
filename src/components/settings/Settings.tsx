@@ -95,6 +95,7 @@ function GoRow({
 function SwitchRow({
   label,
   under,
+  note,
   checked,
   onChange,
   busy = false,
@@ -102,6 +103,8 @@ function SwitchRow({
 }: {
   label: string
   under?: string
+  /** What it costs, under what it is. Read out with the switch, not left to be found. */
+  note?: string
   checked: boolean
   onChange: (next: boolean) => void
   busy?: boolean
@@ -117,12 +120,19 @@ function SwitchRow({
             {under}
           </p>
         )}
+        {note === undefined ? null : (
+          <p id={`${id}-note`} className="mt-0.5 text-sm text-gray-500">
+            {note}
+          </p>
+        )}
       </div>
       <Switch
         checked={checked}
         onChange={onChange}
         label={label}
-        describedBy={under === undefined ? undefined : id}
+        describedBy={[under === undefined ? null : id, note === undefined ? null : `${id}-note`]
+          .filter(Boolean)
+          .join(' ')}
         disabled={busy}
         data-testid={testId}
       />
@@ -217,6 +227,7 @@ export function Settings({
               <SwitchRow
                 label="Daily reminder"
                 under={reminder.enabled ? `At ${reminder.at}` : 'Off'}
+                note="Android may deliver it a few minutes late."
                 checked={reminder.enabled}
                 busy={reminder.busy}
                 testId="reminder-switch"
@@ -262,6 +273,7 @@ export function Settings({
                 <SwitchRow
                   label="Anonymous check-in"
                   under="Says the app is still in use. Nothing about what you track."
+                  note="Turning it off deletes the random number."
                   checked={checkinEnabled}
                   testId="checkin-switch"
                   onChange={(next) => {
