@@ -86,6 +86,14 @@ export function WhatGetsSent({ fields, id }: WhatGetsSentProps) {
             ))}
           </dl>
 
+          {/* The one statement of its kind anywhere in the app, and the reason it is in
+              here rather than only in the policy: this panel is where the long version
+              goes. What was dropped alongside it was where the number is made, which the
+              line above already says by showing it. */}
+          <p>
+            Like any website, our server sees your connection&apos;s address and does not keep it.
+          </p>
+
           <p>Turning it off deletes the random number.</p>
         </div>
       ) : null}

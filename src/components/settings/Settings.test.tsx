@@ -345,22 +345,31 @@ describe('what the switches cost', () => {
   })
 
   /**
-   * The switch carries nothing now, and that is the change rather than an oversight.
+   * The switch shows one line and still says two, which is the whole of this change.
    *
-   * It used to name two lines through aria-describedby, so somebody listening was told the
-   * cost at the moment of the choice. Both lines are now behind the row under it, which is
-   * one tap for a pointer and one more stop for a reader, and that is the trade this makes:
-   * one place saying it instead of two places saying overlapping halves of it. The test is
-   * kept, pointed at where the words went, so that a later change cannot drop them
-   * altogether and be told by nobody.
+   * The row is a switch and nothing else to look at: everything it does is in What gets
+   * sent, one row below. A screen reader has no "one row below" though. It announces the
+   * switch and moves on, so the words it used to read out are still named by the switch,
+   * out of sight. Not a second version written for machines: the same sentences, from the
+   * panel under it.
    */
-  it('says it under the row below, now that the switch does not', async () => {
+  it('still reads out what it costs, to somebody who is listening', async () => {
     const user = userEvent.setup()
     show()
     const checkin = screen.getByRole('switch', { name: 'Anonymous check-in' })
 
-    expect(checkin.getAttribute('aria-describedby') ?? '').toBe('')
+    const named = (checkin.getAttribute('aria-describedby') ?? '')
+      .split(' ')
+      .filter(Boolean)
+      .map((id) => document.getElementById(id))
+    const said = named.map((node) => node?.textContent ?? '').join(' ')
 
+    expect(said).toContain('still in use')
+    expect(said).toContain('deletes the random number')
+    // Out of sight, not out of the page: the row shows one line.
+    expect(named.every((node) => node?.className.includes('sr-only'))).toBe(true)
+
+    // And the same words are readable by anybody, one row down.
     await user.click(screen.getByTestId('checkin-what-gets-sent'))
     const panel = screen.getByTestId('checkin-what-gets-sent').nextElementSibling
 

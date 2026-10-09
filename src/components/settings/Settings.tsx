@@ -97,6 +97,7 @@ function GoRow({
 function SwitchRow({
   label,
   under,
+  heardOnly,
   note,
   checked,
   onChange,
@@ -105,6 +106,15 @@ function SwitchRow({
 }: {
   label: string
   under?: string
+  /**
+   * The same thing `under` is, for somebody who is listening instead of looking.
+   *
+   * A row can be one line on screen and still owe a reader what the switch costs: a
+   * screen reader announces the switch and moves on, and whatever is in the next row is
+   * found later or not at all. These are words already on the screen somewhere else, not
+   * a second version written for machines.
+   */
+  heardOnly?: string
   /** What it costs, under what it is. Read out with the switch, not left to be found. */
   note?: string
   checked: boolean
@@ -122,6 +132,11 @@ function SwitchRow({
             {under}
           </p>
         )}
+        {heardOnly === undefined ? null : (
+          <p id={`${id}-heard`} className="sr-only">
+            {heardOnly}
+          </p>
+        )}
         {note === undefined ? null : (
           <p id={`${id}-note`} className="mt-0.5 text-sm text-gray-500">
             {note}
@@ -132,7 +147,11 @@ function SwitchRow({
         checked={checked}
         onChange={onChange}
         label={label}
-        describedBy={[under === undefined ? null : id, note === undefined ? null : `${id}-note`]
+        describedBy={[
+          under === undefined ? null : id,
+          heardOnly === undefined ? null : `${id}-heard`,
+          note === undefined ? null : `${id}-note`,
+        ]
           .filter(Boolean)
           .join(' ')}
         disabled={busy}
@@ -297,6 +316,7 @@ export function Settings({
               <>
                 <SwitchRow
                   label="Anonymous check-in"
+                  heardOnly="Says the app is still in use. Turning it off deletes the random number."
                   checked={checkinEnabled}
                   testId="checkin-switch"
                   onChange={(next) => {
