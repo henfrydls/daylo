@@ -114,6 +114,10 @@ function App() {
   const { selectedDate, currentView, setCurrentView, _viewTransitionDirection } = useCalendarStore()
   const [isExportOpen, setIsExportOpen] = useState(false)
   const [isImportOpen, setIsImportOpen] = useState(false)
+  // Whether each one has ever been asked for, which is what decides if it is in the page
+  // at all. See where they are rendered for why it is not simply whether it is open.
+  const [exportAsked, setExportAsked] = useState(false)
+  const [importAsked, setImportAsked] = useState(false)
   const [isBottomSheetOpen, setIsBottomSheetOpen] = useState(false)
   // One surface for everything there is to decide, and one flag for it. Reminders first
   // when that is what was asked for, which is the only thing the menu still chooses.
@@ -557,14 +561,22 @@ function App() {
               cleared, or it has nowhere to go back to. It renders nothing when closed. */}
           <QuickLog />
 
-          {/* Export/Import Modals - Lazy loaded */}
+          {/* Export and Import, which are loaded the first time they are asked for and
+              then stay. Not `{isExportOpen && ...}`: with that, the prop can never be
+              false while the component exists, so the dialog is born open and has no frame
+              to come up from, and it is taken out of the page the instant it closes, so
+              the frames where it goes down never happen. Measured before and after, frame
+              by frame, in e2e/dialog.spec.ts.
+
+              Staying costs a dialog that renders null, and keeps the lazy chunk off the
+              first paint, which is why it is "has been asked for" and not "always". */}
           <Suspense fallback={null}>
-            {isExportOpen && (
+            {exportAsked && (
               <ExportModal isOpen={isExportOpen} onClose={() => setIsExportOpen(false)} />
             )}
           </Suspense>
           <Suspense fallback={null}>
-            {isImportOpen && (
+            {importAsked && (
               <ImportModal isOpen={isImportOpen} onClose={() => setIsImportOpen(false)} />
             )}
           </Suspense>
@@ -608,8 +620,14 @@ function App() {
           <Settings
             isOpen={settings === 'open'}
             onClose={() => setSettings('closed')}
-            onExport={() => setIsExportOpen(true)}
-            onImport={() => setIsImportOpen(true)}
+            onExport={() => {
+              setExportAsked(true)
+              setIsExportOpen(true)
+            }}
+            onImport={() => {
+              setImportAsked(true)
+              setIsImportOpen(true)
+            }}
             onFeedback={askForFeedback}
             hasReminders={hasReminders}
             canCheckIn={canCheckIn}

@@ -1,11 +1,18 @@
 import { useRef } from 'react'
 import { createPortal } from 'react-dom'
 import type { ReactNode } from 'react'
-import { useFocusTrap, useAnimatedPresence } from '../../hooks'
+import { useFocusTrap, useAnimatedPresence, useArrival } from '../../hooks'
 import { XIcon } from './Icons'
 
 /**
  * The dialog, and on a phone the sheet that comes up from the bottom.
+ *
+ * It comes up and goes down, which took two fixes and neither was the transition itself.
+ * One is the frame it comes from, which is what useArrival is for. The other is that
+ * `scale-95` sets the `scale` property and the transition named `transform`: Tailwind 4
+ * scales the way it translates, with the property of that name, so the list named
+ * something this element never changes. Both measured in e2e/dialog.spec.ts, frame by
+ * frame, because a class list that names a transition proves nothing about movement.
  *
  * The bottom padding is the design's own plus whatever the system has reserved down
  * there. A phone on gesture navigation keeps a strip at the bottom of the screen for its
@@ -22,6 +29,19 @@ import { XIcon } from './Icons'
  * It needs viewport-fit=cover in the viewport meta to be anything but zero, which
  * index.html has.
  */
+/** What the leaving classes say, and what the dialog is given to do it in. */
+const LEAVES_IN = 150
+/**
+ * Two frames more than the transition itself.
+ *
+ * The timer starts when React commits the leaving classes; the browser starts the
+ * transition at the next paint, so the two are a frame apart and the timer finishes first.
+ * Measured with the timer set to the transition's own length: the dialog was taken out of
+ * the page at opacity 0.34, which is a cut rather than a fade, and the ease it leaves on
+ * does most of its work at the end.
+ */
+const STAYS_FOR = LEAVES_IN + 40
+
 interface ModalProps {
   isOpen: boolean
   onClose: () => void
@@ -46,7 +66,11 @@ export function Modal({
   'data-testid': testId,
 }: ModalProps) {
   const modalRef = useRef<HTMLDivElement>(null)
-  const { shouldRender, isVisible } = useAnimatedPresence(isOpen, 150)
+  const { shouldRender, isVisible } = useAnimatedPresence(isOpen, STAYS_FOR)
+  // A frame at the state it comes from, before it is told to go to the other one. Without
+  // it the dialog is painted finished and the transition has nothing to run: it was simply
+  // there, measured at opacity 1 on the first frame it existed.
+  const arrived = useArrival(isVisible)
 
   useFocusTrap(modalRef, isOpen, { onEscape: onClose, autoFocus: false })
 
@@ -55,14 +79,14 @@ export function Modal({
   return createPortal(
     <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center">
       <div
-        className={`absolute inset-0 bg-black/50 transition-opacity duration-150 ${isVisible ? 'opacity-100' : 'opacity-0'}`}
+        className={`absolute inset-0 bg-black/50 transition-opacity duration-150 ${arrived ? 'opacity-100' : 'opacity-0'}`}
         onClick={onClose}
         aria-hidden="true"
       />
       <div
         ref={modalRef}
-        className={`relative bg-white rounded-t-xl sm:rounded-xl shadow-xl max-w-md w-full mx-0 sm:mx-4 px-6 pt-4 sm:pt-6 pb-[calc(1rem_+_env(safe-area-inset-bottom))] sm:pb-[calc(1.5rem_+_env(safe-area-inset-bottom))] max-h-[90dvh] flex flex-col overflow-hidden transition-[transform,opacity] ${
-          isVisible
+        className={`relative bg-white rounded-t-xl sm:rounded-xl shadow-xl max-w-md w-full mx-0 sm:mx-4 px-6 pt-4 sm:pt-6 pb-[calc(1rem_+_env(safe-area-inset-bottom))] sm:pb-[calc(1.5rem_+_env(safe-area-inset-bottom))] max-h-[90dvh] flex flex-col overflow-hidden motion-safe:transition-[scale,opacity] ${
+          arrived
             ? 'opacity-100 scale-100 duration-250 ease-[var(--ease-emphasized-decel)]'
             : 'opacity-0 scale-95 duration-150 ease-[var(--ease-emphasized-accel)]'
         }`}
