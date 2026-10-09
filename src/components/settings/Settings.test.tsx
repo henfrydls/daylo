@@ -127,7 +127,7 @@ describe('what each platform is shown', () => {
     expect(screen.queryByTestId('checkin-switch')).not.toBeInTheDocument()
     // The heading stays: the sentence about feedback under it is still true, and it is the
     // only place that says what a browser does and does not send.
-    expect(screen.getByText('What leaves your device')).toBeInTheDocument()
+    expect(screen.getByText('Privacy')).toBeInTheDocument()
     expect(screen.getByText(/only when you press Send/)).toBeInTheDocument()
   })
 })
@@ -334,5 +334,71 @@ describe('what the switches cost', () => {
 
     expect(said).toContain('Nothing about what you track')
     expect(said).toContain('deletes the random number')
+  })
+})
+
+describe('the section about what leaves', () => {
+  // Called Privacy, because that is the word somebody looking for this uses. The old
+  // heading described the mechanism and you had to already know what you were after.
+  it('is called Privacy', () => {
+    show()
+
+    expect(screen.getByText('Privacy')).toBeInTheDocument()
+    expect(screen.queryByText('What leaves your device')).not.toBeInTheDocument()
+  })
+
+  // At the end of the short version rather than among the links at the foot, where
+  // somebody reading this section to decide something would not have looked.
+  it('ends with the policy, pointing at the real one', () => {
+    show()
+
+    const row = screen.getByTestId('settings-privacy')
+    expect(row).toHaveAttribute('href', 'https://daylo.henfrydls.com/privacy/')
+    expect(row).toHaveAttribute('rel', expect.stringContaining('noopener'))
+  })
+})
+
+/**
+ * The reminder's second half, which only exists once there is a reminder.
+ *
+ * A row asking when to send something that is not being sent is a question about nothing,
+ * and the line about Android's timing is advice nobody needs yet.
+ */
+describe('the reminder, folded away while it is off', () => {
+  const details = () => screen.getByTestId('reminder-details')
+
+  it('keeps the time and the warning out of reach while it is off', () => {
+    useCalendarStore.setState({ reminderEnabled: false })
+
+    show({ hasReminders: true })
+
+    expect(details().className).toContain('grid-rows-[0fr]')
+    // Out of reach and not merely out of sight: a field folded away must not be something
+    // Tab finds, and the line must not be read out as if it applied.
+    const inner = details().firstElementChild
+    expect(inner).toHaveAttribute('inert')
+    expect(inner).toHaveAttribute('aria-hidden', 'true')
+  })
+
+  it('opens them out once there is a reminder', () => {
+    useCalendarStore.setState({ reminderEnabled: true, reminderHour: 20, reminderMinute: 0 })
+
+    show({ hasReminders: true })
+
+    expect(details().className).toContain('grid-rows-[1fr]')
+    const inner = details().firstElementChild
+    expect(inner).not.toHaveAttribute('inert')
+    expect(screen.getByText('Android may deliver it a few minutes late.')).toBeInTheDocument()
+  })
+
+  // The switch itself never folds: turning it back on has to be possible from where
+  // turning it off left you.
+  it('leaves the switch where it was', () => {
+    useCalendarStore.setState({ reminderEnabled: false })
+
+    show({ hasReminders: true })
+
+    expect(screen.getByTestId('reminder-switch')).toBeInTheDocument()
+    expect(screen.getByText('Off')).toBeInTheDocument()
   })
 })
