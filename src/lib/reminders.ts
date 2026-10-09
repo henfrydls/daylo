@@ -80,13 +80,19 @@ export const INSTEAD = 20
  * The time to offer somebody who has just made their first activity.
  *
  * The next hour on the hour, because the question is being asked now and the answer should
- * be soon enough to mean something: told at 22:52, a reminder at 23:00 is tonight. A fixed
+ * be soon enough to mean something: told at 20:52, a reminder at 21:00 is tonight. A fixed
  * hour chosen when this was written is a reminder somebody has to go and move.
  *
  * Except at night. Between eleven and seven the next hour is a notification nobody wants,
  * so it offers eight in the evening instead: the next time of day somebody would plausibly
  * be told anything. Seven is outside the quiet window on purpose, because being reminded
  * at seven in the morning is a choice people make.
+ *
+ * That is a rule about the hour offered, so read from the clock it starts an hour earlier:
+ * from ten at night until six in the morning the next hour is already in the window, and
+ * eight in the evening is what comes back. This paragraph used to give 22:52 as the
+ * example of a reminder tonight, which is the one case `does not propose eleven` exists to
+ * forbid. Nothing was wrong with the code; the example was.
  */
 export function offeredReminderTime(now: Date = new Date()): { hour: number; minute: number } {
   const next = (now.getHours() + 1) % 24
