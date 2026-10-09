@@ -188,3 +188,45 @@ test('and the second time is like the first', async ({ page }) => {
   expect(seen[0].opacity).toBeLessThan(0.5)
   expect(seen[seen.length - 1].opacity).toBe(1)
 })
+
+/**
+ * What the mount guard used to guarantee for free, and now rests on code.
+ *
+ * Import was taken out of the page when it closed, so everything it held went with it and
+ * the next opening started clean whatever the component did. It stays in the page now, so
+ * the reset it already had on every close path is the only thing keeping a file somebody
+ * chose once from being there the next time they open it.
+ */
+test('Import opens clean after a file was chosen and it was closed', async ({ page }) => {
+  await page.locator('[data-testid="settings-import"]').click()
+  await expect(page.locator(DIALOG)).toBeVisible()
+
+  await page.locator('input[type="file"]').setInputFiles({
+    name: 'daylo.json',
+    mimeType: 'application/json',
+    buffer: Buffer.from(
+      JSON.stringify({
+        activities: [
+          {
+            id: 'b1',
+            name: 'Swim',
+            color: '#3B82F6',
+            createdAt: '2026-01-01T00:00:00.000Z',
+            updatedAt: '2026-01-01T00:00:00.000Z',
+          },
+        ],
+        logs: [],
+      })
+    ),
+  })
+  await expect(page.getByText('Import mode:')).toBeVisible()
+
+  await page.getByRole('button', { name: 'Close modal' }).click()
+  await expect(page.locator(DIALOG)).toBeHidden()
+
+  await page.locator('[data-testid="settings-import"]').click()
+  await expect(page.locator(DIALOG)).toBeVisible()
+
+  // Nothing of the last time: no file read, so nothing to choose a mode for.
+  await expect(page.getByText('Import mode:')).toBeHidden()
+})
