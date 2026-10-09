@@ -22,6 +22,7 @@ const TAKES = 250
 const WEBSITE = 'https://daylo.henfrydls.com'
 const SOURCE = 'https://github.com/henfrydls/daylo'
 const LICENSE = 'https://github.com/henfrydls/daylo/blob/main/LICENSE'
+const PRIVACY = 'https://daylo.henfrydls.com/privacy/'
 
 interface SettingsProps {
   isOpen: boolean
@@ -227,7 +228,6 @@ export function Settings({
               <SwitchRow
                 label="Daily reminder"
                 under={reminder.enabled ? `At ${reminder.at}` : 'Off'}
-                note="Android may deliver it a few minutes late."
                 checked={reminder.enabled}
                 busy={reminder.busy}
                 testId="reminder-switch"
@@ -236,25 +236,49 @@ export function Settings({
                   else void reminder.turnOff()
                 }}
               />
-              <div className="flex min-h-[48px] items-center justify-between gap-3 py-3">
-                <label htmlFor="reminder-time" className="text-gray-900">
-                  Time
-                </label>
-                <input
-                  id="reminder-time"
-                  type="time"
-                  value={`${String(reminder.hour).padStart(2, '0')}:${String(reminder.minute).padStart(2, '0')}`}
-                  onChange={(e) => {
-                    const [h, m] = e.target.value.split(':').map(Number)
-                    if (Number.isFinite(h) && Number.isFinite(m)) reminder.changeTime(h, m)
-                  }}
-                  onFocus={ring.onFocus}
-                  onBlur={ring.onBlur}
-                  data-testid="reminder-time"
-                  className={`rounded-lg bg-transparent px-2 py-1 text-right text-gray-500 focus:outline-none ${
-                    ring.visible ? 'ring-2 ring-emerald-500' : ''
-                  }`}
-                />
+              {/* Only once there is a reminder to have a time. A row asking when to send
+                  something that is not being sent is a question about nothing, and the
+                  line about Android's timing is advice nobody needs yet.
+
+                  Folded with grid rows rather than a height, because the height of this is
+                  whatever the time field and a line of text come to, and a number written
+                  here would be wrong the first time either of them changed. It is inert
+                  while it is away, so a collapsed field is not something Tab finds. */}
+              <div
+                className={`grid transition-[grid-template-rows] duration-200 ease-[var(--ease-emphasized-decel)] motion-reduce:transition-none ${
+                  reminder.enabled ? 'grid-rows-[1fr]' : 'grid-rows-[0fr]'
+                }`}
+                data-testid="reminder-details"
+              >
+                <div
+                  className="overflow-hidden"
+                  inert={!reminder.enabled}
+                  aria-hidden={reminder.enabled ? undefined : 'true'}
+                >
+                  <div className="flex min-h-[48px] items-center justify-between gap-3 border-t border-gray-200 py-3">
+                    <label htmlFor="reminder-time" className="text-gray-900">
+                      Time
+                    </label>
+                    <input
+                      id="reminder-time"
+                      type="time"
+                      value={`${String(reminder.hour).padStart(2, '0')}:${String(reminder.minute).padStart(2, '0')}`}
+                      onChange={(e) => {
+                        const [h, m] = e.target.value.split(':').map(Number)
+                        if (Number.isFinite(h) && Number.isFinite(m)) reminder.changeTime(h, m)
+                      }}
+                      onFocus={ring.onFocus}
+                      onBlur={ring.onBlur}
+                      data-testid="reminder-time"
+                      className={`rounded-lg bg-transparent px-2 py-1 text-right text-gray-500 focus:outline-none ${
+                        ring.visible ? 'ring-2 ring-emerald-500' : ''
+                      }`}
+                    />
+                  </div>
+                  <p className="pb-3 text-sm text-gray-500">
+                    Android may deliver it a few minutes late.
+                  </p>
+                </div>
               </div>
               {reminder.failure === null ? null : (
                 <p className="py-3 text-sm text-gray-500">{`The phone would not set it: ${reminder.failure}`}</p>
@@ -267,7 +291,7 @@ export function Settings({
             <GoRow label="Import" onClick={onImport} testId="settings-import" />
           </Section>
 
-          <Section title="What leaves your device">
+          <Section title="Privacy">
             {canCheckIn ? (
               <>
                 <SwitchRow
@@ -301,6 +325,10 @@ export function Settings({
                 Only what you type, and only when you press Send.
               </p>
             </div>
+            {/* The long version, at the end of the short one. It was only in the footer
+                among the other links, where somebody reading this section to decide
+                something would not have looked for it. */}
+            <AwayRow href={PRIVACY} label="Privacy policy" testId="settings-privacy" />
           </Section>
 
           <Section title="About">
@@ -393,6 +421,27 @@ function said(status: UpdateStatus): string {
     case 'idle':
       return ''
   }
+}
+
+/** A row that leaves Daylo, shaped like the rows it sits among. */
+function AwayRow({ href, label, testId }: { href: string; label: string; testId?: string }) {
+  return (
+    <a
+      href={href}
+      target="_blank"
+      rel="noopener noreferrer"
+      data-testid={testId}
+      onClick={(event) => {
+        if (!isTauri()) return
+        event.preventDefault()
+        void openLink(href)
+      }}
+      className="flex min-h-[48px] w-full items-center justify-between gap-3 py-3 text-gray-900 focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500"
+    >
+      <span>{label}</span>
+      <ChevronRightIcon className="h-5 w-5 shrink-0 text-gray-400" aria-hidden="true" />
+    </a>
+  )
 }
 
 /** A link that leaves Daylo, which inside the application must not happen in the window. */

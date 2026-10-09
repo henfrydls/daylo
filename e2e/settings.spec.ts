@@ -94,7 +94,11 @@ test('the panel says what this copy can and cannot do', async ({ page }) => {
   // What it does have: the data, the one sentence about feedback, and who made it.
   await expect(page.getByText('1 activity, 1 entry')).toBeVisible()
   await expect(page.getByTestId('settings-export')).toBeVisible()
-  await expect(page.getByText('What leaves your device')).toBeVisible()
+  await expect(page.getByRole('heading', { name: 'Privacy', exact: true })).toBeVisible()
+  await expect(page.getByTestId('settings-privacy')).toHaveAttribute(
+    'href',
+    'https://daylo.henfrydls.com/privacy/'
+  )
   await expect(page.getByText('Made by DLSLabs')).toBeVisible()
 })
 
