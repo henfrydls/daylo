@@ -1,5 +1,5 @@
 import { useRef, useCallback, useEffect, useState, type ReactNode } from 'react'
-import { useFocusTrap, useAnimatedPresence } from '../../hooks'
+import { useAnimatedPresence, useArrival, useFocusTrap } from '../../hooks'
 
 interface BottomSheetProps {
   isOpen: boolean
@@ -11,6 +11,15 @@ interface BottomSheetProps {
 const ANIMATION_DURATION = 300
 const DISMISS_THRESHOLD = 0.3
 
+/**
+ * How far down a finger goes before the sheet is being dragged rather than touched.
+ *
+ * The same eight pixels the carousel uses to decide what a gesture is, and for the same
+ * reason: the first two or three pixels of any press are noise, and deciding there turns
+ * a tap into a drag.
+ */
+const DRAG_AT = 8
+
 export function BottomSheet({
   isOpen,
   onClose,
@@ -20,20 +29,10 @@ export function BottomSheet({
   const sheetRef = useRef<HTMLDivElement>(null)
   const { shouldRender, isVisible } = useAnimatedPresence(isOpen, ANIMATION_DURATION)
 
-  // Delay visibility by one frame so the enter transition can play
-  // (component must render off-screen first, then transition on-screen)
-  const [hasEntered, setHasEntered] = useState(false)
-  useEffect(() => {
-    if (isVisible) {
-      requestAnimationFrame(() => requestAnimationFrame(() => setHasEntered(true)))
-    } else {
-      /* eslint-disable react-hooks/set-state-in-effect */
-      setHasEntered(false)
-      /* eslint-enable react-hooks/set-state-in-effect */
-    }
-  }, [isVisible])
-
-  const sheetVisible = hasEntered && isVisible
+  // Two frames under the bottom edge before it comes up, with the frames belonging to the
+  // opening that asked for them. This sheet had the same late-frame hole the day sheet
+  // had: shut faster than they land and the next opening had nowhere to come up from.
+  const sheetVisible = useArrival(isVisible)
 
   useFocusTrap(sheetRef, isOpen, { onEscape: onClose, autoFocus: false })
 
@@ -42,6 +41,7 @@ export function BottomSheet({
   const [isDragging, setIsDragging] = useState(false)
   const [sheetHeight, setSheetHeight] = useState(0)
   const dragStartY = useRef(0)
+  const dragStartX = useRef(0)
 
   // Measure sheet height when visible
   useEffect(() => {
@@ -50,15 +50,30 @@ export function BottomSheet({
     }
   }, [isVisible])
 
+  /**
+   * Where the finger went down, and nothing decided yet.
+   *
+   * It used to begin a drag here, on any touch at all. Everything inside the sheet is
+   * something you tap, so every tap put the sheet into a drag for as long as the finger
+   * was down: the backdrop's blur is cut while dragging, with no transition, so it blinked
+   * off and back on under each press. Henfry filmed six of those in four seconds on the
+   * Activities sheet, including the pencil.
+   */
   const handlePointerDown = useCallback((e: React.PointerEvent) => {
     dragStartY.current = e.clientY
-    setIsDragging(true)
+    dragStartX.current = e.clientX
   }, [])
 
   const handlePointerMove = useCallback(
     (e: React.PointerEvent) => {
-      if (!isDragging) return
       const deltaY = e.clientY - dragStartY.current
+      if (!isDragging) {
+        // Downwards, far enough to mean it, and more down than across. A tap never gets
+        // here; a finger crossing the sheet diagonally does not take it with it.
+        const deltaX = Math.abs(e.clientX - dragStartX.current)
+        if (deltaY < DRAG_AT || deltaY <= deltaX) return
+        setIsDragging(true)
+      }
       setDragOffset(Math.max(0, deltaY))
     },
     [isDragging]
@@ -102,7 +117,10 @@ export function BottomSheet({
         className="absolute inset-0 transition-[opacity,backdrop-filter]"
         style={{
           backgroundColor: `rgba(0, 0, 0, ${backdropOpacity})`,
-          backdropFilter: sheetVisible && !isDragging ? 'blur(4px)' : 'blur(0px)',
+          // Faded with the drag rather than switched off by it. Cutting it meant the
+          // blur and the dimming disagreed the whole way down: one gone at once, the
+          // other easing away with the sheet.
+          backdropFilter: `blur(${sheetVisible ? 4 * (1 - Math.min(1, dragOffset / maxDrag)) : 0}px)`,
           transitionDuration: isDragging ? '0ms' : sheetVisible ? '300ms' : '200ms',
         }}
         onClick={onClose}
