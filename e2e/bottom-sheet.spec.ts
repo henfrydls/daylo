@@ -99,8 +99,12 @@ test('a finger dragged down takes the sheet with it', async ({ page }) => {
     await page.waitForTimeout(16)
   }
 
-  const during = (await page.locator(SHEET).boundingBox())!
-  expect(during.y).toBeGreaterThan(before.y + 60)
+  // Polled rather than read once after a 16ms sleep. The three moves are three React
+  // updates and the last one lands a frame or two after the call returns, so a single read
+  // caught the sheet at the second position under load and failed by a pixel exactly.
+  await expect
+    .poll(async () => (await page.locator(SHEET).boundingBox())!.y, { timeout: 2000 })
+    .toBeGreaterThan(before.y + 60)
 
   await client.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] })
 })

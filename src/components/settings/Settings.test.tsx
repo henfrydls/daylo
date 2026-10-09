@@ -11,6 +11,15 @@ vi.mock('../../lib/checkin', async (importOriginal) => ({
   turnOffCheckin: vi.fn().mockResolvedValue('sent'),
 }))
 
+/** Whether this is running inside the application or in a browser, per test. */
+const inTheApp = vi.hoisted(() => ({ yes: false }))
+
+vi.mock('@tauri-apps/api/core', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@tauri-apps/api/core')>()),
+  isTauri: () => inTheApp.yes,
+  invoke: vi.fn().mockResolvedValue(undefined),
+}))
+
 const enableReminder = vi.hoisted(() => vi.fn())
 const disableReminder = vi.hoisted(() => vi.fn())
 
@@ -22,6 +31,10 @@ vi.mock('../../lib/reminders', async (importOriginal) => ({
 
 const check = vi.fn()
 const install = vi.fn()
+
+/** The heading of the section a row is in, which is the only thing that says where it is. */
+const sectionOf = (node: HTMLElement) =>
+  node.closest('section')?.querySelector('h3')?.textContent ?? ''
 
 function show({
   status = { kind: 'idle' } as UpdateStatus,
@@ -46,6 +59,7 @@ function show({
 }
 
 beforeEach(() => {
+  inTheApp.yes = false
   check.mockReset()
   install.mockReset()
   enableReminder.mockReset().mockResolvedValue({ outcome: 'on' })
@@ -206,13 +220,16 @@ describe('the switches', () => {
     expect(useCalendarStore.getState().updatesEnabled).toBe(false)
   })
 
-  // Each switch says what it turns on and what that costs, in the row itself, because a
-  // switch whose meaning is a paragraph away is a switch pressed without reading it.
-  it('say what they are for where they are', () => {
+  /**
+   * The updater still says what it is for in the row itself, because there is nowhere
+   * else: nothing opens under it. The check-in is the exception and has earned it, with
+   * What gets sent directly below saying the whole of it rather than a summary of it.
+   */
+  it('says what it is for where there is nothing to open', () => {
     show()
 
-    expect(screen.getByText(/Nothing about what you track/)).toBeInTheDocument()
     expect(screen.getByText('Asks GitHub. Nothing about you.')).toBeInTheDocument()
+    expect(screen.getByTestId('checkin-what-gets-sent')).toBeInTheDocument()
   })
 })
 
@@ -307,8 +324,16 @@ describe('the reminder time, and the switch beside it', () => {
  * the warning is a line under the switch instead of being quietly dropped.
  */
 describe('what the switches cost', () => {
-  it('says the number goes when the check-in is turned off', () => {
+  /**
+   * Still said, and still from the surface the switch is on: it moved one row down, into
+   * What gets sent, rather than away. Reached the way a person reaches it, by opening the
+   * row, because a line that is only in the file is a line nobody is told.
+   */
+  it('says the number goes when the check-in is turned off', async () => {
+    const user = userEvent.setup()
     show()
+
+    await user.click(screen.getByTestId('checkin-what-gets-sent'))
 
     expect(screen.getByText('Turning it off deletes the random number.')).toBeInTheDocument()
   })
@@ -319,21 +344,37 @@ describe('what the switches cost', () => {
     expect(screen.getByText('Android may deliver it a few minutes late.')).toBeInTheDocument()
   })
 
-  // Both lines are named by the switch, so somebody listening rather than looking is told
-  // the cost at the same moment as the choice.
-  it('reads them out with the switch they belong to', () => {
-    show({ hasReminders: true })
+  /**
+   * The switch shows one line and still says two, which is the whole of this change.
+   *
+   * The row is a switch and nothing else to look at: everything it does is in What gets
+   * sent, one row below. A screen reader has no "one row below" though. It announces the
+   * switch and moves on, so the words it used to read out are still named by the switch,
+   * out of sight. Not a second version written for machines: the same sentences, from the
+   * panel under it.
+   */
+  it('still reads out what it costs, to somebody who is listening', async () => {
+    const user = userEvent.setup()
+    show()
+    const checkin = screen.getByRole('switch', { name: 'Anonymous check-in' })
 
-    const described = screen
-      .getByRole('switch', { name: 'Anonymous check-in' })
-      .getAttribute('aria-describedby')
-    const said = (described ?? '')
+    const named = (checkin.getAttribute('aria-describedby') ?? '')
       .split(' ')
-      .map((id) => document.getElementById(id)?.textContent ?? '')
-      .join(' ')
+      .filter(Boolean)
+      .map((id) => document.getElementById(id))
+    const said = named.map((node) => node?.textContent ?? '').join(' ')
 
-    expect(said).toContain('Nothing about what you track')
+    expect(said).toContain('still in use')
     expect(said).toContain('deletes the random number')
+    // Out of sight, not out of the page: the row shows one line.
+    expect(named.every((node) => node?.className.includes('sr-only'))).toBe(true)
+
+    // And the same words are readable by anybody, one row down.
+    await user.click(screen.getByTestId('checkin-what-gets-sent'))
+    const panel = screen.getByTestId('checkin-what-gets-sent').nextElementSibling
+
+    expect(panel?.textContent).toContain('Nothing about you or what you track')
+    expect(panel?.textContent).toContain('deletes the random number')
   })
 })
 
@@ -347,14 +388,31 @@ describe('the section about what leaves', () => {
     expect(screen.queryByText('What leaves your device')).not.toBeInTheDocument()
   })
 
-  // At the end of the short version rather than among the links at the foot, where
-  // somebody reading this section to decide something would not have looked.
-  it('ends with the policy, pointing at the real one', () => {
+  // Among the links at the foot, with the other three things somebody might want to read
+  // about Daylo. It had a row of its own in the section, which put the one thing in there
+  // that is not a decision beside three that are.
+  it('points at the real policy, from the foot', () => {
     show()
 
-    const row = screen.getByTestId('settings-privacy')
-    expect(row).toHaveAttribute('href', 'https://daylo.henfrydls.com/privacy/')
-    expect(row).toHaveAttribute('rel', expect.stringContaining('noopener'))
+    const link = screen.getByTestId('settings-privacy')
+    expect(link).toHaveAttribute('href', 'https://daylo.henfrydls.com/privacy/')
+    expect(link).toHaveAttribute('rel', expect.stringContaining('noopener'))
+    expect(sectionOf(link)).toBe('About')
+  })
+
+  /**
+   * On the web there is no check-in and no updater, so Privacy would be a heading with
+   * nothing under it. Send feedback is in it for that reason among others: the section a
+   * person goes looking for when they want to know what Daylo sends should not be the one
+   * that disappears on the platform that sends the least.
+   */
+  it('still has something in it where there is nothing to switch', () => {
+    show({ canCheckIn: false, supported: false })
+
+    expect(screen.getByRole('heading', { name: 'Privacy' })).toBeInTheDocument()
+    expect(screen.queryByTestId('checkin-switch')).not.toBeInTheDocument()
+    expect(screen.queryByTestId('updates-switch')).not.toBeInTheDocument()
+    expect(sectionOf(screen.getByTestId('settings-feedback'))).toBe('Privacy')
   })
 })
 
@@ -400,5 +458,95 @@ describe('the reminder, folded away while it is off', () => {
 
     expect(screen.getByTestId('reminder-switch')).toBeInTheDocument()
     expect(screen.getByText('Off')).toBeInTheDocument()
+  })
+})
+
+/**
+ * Send feedback, and who opens the letter.
+ *
+ * In a browser there is nobody to ask: `openMailto` reports success without doing
+ * anything, because its comment says it "lets the anchor's own navigation do the work".
+ * There was no anchor. The menu entry this replaced was a button, so on the web the thing
+ * did nothing at all and said nothing, for as long as it existed.
+ */
+describe('send feedback', () => {
+  it('is a letter the browser can open by itself', () => {
+    show()
+
+    expect(screen.getByTestId('settings-feedback')).toHaveAttribute(
+      'href',
+      expect.stringContaining('mailto:daylo@henfrydls.com')
+    )
+  })
+
+  // A row in Privacy, where the sentence about it already was, instead of a word at the
+  // foot three sections below the sentence describing it.
+  it('is a row in the section that says what it costs', () => {
+    show()
+
+    const row = screen.getByTestId('settings-feedback')
+    expect(row).toHaveTextContent('Send feedback')
+    expect(row).toHaveTextContent('Only what you type, and only when you press Send.')
+    expect(sectionOf(row)).toBe('Privacy')
+  })
+
+  // No target: a mail client does not want a tab, and a tab it does not use is a blank
+  // one left behind on the only platform where this is a navigation at all.
+  it('does not open a tab to do it', () => {
+    show()
+
+    expect(screen.getByTestId('settings-feedback')).not.toHaveAttribute('target')
+  })
+
+  it('lets the browser do it, rather than asking the application', async () => {
+    const user = userEvent.setup()
+    const onFeedback = vi.fn()
+    render(
+      <Settings
+        isOpen
+        onClose={vi.fn()}
+        onExport={vi.fn()}
+        onImport={vi.fn()}
+        onFeedback={onFeedback}
+        hasReminders={false}
+        canCheckIn
+        version="1.4.2"
+        updates={{ supported: true, status: { kind: 'idle' }, waiting: null, check, install }}
+      />
+    )
+
+    await user.click(screen.getByTestId('settings-feedback'))
+
+    // Nothing in the app answers: the anchor is the whole mechanism here.
+    expect(onFeedback).not.toHaveBeenCalled()
+  })
+
+  // Inside the application the webview must not navigate to a mailto: it would replace
+  // Daylo with nothing and leave no way back. The click is taken and the question asked.
+  it('is taken by the application when there is one', async () => {
+    const user = userEvent.setup()
+    inTheApp.yes = true
+    const onFeedback = vi.fn()
+    render(
+      <Settings
+        isOpen
+        onClose={vi.fn()}
+        onExport={vi.fn()}
+        onImport={vi.fn()}
+        onFeedback={onFeedback}
+        hasReminders={false}
+        canCheckIn
+        version="1.4.2"
+        updates={{ supported: true, status: { kind: 'idle' }, waiting: null, check, install }}
+      />
+    )
+
+    const link = screen.getByTestId('settings-feedback')
+    const click = new MouseEvent('click', { bubbles: true, cancelable: true })
+    link.dispatchEvent(click)
+    await user.click(document.body)
+
+    expect(onFeedback).toHaveBeenCalledOnce()
+    expect(click.defaultPrevented).toBe(true)
   })
 })
