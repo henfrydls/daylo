@@ -14,6 +14,7 @@ import { WhatGetsSent } from './WhatGetsSent'
 import { turnOffCheckin, turnOnCheckin } from '../../lib/checkin'
 import { isTauri } from '@tauri-apps/api/core'
 import { openLink } from '../../lib/openLink'
+import { FEEDBACK_MAILTO } from '../../lib/feedbackInvite'
 import type { UpdateStatus } from '../../hooks/useUpdates'
 
 /** How long the panel takes to arrive and to leave. */
@@ -64,7 +65,7 @@ function Section({
         <h3 className="text-base font-semibold text-gray-900">{title}</h3>
         {aside === undefined ? null : <p className="text-sm text-gray-500">{aside}</p>}
       </div>
-      <div className="mt-2 divide-y divide-gray-200">{children}</div>
+      <div className="mt-2">{children}</div>
     </section>
   )
 }
@@ -255,7 +256,7 @@ export function Settings({
                   inert={!reminder.enabled}
                   aria-hidden={reminder.enabled ? undefined : 'true'}
                 >
-                  <div className="flex min-h-[48px] items-center justify-between gap-3 border-t border-gray-200 py-3">
+                  <div className="flex min-h-[48px] items-center justify-between gap-3 py-3">
                     <label htmlFor="reminder-time" className="text-gray-900">
                       Time
                     </label>
@@ -296,8 +297,6 @@ export function Settings({
               <>
                 <SwitchRow
                   label="Anonymous check-in"
-                  under="Says the app is still in use. Nothing about what you track."
-                  note="Turning it off deletes the random number."
                   checked={checkinEnabled}
                   testId="checkin-switch"
                   onChange={(next) => {
@@ -319,16 +318,7 @@ export function Settings({
                 onChange={setUpdatesEnabled}
               />
             ) : null}
-            <div className="py-3">
-              <p className="text-gray-900">Feedback</p>
-              <p className="mt-0.5 text-sm text-gray-500">
-                Only what you type, and only when you press Send.
-              </p>
-            </div>
-            {/* The long version, at the end of the short one. It was only in the footer
-                among the other links, where somebody reading this section to decide
-                something would not have looked for it. */}
-            <AwayRow href={PRIVACY} label="Privacy policy" testId="settings-privacy" />
+            <FeedbackRow onFeedback={onFeedback} />
           </Section>
 
           <Section title="About">
@@ -387,14 +377,9 @@ export function Settings({
               <Away href={WEBSITE}>Website</Away>
               <Away href={SOURCE}>Source code</Away>
               <Away href={LICENSE}>License</Away>
-              <button
-                type="button"
-                onClick={onFeedback}
-                data-testid="settings-feedback"
-                className="font-medium text-emerald-700 underline focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500"
-              >
-                Send feedback
-              </button>
+              <Away href={PRIVACY} testId="settings-privacy">
+                Privacy policy
+              </Away>
             </div>
           </Section>
         </div>
@@ -423,34 +408,49 @@ function said(status: UpdateStatus): string {
   }
 }
 
-/** A row that leaves Daylo, shaped like the rows it sits among. */
-function AwayRow({ href, label, testId }: { href: string; label: string; testId?: string }) {
+/**
+ * Send feedback, as a row rather than a word at the foot of the screen.
+ *
+ * An anchor, because in a browser there is nobody else to open the letter. `openMailto`
+ * says as much in its own comment, "lets the anchor's own navigation do the work", and
+ * for as long as this has existed there was no anchor: the menu entry it grew out of was
+ * a button, so on the web pressing it did nothing at all and said nothing either.
+ *
+ * Inside the application the click is taken instead and handed to the question, because a
+ * webview that follows a mailto replaces Daylo with nothing and leaves no way back. No
+ * target either way: a new tab for a mail client is a blank tab left behind.
+ */
+function FeedbackRow({ onFeedback }: { onFeedback: () => void }) {
   return (
     <a
-      href={href}
-      target="_blank"
-      rel="noopener noreferrer"
-      data-testid={testId}
+      href={FEEDBACK_MAILTO}
       onClick={(event) => {
         if (!isTauri()) return
         event.preventDefault()
-        void openLink(href)
+        onFeedback()
       }}
+      data-testid="settings-feedback"
       className="flex min-h-[48px] w-full items-center justify-between gap-3 py-3 text-gray-900 focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500"
     >
-      <span>{label}</span>
+      <span className="min-w-0">
+        <span className="block">Send feedback</span>
+        <span className="mt-0.5 block text-sm text-gray-500">
+          Only what you type, and only when you press Send.
+        </span>
+      </span>
       <ChevronRightIcon className="h-5 w-5 shrink-0 text-gray-400" aria-hidden="true" />
     </a>
   )
 }
 
 /** A link that leaves Daylo, which inside the application must not happen in the window. */
-function Away({ href, children }: { href: string; children: ReactNode }) {
+function Away({ href, testId, children }: { href: string; testId?: string; children: ReactNode }) {
   return (
     <a
       href={href}
       target="_blank"
       rel="noopener noreferrer"
+      data-testid={testId}
       onClick={(event) => {
         // Decided now, not when the opening finishes: by then the webview has already
         // followed the link, and preventing a default that has happened prevents nothing.

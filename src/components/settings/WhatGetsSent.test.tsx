@@ -61,13 +61,35 @@ describe('what gets sent', () => {
     expect(screen.getByText(EXAMPLE_ID)).toBeInTheDocument()
   })
 
-  it('says where the number came from and what it is not', async () => {
+  /**
+   * The sentence and the cost, which used to be the two lines under the switch. They are
+   * here now because this is where the message itself is: what it does, what it is, and
+   * what undoing it costs, read in one go rather than assembled from two places.
+   */
+  it('says what it is for, and what turning it off costs', async () => {
     const user = userEvent.setup()
     render(<WhatGetsSent fields={fields} id="abc" />)
 
     await user.click(screen.getByRole('button'))
 
-    expect(screen.getByText(/Made on this device, tied to nothing/)).toBeInTheDocument()
-    expect(screen.getByText(/does not keep it/)).toBeInTheDocument()
+    expect(
+      screen.getByText(
+        'Once a day, it tells us the app is still in use. Nothing about you or what you track.'
+      )
+    ).toBeInTheDocument()
+    expect(screen.getByText('Turning it off deletes the random number.')).toBeInTheDocument()
+  })
+
+  // The sentence first and the cost last, with the message between them: it is an
+  // argument in that order, and read any other way the last word is a field name.
+  it('puts them around the message rather than after it', async () => {
+    const user = userEvent.setup()
+    render(<WhatGetsSent fields={fields} id="abc" />)
+
+    await user.click(screen.getByRole('button'))
+
+    const said = screen.getByRole('button').nextElementSibling?.textContent ?? ''
+    expect(said.indexOf('Once a day')).toBeLessThan(said.indexOf('Random number'))
+    expect(said.indexOf('Random number')).toBeLessThan(said.indexOf('Turning it off'))
   })
 })

@@ -16,6 +16,22 @@ const sendShown = vi.hoisted(() => vi.fn())
 const sendRating = vi.hoisted(() => vi.fn())
 const sendComment = vi.hoisted(() => vi.fn())
 
+/**
+ * Whether this is running inside the application or in a browser.
+ *
+ * The suite used to say "in the app" by making the check-in answer, because everything
+ * that cared asked the check-in. Send feedback does not: it is a `mailto:` link now, and
+ * what decides whether the link is followed or taken is whether there is a webview to
+ * take it. The two are the same thing everywhere except a build with the check-in
+ * compiled out, which is what the lab is, so they are set separately here.
+ */
+const inTheApp = vi.hoisted(() => ({ yes: false }))
+
+vi.mock('@tauri-apps/api/core', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@tauri-apps/api/core')>()),
+  isTauri: () => inTheApp.yes,
+}))
+
 vi.mock('./lib/feedback', async (importOriginal) => ({
   ...(await importOriginal<typeof import('./lib/feedback')>()),
   sendShown,
@@ -70,6 +86,7 @@ async function openSettings() {
 }
 
 beforeEach(() => {
+  inTheApp.yes = false
   remindersAvailable.mockReset().mockResolvedValue(false)
   checkinFields.mockReset().mockResolvedValue(null)
   sendCheckinIfDue.mockReset().mockResolvedValue(undefined)
@@ -153,7 +170,54 @@ describe('writing without being asked, in a browser', () => {
   // silently: the person would never learn there had been one. The cost the other way is
   // that somebody who did write may still be asked later, and that one they
   // can see and close.
-  it('opens the letter without spending the invitation', async () => {
+  /**
+   * In a browser the letter is opened by the link itself, which is what `openMailto` has
+   * always assumed: it reports success without doing anything, and says in its own comment
+   * that it "lets the anchor's own navigation do the work". There was no anchor until now,
+   * so on the web this did nothing at all and said nothing either.
+   */
+  it('is a letter the browser can open by itself', async () => {
+    render(<App />)
+    await act(async () => {})
+    await openSettings()
+
+    expect(screen.getByTestId('settings-feedback')).toHaveAttribute(
+      'href',
+      expect.stringContaining('mailto:daylo@henfrydls.com')
+    )
+  })
+
+  // And it marks nothing. Pressing this out of curiosity and backing out of the chooser
+  // would otherwise take the invitation away for good, and silently: the person would
+  // never learn there had been one.
+  it('spends no invitation when it is pressed', async () => {
+    render(<App />)
+    await act(async () => {})
+    await openSettings()
+
+    await userEvent.click(screen.getByTestId('settings-feedback'))
+
+    await act(async () => {})
+    expect(useCalendarStore.getState().feedbackInviteSeen).toBe(false)
+  })
+})
+
+/**
+ * A build of the application with the check-in compiled out, which is what the lab is and
+ * what anybody building Daylo themselves with the switch off gets.
+ *
+ * There is a webview, so the link must not be followed; and there is no platform to send a
+ * question through, so the letter is asked for instead. When no mail app answers, the
+ * address has to reach the person somehow, and a toast is the only place left.
+ */
+describe('writing from a build with no check-in', () => {
+  beforeEach(() => {
+    inTheApp.yes = true
+    checkinFields.mockResolvedValue(null)
+    openMailto.mockReset().mockResolvedValue('opened')
+  })
+
+  it('asks the platform for the letter rather than following the link', async () => {
     render(<App />)
     await act(async () => {})
     await openSettings()
@@ -162,11 +226,8 @@ describe('writing without being asked, in a browser', () => {
 
     await act(async () => {})
     expect(openMailto).toHaveBeenCalledTimes(1)
-    expect(useCalendarStore.getState().feedbackInviteSeen).toBe(false)
   })
 
-  // A toast rather than a line, because there is no band on screen to write into, and the
-  // address has to reach the person somehow.
   it('gives the address when no email app answers', async () => {
     openMailto.mockResolvedValue('failed')
     render(<App />)
@@ -214,6 +275,7 @@ describe('the question, in the app', () => {
   }
 
   beforeEach(() => {
+    inTheApp.yes = true
     checkinFields.mockResolvedValue({ version: '1.3.0', os: 'linux', source: 'deb' })
     openMailto.mockReset().mockResolvedValue('opened')
     // _feedbackAsked is a session flag and a session is one run of the app; between tests

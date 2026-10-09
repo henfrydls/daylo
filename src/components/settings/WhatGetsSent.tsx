@@ -21,8 +21,12 @@ interface WhatGetsSentProps {
  *
  * Closed by default and not a link: a decision about what a program sends should be
  * answerable without leaving the decision, and the five lines are short enough to put
- * here. The same row appears in the dialog and in the settings sheet, with the same
- * words, so that what was agreed to and what is happening are visibly the same thing.
+ * here.
+ *
+ * Everything the check-in has to say is in here now, which is why it opens into a panel
+ * of its own rather than into the list. The switch above it is a switch and nothing else:
+ * what it does and what it costs are one tap away, in one place, instead of two lines
+ * under the switch and three more behind this row saying overlapping things.
  */
 export function WhatGetsSent({ fields, id }: WhatGetsSentProps) {
   const [open, setOpen] = useState(false)
@@ -53,7 +57,17 @@ export function WhatGetsSent({ fields, id }: WhatGetsSentProps) {
       </button>
 
       {open ? (
-        <div id={contentId} className="space-y-3 pb-4 text-sm text-gray-600">
+        // A panel rather than more list, because what is in here is one thing: a sentence,
+        // the message it describes, and what undoing it costs. Read together they answer
+        // the question the row asks; spread down the list they read as five more settings.
+        <div
+          id={contentId}
+          className="mb-1 space-y-3 rounded-[10px] bg-gray-50 px-3.5 py-3 text-sm text-gray-600"
+        >
+          <p>
+            Once a day, it tells us the app is still in use. Nothing about you or what you track.
+          </p>
+
           <dl className="space-y-1">
             {[
               ['Random number', id ?? EXAMPLE_ID],
@@ -65,20 +79,14 @@ export function WhatGetsSent({ fields, id }: WhatGetsSentProps) {
               ['How it was installed', fields?.source ?? ''],
               ['Date', today()],
             ].map(([label, value]) => (
-              <div key={label} className="flex flex-wrap gap-x-3">
-                <dt className="w-32 shrink-0 text-gray-500">{label}</dt>
-                <dd className="min-w-0 font-mono break-all text-gray-900">{value}</dd>
+              <div key={label} className="flex flex-wrap gap-x-2">
+                <dt className="font-medium text-gray-900">{label}</dt>
+                <dd className="min-w-0 break-all">{value}</dd>
               </div>
             ))}
           </dl>
 
-          <p>
-            Made on this device, tied to nothing, and deleted if you turn this off. Your habits and
-            notes are never part of it.
-          </p>
-          <p>
-            Like any website, our server sees your connection&apos;s address and does not keep it.
-          </p>
+          <p>Turning it off deletes the random number.</p>
         </div>
       ) : null}
     </div>
