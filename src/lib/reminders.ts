@@ -71,6 +71,29 @@ export type ReminderOutcome =
  * platform. Desktop is deliberately out: a notification that only fires while the app is
  * running is not a reminder, and nobody has asked for one.
  */
+/** The earliest and latest the offer will ever propose, when the next hour is no good. */
+export const TOO_LATE = 23
+export const TOO_EARLY = 7
+export const INSTEAD = 20
+
+/**
+ * The time to offer somebody who has just made their first activity.
+ *
+ * The next hour on the hour, because the question is being asked now and the answer should
+ * be soon enough to mean something: told at 22:52, a reminder at 23:00 is tonight. A fixed
+ * hour chosen when this was written is a reminder somebody has to go and move.
+ *
+ * Except at night. Between eleven and seven the next hour is a notification nobody wants,
+ * so it offers eight in the evening instead: the next time of day somebody would plausibly
+ * be told anything. Seven is outside the quiet window on purpose, because being reminded
+ * at seven in the morning is a choice people make.
+ */
+export function offeredReminderTime(now: Date = new Date()): { hour: number; minute: number } {
+  const next = (now.getHours() + 1) % 24
+  if (next >= TOO_LATE || next < TOO_EARLY) return { hour: INSTEAD, minute: 0 }
+  return { hour: next, minute: 0 }
+}
+
 export async function remindersAvailable(): Promise<boolean> {
   if (!isTauri()) {
     return false

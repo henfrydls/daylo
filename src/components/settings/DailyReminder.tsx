@@ -1,10 +1,11 @@
-import { useEffect } from 'react'
+import { useEffect, useState } from 'react'
 import { ConfirmDialog, useToast } from '../ui'
 import { useCalendarStore } from '../../store'
 import { useRemindersAvailable } from '../../hooks'
 import {
   enableReminder,
   formatReminderTime,
+  offeredReminderTime,
   reconcileReminder,
   refreshReminder,
 } from '../../lib/reminders'
@@ -59,9 +60,9 @@ export function DailyReminder() {
   }, [available, activityCount, setReminder])
 
   const accept = async () => {
-    const { outcome } = await enableReminder(hour, minute)
+    const { outcome } = await enableReminder(offerHour, offerMinute)
     if (outcome === 'on') {
-      setReminder(true, hour, minute)
+      setReminder(true, offerHour, offerMinute)
       return
     }
     if (outcome === 'permission-denied') {
@@ -84,13 +85,28 @@ export function DailyReminder() {
     if (offerIsOpen) claimOffer('reminder')
   }, [offerIsOpen, claimOffer])
 
+  /**
+   * The hour this offer proposes, fixed the moment it is put.
+   *
+   * Worked out once and held, rather than read on every render: the question is being
+   * asked now, and a time that moved while the dialog was open would mean the sentence
+   * somebody read and the reminder they agreed to were different things. Somebody who
+   * leaves the dialog up across the hour gets what they were offered.
+   */
+  const [proposed] = useState(() => offeredReminderTime())
+  const chosen = useCalendarStore((state) => state.reminderTimeChosen)
+  // Theirs if they picked one, ours if nobody has. Somebody who went into Settings and set
+  // a time before this was ever put has answered the question already.
+  const offerHour = chosen ? hour : proposed.hour
+  const offerMinute = chosen ? minute : proposed.minute
+
   return (
     <ConfirmDialog
       isOpen={offerIsOpen}
       onClose={markReminderOffered}
       onConfirm={() => void accept()}
       title="Remind me each evening?"
-      message={`A notification around ${formatReminderTime(hour, minute)} so the day does not go unlogged. Android picks the exact moment. You can change the time or turn it off in Settings.`}
+      message={`A notification around ${formatReminderTime(offerHour, offerMinute)} so the day does not go unlogged. Android picks the exact moment. You can change the time or turn it off in Settings.`}
       confirmText="Turn on"
       cancelText="Not now"
       data-testid="reminder-offer"

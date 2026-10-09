@@ -41,6 +41,8 @@ function firstHabitOnAndroid() {
     reminderHour: 21,
     reminderMinute: 0,
     reminderOffered: false,
+    // Nobody has picked a time either: the suggested one is what a first habit meets.
+    reminderTimeChosen: false,
     // Nobody has asked anything yet this session, which is the state a first habit is
     // usually made in. A test that wants the other case says so.
     _offerThisSession: null,
@@ -104,13 +106,39 @@ describe('the one-time offer', () => {
 
   it('is made once the first habit exists', async () => {
     firstHabitOnAndroid()
+    vi.setSystemTime(new Date(2026, 9, 9, 14, 37))
 
     render(<DailyReminder />)
 
     expect(await theOffer()).toBeInTheDocument()
-    // The hour comes from the stored setting rather than the copy, so somebody who moved
-    // the time before the offer is not promised nine o'clock.
-    expect(screen.getByText(/9:00/)).toBeInTheDocument()
+    // The next hour on the hour, because the question is being asked now and a reminder
+    // later today is one that means something tonight.
+    expect(screen.getByText(/3:00 PM/)).toBeInTheDocument()
+  })
+
+  // The guarantee the stored hour used to give, kept: somebody who went into Settings and
+  // picked a time before this was ever put has answered the question already, and must not
+  // be offered our suggestion over their choice.
+  it('offers the time the person picked, when they picked one', async () => {
+    firstHabitOnAndroid()
+    vi.setSystemTime(new Date(2026, 9, 9, 14, 37))
+    useCalendarStore.setState({ reminderHour: 7, reminderMinute: 0, reminderTimeChosen: true })
+
+    render(<DailyReminder />)
+
+    expect(await theOffer()).toBeInTheDocument()
+    expect(screen.getByText(/7:00 AM/)).toBeInTheDocument()
+  })
+
+  // And at night it does not propose the next hour at all.
+  it('offers the evening when the next hour is the middle of the night', async () => {
+    firstHabitOnAndroid()
+    vi.setSystemTime(new Date(2026, 9, 9, 23, 30))
+
+    render(<DailyReminder />)
+
+    expect(await theOffer()).toBeInTheDocument()
+    expect(screen.getByText(/8:00 PM/)).toBeInTheDocument()
   })
 
   it('is not made twice', async () => {
@@ -138,16 +166,34 @@ describe('the one-time offer', () => {
 })
 
 describe('answering the offer', () => {
-  it('turns the reminder on at the stored time', async () => {
+  // Yes means yes to the time on the dialog, not to whatever is in the store. They were
+  // the same thing when the dialog read the store; now that it proposes a time of its own,
+  // scheduling anything else would be scheduling something nobody agreed to.
+  it('turns the reminder on at the time it offered', async () => {
     firstHabitOnAndroid()
+    vi.setSystemTime(new Date(2026, 9, 9, 14, 37))
     enableReminder.mockResolvedValue({ outcome: 'on' })
     render(<DailyReminder />)
     await theOffer()
 
     await userEvent.click(screen.getByText('Turn on'))
 
-    expect(enableReminder).toHaveBeenCalledWith(21, 0)
+    expect(enableReminder).toHaveBeenCalledWith(15, 0)
     await waitFor(() => expect(useCalendarStore.getState().reminderEnabled).toBe(true))
+    expect(useCalendarStore.getState().reminderHour).toBe(15)
+  })
+
+  it('turns it on at the time the person picked, when they picked one', async () => {
+    firstHabitOnAndroid()
+    vi.setSystemTime(new Date(2026, 9, 9, 14, 37))
+    useCalendarStore.setState({ reminderHour: 7, reminderMinute: 0, reminderTimeChosen: true })
+    enableReminder.mockResolvedValue({ outcome: 'on' })
+    render(<DailyReminder />)
+    await theOffer()
+
+    await userEvent.click(screen.getByText('Turn on'))
+
+    expect(enableReminder).toHaveBeenCalledWith(7, 0)
   })
 
   // "Not now" is an answer, not a postponement: it is recorded so the question does not
