@@ -12,11 +12,13 @@ import {
   ToastContainer,
   useToast,
 } from './components/ui'
+import { DIALOG_STAYS_FOR } from './components/ui'
 import type { DropdownMenuItem } from './components/ui'
 import { AppSkeleton } from './components/skeletons'
 import { CheckinNotice, DailyReminder, Settings } from './components/settings'
 import { useCalendarStore } from './store'
 import {
+  useAnimatedPresence,
   useAppVersion,
   useCheckinFields,
   useMediaQuery,
@@ -236,6 +238,14 @@ function App() {
     !questionClosed &&
     selectedDate === null &&
     (askedFromMenu || shouldInvite || feedbackAsked)
+
+  // Whether it is in the page, which is not the same as whether it is being asked: it goes
+  // on standing there with nothing drawn for as long as the leaving takes. See where it is
+  // rendered for why this one is not simply mounted and left alone.
+  const { shouldRender: questionInThePage } = useAnimatedPresence(
+    questionIsOpen,
+    DIALOG_STAYS_FOR + 50
+  )
 
   // Today's check-in, if the switch is on and today has not been tried. Twice, because
   // there are two kinds of device: a phone is closed and opened again, which remounts
@@ -584,15 +594,26 @@ function App() {
           {/* Daily reminder: the one-time offer. The setting itself is in Settings now. */}
           <DailyReminder />
 
-          {/* The question, wherever it came from. Unmounted when it closes, so the number
-            it carries goes with it rather than being cleared by anybody. Behind a Suspense
-            with no fallback: it is asked for by a gate that has already waited a week, so
-            a few milliseconds more while it loads are nothing, and a spinner in its place
-            would announce a question nobody asked for yet. */}
+          {/* The question, wherever it came from. Behind a Suspense with no fallback: it is
+            asked for by a gate that has already waited a week, so a few milliseconds more
+            while it loads are nothing, and a spinner in its place would announce a question
+            nobody asked for yet.
+
+            Still mounted only while it is being asked, unlike Export and Import, and for a
+            reason that is not convenience: the number it carries is made on mount and must
+            not outlive the dialog, or it stops being one question's number and becomes an
+            identifier. onShown is a mount effect for the same reason, and mounting it any
+            earlier would spend the invitation on somebody who was never asked.
+
+            What it does now is stay a little past the closing, so that the leaving frames
+            happen before it goes. Longer than the dialog takes to leave, because the two
+            timers start in the same commit and the one out here must not finish first. A
+            question re-opened inside that window reuses the same number, which takes a
+            quarter of a second and a menu, and has never happened outside a test. */}
           <Suspense fallback={null}>
-            {questionIsOpen && (
+            {questionInThePage && (
               <FeedbackRating
-                isOpen
+                isOpen={questionIsOpen}
                 onShown={(answer) => {
                   markFeedbackAsked()
                   void sendShown(answer, askedFromMenu ? 'menu' : 'automatic')

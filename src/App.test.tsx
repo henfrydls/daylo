@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { act, render, screen } from '@testing-library/react'
+import { act, render, screen, waitForElementToBeRemoved } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import App from './App'
 import { useCalendarStore } from './store'
@@ -311,6 +311,58 @@ describe('the question, in the app', () => {
     })
 
     expect(await screen.findByTestId('feedback-rating')).toBeInTheDocument()
+  })
+
+  /**
+   * It leaves instead of vanishing, and that costs nothing it was not already paying.
+   *
+   * It used to be `{questionIsOpen && <FeedbackRating isOpen />}`, which takes it out of
+   * the page the instant it closes, so the frames where it goes down never happen. It now
+   * stands there a moment longer with nothing drawn, which is the only way those frames
+   * can exist, and then goes.
+   *
+   * Why it still is not simply left mounted, the way Export and Import are: the number it
+   * carries is made on mount and must not outlive the dialog, and onShown is a mount
+   * effect, so mounting it early would spend the invitation on somebody never asked.
+   */
+  it('stands there while it leaves, and then goes', async () => {
+    pastTheGate()
+    render(<App />)
+    await act(async () => {})
+    await screen.findByTestId('feedback-rating')
+
+    await userEvent.click(screen.getByLabelText('Close modal'))
+
+    // Still in the page with the closing under way: this is the whole of the change.
+    expect(screen.getByTestId('feedback-rating')).toBeInTheDocument()
+
+    await waitForElementToBeRemoved(() => screen.queryByTestId('feedback-rating'))
+  })
+
+  /**
+   * And it is still put once.
+   *
+   * The thing that could have gone wrong here: onShown runs on mount, and the mount is now
+   * governed by something that outlives the closing. If the question were re-mounted, or
+   * mounted before being asked, the invitation would be spent on somebody who never saw it
+   * and they would never be asked again.
+   */
+  it('is put once, however long it stands there', async () => {
+    pastTheGate()
+    render(<App />)
+    await act(async () => {})
+    await screen.findByTestId('feedback-rating')
+
+    await userEvent.click(screen.getByLabelText('Close modal'))
+    await waitForElementToBeRemoved(() => screen.queryByTestId('feedback-rating'))
+    // Well past the window it stands there for, in case anything mounts again at the end.
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 400))
+    })
+
+    expect(sendShown).toHaveBeenCalledTimes(1)
+    // And nothing comes back on its own.
+    expect(screen.queryByTestId('feedback-rating')).not.toBeInTheDocument()
   })
 
   it('is spent by being shown', async () => {

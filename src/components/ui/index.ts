@@ -36,7 +36,7 @@ export {
   XIcon,
 } from './Icons'
 export type { IconProps } from './Icons'
-export { Modal } from './Modal'
+export { Modal, STAYS_FOR as DIALOG_STAYS_FOR } from './Modal'
 export { Checkbox } from './Checkbox'
 export { ToastContainer, useToast } from './Toast'
 export { Tooltip } from './Tooltip'
