@@ -237,8 +237,14 @@ export async function reconcileReminder(activityCount: number): Promise<void> {
   if (activityCount > 0 || !(await remindersAvailable())) {
     return
   }
-  const scheduled = await pending()
-  if (scheduled.some((n) => n.id === REMINDER_ID)) {
+  // An answer we did not get is not an answer of "nothing". Reading the list is only here
+  // to save an unnecessary call: by this point there is nothing left to be reminded about,
+  // so taking the reminder down is what this function came to do. If the phone says
+  // nothing, or says something that is not a list, it comes down anyway. Cancelling a
+  // notification that was never scheduled costs nothing; leaving one standing over nothing
+  // is the thing that gets an app uninstalled.
+  const scheduled = await pending().catch(() => null)
+  if (!Array.isArray(scheduled) || scheduled.some((n) => n.id === REMINDER_ID)) {
     await cancel([REMINDER_ID])
   }
 }
