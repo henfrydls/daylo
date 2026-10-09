@@ -4,6 +4,7 @@ import {
   REMINDER_ID,
   disableReminder,
   enableReminder,
+  offeredReminderTime,
   reconcileReminder,
   refreshReminder,
   remindersAvailable,
@@ -258,5 +259,44 @@ describe('re-arming at launch', () => {
     vi.spyOn(console, 'error').mockImplementation(() => {})
 
     await expect(refreshReminder(21, 0)).resolves.toBe(false)
+  })
+})
+
+/**
+ * What time to offer somebody who has just made their first activity.
+ *
+ * It used to be whatever hour this was written with, which is a reminder the person has to
+ * go and move before it means anything. The next hour on the hour is soon enough to be
+ * tonight, which is the point of being asked now.
+ */
+describe('the time the offer proposes', () => {
+  const at = (hour: number, minute: number) =>
+    offeredReminderTime(new Date(2026, 9, 9, hour, minute))
+
+  it('is the next hour, on the hour', () => {
+    expect(at(12, 0)).toEqual({ hour: 13, minute: 0 })
+    expect(at(14, 37)).toEqual({ hour: 15, minute: 0 })
+  })
+
+  // Eleven at night to seven in the morning is a notification nobody wants. Eight in the
+  // evening is the next time of day somebody would plausibly be told anything.
+  it('stays out of the night', () => {
+    expect(at(22, 59)).toEqual({ hour: 20, minute: 0 })
+    expect(at(23, 30)).toEqual({ hour: 20, minute: 0 })
+    expect(at(3, 0)).toEqual({ hour: 20, minute: 0 })
+    expect(at(5, 0)).toEqual({ hour: 20, minute: 0 })
+  })
+
+  // The two edges of that window, which is where a rule like this goes wrong. Seven is
+  // outside it: being reminded at seven in the morning is a choice people make.
+  it('puts seven in the morning on the right side of it', () => {
+    expect(at(6, 30)).toEqual({ hour: 7, minute: 0 })
+    expect(at(6, 59)).toEqual({ hour: 7, minute: 0 })
+    expect(at(5, 59)).toEqual({ hour: 20, minute: 0 })
+  })
+
+  it('does not propose eleven, the first hour of the window', () => {
+    expect(at(22, 0)).toEqual({ hour: 20, minute: 0 })
+    expect(at(21, 0)).toEqual({ hour: 22, minute: 0 })
   })
 })

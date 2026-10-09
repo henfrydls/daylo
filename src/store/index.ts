@@ -143,6 +143,14 @@ interface CalendarState {
   reminderHour: number
   reminderMinute: number
   reminderOffered: boolean
+  /**
+   * Whether the time came from the person rather than from us.
+   *
+   * The offer proposes the next hour on the hour, which is right for somebody who has
+   * never thought about it and wrong for somebody who went into Settings and picked one
+   * before the offer was ever put. This is how those two are told apart.
+   */
+  reminderTimeChosen: boolean
 
   /**
    * The first day this installation was opened, local, `YYYY-MM-DD`. Written once and
@@ -251,6 +259,7 @@ interface CalendarState {
   // Reminder
   setReminder: (enabled: boolean, hour?: number, minute?: number) => void
   markReminderOffered: () => void
+  markReminderTimeChosen: () => void
   /** Records the first day, once. Called when the store finishes hydrating. */
   markOpened: () => void
   markFeedbackInviteSeen: () => void
@@ -305,6 +314,7 @@ export const useCalendarStore = create<CalendarState>()(
       reminderHour: 21,
       reminderMinute: 0,
       reminderOffered: false,
+      reminderTimeChosen: false,
 
       firstOpenedAt: null,
       feedbackInviteSeen: false,
@@ -330,6 +340,8 @@ export const useCalendarStore = create<CalendarState>()(
         })),
 
       markReminderOffered: () => set({ reminderOffered: true }),
+
+      markReminderTimeChosen: () => set({ reminderTimeChosen: true }),
 
       // Once, and never again: the second call has to be a no-op or the field would mean
       // "the last day the app was opened", which is a different fact and not the one
@@ -498,6 +510,7 @@ export const useCalendarStore = create<CalendarState>()(
         selectedMonth: state.selectedMonth,
         reminderEnabled: state.reminderEnabled,
         reminderHour: state.reminderHour,
+        reminderTimeChosen: state.reminderTimeChosen,
         reminderMinute: state.reminderMinute,
         reminderOffered: state.reminderOffered,
         firstOpenedAt: state.firstOpenedAt,

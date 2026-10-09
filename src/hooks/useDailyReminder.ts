@@ -34,6 +34,7 @@ export function useDailyReminder(): DailyReminder {
   const hour = useCalendarStore((s) => s.reminderHour)
   const minute = useCalendarStore((s) => s.reminderMinute)
   const setReminder = useCalendarStore((s) => s.setReminder)
+  const markChosen = useCalendarStore((s) => s.markReminderTimeChosen)
   const { showToast } = useToast()
   const [busy, setBusy] = useState(false)
   const [failure, setFailure] = useState<string | null>(null)
@@ -77,6 +78,10 @@ export function useDailyReminder(): DailyReminder {
   // OK is the confirmation, and there is nothing left to press. While it is off, the time
   // is only remembered, because there is nothing to reschedule.
   const changeTime = (nextHour: number, nextMinute: number): void => {
+    // Said out loud, because the offer needs to know: a time somebody picked is not the
+    // time we would have suggested, and proposing our own over theirs would be asking a
+    // question they have already answered.
+    markChosen()
     if (enabled) {
       void turnOn(nextHour, nextMinute)
       return
