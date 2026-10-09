@@ -11,7 +11,21 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
  * Estos tests describen el comportamiento CORRECTO. Si alguno falla, alguien reintrodujo
  * el defecto: o quito el flush de cierre, o volvio a silenciar los fallos de escritura.
  */
-describe('createDeferredStorage: durabilidad de la escritura', () => {
+/**
+ * Mas tiempo del que da vitest por defecto, y solo aqui.
+ *
+ * La primera prueba de este fichero paga el primer `import('./index')` de su worker, que
+ * trae el store entero y lo que el store trae. Medido: **1056 ms la primera, 1 ms las
+ * cuatro siguientes** (`vi.resetModules()` no obliga a transformar otra vez, solo vacia el
+ * registro). Con la maquina cargada por el resto de la tanda esos 1056 ms se han ido a
+ * 5057, que es justo por encima de los 5000 por defecto, y el fichero se cayo en verde en
+ * la corrida de al lado.
+ *
+ * El numero no describe nada que la app haga, asi que no hay nada que arreglar en el
+ * codigo: es cuanto tarda esta maquina en cargar un modulo mientras hace otras cosas. Lo
+ * que se arregla es el instrumento, que llamaba colgado a lo que solo iba lento.
+ */
+describe('createDeferredStorage: durabilidad de la escritura', { timeout: 30_000 }, () => {
   let idleCallbacks: Array<() => void>
 
   const ocultarPagina = () => {
