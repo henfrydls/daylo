@@ -322,3 +322,54 @@ describe('the time the offer proposes', () => {
     expect(at(6, 0)).toEqual({ hour: 7, minute: 0 })
   })
 })
+
+/**
+ * What to do when the phone does not answer.
+ *
+ * Found while simulating the Tauri bridge for something else: a stub that returned null
+ * where the plugin returns a list made this throw. The plugin is not expected to do that,
+ * which is exactly why the line had no guard and why it is worth one: the cases nobody
+ * expects are the ones nobody has written down.
+ *
+ * Which way to fall is the real question, and it is not "assume nothing is scheduled".
+ * This function is only reached when there is nothing left to be reminded about, so taking
+ * the reminder down is what it came to do. An unknown answer falls towards doing it.
+ */
+describe('when the phone does not say what is scheduled', () => {
+  it('takes the reminder down anyway when the answer is nothing', async () => {
+    pretendAndroid()
+    pending.mockResolvedValue(null)
+
+    await reconcileReminder(0)
+
+    expect(cancel).toHaveBeenCalledWith([REMINDER_ID])
+  })
+
+  it('takes it down when the answer is not a list at all', async () => {
+    pretendAndroid()
+    pending.mockResolvedValue(undefined)
+
+    await reconcileReminder(0)
+
+    expect(cancel).toHaveBeenCalledWith([REMINDER_ID])
+  })
+
+  it('takes it down when asking throws', async () => {
+    pretendAndroid()
+    pending.mockRejectedValue(new Error('the plugin is not there'))
+
+    await expect(reconcileReminder(0)).resolves.toBeUndefined()
+    expect(cancel).toHaveBeenCalledWith([REMINDER_ID])
+  })
+
+  // And a real empty list still means what it says: nothing of ours is scheduled, so there
+  // is nothing to cancel. That is the difference this whole change is about.
+  it('cancels nothing when the phone says the list is empty', async () => {
+    pretendAndroid()
+    pending.mockResolvedValue([])
+
+    await reconcileReminder(0)
+
+    expect(cancel).not.toHaveBeenCalled()
+  })
+})
