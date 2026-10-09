@@ -12,11 +12,13 @@ import {
   ToastContainer,
   useToast,
 } from './components/ui'
+import { DIALOG_STAYS_FOR } from './components/ui'
 import type { DropdownMenuItem } from './components/ui'
 import { AppSkeleton } from './components/skeletons'
 import { CheckinNotice, DailyReminder, Settings } from './components/settings'
 import { useCalendarStore } from './store'
 import {
+  useAnimatedPresence,
   useAppVersion,
   useCheckinFields,
   useMediaQuery,
@@ -114,6 +116,10 @@ function App() {
   const { selectedDate, currentView, setCurrentView, _viewTransitionDirection } = useCalendarStore()
   const [isExportOpen, setIsExportOpen] = useState(false)
   const [isImportOpen, setIsImportOpen] = useState(false)
+  // Whether each one has ever been asked for, which is what decides if it is in the page
+  // at all. See where they are rendered for why it is not simply whether it is open.
+  const [exportAsked, setExportAsked] = useState(false)
+  const [importAsked, setImportAsked] = useState(false)
   const [isBottomSheetOpen, setIsBottomSheetOpen] = useState(false)
   // One surface for everything there is to decide, and one flag for it. Reminders first
   // when that is what was asked for, which is the only thing the menu still chooses.
@@ -232,6 +238,14 @@ function App() {
     !questionClosed &&
     selectedDate === null &&
     (askedFromMenu || shouldInvite || feedbackAsked)
+
+  // Whether it is in the page, which is not the same as whether it is being asked: it goes
+  // on standing there with nothing drawn for as long as the leaving takes. See where it is
+  // rendered for why this one is not simply mounted and left alone.
+  const { shouldRender: questionInThePage } = useAnimatedPresence(
+    questionIsOpen,
+    DIALOG_STAYS_FOR + 50
+  )
 
   // Today's check-in, if the switch is on and today has not been tried. Twice, because
   // there are two kinds of device: a phone is closed and opened again, which remounts
@@ -557,14 +571,22 @@ function App() {
               cleared, or it has nowhere to go back to. It renders nothing when closed. */}
           <QuickLog />
 
-          {/* Export/Import Modals - Lazy loaded */}
+          {/* Export and Import, which are loaded the first time they are asked for and
+              then stay. Not `{isExportOpen && ...}`: with that, the prop can never be
+              false while the component exists, so the dialog is born open and has no frame
+              to come up from, and it is taken out of the page the instant it closes, so
+              the frames where it goes down never happen. Measured before and after, frame
+              by frame, in e2e/dialog.spec.ts.
+
+              Staying costs a dialog that renders null, and keeps the lazy chunk off the
+              first paint, which is why it is "has been asked for" and not "always". */}
           <Suspense fallback={null}>
-            {isExportOpen && (
+            {exportAsked && (
               <ExportModal isOpen={isExportOpen} onClose={() => setIsExportOpen(false)} />
             )}
           </Suspense>
           <Suspense fallback={null}>
-            {isImportOpen && (
+            {importAsked && (
               <ImportModal isOpen={isImportOpen} onClose={() => setIsImportOpen(false)} />
             )}
           </Suspense>
@@ -572,15 +594,26 @@ function App() {
           {/* Daily reminder: the one-time offer. The setting itself is in Settings now. */}
           <DailyReminder />
 
-          {/* The question, wherever it came from. Unmounted when it closes, so the number
-            it carries goes with it rather than being cleared by anybody. Behind a Suspense
-            with no fallback: it is asked for by a gate that has already waited a week, so
-            a few milliseconds more while it loads are nothing, and a spinner in its place
-            would announce a question nobody asked for yet. */}
+          {/* The question, wherever it came from. Behind a Suspense with no fallback: it is
+            asked for by a gate that has already waited a week, so a few milliseconds more
+            while it loads are nothing, and a spinner in its place would announce a question
+            nobody asked for yet.
+
+            Still mounted only while it is being asked, unlike Export and Import, and for a
+            reason that is not convenience: the number it carries is made on mount and must
+            not outlive the dialog, or it stops being one question's number and becomes an
+            identifier. onShown is a mount effect for the same reason, and mounting it any
+            earlier would spend the invitation on somebody who was never asked.
+
+            What it does now is stay a little past the closing, so that the leaving frames
+            happen before it goes. Longer than the dialog takes to leave, because the two
+            timers start in the same commit and the one out here must not finish first. A
+            question re-opened inside that window reuses the same number, which takes a
+            quarter of a second and a menu, and has never happened outside a test. */}
           <Suspense fallback={null}>
-            {questionIsOpen && (
+            {questionInThePage && (
               <FeedbackRating
-                isOpen
+                isOpen={questionIsOpen}
                 onShown={(answer) => {
                   markFeedbackAsked()
                   void sendShown(answer, askedFromMenu ? 'menu' : 'automatic')
@@ -608,8 +641,14 @@ function App() {
           <Settings
             isOpen={settings === 'open'}
             onClose={() => setSettings('closed')}
-            onExport={() => setIsExportOpen(true)}
-            onImport={() => setIsImportOpen(true)}
+            onExport={() => {
+              setExportAsked(true)
+              setIsExportOpen(true)
+            }}
+            onImport={() => {
+              setImportAsked(true)
+              setIsImportOpen(true)
+            }}
             onFeedback={askForFeedback}
             hasReminders={hasReminders}
             canCheckIn={canCheckIn}
