@@ -40,7 +40,7 @@ const LEAVES_IN = 150
  * the page at opacity 0.34, which is a cut rather than a fade, and the ease it leaves on
  * does most of its work at the end.
  */
-const STAYS_FOR = LEAVES_IN + 40
+export const STAYS_FOR = LEAVES_IN + 40
 
 interface ModalProps {
   isOpen: boolean
