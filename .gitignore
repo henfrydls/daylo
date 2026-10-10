@@ -2,7 +2,11 @@
 .claude/
 
 # Dependencies
-node_modules/
+# No trailing slash, on purpose. A slash matches a directory and nothing else, so a
+# symlink named node_modules is not ignored: `git add -A` stages the link itself, which
+# points at somebody's own machine. Linking node_modules from another checkout to run the
+# tests is a thing people here do, and it was staged once.
+node_modules
 
 # Build output
 dist/
