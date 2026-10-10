@@ -111,3 +111,32 @@ test('it closes with Escape and leaves the calendar where it was', async ({ page
   await expect(page.locator(PANEL)).toBeHidden()
   await expect(page.locator('[data-testid="app-header"]')).toBeVisible()
 })
+
+/**
+ * The four links at the foot sit in the middle, which is what Henfry asked for after
+ * seeing 1.4.12.
+ *
+ * Measured as the space each side of the links themselves, never the row they are in: the
+ * row fills the width whether or not anything is centred, so its own middle is the panel's
+ * middle either way and a test written against it passes with the links hard left. Checked
+ * by taking the class off in the live page: 14 and 14 becomes 0 and 28.
+ */
+test('the links at the foot sit in the middle of the panel', async ({ page }) => {
+  await page.locator(GEAR).click()
+  await expect(page.locator(PANEL)).toBeVisible()
+
+  for (const width of [390, 1280]) {
+    await page.setViewportSize({ width, height: 900 })
+    const room = await page.evaluate(() => {
+      const row = document.querySelector('[data-testid="settings-privacy"]')!.parentElement!
+      const boxes = [...row.children].map((node) => node.getBoundingClientRect())
+      const left = Math.min(...boxes.map((b) => b.left))
+      const right = Math.max(...boxes.map((b) => b.right))
+      const outer = row.getBoundingClientRect()
+      return { before: left - outer.left, after: outer.right - right }
+    })
+
+    expect(room.before).toBeGreaterThan(1)
+    expect(Math.abs(room.before - room.after)).toBeLessThan(2)
+  }
+})

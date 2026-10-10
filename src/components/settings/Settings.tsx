@@ -393,7 +393,11 @@ export function Settings({
               <p className="text-gray-900">Made by DLSLabs</p>
               <p className="mt-0.5 text-sm text-gray-500">Henfry De Los Santos</p>
             </div>
-            <div className="flex flex-wrap gap-x-5 gap-y-2 py-3 text-sm">
+            {/* Centred, which is the one thing Henfry asked for after the round. They are
+                not rows: nothing lines up with them above, and left-aligned they read as a
+                fifth row that lost its chevron. Both widths, because the panel on a desktop
+                is the same list in a narrower box. */}
+            <div className="flex flex-wrap justify-center gap-x-5 gap-y-2 py-3 text-sm">
               <Away href={WEBSITE}>Website</Away>
               <Away href={SOURCE}>Source code</Away>
               <Away href={LICENSE}>License</Away>
