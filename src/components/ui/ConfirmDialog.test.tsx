@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { render, screen, fireEvent, waitFor, act } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { ConfirmDialog } from './ConfirmDialog'
+import { DIALOG_STAYS_FOR } from './Modal'
 
 describe('ConfirmDialog', () => {
   const defaultProps = {
@@ -305,9 +306,18 @@ describe('ConfirmDialog', () => {
       expect(screen.getByText('Test Title')).toBeInTheDocument()
 
       rerender(<ConfirmDialog {...defaultProps} isOpen={false} onClose={onClose} />)
-      // Dialog stays rendered during exit animation (150ms)
+
+      // Still there while it leaves, and gone once it has. The number comes from the
+      // component rather than being written here: it was 150 and this test said 150, so
+      // when the dialog started taking longer to leave the test called that a dialog that
+      // never went. What is being claimed is "it goes", not "it goes in 150ms".
       act(() => {
-        vi.advanceTimersByTime(150)
+        vi.advanceTimersByTime(DIALOG_STAYS_FOR - 1)
+      })
+      expect(screen.getByText('Test Title')).toBeInTheDocument()
+
+      act(() => {
+        vi.advanceTimersByTime(2)
       })
       expect(screen.queryByText('Test Title')).not.toBeInTheDocument()
 

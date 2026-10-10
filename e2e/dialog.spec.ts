@@ -230,3 +230,142 @@ test('Import opens clean after a file was chosen and it was closed', async ({ pa
   // Nothing of the last time: no file read, so nothing to choose a mode for.
   await expect(page.getByText('Import mode:')).toBeHidden()
 })
+
+/**
+ * On a phone a dialog is a sheet: it comes up from the bottom edge and goes back down.
+ *
+ * Measured as the rectangle's top edge, frame by frame, and never as a style. Tailwind 4
+ * writes `translate-y-*` to the `translate` property, so `getComputedStyle(node).transform`
+ * reads `none` for the whole journey and a test written against it sees a dialog that never
+ * moved. The rectangle has no opinion about which property moved it.
+ *
+ * Counting the values it passed through, not where it started and ended: a jump satisfies
+ * the two ends, which is how the scale assertion in #126 passed with the bug still in.
+ */
+test('on a phone it comes up from the bottom edge', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 })
+  await page.waitForTimeout(100)
+
+  await page.evaluate((selector) => {
+    const w = window as unknown as { __tops: number[] }
+    w.__tops = []
+    const tick = () => {
+      const node = document.querySelector(selector)
+      if (node) w.__tops.push(Math.round(node.getBoundingClientRect().top))
+      requestAnimationFrame(tick)
+    }
+    requestAnimationFrame(tick)
+  }, DIALOG)
+
+  await page.locator('[data-testid="settings-export"]').click()
+  await expect(page.locator(DIALOG)).toBeVisible()
+  await page.waitForTimeout(600)
+
+  const tops = await page.evaluate(() => (window as unknown as { __tops: number[] }).__tops)
+  expect(tops.length).toBeGreaterThan(5)
+
+  // It began below the bottom edge of a 844-tall screen and finished inside it.
+  expect(tops[0]).toBeGreaterThanOrEqual(844)
+  expect(tops[tops.length - 1]).toBeLessThan(844)
+
+  // And it travelled: more than a handful of distinct heights on the way.
+  expect(new Set(tops).size).toBeGreaterThan(4)
+
+  // Going down again, the same way.
+  await page.evaluate(() => {
+    ;(window as unknown as { __tops: number[] }).__tops = []
+  })
+  await page.getByRole('button', { name: 'Close modal' }).click()
+  await page.waitForTimeout(600)
+
+  const leaving = await page.evaluate(() => (window as unknown as { __tops: number[] }).__tops)
+  expect(leaving.length).toBeGreaterThan(5)
+  expect(leaving[leaving.length - 1]).toBeGreaterThan(leaving[0])
+  expect(new Set(leaving).size).toBeGreaterThan(4)
+})
+
+/**
+ * And above `sm` it is still a dialog in the middle: it must not slide up there, or the
+ * one change becomes two and the desktop gets a sheet nobody asked for.
+ */
+test('on a desktop it stays where it was and only grows', async ({ page }) => {
+  await page.evaluate((selector) => {
+    const w = window as unknown as { __tops: number[] }
+    w.__tops = []
+    const tick = () => {
+      const node = document.querySelector(selector)
+      if (node) w.__tops.push(Math.round(node.getBoundingClientRect().top))
+      requestAnimationFrame(tick)
+    }
+    requestAnimationFrame(tick)
+  }, DIALOG)
+
+  await page.locator('[data-testid="settings-export"]').click()
+  await expect(page.locator(DIALOG)).toBeVisible()
+  await page.waitForTimeout(600)
+
+  const tops = await page.evaluate(() => (window as unknown as { __tops: number[] }).__tops)
+  // A few pixels of movement are the box growing around its middle, not a journey.
+  expect(Math.max(...tops) - Math.min(...tops)).toBeLessThan(40)
+})
+
+/**
+ * The other shell, which is a copy of this one and had all three of the same faults.
+ *
+ * `ConfirmDialog` is not built on `Modal`; it is forty lines of the same markup written
+ * out again. So it appeared finished, its scale never animated, and it was taken out of
+ * the page before it had left. Nobody had looked, because what opens it is a question
+ * somebody is already reading rather than a screen they are watching, and the one on a
+ * phone that matters most, the reminder offer, only exists on Android.
+ */
+test('the confirm is a sheet on a phone too', async ({ page }) => {
+  // From a fresh page at phone width rather than from what the hook left open at 1280.
+  // Resizing a page that already has a panel on it and a sheet arriving over that was
+  // enough to make this pass alone and fail in a full run: the sheet's backdrop was still
+  // taking the press, and the row it wanted was off the bottom of the shorter screen.
+  await page.setViewportSize({ width: 390, height: 844 })
+  await page.goto('/')
+  await expect(page.locator('[data-testid="app-header"]')).toBeVisible()
+  await page.getByTestId('fab-button').click()
+  await expect(page.locator('[data-testid="bottom-sheet"]')).toBeVisible()
+  // Scoped to the sheet: the same row is also in the page behind it, and an unscoped
+  // locator matches both and refuses to choose.
+  const row = page.getByTestId('bottom-sheet').getByTestId('activity-item')
+  await expect(row).toBeVisible()
+  // The sheet's own arrival, out of the way: until it lands its backdrop takes the press.
+  await expect(page.locator('[data-testid="bottom-sheet-backdrop"]')).toHaveCSS('opacity', '1')
+  await page.waitForTimeout(350)
+
+  const CONFIRM = '[data-testid="delete-activity-confirm"]'
+  await page.evaluate((selector) => {
+    const w = window as unknown as { __tops: number[] }
+    w.__tops = []
+    const tick = () => {
+      const node = document.querySelector(selector)
+      if (node) w.__tops.push(Math.round(node.getBoundingClientRect().top))
+      requestAnimationFrame(tick)
+    }
+    requestAnimationFrame(tick)
+  }, CONFIRM)
+
+  // The last button on an activity's row is the one that asks before deleting.
+  await row.getByRole('button').last().click()
+  await expect(page.locator(CONFIRM)).toBeVisible()
+  await page.waitForTimeout(600)
+
+  const tops = await page.evaluate(() => (window as unknown as { __tops: number[] }).__tops)
+  expect(tops.length).toBeGreaterThan(5)
+  expect(tops[0]).toBeGreaterThanOrEqual(844)
+  expect(tops[tops.length - 1]).toBeLessThan(844)
+  expect(new Set(tops).size).toBeGreaterThan(4)
+
+  // Left the way it came, and nothing deleted: this asks, it does not do.
+  //
+  // Counted in the page rather than in the sheet, because pressing Cancel closes the
+  // activities sheet as well, which is a separate fault and not this one's. Measured on
+  // main with none of this applied and it does the same there, so it is older than any of
+  // it: you say no to deleting an activity and lose your place. Reported, not fixed here.
+  await page.getByRole('button', { name: 'Cancel' }).click()
+  await expect(page.locator(CONFIRM)).toBeHidden()
+  await expect(page.locator('#main-content').getByTestId('activity-item')).toHaveCount(1)
+})

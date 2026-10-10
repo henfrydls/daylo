@@ -1,7 +1,8 @@
 import { useRef, useEffect } from 'react'
 import { createPortal } from 'react-dom'
 import { Button } from './Button'
-import { useFocusTrap, useAnimatedPresence } from '../../hooks'
+import { useFocusTrap, useAnimatedPresence, useArrival } from '../../hooks'
+import { DIALOG_CURVE, DIALOG_STAYS_FOR } from './Modal'
 
 interface ConfirmDialogProps {
   isOpen: boolean
@@ -28,7 +29,15 @@ export function ConfirmDialog({
 }: ConfirmDialogProps) {
   const confirmButtonRef = useRef<HTMLButtonElement>(null)
   const dialogRef = useRef<HTMLDivElement>(null)
-  const { shouldRender, isVisible } = useAnimatedPresence(isOpen, 150)
+  /**
+   * The same three fixes Modal needed, for the same three reasons, because this is a copy
+   * of that shell rather than a use of it: a frame to come from, a transition that names
+   * the property Tailwind actually writes, and long enough in the page to finish leaving.
+   * It had all three faults and nobody had looked, because what opens it is a question
+   * somebody is already reading rather than a screen they are watching.
+   */
+  const { shouldRender, isVisible } = useAnimatedPresence(isOpen, DIALOG_STAYS_FOR)
+  const arrived = useArrival(isVisible)
 
   // Use focus trap with autoFocus disabled so we can focus the cancel button instead
   useFocusTrap(dialogRef, isOpen, { onEscape: onClose, autoFocus: false })
@@ -111,16 +120,16 @@ export function ConfirmDialog({
   return createPortal(
     <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center">
       <div
-        className={`absolute inset-0 bg-black/50 transition-opacity duration-150 ${isVisible ? 'opacity-100' : 'opacity-0'}`}
+        className={`absolute inset-0 bg-black/50 transition-opacity duration-[250ms] ${arrived ? 'opacity-100' : 'opacity-0'}`}
         onClick={onClose}
         aria-hidden="true"
       />
       <div
         ref={dialogRef}
-        className={`relative bg-white rounded-t-xl sm:rounded-xl shadow-xl max-w-sm w-full mx-0 sm:mx-4 p-4 sm:p-6 transition-[transform,opacity] ${
-          isVisible
-            ? 'opacity-100 scale-100 duration-250 ease-[var(--ease-emphasized-decel)]'
-            : 'opacity-0 scale-95 duration-150 ease-[var(--ease-emphasized-accel)]'
+        className={`relative bg-white rounded-t-xl sm:rounded-xl shadow-xl max-w-sm w-full mx-0 sm:mx-4 p-4 sm:p-6 motion-safe:transition-[translate,scale,opacity] duration-[250ms] ${DIALOG_CURVE} ${
+          arrived
+            ? 'translate-y-0 opacity-100 sm:scale-100'
+            : 'translate-y-full opacity-0 sm:translate-y-0 sm:scale-95'
         }`}
         role="alertdialog"
         aria-modal="true"

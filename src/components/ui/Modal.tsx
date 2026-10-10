@@ -7,7 +7,13 @@ import { XIcon } from './Icons'
 /**
  * The dialog, and on a phone the sheet that comes up from the bottom.
  *
- * It comes up and goes down, which took two fixes and neither was the transition itself.
+ * On a phone it comes up from the bottom edge and goes back down, the same way and on the
+ * same curve as the day sheet, because on a phone it is the same object: a sheet. Above
+ * `sm` there is no bottom edge to come from, so it stays what it was, something that grows
+ * into the middle of the screen. One component, two behaviours, decided by width and not
+ * by platform: a narrow window on a desktop gets the sheet.
+ *
+ * It comes up and goes down at all, which took two fixes and neither was the transition itself.
  * One is the frame it comes from, which is what useArrival is for. The other is that
  * `scale-95` sets the `scale` property and the transition named `transform`: Tailwind 4
  * scales the way it translates, with the property of that name, so the list named
@@ -29,8 +35,23 @@ import { XIcon } from './Icons'
  * It needs viewport-fit=cover in the viewport meta to be anything but zero, which
  * index.html has.
  */
-/** What the leaving classes say, and what the dialog is given to do it in. */
-const LEAVES_IN = 150
+/**
+ * What the leaving classes say, and what the dialog is given to do it in.
+ *
+ * 250 and one curve in both directions, which is the day sheet's, because on a phone this
+ * is the same object: something that comes up from the bottom edge. Two durations and two
+ * eases is what a dialog that grows in the middle of the screen wants, and that is still
+ * what it does above `sm`.
+ */
+export const DIALOG_LEAVES_IN = 250
+/**
+ * The day sheet's curve, so that two things that move the same way move the same way.
+ *
+ * Written out at every use rather than interpolated into a class. Tailwind reads the
+ * source as text, so `duration-[${n}ms]` is a class nobody ever writes down: nothing
+ * generates it, and the transition quietly has no duration at all.
+ */
+export const DIALOG_CURVE = 'ease-[cubic-bezier(0.32,0.72,0,1)]'
 /**
  * Two frames more than the transition itself.
  *
@@ -40,7 +61,7 @@ const LEAVES_IN = 150
  * the page at opacity 0.34, which is a cut rather than a fade, and the ease it leaves on
  * does most of its work at the end.
  */
-export const STAYS_FOR = LEAVES_IN + 40
+export const DIALOG_STAYS_FOR = DIALOG_LEAVES_IN + 40
 
 interface ModalProps {
   isOpen: boolean
@@ -66,7 +87,7 @@ export function Modal({
   'data-testid': testId,
 }: ModalProps) {
   const modalRef = useRef<HTMLDivElement>(null)
-  const { shouldRender, isVisible } = useAnimatedPresence(isOpen, STAYS_FOR)
+  const { shouldRender, isVisible } = useAnimatedPresence(isOpen, DIALOG_STAYS_FOR)
   // A frame at the state it comes from, before it is told to go to the other one. Without
   // it the dialog is painted finished and the transition has nothing to run: it was simply
   // there, measured at opacity 1 on the first frame it existed.
@@ -79,16 +100,16 @@ export function Modal({
   return createPortal(
     <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center">
       <div
-        className={`absolute inset-0 bg-black/50 transition-opacity duration-150 ${arrived ? 'opacity-100' : 'opacity-0'}`}
+        className={`absolute inset-0 bg-black/50 transition-opacity duration-[250ms] ${arrived ? 'opacity-100' : 'opacity-0'}`}
         onClick={onClose}
         aria-hidden="true"
       />
       <div
         ref={modalRef}
-        className={`relative bg-white rounded-t-xl sm:rounded-xl shadow-xl max-w-md w-full mx-0 sm:mx-4 px-6 pt-4 sm:pt-6 pb-[calc(1rem_+_env(safe-area-inset-bottom))] sm:pb-[calc(1.5rem_+_env(safe-area-inset-bottom))] max-h-[90dvh] flex flex-col overflow-hidden motion-safe:transition-[scale,opacity] ${
+        className={`relative bg-white rounded-t-xl sm:rounded-xl shadow-xl max-w-md w-full mx-0 sm:mx-4 px-6 pt-4 sm:pt-6 pb-[calc(1rem_+_env(safe-area-inset-bottom))] sm:pb-[calc(1.5rem_+_env(safe-area-inset-bottom))] max-h-[90dvh] flex flex-col overflow-hidden motion-safe:transition-[translate,scale,opacity] duration-[250ms] ${DIALOG_CURVE} ${
           arrived
-            ? 'opacity-100 scale-100 duration-250 ease-[var(--ease-emphasized-decel)]'
-            : 'opacity-0 scale-95 duration-150 ease-[var(--ease-emphasized-accel)]'
+            ? 'translate-y-0 opacity-100 sm:scale-100'
+            : 'translate-y-full opacity-0 sm:translate-y-0 sm:scale-95'
         }`}
         role="dialog"
         aria-modal="true"
