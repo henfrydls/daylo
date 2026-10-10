@@ -1,6 +1,20 @@
 import { useEffect, useRef, type RefObject } from 'react'
 import { onAndroidBack } from '../lib/androidBack'
 
+/**
+ * Everything on screen that answers Escape, oldest first. Only the last one does.
+ *
+ * Each trap listened on `document`, so Escape reached all of them at once and a dialog
+ * opened from inside a sheet took the sheet with it when it closed. Android never had the
+ * fault: `onAndroidBack` has kept a stack from the day it was written, and the comment
+ * below says the two are one gesture. They are now.
+ *
+ * A module-level array rather than a context, for the same reason the Android one is: what
+ * is in front of what is a fact about the screen, not about any tree of components, and a
+ * dialog rendered through a portal is in nobody's tree.
+ */
+const answeringEscape: Array<{ fire: () => void }> = []
+
 const FOCUSABLE_SELECTOR =
   'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])'
 
@@ -88,22 +102,30 @@ export function useFocusTrap(
     }
   }, [isActive, restoreFocus, autoFocus, containerRef])
 
-  // Handle Escape key
+  // Handle Escape key. Through the ref and on [isActive] alone, exactly as the Android
+  // half above: a dialog whose onEscape is written inline gets a new one every render, and
+  // re-registering would put it back on top of the stack while something else is in front.
   useEffect(() => {
-    if (!isActive || !onEscape) return
+    if (!isActive || escape.current === undefined) return
+
+    const mine = { fire: () => escape.current?.() }
+    answeringEscape.push(mine)
 
     const handleEscape = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') {
-        onEscape()
-      }
+      if (e.key !== 'Escape') return
+      // Only what is in front. Everything else is behind something and keeps its place.
+      if (answeringEscape[answeringEscape.length - 1] !== mine) return
+      mine.fire()
     }
 
     document.addEventListener('keydown', handleEscape)
 
     return () => {
       document.removeEventListener('keydown', handleEscape)
+      const at = answeringEscape.lastIndexOf(mine)
+      if (at !== -1) answeringEscape.splice(at, 1)
     }
-  }, [isActive, onEscape])
+  }, [isActive])
 
   // Focus trap - handle Tab and Shift+Tab
   useEffect(() => {

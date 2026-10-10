@@ -42,6 +42,20 @@ export function BottomSheet({
   const [sheetHeight, setSheetHeight] = useState(0)
   const dragStartY = useRef(0)
   const dragStartX = useRef(0)
+  /**
+   * Whether a finger is actually down on this sheet.
+   *
+   * Without it a move was enough, and `dragStartY` begins at zero, so the first time a
+   * pointer crossed the sheet at all it measured its own height as a drag: five hundred
+   * and thirty-one pixels, past the distance that dismisses it. Nothing happened at once,
+   * because the press that follows reads the flag React has not committed yet; the sheet
+   * went the next time something was let go anywhere, which is how pressing Cancel on
+   * "Delete Activity?" closed the panel the question was asked in.
+   *
+   * A ref and not state: what is being asked is "is a finger down", which the next event
+   * needs the answer to before React has rendered anything.
+   */
+  const pressing = useRef(false)
 
   // Measure sheet height when visible
   useEffect(() => {
@@ -59,13 +73,26 @@ export function BottomSheet({
    * off and back on under each press. Henfry filmed six of those in four seconds on the
    * Activities sheet, including the pencil.
    */
+  /**
+   * Whether this pointer is on the sheet at all.
+   *
+   * A dialog opened from inside the sheet renders through a portal, which puts it outside
+   * the sheet in the page and leaves it inside it in React, and React bubbles events up
+   * the tree it knows. So pressing a button in that dialog arrived here as a press on the
+   * sheet, and the move down to it as a drag.
+   */
+  const onThisSheet = (e: React.PointerEvent) => e.currentTarget.contains(e.target as Node | null)
+
   const handlePointerDown = useCallback((e: React.PointerEvent) => {
+    if (!onThisSheet(e)) return
+    pressing.current = true
     dragStartY.current = e.clientY
     dragStartX.current = e.clientX
   }, [])
 
   const handlePointerMove = useCallback(
     (e: React.PointerEvent) => {
+      if (!pressing.current || !onThisSheet(e)) return
       const deltaY = e.clientY - dragStartY.current
       if (!isDragging) {
         // Downwards, far enough to mean it, and more down than across. A tap never gets
@@ -80,6 +107,7 @@ export function BottomSheet({
   )
 
   const handlePointerUp = useCallback(() => {
+    pressing.current = false
     if (!isDragging) return
     setIsDragging(false)
 

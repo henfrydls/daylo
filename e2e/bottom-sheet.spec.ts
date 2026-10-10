@@ -108,3 +108,70 @@ test('a finger dragged down takes the sheet with it', async ({ page }) => {
 
   await client.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] })
 })
+
+/**
+ * Saying no to deleting an activity used to close the panel you said it in.
+ *
+ * Two separate faults, and both had to go. A drag began on a bare move, with `dragStartY`
+ * still at zero, so the first pointer to cross the sheet measured five hundred and
+ * thirty-one pixels of drag, past the distance that dismisses it; the sheet went the next
+ * time anything was let go. And every focus trap listened for Escape on the document, so
+ * one press reached the confirm and the sheet at once, while Android's back button has
+ * kept a stack since the day it was written.
+ *
+ * Measured rather than reasoned about, and the first reasoning was wrong twice: it was not
+ * the portal's press, and it was not only Escape.
+ */
+const CONFIRM = '[data-testid="delete-activity-confirm"]'
+const sheetTop = (page: import('@playwright/test').Page) =>
+  page.evaluate(
+    (selector) => Math.round(document.querySelector(selector)!.getBoundingClientRect().top),
+    SHEET
+  )
+
+async function askToDelete(page: import('@playwright/test').Page) {
+  const row = page.getByTestId('bottom-sheet').getByTestId('activity-item')
+  await expect(row).toHaveCount(1)
+  await row.getByRole('button').last().click()
+  await expect(page.locator(CONFIRM)).toBeVisible()
+}
+
+test('saying no leaves the sheet open and where it was', async ({ page }) => {
+  const before = await sheetTop(page)
+  await askToDelete(page)
+
+  // It does not move while the question is up either: the stray drag pushed it down.
+  expect(await sheetTop(page)).toBe(before)
+
+  await page.getByRole('button', { name: 'Cancel' }).click()
+  await expect(page.locator(CONFIRM)).toBeHidden()
+
+  await expect(page.locator(SHEET)).toBeVisible()
+  expect(await sheetTop(page)).toBe(before)
+  await expect(page.getByTestId('bottom-sheet').getByTestId('activity-item')).toHaveCount(1)
+})
+
+test('Escape takes away the question and nothing behind it', async ({ page }) => {
+  const before = await sheetTop(page)
+  await askToDelete(page)
+
+  await page.keyboard.press('Escape')
+  await expect(page.locator(CONFIRM)).toBeHidden()
+
+  await expect(page.locator(SHEET)).toBeVisible()
+  expect(await sheetTop(page)).toBe(before)
+
+  // And a second Escape, with nothing in front of it any more, does close the sheet.
+  await page.keyboard.press('Escape')
+  await expect(page.locator(SHEET)).toBeHidden()
+})
+
+test('saying yes still deletes, and still leaves the sheet', async ({ page }) => {
+  await askToDelete(page)
+
+  await page.getByRole('button', { name: 'Delete', exact: true }).click()
+  await expect(page.locator(CONFIRM)).toBeHidden()
+
+  await expect(page.locator(SHEET)).toBeVisible()
+  await expect(page.getByTestId('bottom-sheet').getByTestId('activity-item')).toHaveCount(0)
+})
