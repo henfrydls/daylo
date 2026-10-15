@@ -146,6 +146,13 @@ jobs:
           # names get minified, URL strings do not.
           scripts/check-no-analytics.sh --text-only package-lock.json dist dist-demo
 
+      # release.yml is run by no check here: only a tag runs it, so a mistake in it is
+      # found by publishing one. This reads its dependency graph instead, which is the
+      # part of it that can be read without running anything, and is where the hashes of
+      # three releases went wrong.
+      - name: The hashes are published after the files they describe
+        run: scripts/check-sums-come-last.sh
+
 
   # Android is the only platform whose build was never checked on a pull request: the APK
   # was produced solely by release.yml, on tag. That was tolerable while nothing touched

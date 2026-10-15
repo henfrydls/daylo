@@ -528,7 +528,16 @@ jobs:
           echo "The address the app reads gives back $served."
 
   release-summary:
-    needs: [build, build-android, build-demo]
+    # 'updater-manifest' is here for its ORDER, not for anything it produces: this job uses
+    # no output of it. It publishes SHA256SUMS.txt from the digests the releases API
+    # reports, and the manifest job rewrites latest.json, so without this edge the two
+    # became eligible in the same second and raced. The sums job is the shorter of the
+    # two and won all three times it was measured, which is why v1.4.0, v1.4.1 and v1.4.2
+    # all published the hash of the latest.json that the manifest job then replaced.
+    #
+    # So it looks removable, and it is not. scripts/check-sums-come-last.sh fails if it
+    # goes, and says why.
+    needs: [build, build-android, build-demo, updater-manifest]
     runs-on: ubuntu-latest
     # The repository has default_workflow_permissions set to "read", so without declaring
     # this 'gh release upload' returns 403. The other two jobs already declare it; this one
