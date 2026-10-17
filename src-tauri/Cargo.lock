@@ -4076,8 +4076,7 @@ dependencies = [
 [[package]]
 name = "tauri-plugin-notification"
 version = "2.3.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "01fc2c5ff41105bd1f7242d8201fdf3efd70749b82fa013a17f2126357d194cc"
+source = "git+https://github.com/henfrydls/plugins-workspace?rev=c060e1042e4edb9a70dcb83d73dc57a3e8cb42b3#c060e1042e4edb9a70dcb83d73dc57a3e8cb42b3"
 dependencies = [
  "log",
  "notify-rust",

@@ -254,3 +254,87 @@ pub fn fetch_text(url: &str, limit: i32) -> Result<String, String> {
         }
     })
 }
+
+/// Whether this phone will let Daylo set an alarm for an exact time.
+///
+/// Android 12 made exact alarms something an app has to be allowed, and Android 14 made
+/// the answer "no" by default for an app like this one. There is a sister permission that
+/// is granted on sight, `USE_EXACT_ALARM`, and Daylo deliberately does not ask for it:
+/// Google reserves it for alarm clocks and calendars, and a habit tracker is neither.
+///
+/// Below Android 12 there is nothing to ask, so the answer is yes. True is also the answer
+/// when the question cannot be put at all, and that direction is chosen on purpose: the
+/// only thing this decides is whether the screen offers a way to fix something, and
+/// offering a fix for a problem that may not exist is worse than staying quiet. The
+/// reminder is scheduled either way.
+pub fn exact_alarms_allowed() -> bool {
+    with_the_activity(|env, activity| {
+        if sdk_int(env)? < 31 {
+            return Ok(true);
+        }
+        let name = env.new_string("alarm")?;
+        let alarms = env
+            .call_method(
+                activity,
+                "getSystemService",
+                "(Ljava/lang/String;)Ljava/lang/Object;",
+                &[JValue::Object(&name)],
+            )?
+            .l()?;
+        if alarms.is_null() {
+            return Ok(true);
+        }
+        env.call_method(&alarms, "canScheduleExactAlarms", "()Z", &[])?
+            .z()
+    })
+    .unwrap_or(true)
+}
+
+/// Open the system screen where exact alarms are allowed, and say whether it opened.
+///
+/// It is the phone's own screen, titled "Alarms & reminders", and nothing here grants
+/// anything: the person does, or does not, and the app finds out the next time it asks.
+/// The intent carries this app's package so the screen opens on Daylo's own entry rather
+/// than on a list to go looking through.
+pub fn ask_for_exact_alarms() -> bool {
+    with_the_activity(|env, activity| {
+        if sdk_int(env)? < 31 {
+            return Ok(false);
+        }
+        let action = env.new_string("android.settings.REQUEST_SCHEDULE_EXACT_ALARM")?;
+        let intent = env.new_object(
+            "android/content/Intent",
+            "(Ljava/lang/String;)V",
+            &[JValue::Object(&action)],
+        )?;
+
+        let package = env
+            .call_method(activity, "getPackageName", "()Ljava/lang/String;", &[])?
+            .l()?;
+        let package = String::from(env.get_string(&JString::from(package))?);
+        let target = env.new_string(format!("package:{package}"))?;
+        let uri = env
+            .call_static_method(
+                "android/net/Uri",
+                "parse",
+                "(Ljava/lang/String;)Landroid/net/Uri;",
+                &[JValue::Object(&target)],
+            )?
+            .l()?;
+        env.call_method(
+            &intent,
+            "setData",
+            "(Landroid/net/Uri;)Landroid/content/Intent;",
+            &[JValue::Object(&uri)],
+        )?;
+
+        env.call_method(
+            activity,
+            "startActivity",
+            "(Landroid/content/Intent;)V",
+            &[JValue::Object(&intent)],
+        )?;
+        Ok(true)
+    })
+    .unwrap_or(false)
+}

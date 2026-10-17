@@ -295,9 +295,27 @@ export function Settings({
                       }`}
                     />
                   </div>
-                  <p className="pb-3 text-sm text-gray-500">
-                    Android may deliver it a few minutes late.
-                  </p>
+                  {reminder.onTime ? (
+                    <p className="pb-3 text-sm text-gray-500">
+                      Android may deliver it a few minutes late.
+                    </p>
+                  ) : (
+                    <>
+                      {/* Two sentences and a row rather than a dialog: the permission is
+                          granted on a screen that belongs to the phone, so all the app can
+                          do is say what is happening and open the door to it. The row goes
+                          away by itself when the person comes back having granted it. */}
+                      <p className="text-sm text-gray-500">
+                        Android may send this an hour or more late, unless Daylo is allowed to
+                        remind you on time.
+                      </p>
+                      <GoRow
+                        label="Allow on-time reminders"
+                        onClick={() => void reminder.askForTime()}
+                        testId="reminder-exact"
+                      />
+                    </>
+                  )}
                 </div>
               </div>
               {reminder.failure === null ? null : (

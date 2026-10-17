@@ -112,6 +112,46 @@ export async function remindersAvailable(): Promise<boolean> {
 }
 
 /**
+ * Whether the reminder will arrive at the time it was set for.
+ *
+ * False does not mean it will not arrive. It means Android is free to move it, by about
+ * an hour on a phone in use and further out of a deep doze, which is what an inexact
+ * alarm is. The screen uses this to decide whether to say so and offer the way to change
+ * it, never whether to schedule anything.
+ *
+ * True where the question cannot be put at all, which is the same direction the Rust side
+ * takes and for the same reason: the only thing this decides is whether to offer a fix,
+ * and offering one for a problem that may not exist is worse than saying nothing.
+ */
+export async function exactAlarmsAllowed(): Promise<boolean> {
+  if (!isTauri()) {
+    return true
+  }
+  try {
+    return await invoke<boolean>('exact_alarms_allowed')
+  } catch {
+    return true
+  }
+}
+
+/**
+ * Open the phone's own "Alarms & reminders" screen, and say whether it opened.
+ *
+ * Opening a screen grants nothing. The person decides there, and the app finds out by
+ * asking again when it comes back, which is why nothing here waits for an answer.
+ */
+export async function askForExactAlarms(): Promise<boolean> {
+  if (!isTauri()) {
+    return false
+  }
+  try {
+    return await invoke<boolean>('ask_for_exact_alarms')
+  } catch {
+    return false
+  }
+}
+
+/**
  * Put the reminder on the phone's alarm queue, and say whether it got there.
  *
  * Called through invoke rather than through the plugin's own sendNotification, which is
@@ -131,7 +171,13 @@ async function putOnTheQueue(hour: number, minute: number): Promise<string | nul
         title: TITLE,
         body: BODY,
         icon: REMINDER_ICON,
-        schedule: Schedule.interval({ hour, minute }, true),
+        // The zero is load bearing. The plugin's Kotlin builds the next trigger from a
+        // calendar made of *now* and sets only the fields it was given, zeroing the
+        // milliseconds and leaving the seconds (NotificationSchedule.kt,
+        // buildNextTriggerTime). Without this, a reminder set at 21:00:36 fires at
+        // 21:00:36 every night: on the minute by accident of when the switch was pressed.
+        // Seen on a phone on 2026-10-13 as origWhen=21:00:36.
+        schedule: Schedule.interval({ hour, minute, second: 0 }, true),
       },
     })
     return null
@@ -148,9 +194,9 @@ async function putOnTheQueue(hour: number, minute: number): Promise<string | nul
  * Turn the daily reminder on at the given local time.
  *
  * The schedule is an interval matching an hour and a minute, which Android re-arms by
- * itself and which the plugin restores after a reboot. allowWhileIdle is set because
- * without it the alarm will not wake a dozing phone, and an evening reminder that waits
- * for the phone to be picked up is no reminder at all.
+ * itself. It does not survive a reboot: see refreshReminder, which is what brings it back.
+ * allowWhileIdle is set because without it the alarm will not wake a dozing phone, and an
+ * evening reminder that waits for the phone to be picked up is no reminder at all.
  *
  * What it does not buy is punctuality. Without SCHEDULE_EXACT_ALARM the alarm is an
  * inexact one, which Android is free to move within a window of about an hour, and
@@ -167,13 +213,20 @@ async function putOnTheQueue(hour: number, minute: number): Promise<string | nul
  * means even at its best, and why the wording says "usually close" rather than a number.
  *
  * Asking for the exact-alarm permission was weighed and refused here, and that decision
- * has since been reversed: Henfry saw other apps arrive on the minute, and it is going in
- * a later version. When it does, two things have to be true before this paragraph can
- * promise anything. The permission comes denied by default on Android 14 and up, so the
- * sheet has to tell the truth when it is not granted. And the plugin re-arms the following
- * days in its receiver with `setExact(RTC, ...)`, without RTC_WAKEUP and without
- * allowWhileIdle, so without a fix there the permission buys one punctual reminder rather
- * than punctual reminders.
+ * was reversed in 1.5: Henfry saw other apps arrive on the minute. Daylo now declares
+ * SCHEDULE_EXACT_ALARM and the screen asks `exactAlarmsAllowed` whether it was granted,
+ * because on Android 14 and up it comes denied by default and a sheet that promised
+ * punctuality without it would be lying to most phones.
+ *
+ * The other half is the plugin, which re-armed the following days in its receiver with
+ * `setExact(RTC, ...)`, without RTC_WAKEUP and without allowWhileIdle, so the permission
+ * bought one punctual reminder rather than punctual reminders. Daylo builds a patched
+ * copy of the plugin where both paths decide the same way: see `[patch.crates-io]` in
+ * src-tauri/Cargo.toml.
+ *
+ * What the sheet says has deliberately not changed yet. Both halves are in, and neither
+ * has been watched arriving on a phone over two nights. The wording moves when somebody
+ * has seen it, not when the code that should make it true was written.
  *
  * It will fire whether or not anything was logged that day. Suppressing it on a day
  * already logged would mean cancelling and re-arming from inside the app, and then a
@@ -200,15 +253,20 @@ export async function enableReminder(hour: number, minute: number): Promise<Remi
 /**
  * Arm an already-enabled reminder again, without asking for anything.
  *
- * The plugin sets the first alarm with setExactAndAllowWhileIdle on RTC_WAKEUP, but it
- * re-arms every later one from its own receiver with plain RTC, no wakeup and no idle
- * allowance. From the second evening on, a phone in Doze can hold the reminder back until
- * it next wakes. Scheduling it again when Daylo is opened restores the good alarm for the
- * next evening, and it costs one call.
+ * A reboot takes the reminder away and nothing brings it back on its own. The plugin has a
+ * receiver for BOOT_COMPLETED, and it restores whatever is in its own store, and its store
+ * is empty: a notification scheduled through `show`, which is the only path the Rust API
+ * offers, is never written there. Only `batch` writes, and nothing reaches `batch`. So the
+ * one thing that puts the alarm back after a restart is Daylo being opened, which is this.
  *
  * It also puts the switch back in step with the phone: a permission taken away in the
  * system settings leaves nothing scheduled, and this is how the app finds out. Returns
  * whether the reminder is on after the call.
+ *
+ * It used to be here for a third reason, the re-arming the plugin's receiver did with
+ * plain RTC and no idle allowance, which this call undid for the next evening. That is
+ * fixed in the plugin now, in the patched copy pinned in src-tauri/Cargo.toml, so this is
+ * no longer the only thing standing between a daily reminder and a dozing phone.
  */
 export async function refreshReminder(hour: number, minute: number): Promise<boolean> {
   if (!(await remindersAvailable())) {
