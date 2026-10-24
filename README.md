@@ -20,6 +20,8 @@
 
 ## Installation
 
+[![Launch on PicoRunner](https://picorunner.com/badges/launch.svg)](https://picorunner.com/launch/?repository=https%3A%2F%2Fgithub.com%2Fhenfrydls%2Fdaylo)
+
 Your data stays on your device. No account, and nothing you track is ever uploaded. What the app sends, and how to turn it off, is in the [privacy policy](https://daylo.henfrydls.com/privacy/).
 
 - **[Desktop app](#desktop-app)** (Windows, macOS, Linux): On Windows, [get it from the Microsoft Store](https://apps.microsoft.com/detail/9NJM37WMMC5Z). Otherwise download from GitHub Releases
