@@ -69,6 +69,22 @@ fn inside_a_store_package() -> bool {
     result != APPMODEL_ERROR_NO_PACKAGE
 }
 
+/// Whether this copy is running from inside a snap.
+///
+/// `$SNAP` is the root of the mounted squashfs, and snapd sets it for everything it
+/// starts. It is read rather than stamped because nothing stamps it: snapcraft packages
+/// what the Tauri bundler already built, so the stamp inside the binary says whichever
+/// format it was unpacked from. A copy from the Snap Store would call itself a deb, and
+/// the updater would offer to download a replacement into a read-only filesystem for an
+/// app the store is already keeping current.
+///
+/// Takes the value rather than reading it, like everything else here, so the two answers
+/// that matter can be pinned by a test. Set and empty counts as not set: `SNAP=` in a
+/// shell is a variable that exists and says nothing.
+pub fn inside_a_snap(snap: Option<&str>) -> bool {
+    matches!(snap, Some(root) if !root.is_empty())
+}
+
 /// What the screen asks before offering anything.
 ///
 /// `"store"` means the copy is managed by somebody else and Daylo says nothing at all:
@@ -83,6 +99,14 @@ pub fn install_format() -> Option<&'static str> {
     #[cfg(target_os = "windows")]
     if inside_a_store_package() {
         return Some("store");
+    }
+
+    // Before the stamp and not after, for the same reason as the Store check above: the
+    // stamp is there and it is wrong. It describes the file snapcraft unpacked, not the
+    // door this copy came through.
+    #[cfg(target_os = "linux")]
+    if inside_a_snap(std::env::var("SNAP").ok().as_deref()) {
+        return Some("snap");
     }
 
     installed_as(tauri::utils::platform::bundle_type())
@@ -101,6 +125,9 @@ pub fn install_format() -> Option<&'static str> {
 /// `installer` is only ever Some on a phone, and only the Android arm reads it.
 pub fn installed_from(format: Option<&str>, installer: Option<&str>) -> &'static str {
     match format {
+        // Managed by somebody else, like the Microsoft Store and Google Play, and counted
+        // separately because it is a different door and a different kind of person.
+        Some("snap") => "snap",
         Some("store") => "store",
         Some("nsis") | Some("msi") => "installer",
         Some("appimage") => "appimage",
@@ -167,12 +194,13 @@ fn android_installer() -> Option<String> {
 
 #[cfg(test)]
 mod tests {
-    use super::{android_source, installed_as, installed_from, BundleType};
+    use super::{android_source, inside_a_snap, installed_as, installed_from, BundleType};
 
     /// Every word the check-in can carry, and what it is for. A panel that counts these is
     /// only as good as the day somebody adds a format and forgets this line.
     #[test]
     fn every_way_in_has_a_word() {
+        assert_eq!(installed_from(Some("snap"), None), "snap");
         assert_eq!(installed_from(Some("store"), None), "store");
         assert_eq!(installed_from(Some("nsis"), None), "installer");
         assert_eq!(installed_from(Some("msi"), None), "installer");
@@ -194,6 +222,26 @@ mod tests {
             installed_from(Some("nsis"), None),
             installed_from(Some("store"), None)
         );
+    }
+
+    /// A snap says so in the environment, and that is the only way to know.
+    ///
+    /// Nothing is stamped into the binary: snapcraft takes what the Tauri bundler built
+    /// and the stamp that comes with it says `deb`, which is the format it was unpacked
+    /// from and not the one somebody installed. Reading that would have the updater offer
+    /// a download to a copy the Snap Store keeps current, inside a read-only squashfs
+    /// where nothing could be written anyway.
+    #[test]
+    fn a_snap_is_known_by_its_environment() {
+        assert!(inside_a_snap(Some("/snap/daylo/x1")));
+        assert!(!inside_a_snap(None));
+    }
+
+    /// Set and empty is not set. `SNAP=` in a shell is a variable that exists and answers
+    /// nothing, and treating that as yes would call a developer's terminal a snap.
+    #[test]
+    fn an_empty_variable_is_not_a_snap() {
+        assert!(!inside_a_snap(Some("")));
     }
 
     /// Android has two doors now, and only one of them has a name.

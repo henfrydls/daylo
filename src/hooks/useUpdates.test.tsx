@@ -98,6 +98,24 @@ describe('whether it looks at all', () => {
     expect(result.current.supported).toBe(false)
   })
 
+  // The same, from a third store, and the one place where being wrong costs the most: a
+  // snap is mounted read-only, so an offer taken up here could not finish even if the
+  // Snap Store were not already refreshing the copy. Written as its own test rather than
+  // another word in the one above, because what is being watched is the hook and not the
+  // table it reads.
+  it('asks nothing and offers nothing inside a snap', async () => {
+    format = 'snap'
+    check.mockResolvedValue(anUpdate())
+
+    const { result } = renderHook(() => useUpdates())
+    await settle()
+
+    expect(check).not.toHaveBeenCalled()
+    expect(result.current.notice).toBeNull()
+    expect(result.current.waiting).toBeNull()
+    expect(result.current.supported).toBe(false)
+  })
+
   // Nothing patched this copy, so we do not know what it is. The menu entry goes with it:
   // a setting that cannot act on anything is a setting that lies about what it does.
   it('says nothing where nothing packaged this copy', async () => {

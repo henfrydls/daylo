@@ -17,9 +17,10 @@ export interface CheckinFields {
   version: string
   os: string
   /**
-   * One word for the way this copy was installed: store, installer, appimage, deb, rpm,
-   * macos, play, apk, or unknown where nothing packaged it. Added in 1.4.1, because the
-   * panel could see twenty copies on Windows and not know how many came from the Store.
+   * One word for the way this copy was installed: store, installer, appimage, snap, deb,
+   * rpm, macos, play, apk, or unknown where nothing packaged it. Added in 1.4.1, because
+   * the panel could see twenty copies on Windows and not know how many came from the
+   * Store.
    *
    * play and apk are the same question asked again on Android, from 1.5: Daylo is on
    * Google Play and is also a file on the site, and only the phone knows which one a copy

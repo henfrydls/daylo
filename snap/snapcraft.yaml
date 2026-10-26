@@ -1,0 +1,98 @@
+# The Snap Store package. What is uploaded is built by .github/workflows, never by hand.
+#
+# It packages the .deb the Tauri bundler already produced rather than building the app a
+# second time from source. The Flatpak does build from source, and it has to: Flathub
+# builds everything itself, offline, which is what cargo-sources.json and node-sources.json
+# exist for. Nothing here has that constraint, and a second build would be a second thing
+# that can drift from what the release actually ships.
+#
+# The cost of that choice is written down plainly: `snapcraft` cannot be run on a clean
+# checkout. It needs daylo.deb beside this file, which the workflow puts there. See
+# `source` below.
+name: daylo
+base: core24
+adopt-info: daylo
+summary: See your whole year at a glance
+description: |
+  Daylo is a habit tracker with a calendar you can read at a glance. Tick off what you
+  did today and the year fills in with colour, so you can see a streak forming or a month
+  you let slip without reading a single number.
+
+  Your data stays on your device. Daylo has no account, and no server stores your habits
+  or the days you marked. One thing leaves your device unless you turn it off: an
+  anonymous daily check-in that tells us the app is still in use. It carries a random
+  number, the app version, your system, how it was installed and the date, and nothing
+  else. The app tells you the first time it opens, and you can turn it off from Settings
+  at any time. You can export a backup whenever you want and import it on another machine.
+
+license: MIT
+grade: stable
+
+# Strict, and the app was ready for it before this file existed. See the plugs below.
+confinement: strict
+
+# amd64 alone, which matches the rest of the project rather than being a limitation of
+# snap. There is no Linux arm64 build anywhere in Daylo: the release matrix builds
+# linux-x64 and nothing else on this platform. Adding one for the Snap Store alone would
+# mean cross building a Tauri app for a target nobody has tested, to reach people who
+# cannot install any other Linux build today either.
+platforms:
+  amd64:
+
+apps:
+  daylo:
+    command: usr/bin/Daylo
+    # The GNOME extension, and it is not decoration: it is what supplies WebKitGTK.
+    # Measured on 2026-10-23 against the platform snap this extension brings in on core24:
+    # /snap/gnome-46-2404/current/usr/lib/x86_64-linux-gnu/libwebkit2gtk-4.1.so.0 is there,
+    # along with libjavascriptcoregtk-4.1, which is the pair Tauri 2 links against. Without
+    # it they would have to be staged into this snap, which is tens of megabytes of a
+    # browser engine that every GNOME snap on the machine already has a copy of.
+    #
+    # The extension also brings the desktop, desktop-legacy, wayland, x11, opengl and
+    # gsettings plugs with it, so they are not repeated here. What is listed is what it
+    # does not give.
+    extensions: [gnome]
+    desktop: usr/share/applications/daylo.desktop
+    common-id: io.github.henfrydls.daylo
+    plugs:
+      # The anonymous check-in and the update check, and nothing else reaches the network.
+      # The Flatpak declares the same one permission for the same reason, and the argument
+      # for making it visible rather than hiding it is written out at length in
+      # packaging/flathub/io.github.henfrydls.daylo.yml.
+      - network
+
+      # There is deliberately no `home` plug, and no `removable-media`. Export and import
+      # both go through the desktop portal: the person picks the file and the portal hands
+      # over that one file and nothing else. That is a property of the app since 1.1.3 and
+      # not a hope about the sandbox, which is why the Flatpak ships with no --filesystem
+      # at all. tauri-plugin-dialog is built with its xdg-portal feature and without the
+      # gtk3 backend precisely so this works; src-tauri/Cargo.toml says why at length.
+      #
+      # If a backup ever lands somewhere nobody can find, the fix is in the app, as it was
+      # the last time. Adding `home` here would widen what Daylo can read to the whole of
+      # somebody's files, to fix a bug that would still be there.
+
+parts:
+  daylo:
+    plugin: dump
+    # Put here by the workflow, from the same bundler run that produces the .deb on the
+    # release page. snapcraft unpacks it and the tree inside is the tree that gets mounted:
+    # usr/bin/Daylo, usr/share/applications/Daylo.desktop and the hicolor icons.
+    source: daylo.deb
+    source-type: deb
+    override-pull: |
+      craftctl default
+      # One source of truth for the version, the same file the app and the Cargo crate
+      # read. A number typed here would be right on the day it was typed.
+      craftctl set version="$(grep -m1 '"version"' "$CRAFT_PROJECT_DIR/package.json" | cut -d'"' -f4)"
+
+  # The launcher entry, replaced rather than taken from the .deb. The bundler writes one
+  # with `Categories=` empty and `Exec=Daylo`, so a desktop menu has nowhere to file Daylo
+  # and the icon is looked for by a bare name. This one says where it belongs and points
+  # at the icon inside the snap.
+  launcher:
+    plugin: dump
+    source: snap/local
+    organize:
+      daylo.desktop: usr/share/applications/daylo.desktop

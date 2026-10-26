@@ -52,6 +52,15 @@ describe('what may be offered about this copy', () => {
   it('says nothing at all to a copy from the Microsoft Store', () => {
     expect(whatWeMayDo('store')).toBe('silent')
   })
+
+  // The same fact on a third store, and here it is twice true: the Snap Store refreshes
+  // its own copies, and a snap is a read-only squashfs, so there is nowhere to write an
+  // update even if somebody wanted one. Without this it would fall through to 'point',
+  // which is the default for a format nobody recognised, and a copy that keeps itself
+  // current would be sent to the downloads page.
+  it('says nothing at all to a copy from the Snap Store', () => {
+    expect(whatWeMayDo('snap')).toBe('silent')
+  })
 })
 
 describe('asking how this copy was installed', () => {

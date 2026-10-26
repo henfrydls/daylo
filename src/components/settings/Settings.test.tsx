@@ -227,14 +227,15 @@ describe('the switches', () => {
   })
 
   /**
-   * The updater still says what it is for in the row itself, because there is nowhere
-   * else: nothing opens under it. The check-in is the exception and has earned it, with
-   * What gets sent directly below saying the whole of it rather than a summary of it.
+   * The updater row is its label and its switch, nothing under it: what the check sends is
+   * said in the privacy policy, linked at the foot of this screen. The check-in keeps What
+   * gets sent directly below, because that one says the whole of it.
    */
-  it('says what it is for where there is nothing to open', () => {
+  it('leaves the updater row without a line under it', () => {
     show()
 
-    expect(screen.getByText('Asks GitHub. Nothing about you.')).toBeInTheDocument()
+    expect(screen.queryByText('Asks GitHub. Nothing about you.')).not.toBeInTheDocument()
+    expect(screen.getByText('Check for new versions')).toBeInTheDocument()
     expect(screen.getByTestId('checkin-what-gets-sent')).toBeInTheDocument()
   })
 })

@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Button, Modal } from '../ui'
+import { Button, DIALOG_LEAVES_IN, Modal } from '../ui'
 import { newAnswer } from '../../lib/feedback'
 
 interface FeedbackRatingProps {
@@ -42,6 +42,25 @@ interface FeedbackRatingProps {
   /** Open a letter to the address in the line, and say so if nothing opened. */
   onWriteToUs: () => void
 }
+
+/**
+ * How long the stars refuse a press, counted from the moment the question is put.
+ *
+ * The dialog enters from `opacity-0` over a quarter of a second, and until this it did so
+ * with the stars live. A press already on its way, aimed at whatever the question has just
+ * covered, was an answer to something nobody had been shown. Here that matters more than
+ * anywhere else in the app: this is the only dialog that puts itself rather than being
+ * opened, and what it collects is an opinion.
+ *
+ * The transition's own length and a frame or two, not a round number: what is being waited
+ * for is the question being on the screen. It is no answer to a press that comes later,
+ * which is a different hole and the reason a second press is allowed to replace the first.
+ *
+ * `inert` and not a check inside the handler, because the browser enforces it over the
+ * whole row for pointer, keyboard and focus alike. jsdom does not enforce it, so what the
+ * component test can watch is the attribute going on and coming off.
+ */
+export const STARS_TAKE_A_PRESS_AFTER = DIALOG_LEAVES_IN + 100
 
 /**
  * The question Daylo asks, and the only way anything typed can reach us from inside the
@@ -87,6 +106,8 @@ export function FeedbackRating({
   // flag behind the prop is marked at the same moment, and a line that vanished while
   // somebody was reading it would be the app taking the offer back.
   const [offeringStore, setOfferingStore] = useState(false)
+  // Whether the question is on the screen yet. See STARS_TAKE_A_PRESS_AFTER.
+  const [settled, setSettled] = useState(false)
   const [text, setText] = useState('')
   // 'idle' until Send, 'sending' while it is in the air, 'failed' when it did not go.
   // There is no 'sent': that one closes.
@@ -98,6 +119,11 @@ export function FeedbackRating({
   const [slow, setSlow] = useState(false)
 
   useEffect(() => {
+    const onScreen = setTimeout(() => setSettled(true), STARS_TAKE_A_PRESS_AFTER)
+    return () => clearTimeout(onScreen)
+  }, [])
+
+  useEffect(() => {
     onShown(answer)
     // Once per mount, on purpose: this reports that the question was put, and it was put
     // once however many times anything above here re-renders.
@@ -107,9 +133,18 @@ export function FeedbackRating({
   // The tap is the answer. A star followed by a button to confirm it would mean the app
   // has the rating and is holding it hostage for the rest of the form, and the rest of
   // the form is optional.
+  //
+  // It is not the last word, though, and that is deliberate. The question is put the
+  // moment the day sheet closes, and measured on 2026-10-21 its five stars land on five
+  // day cells of the month grid at 1280x800: the next press a person makes, meaning to
+  // mark another day, answers a question they have not read. A second press replaces the
+  // score under the same number, and the panel keeps the last one it was sent.
   const rate = (stars: number) => {
+    // Only the first score takes the offer. Reading the prop again would find the parent
+    // already saying no, having spent it, and the line would go off the screen while
+    // somebody was reading it.
+    if (rated === null) setOfferingStore(offerStoreReview)
     setRated(stars)
-    setOfferingStore(offerStoreReview)
     onRate(answer, stars)
   }
 
@@ -162,20 +197,24 @@ export function FeedbackRating({
         )
       }
     >
-      <div className="flex justify-center gap-1" role="group" aria-label="How is it going?">
+      <div
+        className="flex justify-center gap-1"
+        role="group"
+        aria-label="How is it going?"
+        inert={!settled}
+      >
         {[1, 2, 3, 4, 5].map((value) => (
           <button
             key={value}
             type="button"
             onClick={() => rate(value)}
-            disabled={rated !== null}
             aria-pressed={rated !== null && value <= rated}
             aria-label={value === 1 ? '1 star' : `${value} stars`}
             // 56px, and the number is not a preference. Measured on a real phone at
             // 1080/420dpi: the first version drew a 42px button whose visible star came
             // out at about 24dp, half of Android's 48dp minimum for anything you touch.
             // The button is the target and it is now 56dp; the glyph below fills it.
-            className="flex h-14 w-14 items-center justify-center rounded-lg text-gray-300 transition-colors hover:text-amber-400 focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 disabled:cursor-default disabled:hover:text-inherit aria-pressed:text-amber-400"
+            className="flex h-14 w-14 items-center justify-center rounded-lg text-gray-300 transition-colors hover:text-amber-400 focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 aria-pressed:text-amber-400"
           >
             {/* The viewBox is cropped to the path rather than left at 0 0 24 24. With the
                 square box the drawing filled about three quarters of it, so a 32px svg

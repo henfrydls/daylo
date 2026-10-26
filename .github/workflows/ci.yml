@@ -146,6 +146,13 @@ jobs:
           # names get minified, URL strings do not.
           scripts/check-no-analytics.sh --text-only package-lock.json dist dist-demo
 
+      # release.yml is run by no check here: only a tag runs it, so a mistake in it is
+      # found by publishing one. This reads its dependency graph instead, which is the
+      # part of it that can be read without running anything, and is where the hashes of
+      # three releases went wrong.
+      - name: The hashes are published after the files they describe
+        run: scripts/check-sums-come-last.sh
+
 
   # Android is the only platform whose build was never checked on a pull request: the APK
   # was produced solely by release.yml, on tag. That was tolerable while nothing touched
@@ -344,7 +351,16 @@ jobs:
   # Its own job so that Test & Lint stays quick: that one is what everybody waits for.
   e2e:
     name: End to end
-    runs-on: ubuntu-latest
+    # Pinned, and the only job here that is. `ubuntu-latest` became Ubuntu 26.04 and
+    # Playwright 1.58.2 refuses to install a browser on it at all: "Playwright does not
+    # support chromium on ubuntu26.04-x64", before a single test runs. Every End to end on
+    # every branch has failed since, the last green one being 2026-10-17.
+    #
+    # The runner and not the dependency, deliberately. Taking a newer Playwright also takes
+    # the browser builds the whole suite's timing and layout assertions were measured
+    # against, and the days before a tag are the wrong days to change the thing the tests
+    # are run in. The bump is its own change, with the suite watched over it.
+    runs-on: ubuntu-24.04
     timeout-minutes: 20
     permissions:
       contents: read

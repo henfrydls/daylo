@@ -350,7 +350,6 @@ export function Settings({
             {updates.supported ? (
               <SwitchRow
                 label="Check for new versions"
-                under="Asks GitHub. Nothing about you."
                 checked={updatesEnabled}
                 testId="updates-switch"
                 onChange={setUpdatesEnabled}

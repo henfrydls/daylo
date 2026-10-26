@@ -528,7 +528,16 @@ jobs:
           echo "The address the app reads gives back $served."
 
   release-summary:
-    needs: [build, build-android, build-demo]
+    # 'updater-manifest' is here for its ORDER, not for anything it produces: this job uses
+    # no output of it. It publishes SHA256SUMS.txt from the digests the releases API
+    # reports, and the manifest job rewrites latest.json, so without this edge the two
+    # became eligible in the same second and raced. The sums job is the shorter of the
+    # two and won all three times it was measured, which is why v1.4.0, v1.4.1 and v1.4.2
+    # all published the hash of the latest.json that the manifest job then replaced.
+    #
+    # So it looks removable, and it is not. scripts/check-sums-come-last.sh fails if it
+    # goes, and says why.
+    needs: [build, build-android, build-demo, updater-manifest]
     runs-on: ubuntu-latest
     # The repository has default_workflow_permissions set to "read", so without declaring
     # this 'gh release upload' returns 403. The other two jobs already declare it; this one
@@ -746,3 +755,97 @@ jobs:
             echo "\`SHA256SUMS.txt\` covers $(grep -c . SHA256SUMS.txt) files, with the hashes"
             echo "the releases API publishes itself."
           } >> "$GITHUB_STEP_SUMMARY"
+
+  # The Snap Store. Built from the .deb this release already published, and pushed to the
+  # edge channel only when there are credentials to push with.
+  #
+  # Deliberately NOT in release-summary's needs, and not an asset on the release page.
+  # A .snap is installed from the store, the same way the .aab is handed to Play rather
+  # than published next to things people can open. Keeping it out also keeps it out of
+  # SHA256SUMS.txt, which describes what is on the release page, and out of the ordering
+  # that scripts/check-sums-come-last.sh exists to protect.
+  snap:
+    if: startsWith(github.ref, 'refs/tags/')
+    needs: build
+    runs-on: ubuntu-24.04
+    name: Build (snap)
+    timeout-minutes: 30
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      # From the release rather than from a workflow artifact: the matrix hands its
+      # installers straight to tauri-action, which uploads them to the release page, so
+      # that is where the .deb for this tag is.
+      - name: Take the Debian package from this release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          gh release download "${{ github.ref_name }}" --pattern '*_amd64.deb' --dir linux-build
+          deb="$(find linux-build -name '*.deb' -print -quit)"
+          if [ -z "$deb" ]; then
+            echo "::error::This release has no amd64 .deb, and the snap is built from it."
+            exit 1
+          fi
+          cp "$deb" daylo.deb
+          ls -l daylo.deb
+
+      - name: Build the snap
+        id: build
+        uses: snapcore/action-build@v1
+
+      - name: Say what is inside it
+        run: |
+          set -euo pipefail
+          unsquashfs -d unpacked "${{ steps.build.outputs.snap }}"
+          for path in usr/bin/Daylo usr/share/applications/daylo.desktop meta/snap.yaml; do
+            if [ ! -e "unpacked/$path" ]; then
+              echo "::error::$path is not in the snap."
+              exit 1
+            fi
+          done
+          cat unpacked/meta/snap.yaml
+
+      # The secret cannot be read in a job level `if`: the secrets context is not available
+      # there. So the question is asked in a step, and the answer is a word rather than the
+      # credential, which is never printed or written anywhere.
+      - name: Are there credentials to publish with
+        env:
+          CREDENTIALS: ${{ secrets.SNAPCRAFT_STORE_CREDENTIALS }}
+        run: |
+          if [ -n "${CREDENTIALS:-}" ]; then
+            echo "CAN_PUBLISH=yes" >> "$GITHUB_ENV"
+          else
+            echo "CAN_PUBLISH=no" >> "$GITHUB_ENV"
+            echo "::notice::No SNAPCRAFT_STORE_CREDENTIALS secret is set, so the snap was"
+            echo "::notice::built and kept as an artifact and nothing was pushed to the"
+            echo "::notice::store. Generate one with 'snapcraft export-login' and add it to"
+            echo "::notice::the repository secrets to turn this on. This is not a failure:"
+            echo "::notice::the release does not depend on the Snap Store."
+          fi
+
+      # edge and not stable. The name 'daylo' is registered but its registration is still
+      # in manual review, and a tag should not be what decides a copy reaches the public.
+      # Promoting to stable is a deliberate act in the store, by a person.
+      - name: Push it to the edge channel
+        if: env.CAN_PUBLISH == 'yes'
+        uses: snapcore/action-publish@v1
+        env:
+          SNAPCRAFT_STORE_CREDENTIALS: ${{ secrets.SNAPCRAFT_STORE_CREDENTIALS }}
+        with:
+          snap: ${{ steps.build.outputs.snap }}
+          release: edge
+
+      # Ninety days, like the .aab, and for the same reason: longer than any store review
+      # takes, and it is the only copy of this build outside the store.
+      - name: Keep the snap
+        uses: actions/upload-artifact@v4
+        with:
+          name: daylo-snap
+          path: ${{ steps.build.outputs.snap }}
+          retention-days: 90
+          if-no-files-found: error

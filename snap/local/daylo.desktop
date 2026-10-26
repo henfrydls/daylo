@@ -1,0 +1,10 @@
+[Desktop Entry]
+Type=Application
+Name=Daylo
+Comment=See your whole year at a glance
+Exec=daylo
+Icon=${SNAP}/usr/share/icons/hicolor/128x128/apps/Daylo.png
+Terminal=false
+Categories=Office;Calendar;
+Keywords=habit;tracker;calendar;heatmap;streak;
+StartupWMClass=Daylo

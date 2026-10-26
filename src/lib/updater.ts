@@ -22,6 +22,7 @@ export type InstallFormat =
   | 'deb'
   | 'rpm'
   | 'appimage'
+  | 'snap'
   | 'msi'
   | 'nsis'
   | 'macos'
@@ -40,12 +41,15 @@ export type InstallFormat =
  *   nobody recognised would be installed as an AppImage rather than refused.
  * - `silent`: say nothing at all. A copy from the Microsoft Store is updated by the Store,
  *   so there is nothing to tell and nothing to do. A copy from Google Play is the same
- *   fact on another platform, and it reaches the same answer by the same route.
+ *   fact on another platform, and it reaches the same answer by the same route. So is a
+ *   snap, where it is true twice over: the Snap Store refreshes its own copies, and a
+ *   snap is mounted read-only, so there is nowhere to put an update even if somebody
+ *   asked for one.
  */
 export type WhatWeMayDo = 'install' | 'point' | 'silent'
 
 export function whatWeMayDo(format: InstallFormat | null): WhatWeMayDo {
-  if (format === 'store' || format === 'play') return 'silent'
+  if (format === 'store' || format === 'play' || format === 'snap') return 'silent'
   if (format === 'appimage' || format === 'nsis' || format === 'msi' || format === 'macos') {
     return 'install'
   }

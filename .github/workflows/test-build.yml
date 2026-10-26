@@ -734,3 +734,81 @@ jobs:
           path: src-tauri/gen/android/app/build/outputs/apk/universal/debug/Daylo-android-arm64-debug.apk
           retention-days: 7
           if-no-files-found: error
+
+  # The snap, built from the .deb the job above already produced rather than from source.
+  #
+  # Reusing that artifact rather than building again is the whole point: what gets wrapped
+  # is the same bytes that were tested, and there is no second build to drift from the
+  # first. The cost is waiting for the matrix, which is parallel anyway.
+  #
+  # Nothing here publishes. The Snap Store upload lives in release.yml, behind a tag.
+  snap:
+    needs: build
+    if: >-
+      (github.event_name == 'workflow_dispatch' || github.event.label.name == 'build-installers')
+      && !inputs.debug_apk
+    runs-on: ubuntu-24.04
+    name: Test build (snap)
+    timeout-minutes: 30
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      # The same seven characters the matrix used, worked out the same way, because that
+      # is the name it filed the artifact under.
+      - name: Work out the short sha
+        run: |
+          sha="${{ github.event.pull_request.head.sha || github.sha }}"
+          echo "SHORT_SHA=${sha:0:7}" >> "$GITHUB_ENV"
+
+      - name: Take the Linux build that was already made
+        uses: actions/download-artifact@v4
+        with:
+          name: daylo-linux-x64-${{ env.SHORT_SHA }}
+          path: linux-build
+
+      # snapcraft reads `source: daylo.deb` relative to the project directory, which is the
+      # checkout root. Named rather than globbed in the yaml so that file says one thing.
+      - name: Put the package where snapcraft looks for it
+        run: |
+          set -euo pipefail
+          deb="$(find linux-build -name '*.deb' -print -quit)"
+          if [ -z "$deb" ]; then
+            echo "::error::No .deb in the Linux artifact. The snap wraps that file, so"
+            echo "::error::there is nothing to build and a green job here would mean nothing."
+            exit 1
+          fi
+          cp "$deb" daylo.deb
+          ls -l daylo.deb
+
+      - name: Build the snap
+        id: build
+        uses: snapcore/action-build@v1
+
+      # Unpacking it and reading what came out, because a .snap that built is not yet a
+      # .snap with the app in it. The first time this ran is the first time anybody had
+      # seen snapcraft touch this project, so it says what it found rather than trusting it.
+      - name: Say what is inside it
+        run: |
+          set -euo pipefail
+          unsquashfs -d unpacked "${{ steps.build.outputs.snap }}"
+          for path in usr/bin/Daylo usr/share/applications/daylo.desktop meta/snap.yaml; do
+            if [ ! -e "unpacked/$path" ]; then
+              echo "::error::$path is not in the snap."
+              exit 1
+            fi
+            echo "found $path"
+          done
+          echo "--- meta/snap.yaml ---"
+          cat unpacked/meta/snap.yaml
+
+      - name: Upload the snap
+        uses: actions/upload-artifact@v4
+        with:
+          name: daylo-snap-${{ env.SHORT_SHA }}
+          path: ${{ steps.build.outputs.snap }}
+          retention-days: 7
+          if-no-files-found: error

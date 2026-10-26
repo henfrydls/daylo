@@ -3,6 +3,35 @@
 What changed in each release, for the people who use Daylo. Earlier versions are not
 listed: this file starts at 1.1.2, when the first change worth warning about arrived.
 
+## 1.5.0
+
+**On Android, the check-in now says how your copy was installed.** The settings sheet shows
+the word it sends, under What gets sent, so you can see which one yours is. It still says
+nothing about you: everyone who installed the same way sends the same word.
+
+**After you answer "How is it going?", Daylo now leaves you an address.** One line, under
+the note about what gets sent: write to us if you want to tell us how you use it. It is
+there whatever you pressed, because the people we hear from least are the ones who did not
+love it. On a copy installed from the Microsoft Store there is also a line offering to rate
+Daylo there, once, and it appears whatever you pressed too.
+
+**The Android app downloaded from the site now tells you when a newer Daylo is out.** It
+shows the same quiet card the desktop shows, in the same place, with one button that opens
+the download. Nothing installs itself: Android asks you whether to update when you open the
+file, and your activities stay where they are. Like on the desktop, the check can be turned
+off in Settings, it asks GitHub and not us, and it carries nothing about you.
+
+**The list of checksums published with each release is now correct for every file.** One
+line, for the small file Daylo reads to find out a new version is out, described the
+previous version, so checking every file at once reported one failure. The files you
+download were always correct.
+
+**If you press the wrong star, press another one: the last one you press is your answer.**
+Daylo asks how it is going just after you close a day, and the stars come up over the
+calendar, so a press meant for another day could answer a question you had not read, and
+there was no way back from it. A second press now replaces the first. The stars also take
+no press at all while the question is still appearing.
+
 ## 1.4.2
 
 **The day sheet slides in and out again.** Tapping a day put the sheet on the screen
