@@ -198,7 +198,24 @@ export function FeedbackRating({
       }
     >
       <div
-        className="flex justify-center gap-1"
+        // The bottom space is the floating button's, and it is there to be empty.
+        //
+        // On a phone this dialog is a sheet at the bottom edge, and that button lives in
+        // the same corner as the fifth star: measured on 2026-10-21, 48 by 48 pixels of
+        // overlap at 360 wide, 22 by 48 at 412, 4 by 48 at 448, nothing above that. The
+        // button cannot be pressed while this is up and cannot even be seen, because the
+        // sheet is opaque over it. What reaches for it is a hand that knows where it was,
+        // and what that hand presses is five stars, which is an answer.
+        //
+        // Hiding the button was tried first and fixes nothing: the star is what is on top,
+        // so the press lands on it either way. Two screenshots at 360x740, with the button
+        // drawn and not drawn, came out identical. What moves the star out of that corner
+        // is space under it.
+        //
+        // `sm:pb-0` because above that width this is no longer a sheet at the bottom edge
+        // but a dialog in the middle of the screen, nowhere near the button, which was
+        // measured too: no overlap at 520.
+        className="flex justify-center gap-1 pb-20 sm:pb-0"
         role="group"
         aria-label="How is it going?"
         inert={!settled}
