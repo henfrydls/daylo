@@ -61,6 +61,31 @@ describe('what gets sent', () => {
     expect(screen.getByText(EXAMPLE_ID)).toBeInTheDocument()
   })
 
+  // Showing the example is half of it. Without this line the example reads as the number
+  // this copy sends, which is the opposite of true: it sends nothing, and that number
+  // belongs to nobody.
+  it('says the example is an example', async () => {
+    const user = userEvent.setup()
+    render(<WhatGetsSent fields={fields} id={null} />)
+
+    await user.click(screen.getByRole('button'))
+
+    expect(screen.getByTestId('checkin-example-note')).toHaveTextContent(
+      'That number is an example. A real one is only made if you turn the check-in on.'
+    )
+  })
+
+  // And it goes away once there is a real one, or it would be calling a number somebody
+  // actually sends an example of itself.
+  it('says nothing about examples once there is a real number', async () => {
+    const user = userEvent.setup()
+    render(<WhatGetsSent fields={fields} id="abc123" />)
+
+    await user.click(screen.getByRole('button'))
+
+    expect(screen.queryByTestId('checkin-example-note')).not.toBeInTheDocument()
+  })
+
   /**
    * The sentence and the cost, which used to be the two lines under the switch. They are
    * here now because this is where the message itself is: what it does, what it is, and

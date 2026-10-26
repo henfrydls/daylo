@@ -86,6 +86,15 @@ export function WhatGetsSent({ fields, id }: WhatGetsSentProps) {
             ))}
           </dl>
 
+          {/* Only while there is no real number. Showing the example without saying so
+              reads as the number this copy sends, which is the opposite of true: with the
+              check-in off it sends nothing at all, and that number belongs to nobody. */}
+          {id === null ? (
+            <p data-testid="checkin-example-note">
+              That number is an example. A real one is only made if you turn the check-in on.
+            </p>
+          ) : null}
+
           {/* The one statement of its kind anywhere in the app, and the reason it is in
               here rather than only in the policy: this panel is where the long version
               goes. What was dropped alongside it was where the number is made, which the
