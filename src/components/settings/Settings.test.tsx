@@ -22,11 +22,15 @@ vi.mock('@tauri-apps/api/core', async (importOriginal) => ({
 
 const enableReminder = vi.hoisted(() => vi.fn())
 const disableReminder = vi.hoisted(() => vi.fn())
+const exactAlarmsAllowed = vi.hoisted(() => vi.fn())
+const askForExactAlarms = vi.hoisted(() => vi.fn())
 
 vi.mock('../../lib/reminders', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../../lib/reminders')>()),
   enableReminder,
   disableReminder,
+  exactAlarmsAllowed,
+  askForExactAlarms,
 }))
 
 const check = vi.fn()
@@ -59,6 +63,8 @@ function show({
 }
 
 beforeEach(() => {
+  exactAlarmsAllowed.mockReset().mockResolvedValue(true)
+  askForExactAlarms.mockReset().mockResolvedValue(true)
   inTheApp.yes = false
   check.mockReset()
   install.mockReset()
@@ -566,5 +572,29 @@ describe('the word on the version row', () => {
     show({ status: { kind: 'available', version: '1.5.0', canInstall: false }, waiting: '1.5.0' })
 
     expect(screen.getByTestId('settings-update')).toHaveTextContent('Download')
+  })
+})
+
+describe('a reminder that arrives when it was set for', () => {
+  // The offer is the only part of this the app can do anything about: the permission is
+  // granted on a screen that belongs to the phone. So the row exists exactly when there
+  // is something to fix, and pressing it goes there.
+  it('offers the phone screen when the reminder would be moved', async () => {
+    exactAlarmsAllowed.mockResolvedValue(false)
+    useCalendarStore.setState({ reminderEnabled: true })
+    show({ hasReminders: true })
+
+    const row = await screen.findByTestId('reminder-exact')
+    fireEvent.click(row)
+    await waitFor(() => expect(askForExactAlarms).toHaveBeenCalled())
+  })
+
+  it('offers nothing when the phone already lets it arrive on time', async () => {
+    exactAlarmsAllowed.mockResolvedValue(true)
+    useCalendarStore.setState({ reminderEnabled: true })
+    show({ hasReminders: true })
+
+    await waitFor(() => expect(exactAlarmsAllowed).toHaveBeenCalled())
+    expect(screen.queryByTestId('reminder-exact')).not.toBeInTheDocument()
   })
 })

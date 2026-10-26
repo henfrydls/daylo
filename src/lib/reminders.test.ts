@@ -8,6 +8,8 @@ import {
   reconcileReminder,
   refreshReminder,
   remindersAvailable,
+  askForExactAlarms,
+  exactAlarmsAllowed,
 } from './reminders'
 
 const isPermissionGranted = vi.hoisted(() => vi.fn())
@@ -52,6 +54,12 @@ afterEach(() => {
   vi.restoreAllMocks()
 })
 
+// Measured on a phone on 2026-10-13: the alarm came out as origWhen=21:00:36, carrying the
+// seconds of the moment it was scheduled, so a reminder set for nine o'clock arrived 36
+// seconds into the minute. The plugin's Kotlin builds the next trigger from a calendar made
+// of *now* and overwrites only the fields it was given: it zeroes the milliseconds and
+// leaves the seconds alone (NotificationSchedule.kt, buildNextTriggerTime). Sending the zero
+// is what makes the time the time.
 describe('where reminders exist', () => {
   it('nowhere on the web', async () => {
     await expect(remindersAvailable()).resolves.toBe(false)
@@ -87,7 +95,7 @@ describe('turning the reminder on', () => {
         // plugin restores after a reboot. Not Schedule.at: with repeating it computes the
         // repeat gap as the time left until the first fire, so a reminder set at 20:00 for
         // 21:00 would repeat hourly.
-        schedule: { interval: { hour: 21, minute: 0 }, allowWhileIdle: true },
+        schedule: { interval: { hour: 21, minute: 0, second: 0 }, allowWhileIdle: true },
       }),
     })
   })
@@ -221,7 +229,7 @@ describe('re-arming at launch', () => {
     expect(scheduled()).toEqual({
       options: expect.objectContaining({
         id: REMINDER_ID,
-        schedule: { interval: { hour: 21, minute: 0 }, allowWhileIdle: true },
+        schedule: { interval: { hour: 21, minute: 0, second: 0 }, allowWhileIdle: true },
       }),
     })
   })
@@ -371,5 +379,54 @@ describe('when the phone does not say what is scheduled', () => {
     await reconcileReminder(0)
 
     expect(cancel).not.toHaveBeenCalled()
+  })
+})
+
+describe('whether it will arrive on time', () => {
+  it('says yes where there is no phone to ask', async () => {
+    vi.stubGlobal('isTauri', false)
+    await expect(exactAlarmsAllowed()).resolves.toBe(true)
+    expect(invoke).not.toHaveBeenCalled()
+  })
+
+  it('says what the phone says', async () => {
+    pretendAndroid()
+    invoke.mockImplementation((command: string) =>
+      command === 'exact_alarms_allowed' ? Promise.resolve(false) : Promise.resolve(true)
+    )
+    await expect(exactAlarmsAllowed()).resolves.toBe(false)
+  })
+
+  // The only thing this decides is whether the screen offers to fix something. An app
+  // that cannot ask has nothing to offer, and a line about a problem that may not exist
+  // is worse than silence. Same direction as the Rust side, deliberately.
+  it('says yes when the question cannot be put', async () => {
+    vi.stubGlobal('isTauri', true)
+    invoke.mockRejectedValue('no such command')
+    await expect(exactAlarmsAllowed()).resolves.toBe(true)
+  })
+})
+
+describe('asking for exact alarms', () => {
+  it('does nothing where there is no phone', async () => {
+    vi.stubGlobal('isTauri', false)
+    await expect(askForExactAlarms()).resolves.toBe(false)
+    expect(invoke).not.toHaveBeenCalled()
+  })
+
+  it('says whether the system screen opened', async () => {
+    pretendAndroid()
+    invoke.mockImplementation((command: string) =>
+      command === 'ask_for_exact_alarms' ? Promise.resolve(true) : Promise.resolve(true)
+    )
+    await expect(askForExactAlarms()).resolves.toBe(true)
+  })
+
+  // Nothing is granted by opening a screen, so a refusal to open it is not a refusal of
+  // anything else: it only means there was no screen to open.
+  it('says no when the screen would not open', async () => {
+    vi.stubGlobal('isTauri', true)
+    invoke.mockRejectedValue('no activity')
+    await expect(askForExactAlarms()).resolves.toBe(false)
   })
 })

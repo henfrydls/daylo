@@ -143,3 +143,32 @@ lto = true
 opt-level = 3
 panic = "abort"
 strip = false
+
+# The notification plugin, with one fix that is not upstream yet.
+#
+# A repeating notification is scheduled by two different pieces of code in that plugin,
+# and they had drifted apart. The first firing reads the schedule's allowWhileIdle and
+# arms setExactAndAllowWhileIdle on RTC_WAKEUP; every later one is re-armed by the
+# plugin's own receiver with plain RTC, no wakeup and no idle allowance, because the
+# receiver is handed an intent and the intent carries the cron string without the flag.
+# So a daily reminder wakes a dozing phone the day it is set and, from the second night
+# on, waits for the phone to be picked up. Asking Android for SCHEDULE_EXACT_ALARM
+# without this buys one punctual reminder rather than punctual reminders.
+#
+# Two commits, because the first one was wrong in a way only a phone could show. It read
+# the flag back from the plugin's own notification store, which looked safe since the
+# receiver already loads from it two lines earlier, and that store is always empty: it is
+# written by the `batch` command and nothing in the Rust API reaches `batch`. Measured on
+# the Galaxy on 2026-10-13, the re-armed alarm came out exact and still without the idle
+# allowance. The flag now rides on the intent, beside the cron string, which is how the
+# receiver learns everything else it knows.
+#
+# Pinned to a commit and not to a branch: a moving branch is a build that changes under
+# us, and this one has to be the same bytes in CI, on a tag, and on the machine that
+# measured it. The branch is based on notification-v2.3.3 and keeps that version number,
+# which is what `~2.3` above and the 2.3.3 npm package both require: a patch whose
+# version does not satisfy the requirement is silently not applied.
+#
+# It goes upstream once it has been measured on a phone over two nights.
+[patch.crates-io]
+tauri-plugin-notification = { git = "https://github.com/henfrydls/plugins-workspace", rev = "c060e1042e4edb9a70dcb83d73dc57a3e8cb42b3" }

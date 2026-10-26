@@ -2,6 +2,14 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
     <uses-permission android:name="android.permission.INTERNET" />
 
+    <!-- So the daily reminder arrives at the time it was set for. Android 12 made this
+         something to be allowed and Android 14 made it denied by default, which is why
+         the settings screen can say so and offer the way to the system's own screen.
+         Not USE_EXACT_ALARM, which is granted on sight: Google reserves that one for
+         alarm clocks and calendars, and a habit tracker is neither. Without this the
+         reminder still arrives, just inexactly. -->
+    <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" />
+
     <!-- AndroidTV support -->
     <uses-feature android:name="android.software.leanback" android:required="false" />
 

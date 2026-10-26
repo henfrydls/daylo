@@ -155,6 +155,27 @@ async fn latest_version(app: tauri::AppHandle) -> Result<String, String> {
     updates::version_in(&manifest)
 }
 
+/// Whether the reminder will arrive at the time it was set for.
+///
+/// False means it still arrives, within an hour or so of the time and later than that out
+/// of a deep doze, which is what an inexact alarm is. The screen uses this to decide
+/// whether to say so and offer the way to change it, not whether to schedule anything.
+#[cfg(target_os = "android")]
+#[tauri::command]
+fn exact_alarms_allowed() -> bool {
+    android::exact_alarms_allowed()
+}
+
+/// Open the phone's "Alarms & reminders" screen for this app.
+///
+/// Returns whether it opened, not whether anything was granted: the person decides on
+/// that screen and Daylo finds out by asking again when it comes back.
+#[cfg(target_os = "android")]
+#[tauri::command]
+fn ask_for_exact_alarms() -> bool {
+    android::ask_for_exact_alarms()
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     // Before anything else, because everything else assumes a window can exist. Without
@@ -217,6 +238,8 @@ pub fn run() {
             reminders_available,
             latest_version,
             install_source,
+            exact_alarms_allowed,
+            ask_for_exact_alarms,
             checkin::checkin_fields,
             checkin::send_checkin,
             checkin::send_feedback
