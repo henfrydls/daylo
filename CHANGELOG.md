@@ -3,6 +3,28 @@
 What changed in each release, for the people who use Daylo. Earlier versions are not
 listed: this file starts at 1.1.2, when the first change worth warning about arrived.
 
+## 1.5.1
+
+**On Android, Daylo can now tell you when your reminder will not arrive at the time you
+set it for, and take you to where that is changed.** Android decides when an app may wake
+a sleeping phone, and unless it is allowed to, a reminder set for nine in the evening can
+turn up an hour or more later. The reminder itself has not changed and is still set the
+moment you turn it on. What is new is that the settings screen says so when it applies,
+with one row that opens the phone's own "Alarms & reminders" screen, and the row goes away
+once you have been there.
+
+**On Android, a daily reminder now behaves the same on its tenth day as on its first.**
+It was set once with permission to wake a sleeping phone, and every day after that it was
+quietly put back without it, so the first reminder could arrive while the phone was idle
+and the later ones waited until it was picked up. Nothing you set asked for that. Both are
+now scheduled the same way.
+
+**The number shown under "What gets sent" now says when it is only an example.** With the
+daily check-in off there is no number, and Daylo filled that line with one that belongs to
+nobody so you could see the shape of the message. It did not say so, which left the panel
+telling you the one thing that is not true about it. It sends nothing while the check-in
+is off, and the line now says the number is only an example.
+
 ## 1.5.0
 
 **On Android, the check-in now says how your copy was installed.** The settings sheet shows
