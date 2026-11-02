@@ -552,11 +552,29 @@ jobs:
     steps:
       - name: Check build results
         run: |
-          if [ "${{ needs.build.result }}" == "success" ] && [ "${{ needs.build-android.result }}" == "success" ]; then
+          # updater-manifest is read here too, and it was the one missing. It is the job
+          # that writes latest.json, which is the only file every installed copy ever asks
+          # for: without it they all go on being told they are up to date, however many
+          # installers the release page shows. It can refuse on its own terms (a release
+          # note left over from the previous version, a platform that built without a
+          # .sig), and when it did, this step printed "All builds completed successfully!"
+          # over the top of it, because it only read the two build jobs.
+          #
+          # The step below still runs, by design: it carries 'if: !cancelled()' so the
+          # platforms that DID build keep their stable named copies and their line in
+          # SHA256SUMS.txt. What changes here is only what the summary claims.
+          if [ "${{ needs.build.result }}" == "success" ] \
+            && [ "${{ needs.build-android.result }}" == "success" ] \
+            && [ "${{ needs.updater-manifest.result }}" == "success" ]; then
             echo "All builds completed successfully!"
             echo "Release artifacts have been uploaded to: ${{ github.server_url }}/${{ github.repository }}/releases/tag/${{ github.ref_name }}"
           else
-            echo "Some builds failed. Check the individual build logs for details."
+            echo "Builds: ${{ needs.build.result }}, Android: ${{ needs.build-android.result }}, update manifest: ${{ needs.updater-manifest.result }}."
+            if [ "${{ needs.updater-manifest.result }}" != "success" ]; then
+              echo "::error::latest.json was not published, so no installed copy will be"
+              echo "::error::offered this release however complete the release page looks."
+            fi
+            echo "Check the individual job logs for details."
             exit 1
           fi
 
