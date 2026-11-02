@@ -482,8 +482,21 @@ function FeedbackRow({ onFeedback }: { onFeedback: () => void }) {
     >
       <span className="min-w-0">
         <span className="block">Send feedback</span>
+        {/* Two sentences for one row, because the row does two different things and the
+            line under it was true in neither. In the application it opens the question,
+            where the star is sent the instant it is pressed: there is no draft and no
+            Send for it, the tap is the answer. "Only what you type, and only when you
+            press Send" told somebody their press was private when it was not, which is
+            the kind of sentence that costs more than saying nothing would have. In a
+            browser the row is the mailto it has always been, and there Daylo really does
+            send nothing: the mail client does, when that person sends it.
+
+            One sentence covering both would have to be vague enough to be useless in
+            each, so there are two and a test says they differ. */}
         <span className="mt-0.5 block text-sm text-gray-500">
-          Only what you type, and only when you press Send.
+          {isTauri()
+            ? 'A star is sent the moment you press it. What you write is sent when you press Send.'
+            : 'This opens your email. Daylo sends nothing itself.'}
         </span>
       </span>
       <ChevronRightIcon className="h-5 w-5 shrink-0 text-gray-400" aria-hidden="true" />

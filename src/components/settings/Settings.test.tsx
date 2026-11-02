@@ -70,6 +70,10 @@ beforeEach(() => {
   install.mockReset()
   enableReminder.mockReset().mockResolvedValue({ outcome: 'on' })
   disableReminder.mockReset().mockResolvedValue(undefined)
+  // Back to a browser between tests. It is a module level flag, so a test that switches
+  // to the application and does not switch back hands that to whatever runs next, and the
+  // one that breaks is never the one that set it.
+  inTheApp.yes = false
   useCalendarStore.setState({
     activities: [],
     logs: [],
@@ -146,9 +150,10 @@ describe('what each platform is shown', () => {
 
     expect(screen.queryByTestId('checkin-switch')).not.toBeInTheDocument()
     // The heading stays: the sentence about feedback under it is still true, and it is the
-    // only place that says what a browser does and does not send.
+    // only place that says what a browser does and does not send. It says that outright
+    // now, where before it described a Send button this row does not have here.
     expect(screen.getByText('Privacy')).toBeInTheDocument()
-    expect(screen.getByText(/only when you press Send/)).toBeInTheDocument()
+    expect(screen.getByText(/Daylo sends nothing itself/)).toBeInTheDocument()
   })
 })
 
@@ -493,8 +498,49 @@ describe('send feedback', () => {
 
     const row = screen.getByTestId('settings-feedback')
     expect(row).toHaveTextContent('Send feedback')
-    expect(row).toHaveTextContent('Only what you type, and only when you press Send.')
     expect(sectionOf(row)).toBe('Privacy')
+  })
+
+  /**
+   * The line under the row, which has to be true in two places that do different things.
+   *
+   * It used to read "Only what you type, and only when you press Send." in both. In a
+   * browser that is near enough: the row is a mailto and Daylo sends nothing itself. In
+   * the application it was false twice over, and the star is the half that surprises
+   * people: there is no draft and no Send for it, the tap is the answer and it leaves at
+   * once. A sentence promising otherwise is the app telling somebody their press was
+   * private when it was not.
+   */
+  it('tells the truth about the star inside the application', () => {
+    inTheApp.yes = true
+    show()
+
+    expect(screen.getByTestId('settings-feedback')).toHaveTextContent(
+      'A star is sent the moment you press it. What you write is sent when you press Send.'
+    )
+  })
+
+  it('says what the same row does in a browser, which is open the mail client', () => {
+    inTheApp.yes = false
+    show()
+
+    expect(screen.getByTestId('settings-feedback')).toHaveTextContent(
+      'This opens your email. Daylo sends nothing itself.'
+    )
+  })
+
+  // The two are not interchangeable, and a single sentence covering both would have to be
+  // vague enough to be useless in each.
+  it('does not say the same thing in both', () => {
+    inTheApp.yes = true
+    const { unmount } = show()
+    const inside = screen.getByTestId('settings-feedback').textContent
+    unmount()
+
+    inTheApp.yes = false
+    show()
+
+    expect(screen.getByTestId('settings-feedback').textContent).not.toBe(inside)
   })
 
   // No target: a mail client does not want a tab, and a tab it does not use is a blank
