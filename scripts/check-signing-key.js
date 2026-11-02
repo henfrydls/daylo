@@ -17,7 +17,10 @@ import { fileURLToPath } from 'url'
  *
  * What is compared is the key id. A minisign key id is derived from the key pair and is
  * carried, in the clear, in both halves: the public key file prints it in its own comment,
- * and every signature begins with it. Two keys agreeing on an id are the same key. The 32
+ * and every signature begins with it. Two shapes have to be got right to read it, and the
+ * first version of this file got both wrong while its own tests passed: a tauri .sig is
+ * base64 around the minisign file, and the signature inside is `ED` where the public key
+ * is `Ed`. The fixtures beside this are real signatures now, for that reason. Two keys agreeing on an id are the same key. The 32
  * bytes of public key and the 64 of signature are never read out of either file, so there
  * is nothing here that could leak, and the ids themselves are public by construction.
  *
@@ -32,6 +35,17 @@ const ALGORITHM = 2
 const KEY_ID = 8
 
 /**
+ * The two algorithms minisign writes, and both of them turn up here.
+ *
+ * `Ed` is a plain Ed25519 signature over the file. `ED` is the same over a BLAKE2b hash of
+ * it, which is what minisign calls prehashed and what tauri signs with. So a public key
+ * says `Ed` and the signature beside a release says `ED`, in the same pair, for the same
+ * key. Accepting only one of them rejected every real signature Daylo has ever published,
+ * which was the first version of this file.
+ */
+const ALGORITHMS = ['Ed', 'ED']
+
+/**
  * The key id a minisign line belongs to, as minisign itself writes it.
  *
  * The bytes come out of the file in the opposite order from the way they are printed. Our
@@ -42,8 +56,11 @@ const KEY_ID = 8
 export function keyIdOf(line) {
   const raw = Buffer.from(line.trim(), 'base64')
 
-  if (raw.length < ALGORITHM + KEY_ID || raw.subarray(0, ALGORITHM).toString('ascii') !== 'Ed') {
-    throw new Error('That is not a minisign line: it does not begin with an Ed signature.')
+  if (
+    raw.length < ALGORITHM + KEY_ID ||
+    !ALGORITHMS.includes(raw.subarray(0, ALGORITHM).toString('ascii'))
+  ) {
+    throw new Error('That is not a minisign line: it begins with neither Ed nor ED.')
   }
 
   return Buffer.from(raw.subarray(ALGORITHM, ALGORITHM + KEY_ID))
@@ -63,9 +80,25 @@ export function publicKeyLineOf(pubkey) {
   return line.trim()
 }
 
-/** The signature line of what `tauri signer sign` leaves beside the file it signed. */
+/**
+ * The signature line of what `tauri signer sign` leaves beside the file it signed.
+ *
+ * A tauri .sig is not the minisign file: it is that file base64 encoded onto a single
+ * line, the same way tauri.conf.json carries the public key, and the same way the string
+ * goes into latest.json. Measured on 2026-11-02 against the signature published beside
+ * Daylo_1.5.1_amd64.AppImage, and against a file signed locally with a throwaway key:
+ * `tauri signer sign` and the bundler produce the same shape, so what this reads on the
+ * runner is what a release carries.
+ *
+ * The unwrapped file is still accepted, because minisign itself writes one and somebody
+ * passing a hand made signature should not be told it is malformed.
+ */
 export function signatureLineOf(text) {
-  const line = text.split('\n')[1]
+  const inside = text.includes('untrusted comment:')
+    ? text
+    : Buffer.from(text.trim(), 'base64').toString('utf8')
+
+  const line = inside.split('\n')[1]
 
   if (!line) {
     throw new Error('The signature has no second line, so it is not a minisign signature.')
