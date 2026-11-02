@@ -192,8 +192,11 @@ export function checkReleaseNote({ note, previousNote }) {
  *
  * Note what it does NOT prove and what does: the signatures it reads were made by whatever
  * key the build had. That the key in GitHub's secrets is the one whose public half is in
- * tauri.conf.json is the one link in this chain nobody has watched, and it is what the
- * "Does the signing secret sign?" workflow is for.
+ * tauri.conf.json is checked by the "Does the signing secret sign?" workflow, which until
+ * 2026-11-02 only checked that the secret signs at all. A valid key that is the wrong key
+ * passed it, and would publish a release every installed copy refuses. It compares the key
+ * ids now, so this sentence is true; it was not before, and that is worth remembering the
+ * next time a comment here says something is covered.
  */
 async function main() {
   const [tag] = process.argv.slice(2)
