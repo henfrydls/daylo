@@ -62,14 +62,68 @@ describe('what each answer carries', () => {
   })
 
   it('says how the question arrived', async () => {
+    withTheCheckinOn()
+
     await sendShown(answer, 'menu')
 
     expect(invoke).toHaveBeenCalledExactlyOnceWith('send_feedback', {
       kind: 'shown',
       answer,
-      id: undefined,
+      id: '4f9c2a7e1b60d3a8c5e2f1b74a9d0c6e',
       origin: 'menu',
     })
+  })
+})
+
+/**
+ * The one message nobody asked for.
+ *
+ * A rating and a comment are answers: somebody pressed a star or wrote a sentence, and
+ * sending what they did is the whole point. `shown` is not an answer. The dialog puts
+ * itself on screen after seven days and reports its own arrival, so on a device with the
+ * check-in off it was the app reaching a server off its own bat, which is the single thing
+ * that switch is there to stop.
+ *
+ * It left nothing lasting behind, because `lastingId` already read the switch. But a
+ * connection is not nothing: it carries an address and the fact that Daylo is in use, on
+ * that day, which is word for word what `CheckinNotice` says is no longer happening.
+ */
+describe('the message that reports the question was put', () => {
+  const answer = '0a1b2c3d4e5f60718293a4b5c6d7e8f9'
+
+  it('does not go out at all while the check-in is off', async () => {
+    await sendShown(answer, 'automatic')
+
+    expect(invoke).not.toHaveBeenCalled()
+  })
+
+  // Including the way in from the menu. Going looking for the feedback row is consent to
+  // write a letter, not consent to be counted.
+  it('does not go out from the menu either', async () => {
+    await sendShown(answer, 'menu')
+
+    expect(invoke).not.toHaveBeenCalled()
+  })
+
+  it('tells the caller plainly that nothing left', async () => {
+    await expect(sendShown(answer, 'automatic')).resolves.toBe(false)
+  })
+
+  // The two that are answers still travel with the check-in off, and that is deliberate:
+  // checkin.rs puts it as "of somebody who turned the check-in off we know only what they
+  // chose to write to us". A star is something they chose.
+  it('leaves the answers themselves alone', async () => {
+    await sendRating(answer, 4)
+    await sendComment(answer, 'the year view')
+
+    expect(invoke).toHaveBeenCalledTimes(2)
+  })
+
+  it('goes out as before once the check-in is on', async () => {
+    withTheCheckinOn()
+
+    await expect(sendShown(answer, 'automatic')).resolves.toBe(true)
+    expect(invoke).toHaveBeenCalledOnce()
   })
 })
 
@@ -86,11 +140,13 @@ describe('the check-in number', () => {
     expect(invoke.mock.calls[0][1]).toMatchObject({ id: '4f9c2a7e1b60d3a8c5e2f1b74a9d0c6e' })
   })
 
-  it('stays behind while it is off, in every one of the three', async () => {
-    await sendShown(answer, 'automatic')
+  // Only two of the three are reachable with the switch off now: `shown` does not go out
+  // at all. These are the ones that do, and neither may carry the number.
+  it('stays behind while it is off, in both of the ones that still travel', async () => {
     await sendRating(answer, 5)
     await sendComment(answer, 'anything')
 
+    expect(invoke).toHaveBeenCalledTimes(2)
     for (const [, args] of invoke.mock.calls) {
       expect((args as { id?: string }).id).toBeUndefined()
     }
@@ -117,6 +173,11 @@ describe('when it does not go through', () => {
   // naming it would put on this device the one thing these messages are careful about.
   it('says so to the caller without throwing', async () => {
     invoke.mockRejectedValue(new Error('could not connect'))
+
+    // The check-in is on here on purpose: with it off, sendShown returns false without
+    // ever reaching the network, and this test would pass for a reason that has nothing to
+    // do with the failure it is about.
+    withTheCheckinOn()
 
     await expect(sendRating(answer, 2)).resolves.toBe(false)
     await expect(sendComment(answer, 'text')).resolves.toBe(false)
