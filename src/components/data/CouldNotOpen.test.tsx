@@ -36,7 +36,7 @@ describe('when the data will not open', () => {
     expect(screen.getByTestId('could-not-open')).toBeInTheDocument()
     expect(screen.getByText(/could not open/i)).toBeInTheDocument()
     // The one fact that matters to somebody reading this: it is not gone.
-    expect(screen.getByText(/still on this device/i)).toBeInTheDocument()
+    expect(screen.getByText(/still on this device, unchanged/i)).toBeInTheDocument()
   })
 
   /**
@@ -95,7 +95,26 @@ describe('when the data will not open', () => {
     render(<CouldNotOpen />)
 
     expect(screen.queryByTestId('could-not-open-save')).not.toBeInTheDocument()
-    expect(screen.getByText(/storage/i)).toBeInTheDocument()
+    expect(screen.getByText(/cannot reach its storage/i)).toBeInTheDocument()
+  })
+
+  /**
+   * The address is only worth having where there is something to attach to it.
+   *
+   * It used to sit at the foot of the screen, under both failures, and under the one where
+   * storage cannot be reached there is no copy to send and nothing wrong with the file: it
+   * was asking somebody to write to us about a problem they do not have, and to send a
+   * thing that does not exist. It belongs with the copy, so it lives on that branch.
+   */
+  it('asks for the copy to be sent only where there is a copy', () => {
+    useRescueStore.setState({ failure: { reason: 'unreachable', raw: null } })
+    const { unmount } = render(<CouldNotOpen />)
+    expect(screen.queryByText(/daylo@henfrydls\.com/)).not.toBeInTheDocument()
+    unmount()
+
+    useRescueStore.setState({ failure: { reason: 'unreadable', raw: STORED } })
+    render(<CouldNotOpen />)
+    expect(screen.getByText(/daylo@henfrydls\.com/)).toBeInTheDocument()
   })
 
   it('draws nothing at all when nothing went wrong', () => {

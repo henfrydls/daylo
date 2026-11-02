@@ -61,21 +61,22 @@ export function CouldNotOpen() {
           <>
             {/* First, because it is the only thing somebody wants to know in that second. */}
             <p className="text-sm text-gray-600">
-              Everything you have tracked is still on this device. Daylo just could not make sense
-              of the file it keeps it in, so it has not opened it and has not changed it.
+              Your data is still on this device, unchanged. Daylo could not read the file it is kept
+              in.
             </p>
+            {/* The address lives in here and not at the foot, because what makes it useful is
+                having a copy to attach, and a copy only exists on this branch. Under the other
+                failure it was an invitation to send nothing, about a problem that is not there. */}
             <p className="text-sm text-gray-600">
-              Save a copy before anything else. It is the file exactly as it is now, and whoever
-              looks at it next will want it untouched.
+              Save a copy first, and send it to daylo@henfrydls.com so we can help you get it back.
             </p>
           </>
         ) : (
           /* Not a damaged file, and it must not read like one: there is nothing wrong with
              the data, and saying there is sends somebody looking for damage to repair. */
           <p className="text-sm text-gray-600">
-            Daylo cannot reach the storage it keeps your activities in. Some browsers block it with
-            site data turned off, and some private windows do too. Nothing has been lost: with
-            storage allowed again, everything is where it was.
+            Daylo cannot reach its storage. This happens in some private windows or with site data
+            turned off. Nothing is lost: allow storage again and everything will be there.
           </p>
         )}
 
@@ -86,7 +87,7 @@ export function CouldNotOpen() {
             data-testid="could-not-open-save"
             className="min-h-[44px] w-full rounded-lg bg-emerald-700 px-4 py-2 text-sm font-medium text-white hover:bg-emerald-800 focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 focus-visible:ring-offset-2"
           >
-            Save a copy of it
+            Save a copy
           </button>
         )}
 
@@ -99,10 +100,6 @@ export function CouldNotOpen() {
             {said.text}
           </p>
         )}
-
-        <p className="text-sm text-gray-500">
-          Writing to daylo@henfrydls.com with that copy is the fastest way to get it back.
-        </p>
       </div>
     </div>
   )
