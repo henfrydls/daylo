@@ -23,6 +23,12 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+        with:
+          # The whole history, for the one step that needs the tags: the release note is
+          # compared against the note the newest tag shipped with, and the default shallow
+          # clone fetches no tags at all. Without this the comparison has nothing to read,
+          # and a check that cannot look is the failure this step exists to remove.
+          fetch-depth: 0
 
       - name: Install Rust stable
         uses: dtolnay/rust-toolchain@stable
@@ -152,6 +158,20 @@ jobs:
       # three releases went wrong.
       - name: The hashes are published after the files they describe
         run: scripts/check-sums-come-last.sh
+
+      # Same reason as the step above, for the other half of release.yml that only a tag
+      # runs. checkReleaseNote lives in the updater-manifest job, so until now the note was
+      # first read twenty to forty minutes into a publication, with the release already
+      # public and the installers already uploaded. A refusal there leaves a complete
+      # release page with no latest.json in it, and every installed copy goes on hearing
+      # that it is up to date.
+      #
+      # It only speaks while a release is being prepared, which the repository states by
+      # raising package.json above the newest tag. On every other pull request it says so
+      # and passes: a check that is red over something its author was not due to do yet is
+      # a check people learn to merge past.
+      - name: The release note is this version's
+        run: node scripts/check-release-note.js
 
 
   # Android is the only platform whose build was never checked on a pull request: the APK
