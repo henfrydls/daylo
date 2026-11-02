@@ -5,6 +5,14 @@ import { formatDate, generateId } from '../lib/dates'
 // Import estatico a proposito: Toast.tsx ya importa este modulo de forma estatica,
 // asi que un import() dinamico aqui no partiria el bundle -- solo retrasaria el aviso.
 import { useToastStore } from './toast'
+import { useRescueStore, whatIsOnDisk } from './rescue'
+
+/**
+ * Where everything lives. Named rather than written twice: the rescue path reads the same
+ * key straight off the disk, and two spellings of it would mean the screen that hands back
+ * your data could hand back somebody else's nothing.
+ */
+export const STORAGE_KEY = 'simple-calendar-storage'
 
 type ViewType = 'year' | 'month'
 type ViewTransitionDirection = 'drill-down' | 'drill-up' | null
@@ -508,7 +516,7 @@ export const useCalendarStore = create<CalendarState>()(
       },
     }),
     {
-      name: 'simple-calendar-storage',
+      name: STORAGE_KEY,
       storage: createJSONStorage(() => createDeferredStorage()),
       partialize: (state) => ({
         activities: state.activities,
@@ -556,7 +564,32 @@ export const useCalendarStore = create<CalendarState>()(
           _checkinStart: 'checkinEnabled' in stored ? 'decided' : 'update',
         }
       },
-      onRehydrateStorage: () => (state) => {
+      /**
+       * The second argument is the one that was being dropped, and dropping it was the
+       * whole of the bug.
+       *
+       * zustand calls this with `(undefined, error)` when hydration throws, which a
+       * truncated or otherwise unparseable value in storage does, and a browser with site
+       * data blocked does too. The old body was `state?.setHasHydrated(true)`: the `?.`
+       * quietly swallowed exactly that case, `_hasHydrated` stayed false, and App returned
+       * the loading skeleton for ever. No header, no Settings, no Export, over data still
+       * sitting on the disk.
+       *
+       * Nothing here may touch `useCalendarStore`. This runs from inside `create()`, so
+       * that const is still in its temporal dead zone and naming it would throw from the
+       * handler for a failure. The rescue store is separate for that reason among others.
+       *
+       * And nothing here writes. A device that could not be read is the last device that
+       * should be written to: whatever is there is the only copy, and the screen this
+       * raises exists to get it off intact.
+       */
+      onRehydrateStorage: () => (state, error) => {
+        if (error) {
+          useRescueStore
+            .getState()
+            .couldNotOpen(whatIsOnDisk(() => localStorage.getItem(STORAGE_KEY)))
+          return
+        }
         state?.setHasHydrated(true)
       },
     }

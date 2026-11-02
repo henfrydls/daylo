@@ -3,9 +3,47 @@ import { act, render, screen, waitForElementToBeRemoved } from '@testing-library
 import userEvent from '@testing-library/user-event'
 import App from './App'
 import { useCalendarStore } from './store'
+import { useRescueStore } from './store/rescue'
 import { formatDate } from './lib/dates'
 
 const NOW = '2026-09-01T00:00:00.000Z'
+
+/**
+ * The failure that used to have no screen.
+ *
+ * App returns the skeleton while `_hasHydrated` is false, and hydration throwing leaves it
+ * false for ever: zustand calls the rehydrate callback with no state, so nothing ever sets
+ * it. The result was a loading screen that never finished, with no header, so no Settings,
+ * so no Export, over data that was sitting on the disk the whole time.
+ */
+describe('when the data will not open', () => {
+  beforeEach(() => {
+    useRescueStore.setState({ failure: null })
+  })
+
+  it('shows a way out instead of a skeleton that never finishes', () => {
+    useCalendarStore.setState({ _hasHydrated: false })
+    useRescueStore.setState({
+      failure: { reason: 'unreadable', raw: '{"state":{"logs":[truncated' },
+    })
+
+    render(<App />)
+
+    expect(screen.getByTestId('could-not-open')).toBeInTheDocument()
+    expect(screen.queryByTestId('app-skeleton')).not.toBeInTheDocument()
+  })
+
+  // Loading is not failing. A skeleton while hydration is still running is correct, and
+  // replacing it with an error would be the app panicking at its own startup.
+  it('still shows the skeleton while it is only loading', () => {
+    useCalendarStore.setState({ _hasHydrated: false })
+
+    render(<App />)
+
+    expect(screen.getByTestId('app-skeleton')).toBeInTheDocument()
+    expect(screen.queryByTestId('could-not-open')).not.toBeInTheDocument()
+  })
+})
 
 const remindersAvailable = vi.hoisted(() => vi.fn())
 const openMailto = vi.hoisted(() => vi.fn())
