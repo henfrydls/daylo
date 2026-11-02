@@ -423,3 +423,19 @@ describe('ActivityForm', () => {
     })
   })
 })
+
+/**
+ * The limit the import used to carry, moved to where the typing happens.
+ *
+ * It was only ever enforced on the way back IN, which is the one direction where it could
+ * not help: a name long enough to be refused could only exist because this form had let
+ * somebody type it, and refusing it there threw out their whole backup. Here it stops the
+ * name being made in the first place, which somebody can see happening as they type.
+ */
+describe('how long a name may be', () => {
+  it('stops at the length an import will take back', () => {
+    render(<ActivityForm isOpen onClose={vi.fn()} />)
+
+    expect(screen.getByTestId('activity-name-input')).toHaveAttribute('maxLength', '100')
+  })
+})

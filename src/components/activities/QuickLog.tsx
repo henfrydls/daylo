@@ -5,6 +5,7 @@ import { ACTIVITY_COLORS } from '../../lib/colors'
 import { Button, Checkbox, ColorPicker, PlusIcon, XIcon } from '../ui'
 import { useFocusTrap, useAnimatedPresence } from '../../hooks'
 import { useShallow } from 'zustand/react/shallow'
+import { LONGEST_NAME } from '../../lib/limits'
 
 export const QuickLog = memo(function QuickLog() {
   // Use individual selectors to prevent over-subscription
@@ -185,6 +186,9 @@ export const QuickLog = memo(function QuickLog() {
           onKeyDown={handleKeyDown}
           placeholder="Activity name"
           aria-label="New activity name"
+          // See ActivityForm: the limit belongs where the name is made, not where a backup
+          // of it comes home.
+          maxLength={LONGEST_NAME}
           className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent min-h-[44px] sm:min-h-0"
           data-testid="quicklog-new-activity-input"
         />
