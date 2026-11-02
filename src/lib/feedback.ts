@@ -39,6 +39,11 @@ function lastingId(): string | undefined {
   return checkinEnabled && checkinId ? checkinId : undefined
 }
 
+/** Whether this device is one that speaks to us at all. */
+function speaksToUs(): boolean {
+  return useCalendarStore.getState().checkinEnabled
+}
+
 /**
  * Hand one answer to the native side. True if it left, false if it did not.
  *
@@ -62,8 +67,28 @@ async function send(args: Record<string, unknown>): Promise<boolean> {
  * Without this, no answers means either "nobody wanted to" or "nobody ever saw it", and
  * those two ask for opposite things to be done next. `menu` is somebody who went looking
  * for it; `automatic` is somebody the app interrupted.
+ *
+ * It is the only one of the three that nobody asked for, and the only one that waits on
+ * the check-in's switch. A rating and a comment are answers: somebody pressed a star or
+ * wrote a sentence, and sending what they did is the point of the dialog. This one is the
+ * dialog reporting its own arrival, on a screen that put itself there after seven days.
+ * With the switch off that was the app reaching a server off its own bat, which is the
+ * single thing that switch exists to stop.
+ *
+ * It never carried the lasting number, because `lastingId` already read the switch. That
+ * was not enough: a connection carries an address and the fact that Daylo is in use today,
+ * and "Anonymous check-in is off. It would tell us the app is still in use" is on screen
+ * saying that no longer happens. The sentence in checkin.rs is the policy, and it is now
+ * true of all three: of somebody who turned the check-in off we know only what they chose
+ * to write to us.
+ *
+ * What this costs is real and is worth naming: with the switch off there is no denominator
+ * any more, so a silence from those devices cannot be read as "saw it and said nothing"
+ * rather than "never saw it". That is a thing we no longer get to know, which is what
+ * turning it off means.
  */
 export function sendShown(answer: string, origin: 'automatic' | 'menu'): Promise<boolean> {
+  if (!speaksToUs()) return Promise.resolve(false)
   return send({ kind: 'shown', answer, id: lastingId(), origin })
 }
 

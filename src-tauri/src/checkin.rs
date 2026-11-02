@@ -194,6 +194,13 @@ fn with_ids(answer: &str, id: Option<&str>) -> serde_json::Map<String, serde_jso
 ///
 /// `origin` separates the two ways it can arrive: somebody who opened it from the menu went
 /// looking for it, and somebody the app interrupted did not.
+///
+/// This is the one of the three that only reaches here with the check-in on. A rating and a
+/// comment are answers, and the sentence above covers them: somebody chose to send them. A
+/// `shown` is the dialog reporting its own arrival on a screen that put itself there, so on
+/// a device with the switch off it was the app speaking unasked, which is the thing the
+/// switch is for. `src/lib/feedback.ts` is where it stops; the shape here is unchanged, and
+/// `id` stays an Option because the caller is what guarantees it, not this signature.
 pub fn shown(answer: &str, id: Option<&str>, origin: &str) -> serde_json::Value {
     let mut data = with_ids(answer, id);
     data.insert("origin".into(), serde_json::Value::String(origin.into()));
