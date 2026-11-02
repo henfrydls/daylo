@@ -17,6 +17,8 @@ import type { DropdownMenuItem } from './components/ui'
 import { AppSkeleton } from './components/skeletons'
 import { CheckinNotice, DailyReminder, Settings } from './components/settings'
 import { useCalendarStore } from './store'
+import { useRescueStore } from './store/rescue'
+import { CouldNotOpen } from './components/data/CouldNotOpen'
 import {
   useAnimatedPresence,
   useAppVersion,
@@ -130,6 +132,7 @@ function ViewToggle() {
 
 function App() {
   const hasHydrated = useCalendarStore((state) => state._hasHydrated)
+  const couldNotOpen = useRescueStore((state) => state.failure)
   const { selectedDate, currentView, setCurrentView, _viewTransitionDirection } = useCalendarStore()
   const [isExportOpen, setIsExportOpen] = useState(false)
   const [isImportOpen, setIsImportOpen] = useState(false)
@@ -317,6 +320,14 @@ function App() {
         : null,
     [onPhone, travelTo]
   )
+
+  // Before the skeleton, because the skeleton is what this replaces. Hydration throwing
+  // leaves _hasHydrated false for ever, and the loading screen it shows has no header, so
+  // no Settings, so no Export: a person watching a spinner over data that is on the disk
+  // and reachable by nothing. Loading is still loading, and still gets the skeleton.
+  if (couldNotOpen !== null) {
+    return <CouldNotOpen />
+  }
 
   if (!hasHydrated) {
     return <AppSkeleton />
