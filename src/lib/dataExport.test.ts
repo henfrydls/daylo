@@ -235,16 +235,15 @@ describe('dataExport utility functions', () => {
       expect(result).toBeNull()
     })
 
-    it('should return sanitized data', () => {
-      const exportData = createValidExportData([
-        createValidActivity({ name: '<script>alert("xss")</script>Safe Name' }),
-      ])
+    it('hands back the names as they were written', () => {
+      const written = '<script>alert("xss")</script>Safe Name'
+      const exportData = createValidExportData([createValidActivity({ name: written })])
       const content = JSON.stringify(exportData)
 
       const result = parseImportFile(content)
 
       expect(result).not.toBeNull()
-      expect(result!.activities[0].name).not.toContain('<script>')
+      expect(result!.activities[0].name).toBe(written)
     })
   })
 
@@ -282,29 +281,36 @@ describe('dataExport utility functions', () => {
       expect(result.valid).toBe(false)
     })
 
-    it('should sanitize activity names for XSS', () => {
-      const exportData = createValidExportData([
-        createValidActivity({ name: '<img src=x onerror=alert(1)>Test' }),
-      ])
+    /**
+     * Daylo does not rewrite what somebody wrote, and that includes text shaped like a
+     * tag. Nothing in this app ever puts a name into HTML: React escapes every string it
+     * renders, and there is no dangerouslySetInnerHTML or innerHTML anywhere in src/. So
+     * the stripping protected no sink and did damage of its own, losing whole words out of
+     * ordinary names on the one path somebody uses to get their data back.
+     */
+    it('keeps text shaped like a tag, because escaping happens where it is drawn', () => {
+      const written = '<img src=x onerror=alert(1)>Test'
+      const exportData = createValidExportData([createValidActivity({ name: written })])
       const content = JSON.stringify(exportData)
 
       const result = parseImportFileWithValidation(content)
 
       expect(result.valid).toBe(true)
-      expect(result.sanitizedData!.activities[0].name).not.toContain('<img')
+      expect(result.sanitizedData!.activities[0].name).toBe(written)
     })
 
-    it('should sanitize log notes for XSS', () => {
+    it('keeps notes as they were written too', () => {
+      const written = '<script>steal(cookies)</script>Notes'
       const exportData = createValidExportData(
         [createValidActivity()],
-        [createValidLog({ notes: '<script>steal(cookies)</script>Notes' })]
+        [createValidLog({ notes: written })]
       )
       const content = JSON.stringify(exportData)
 
       const result = parseImportFileWithValidation(content)
 
       expect(result.valid).toBe(true)
-      expect(result.sanitizedData!.logs[0].notes).not.toContain('<script>')
+      expect(result.sanitizedData!.logs[0].notes).toBe(written)
     })
   })
 
@@ -504,15 +510,30 @@ describe('dataExport utility functions', () => {
         expect(result.errors.some((e) => e.message.includes('name cannot be empty'))).toBe(true)
       })
 
-      it('should return error for activity with name exceeding max length', () => {
+      /**
+       * A backup of your own has to open, and Daylo shipped for years with no limit on
+       * either form, so a name of any length can be in a file Daylo itself wrote. This
+       * used to reject the entire import, in both modes, over one long name: somebody who
+       * had once named an activity with a sentence could not restore their own data at
+       * all. The limit lives where the typing happens now.
+       */
+      it('takes a name longer than the form would allow today, because Daylo wrote it', () => {
         const data = { activities: [createValidActivity({ name: 'a'.repeat(101) })], logs: [] }
 
         const result = validateImportDataWithErrors(data)
 
+        expect(result.valid).toBe(true)
+      })
+
+      // There is still a ceiling, and it is where no thumbs reach. A single name of more
+      // than ten thousand characters is a malformed or hostile file, not a long habit.
+      it('refuses a name no person could have typed', () => {
+        const data = { activities: [createValidActivity({ name: 'a'.repeat(10001) })], logs: [] }
+
+        const result = validateImportDataWithErrors(data)
+
         expect(result.valid).toBe(false)
-        expect(result.errors.some((e) => e.message.includes('name exceeds maximum length'))).toBe(
-          true
-        )
+        expect(result.errors.some((e) => e.message.includes('longer than anything'))).toBe(true)
       })
 
       it('should return error for activity with missing color', () => {
@@ -743,15 +764,21 @@ describe('dataExport utility functions', () => {
         expect(result.errors.some((e) => e.message.includes('notes must be a string'))).toBe(true)
       })
 
-      it('should return error for log with notes exceeding max length', () => {
+      it('takes a note longer than the old limit for the same reason', () => {
         const data = { activities: [], logs: [createValidLog({ notes: 'a'.repeat(1001) })] }
 
         const result = validateImportDataWithErrors(data)
 
+        expect(result.valid).toBe(true)
+      })
+
+      it('refuses a note no person could have typed', () => {
+        const data = { activities: [], logs: [createValidLog({ notes: 'a'.repeat(100001) })] }
+
+        const result = validateImportDataWithErrors(data)
+
         expect(result.valid).toBe(false)
-        expect(result.errors.some((e) => e.message.includes('notes exceeds maximum length'))).toBe(
-          true
-        )
+        expect(result.errors.some((e) => e.message.includes('longer than anything'))).toBe(true)
       })
 
       it('should return error for log with missing createdAt', () => {
@@ -793,62 +820,55 @@ describe('dataExport utility functions', () => {
   })
 
   describe('XSS sanitization', () => {
-    it('should remove script tags from activity name', () => {
-      const exportData = createValidExportData([
-        createValidActivity({ name: 'Test<script>alert(1)</script>' }),
-      ])
-      const content = JSON.stringify(exportData)
+    /**
+     * What an import does to the words somebody wrote: nothing.
+     *
+     * It used to strip anything between angle brackets and then re-encode what was left.
+     * The comment called it XSS protection, and there is no sink for it to protect: React
+     * escapes every string it renders and this app has no dangerouslySetInnerHTML or
+     * innerHTML anywhere. What it did instead was quietly destroy ordinary names on the
+     * one path somebody takes to get their data back after losing a phone.
+     *
+     * These are names a person actually types.
+     */
+    it.each([
+      ['Read <10 pages>', 'a whole phrase vanished between the brackets'],
+      ['Peso <-> medidas', 'an arrow read as a tag and deleted'],
+      ['Gym <3', 'shown afterwards as the literal characters &lt;3'],
+      ['Correr <30min', 'the same, on an ordinary abbreviation'],
+      ['Tom &amp; Jerry', 'an entity somebody typed on purpose, decoded under them'],
+      ['Test<script>alert(1)</script>', 'text shaped like a tag is still their text'],
+    ])('leaves %s alone (%s)', (written) => {
+      const exportData = createValidExportData([createValidActivity({ name: written })])
 
-      const result = parseImportFileWithValidation(content)
+      const result = parseImportFileWithValidation(JSON.stringify(exportData))
 
-      expect(result.sanitizedData!.activities[0].name).not.toContain('<script>')
-      expect(result.sanitizedData!.activities[0].name).not.toContain('</script>')
+      expect(result.valid).toBe(true)
+      expect(result.sanitizedData!.activities[0].name).toBe(written)
     })
 
-    it('should remove img tags with onerror from activity name', () => {
-      const exportData = createValidExportData([
-        createValidActivity({ name: 'Test<img src=x onerror=alert(1)>' }),
-      ])
-      const content = JSON.stringify(exportData)
-
-      const result = parseImportFileWithValidation(content)
-
-      expect(result.sanitizedData!.activities[0].name).not.toContain('<img')
-    })
-
-    it('should remove standalone angle brackets', () => {
-      const exportData = createValidExportData([createValidActivity({ name: 'Test < > value' })])
-      const content = JSON.stringify(exportData)
-
-      const result = parseImportFileWithValidation(content)
-
-      // The sanitization removes < and > characters
-      expect(result.sanitizedData!.activities[0].name).not.toContain('<')
-      expect(result.sanitizedData!.activities[0].name).not.toContain('>')
-    })
-
-    it('should handle HTML entities', () => {
-      const exportData = createValidExportData([
-        createValidActivity({ name: 'Test &amp; &lt;script&gt;' }),
-      ])
-      const content = JSON.stringify(exportData)
-
-      const result = parseImportFileWithValidation(content)
-
-      expect(result.sanitizedData!.activities[0].name).not.toContain('<script>')
-    })
-
-    it('should sanitize log notes', () => {
+    // Export then import has to be the same file coming back. It was not: exportToJSON
+    // never sanitised, so a round trip through a backup changed the data, and a second
+    // round trip changed it again.
+    it('gives back exactly what it was given, so a backup round trips', () => {
+      const names = ['Read <10 pages>', 'Gym <3', 'Tom &amp; Jerry']
       const exportData = createValidExportData(
-        [createValidActivity()],
-        [createValidLog({ notes: '<div onclick="steal()">Click me</div>' })]
+        names.map((name, i) => createValidActivity({ id: `a${i}`, name }))
       )
-      const content = JSON.stringify(exportData)
 
-      const result = parseImportFileWithValidation(content)
+      const once = parseImportFileWithValidation(JSON.stringify(exportData))
+      const twice = parseImportFileWithValidation(JSON.stringify(once.sanitizedData))
 
-      expect(result.sanitizedData!.logs[0].notes).not.toContain('<div')
-      expect(result.sanitizedData!.logs[0].notes).not.toContain('onclick')
+      expect(once.sanitizedData!.activities.map((a) => a.name)).toEqual(names)
+      expect(twice.sanitizedData!.activities.map((a) => a.name)).toEqual(names)
+    })
+
+    it('still trims the whitespace around a name, which is not content', () => {
+      const exportData = createValidExportData([createValidActivity({ name: '  Running  ' })])
+
+      const result = parseImportFileWithValidation(JSON.stringify(exportData))
+
+      expect(result.sanitizedData!.activities[0].name).toBe('Running')
     })
 
     it('should trim whitespace from sanitized strings', () => {

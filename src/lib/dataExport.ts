@@ -1,4 +1,5 @@
 import type { Activity, ActivityLog } from '../types'
+import { LONGEST_NAME } from './limits'
 
 export interface ExportData {
   activities: Activity[]
@@ -11,7 +12,15 @@ export interface ExportData {
 const VALIDATION_LIMITS = {
   MAX_ACTIVITIES: 10_000,
   MAX_LOGS: 100_000,
-  MAX_NAME_LENGTH: 100,
+  /** What the forms let somebody type. Enforced there, where it can be seen happening. */
+  MAX_NAME_LENGTH: LONGEST_NAME,
+  /**
+   * What an import will take. Far above the form's limit on purpose: Daylo shipped for
+   * years with no limit on either form, so longer names exist in real files that Daylo
+   * itself wrote, and a backup of your own has to open. This one only catches the absurd.
+   */
+  LONGEST_NAME_ACCEPTED: 10000,
+  LONGEST_NOTES_ACCEPTED: 100000,
   MAX_COLOR_LENGTH: 20,
   MAX_ID_LENGTH: 100,
   MAX_NOTES_LENGTH: 1000,
@@ -265,10 +274,20 @@ function validateActivity(obj: unknown, index: number): ValidationError[] {
         index,
       })
     }
-    if (activity.name.length > VALIDATION_LIMITS.MAX_NAME_LENGTH) {
+    // Deliberately no maximum here, and the reason is that Daylo never had one either.
+    // The forms have never limited what you can type, so a name of any length can be in a
+    // file Daylo itself wrote. Refusing it threw out the WHOLE import, in both modes, so a
+    // person who had once named an activity with a sentence could not restore their own
+    // backup at all. The limit is enforced where it belongs now, in the two places a name
+    // is typed, which stops new ones without disowning the old.
+    //
+    // What is still refused is the absurd, below: a single name of more than ten thousand
+    // characters did not come from anybody's thumbs and is the shape of a malformed or
+    // hostile file.
+    if (activity.name.length > VALIDATION_LIMITS.LONGEST_NAME_ACCEPTED) {
       errors.push({
         field: `${prefix}.name`,
-        message: `Activity at index ${index} name exceeds maximum length of ${VALIDATION_LIMITS.MAX_NAME_LENGTH} characters.`,
+        message: `Activity at index ${index} has a name of ${activity.name.length} characters, which is longer than anything Daylo could have written.`,
         index,
       })
     }
@@ -403,10 +422,11 @@ function validateActivityLog(obj: unknown, index: number): ValidationError[] {
         message: `Log at index ${index} notes must be a string if provided.`,
         index,
       })
-    } else if (log.notes.length > VALIDATION_LIMITS.MAX_NOTES_LENGTH) {
+    } else if (log.notes.length > VALIDATION_LIMITS.LONGEST_NOTES_ACCEPTED) {
+      // Same reasoning as the name above: what Daylo wrote, Daylo takes back.
       errors.push({
         field: `${prefix}.notes`,
-        message: `Log at index ${index} notes exceeds maximum length of ${VALIDATION_LIMITS.MAX_NOTES_LENGTH} characters.`,
+        message: `Log at index ${index} has a note of ${log.notes.length} characters, which is longer than anything Daylo could have written.`,
         index,
       })
     }
@@ -513,19 +533,28 @@ function containsHTML(str: string): boolean {
 }
 
 /**
- * Sanitize string by removing HTML tags to prevent XSS
+ * The words somebody wrote, given back unchanged except for the space around them.
+ *
+ * This used to strip everything between angle brackets and then re-encode what was left,
+ * under a comment saying it prevented XSS. There is no sink for it to have protected:
+ * React escapes every string it renders, and this app has no dangerouslySetInnerHTML and
+ * no innerHTML anywhere. What it did have was teeth. Measured against names people type:
+ *
+ *   Read <10 pages>  became  Read
+ *   Peso <-> medidas became  Peso  medidas
+ *   Gym <3           was shown as  Gym &lt;3
+ *   Tom &amp; Jerry  became  Tom & Jerry
+ *
+ * And it only bit on the way back in. Nothing sanitises on the way out and nothing
+ * sanitises a name typed into the app, so the single path that changed somebody's data was
+ * the one they take after losing a phone. A backup that comes back different is not a
+ * backup.
+ *
+ * Trimming stays: the space around a name is not content, and it is what the form does
+ * when the name is typed in the first place.
  */
-function sanitizeString(str: string): string {
-  return str
-    .replace(/<[^>]*>/g, '') // Remove HTML tags
-    .replace(/&lt;/g, '<') // Decode common entities for re-encoding
-    .replace(/&gt;/g, '>')
-    .replace(/&amp;/g, '&')
-    .replace(/&quot;/g, '"')
-    .replace(/&#x27;/g, "'")
-    .replace(/</g, '&lt;') // Re-encode dangerous characters
-    .replace(/>/g, '&gt;')
-    .trim()
+function tidy(str: string): string {
+  return str.trim()
 }
 
 /**
@@ -535,7 +564,7 @@ function sanitizeActivity(activity: Activity): Activity {
   return {
     ...activity,
     id: activity.id.trim(),
-    name: sanitizeString(activity.name).slice(0, VALIDATION_LIMITS.MAX_NAME_LENGTH),
+    name: tidy(activity.name),
     color: activity.color.trim().slice(0, VALIDATION_LIMITS.MAX_COLOR_LENGTH),
     createdAt: activity.createdAt,
     updatedAt: activity.updatedAt,
@@ -552,9 +581,7 @@ function sanitizeActivityLog(log: ActivityLog): ActivityLog {
     activityId: log.activityId.trim(),
     date: log.date.trim(),
     completed: log.completed,
-    notes: log.notes
-      ? sanitizeString(log.notes).slice(0, VALIDATION_LIMITS.MAX_NOTES_LENGTH)
-      : undefined,
+    notes: log.notes ? tidy(log.notes) : undefined,
     createdAt: log.createdAt,
   }
 }

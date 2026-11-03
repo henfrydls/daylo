@@ -4,6 +4,7 @@ import { ACTIVITY_COLORS } from '../../lib/colors'
 import { useCalendarStore } from '../../store'
 import { formatDate } from '../../lib/dates'
 import type { Activity } from '../../types'
+import { LONGEST_NAME } from '../../lib/limits'
 
 interface ActivityFormProps {
   isOpen: boolean
@@ -133,6 +134,12 @@ export const ActivityForm = memo(function ActivityForm({
             value={name}
             onChange={(e) => setName(e.target.value)}
             placeholder="e.g., Exercise, Read, Meditate"
+            // The same number an import will take back, enforced where somebody can see it
+            // happen. It used to be checked only on the way in, which is the one direction
+            // where it could not help: a name long enough to be refused could only exist
+            // because this form had allowed it, and refusing it there threw out the whole
+            // backup rather than the name.
+            maxLength={LONGEST_NAME}
             className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent min-h-[44px] sm:min-h-0"
             autoFocus={!isEditing}
             data-testid="activity-name-input"
