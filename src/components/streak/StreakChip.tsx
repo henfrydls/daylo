@@ -3,6 +3,20 @@ import { useEffect, useRef, useState } from 'react'
 /** How long one digit waits before the next, when the number walks. */
 const A_DIGIT_AT_A_TIME = 100
 
+/**
+ * The furthest the number will walk rather than jump.
+ *
+ * A digit at a time is a nice touch over a step or two and a hostage situation over a
+ * hundred. Importing a backup takes the run from 0 to whatever it was, and at a tenth of a
+ * second a digit, 128 days would be twelve and a half seconds of a number ticking in the
+ * header while somebody waits to find out what they have. The same the other way: deleting
+ * one old log can break a run of 30 into 3, and counting that loss out loud is the last
+ * thing anybody needs.
+ *
+ * Three, because what this is for is the ordinary day where the number goes up by one.
+ */
+const AS_FAR_AS_IT_WALKS = 3
+
 interface StreakChipProps {
   /** Days in a row, ending today or yesterday. Zero means there is no run to speak of. */
   streak: number
@@ -69,7 +83,16 @@ function useWalkingNumber(target: number): number {
 
   useEffect(() => {
     if (previous.current === target) return
+    const from = previous.current
     previous.current = target
+
+    // The movement is JavaScript, so the CSS rule that turns animation off never reaches
+    // it and it has to ask for itself.
+    const tooFar = Math.abs(target - from) > AS_FAR_AS_IT_WALKS
+    if (tooFar || prefersLessMovement()) {
+      setShown(target)
+      return
+    }
 
     let value = shown
     let timer: ReturnType<typeof setTimeout>
@@ -88,6 +111,17 @@ function useWalkingNumber(target: number): number {
   }, [target])
 
   return shown
+}
+
+/**
+ * Whether somebody has asked their system for less movement.
+ *
+ * Read when the number changes rather than once at mount: the setting can be turned on
+ * while the app is open, and a component that only asked at startup would keep moving for
+ * the rest of the session.
+ */
+function prefersLessMovement(): boolean {
+  return window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ?? false
 }
 
 /**

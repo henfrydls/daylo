@@ -2,8 +2,29 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { render, screen, act } from '@testing-library/react'
 import { StreakChip } from './StreakChip'
 
+/** jsdom has no matchMedia, and the chip asks it whether anybody wants movement. */
+function wants(movement: boolean) {
+  Object.defineProperty(window, 'matchMedia', {
+    writable: true,
+    configurable: true,
+    value: (query: string) => ({
+      matches: query.includes('prefers-reduced-motion') ? !movement : false,
+      media: query,
+      onchange: null,
+      addEventListener: vi.fn(),
+      removeEventListener: vi.fn(),
+      addListener: vi.fn(),
+      removeListener: vi.fn(),
+      dispatchEvent: vi.fn(),
+    }),
+  })
+}
+
 describe('the streak chip', () => {
-  beforeEach(() => vi.useFakeTimers({ shouldAdvanceTime: true }))
+  beforeEach(() => {
+    vi.useFakeTimers({ shouldAdvanceTime: true })
+    wants(true)
+  })
   afterEach(() => vi.useRealTimers())
 
   it('says the run and whether today is in it', () => {
@@ -72,5 +93,35 @@ describe('the streak chip', () => {
     expect(chip.className).toContain('rounded-full')
     expect(chip.className).not.toContain('border')
     expect(chip.className).toContain('min-h-12')
+  })
+
+  // A digit at a time is a nice touch over a step or two and a hostage situation over a
+  // hundred. Importing a backup takes the run from 0 to whatever it was, and at a tenth of
+  // a second a digit, 128 days is twelve and a half seconds of a number ticking in the
+  // header while somebody waits to find out what they have.
+  it('jumps when the distance is more than a few days', () => {
+    const { rerender } = render(<StreakChip streak={0} todayDone={false} />)
+    rerender(<StreakChip streak={128} todayDone />)
+
+    expect(screen.getByTestId('streak-chip')).toHaveTextContent('128 days')
+  })
+
+  // The same the other way: deleting an old log can break a run of 30 into 3, and counting
+  // down 27 steps is almost three seconds of watching a number fall.
+  it('jumps down too, rather than counting the loss out loud', () => {
+    const { rerender } = render(<StreakChip streak={30} todayDone />)
+    rerender(<StreakChip streak={3} todayDone />)
+
+    expect(screen.getByTestId('streak-chip')).toHaveTextContent('3 days')
+  })
+
+  // The movement is JavaScript, so the CSS rule that turns animation off does not reach it
+  // and it has to ask for itself.
+  it('does not walk at all for somebody who asked for less movement', () => {
+    wants(false)
+    const { rerender } = render(<StreakChip streak={4} todayDone={false} />)
+    rerender(<StreakChip streak={6} todayDone />)
+
+    expect(screen.getByTestId('streak-chip')).toHaveTextContent('6 days')
   })
 })
