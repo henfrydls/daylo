@@ -182,7 +182,26 @@ describe('turning it off', () => {
 })
 
 describe('when the last activity goes', () => {
-  it('takes the reminder down with it', async () => {
+  /**
+   * The case every real phone is in, and the one the old code could not act on.
+   *
+   * getPending reads the plugin's own store, and that store is only ever written by the
+   * Kotlin `batch` path. Daylo schedules through `notify`, which reaches `show`, and `show`
+   * writes nothing. So `pending()` answers `[]` on a phone with the reminder live and
+   * ringing every night, and the old condition read that as "nothing of ours is scheduled"
+   * and cancelled nothing. Somebody who deleted their last activity went on being asked how
+   * the day went, over an app with nothing left in it.
+   */
+  it('takes the reminder down even though the phone lists nothing', async () => {
+    pretendAndroid()
+    pending.mockResolvedValue([])
+
+    await reconcileReminder(0)
+
+    expect(cancel).toHaveBeenCalledWith([REMINDER_ID])
+  })
+
+  it('takes it down when the phone does list it', async () => {
     pretendAndroid()
     pending.mockResolvedValue([{ id: REMINDER_ID, title: 'Daylo', schedule: {} }])
 
@@ -196,16 +215,36 @@ describe('when the last activity goes', () => {
 
     await reconcileReminder(3)
 
-    expect(pending).not.toHaveBeenCalled()
     expect(cancel).not.toHaveBeenCalled()
   })
 
-  // Reads what is really scheduled rather than trusting stored state: the phone's own
-  // settings can take notifications away behind the app's back.
-  it('cancels nothing when nothing of ours is scheduled', async () => {
+  /**
+   * It does not ask any more, and that is the change.
+   *
+   * By the time this runs there is nothing left to be reminded about, so taking the
+   * reminder down is the whole of what it came to do, whatever any list says. Cancelling
+   * one that was never scheduled costs nothing. Asking first only ever gave an answer that
+   * could talk it out of its own job, and on a real phone that is exactly what it did.
+   */
+  it('does not consult a list it cannot act on', async () => {
     pretendAndroid()
-    pending.mockResolvedValue([{ id: 99, title: 'Something else', schedule: {} }])
 
+    await reconcileReminder(0)
+
+    expect(pending).not.toHaveBeenCalled()
+    expect(cancel).toHaveBeenCalledWith([REMINDER_ID])
+  })
+
+  // Nothing on this path may throw: it runs from a screen somebody is looking at, right
+  // after they deleted something.
+  it('does not throw when cancelling itself fails', async () => {
+    pretendAndroid()
+    cancel.mockRejectedValue(new Error('the plugin is not there'))
+
+    await expect(reconcileReminder(0)).resolves.toBeUndefined()
+  })
+
+  it('does nothing at all where there are no reminders', async () => {
     await reconcileReminder(0)
 
     expect(cancel).not.toHaveBeenCalled()
@@ -328,57 +367,6 @@ describe('the time the offer proposes', () => {
     expect(at(22, 0)).toEqual({ hour: 20, minute: 0 })
     expect(at(5, 59)).toEqual({ hour: 20, minute: 0 })
     expect(at(6, 0)).toEqual({ hour: 7, minute: 0 })
-  })
-})
-
-/**
- * What to do when the phone does not answer.
- *
- * Found while simulating the Tauri bridge for something else: a stub that returned null
- * where the plugin returns a list made this throw. The plugin is not expected to do that,
- * which is exactly why the line had no guard and why it is worth one: the cases nobody
- * expects are the ones nobody has written down.
- *
- * Which way to fall is the real question, and it is not "assume nothing is scheduled".
- * This function is only reached when there is nothing left to be reminded about, so taking
- * the reminder down is what it came to do. An unknown answer falls towards doing it.
- */
-describe('when the phone does not say what is scheduled', () => {
-  it('takes the reminder down anyway when the answer is nothing', async () => {
-    pretendAndroid()
-    pending.mockResolvedValue(null)
-
-    await reconcileReminder(0)
-
-    expect(cancel).toHaveBeenCalledWith([REMINDER_ID])
-  })
-
-  it('takes it down when the answer is not a list at all', async () => {
-    pretendAndroid()
-    pending.mockResolvedValue(undefined)
-
-    await reconcileReminder(0)
-
-    expect(cancel).toHaveBeenCalledWith([REMINDER_ID])
-  })
-
-  it('takes it down when asking throws', async () => {
-    pretendAndroid()
-    pending.mockRejectedValue(new Error('the plugin is not there'))
-
-    await expect(reconcileReminder(0)).resolves.toBeUndefined()
-    expect(cancel).toHaveBeenCalledWith([REMINDER_ID])
-  })
-
-  // And a real empty list still means what it says: nothing of ours is scheduled, so there
-  // is nothing to cancel. That is the difference this whole change is about.
-  it('cancels nothing when the phone says the list is empty', async () => {
-    pretendAndroid()
-    pending.mockResolvedValue([])
-
-    await reconcileReminder(0)
-
-    expect(cancel).not.toHaveBeenCalled()
   })
 })
 

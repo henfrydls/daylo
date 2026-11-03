@@ -1,7 +1,6 @@
 import {
   cancel,
   isPermissionGranted,
-  pending,
   requestPermission,
   Schedule,
 } from '@tauri-apps/plugin-notification'
@@ -294,21 +293,34 @@ export async function disableReminder(): Promise<void> {
  *
  * Someone who deletes their last activity should not keep getting asked how the day went,
  * and a reminder outliving what it reminds about is the kind of thing that gets an app
- * uninstalled. Reads what is actually scheduled rather than trusting stored state, because
- * the two can drift: the phone's own settings can take notifications away.
+ * uninstalled.
+ *
+ * It used to ask the phone what was scheduled first, and that question was the bug. The
+ * plugin answers it from its own store, and that store is only ever written by the Kotlin
+ * `batch` path: Daylo schedules through `notify`, which reaches `show`, and `show` writes
+ * nothing. So on a real phone, with the reminder live and ringing every night, `pending()`
+ * answers with an empty list, the old condition read that as "nothing of ours is
+ * scheduled", and nothing was cancelled. The one case this function exists for was the one
+ * case it could not act in, for the whole of its life.
+ *
+ * It does not ask any more. By the time it runs there is nothing left to be reminded
+ * about, so taking the reminder down is the whole of what it came to do, and cancelling
+ * one that was never scheduled costs nothing. The old comment argued for exactly this and
+ * then wrote a condition that did the opposite.
+ *
+ * The same empty store is why a reboot takes the reminder with it, which is known and
+ * deliberate; see refreshReminder.
  */
 export async function reconcileReminder(activityCount: number): Promise<void> {
   if (activityCount > 0 || !(await remindersAvailable())) {
     return
   }
-  // An answer we did not get is not an answer of "nothing". Reading the list is only here
-  // to save an unnecessary call: by this point there is nothing left to be reminded about,
-  // so taking the reminder down is what this function came to do. If the phone says
-  // nothing, or says something that is not a list, it comes down anyway. Cancelling a
-  // notification that was never scheduled costs nothing; leaving one standing over nothing
-  // is the thing that gets an app uninstalled.
-  const scheduled = await pending().catch(() => null)
-  if (!Array.isArray(scheduled) || scheduled.some((n) => n.id === REMINDER_ID)) {
+  // Nothing here may throw. It runs from a screen somebody is looking at, in the moment
+  // just after they deleted something, and a failure to cancel is not their problem.
+  try {
     await cancel([REMINDER_ID])
+  } catch {
+    // Deliberately swallowed, and nothing is reported: there is no screen to report it on
+    // and nothing the person could do about it.
   }
 }
