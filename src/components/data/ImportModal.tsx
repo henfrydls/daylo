@@ -230,14 +230,24 @@ export function ImportModal({ isOpen, onClose }: ImportModalProps) {
         }
       >
         <div className="space-y-6">
-          {/* Drop zone */}
-          <div
+          {/* A label and not a div, which is the whole of the fix.
+              It was a div with an onClick, carrying no role, no tabIndex and no key
+              handler, over an input that was `hidden`: display:none, so not focusable and
+              not in the accessibility tree either. Somebody on a keyboard or a screen
+              reader opened Import and found nothing to activate, with Cancel the only
+              enabled control. A backup matters on exactly one day, and on that day they
+              could not reach it.
+              Wrapping the input makes the browser do all of it: the whole zone stays
+              clickable, Tab reaches the input, Enter opens the picker because that is what
+              a focused file input does, and the words inside become its accessible name.
+              No roles, no key handlers, nothing to keep in step with native behaviour. */}
+          <label
             onDragOver={handleDragOver}
             onDragLeave={handleDragLeave}
             onDrop={handleDrop}
-            onClick={() => fileInputRef.current?.click()}
             className={`
-              relative border-2 border-dashed rounded-lg p-8 text-center cursor-pointer
+              relative block border-2 border-dashed rounded-lg p-8 text-center cursor-pointer
+              focus-within:outline-none focus-within:ring-2 focus-within:ring-emerald-500
               transition-colors duration-200
               ${
                 isDragging
@@ -250,12 +260,15 @@ export function ImportModal({ isOpen, onClose }: ImportModalProps) {
               }
             `}
           >
+            {/* sr-only and not hidden: it has to stay focusable and stay in the
+                accessibility tree. The ring above is drawn on the zone instead, because
+                the input itself is a pixel nobody can see. */}
             <input
               ref={fileInputRef}
               type="file"
               accept=".json"
               onChange={handleFileChange}
-              className="hidden"
+              className="sr-only"
             />
 
             {parsedData ? (
@@ -300,7 +313,7 @@ export function ImportModal({ isOpen, onClose }: ImportModalProps) {
                 <p className="text-xs text-gray-400 mt-1">Supports JSON files only</p>
               </div>
             )}
-          </div>
+          </label>
 
           {/* Error message */}
           {error && (
