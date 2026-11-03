@@ -3,6 +3,7 @@ import type { Update } from '@tauri-apps/plugin-updater'
 import {
   checkForUpdate,
   installFormat,
+  openApkFor,
   openDownloads,
   restartApp,
   takeUpdate,
@@ -172,7 +173,10 @@ export function useUpdates(): Updates {
       return
     }
     if (!found.canInstall) {
-      void openDownloads()
+      // A desktop is sent to the page that explains the formats, because it has to pick
+      // one of eight. A phone has only ever had one file, so it is handed that file, named
+      // after the version the card has just announced.
+      void (format === 'apk' ? openApkFor(found.version) : openDownloads())
       return
     }
     // Belt and braces: canInstall is false wherever update is null, and a path that
@@ -183,7 +187,7 @@ export function useUpdates(): Updates {
     void takeUpdate(found.update, setTaking).finally(() => {
       busy.current = false
     })
-  }, [found, look, taking])
+  }, [format, found, look, taking])
 
   const check = useCallback(() => {
     void look(true)

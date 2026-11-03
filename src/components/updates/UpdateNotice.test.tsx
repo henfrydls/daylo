@@ -39,9 +39,9 @@ describe('what each state says', () => {
     expect(card()).not.toHaveTextContent(/install/i)
   })
 
-  // One word, and the errand is why. On a phone the landing's Android button hands over
-  // the one APK there is, so "Download" is what happens next; on a desktop the same page
-  // asks which of eight files is theirs, which is a different sentence.
+  // One word, and the errand is why. On a phone Daylo hands over the one APK there is, so
+  // "Download" is what happens next; on a desktop the same card points at a page that asks
+  // which of eight files is theirs, which is a different sentence.
   it('says Download on a phone, where that is what the link does', () => {
     show({ kind: 'download', version: '1.5.0' })
 
