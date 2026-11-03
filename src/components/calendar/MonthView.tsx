@@ -20,7 +20,16 @@ interface DayInfo {
 function getMonthDays(year: number, month: number): DayInfo[] {
   const firstDay = new Date(year, month, 1)
   const lastDay = new Date(year, month + 1, 0)
-  const startDayOfWeek = firstDay.getDay()
+  // `|| 7` and not `getDay()`, because a Sunday answers 0 and the loop below then prepends
+  // nothing at all: a month that begins on a Sunday showed not one day of the month before
+  // it. That is 13 months in every 96, and it is the worst case rather than a corner. The
+  // 2nd of such a month puts the whole of somebody's run on the screen they are not
+  // looking at, so the arrival screen of a person who has turned up four days running is
+  // an empty grid with one dot in it.
+  //
+  // Seven is the most this can prepend, and 7 + 31 is 38, so it is still 42 cells and six
+  // rows for every month. Checked from 2024 to 2031.
+  const startDayOfWeek = firstDay.getDay() || 7
   const daysInMonth = lastDay.getDate()
 
   const days: DayInfo[] = []

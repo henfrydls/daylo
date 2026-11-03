@@ -248,4 +248,43 @@ describe('MonthView', () => {
       expect(logTodayBar).toHaveTextContent('1/2 activities')
     })
   })
+
+  describe('the week before the first', () => {
+    const cells = () => screen.getAllByLabelText(/^\d{4}-\d{2}-\d{2},/)
+
+    // A month whose 1st falls on a Sunday showed no day of the month before it at all:
+    // `getDay()` is 0 for a Sunday, so the loop that prepends them never ran once. That is 13
+    // months in every 96, one in seven, and it is the worst case rather than a corner: on the
+    // 2nd of such a month the whole of somebody's run is in the month before, and the arrival
+    // screen is an empty grid with a single dot in the corner.
+    it('shows the last week of the month before when the 1st is a Sunday', () => {
+      // 1 November 2026 is a Sunday.
+      useCalendarStore.setState({ selectedYear: 2026, selectedMonth: 10 })
+      render(<MonthView />)
+
+      expect(screen.getByLabelText(/^2026-10-25,/)).toBeInTheDocument()
+      expect(screen.getByLabelText(/^2026-10-31,/)).toBeInTheDocument()
+      expect(cells()[0]).toHaveAccessibleName(/^2026-10-25,/)
+    })
+
+    // Six rows of seven, whatever the month does. A month that grew a seventh row would push
+    // the grid past the bottom of a phone, which is the thing this is supposed to stop.
+    it('still draws 42 cells on a month that starts on a Sunday', () => {
+      useCalendarStore.setState({ selectedYear: 2026, selectedMonth: 10 })
+      render(<MonthView />)
+
+      expect(cells()).toHaveLength(42)
+      expect(cells()[41]).toHaveAccessibleName(/^2026-12-05,/)
+    })
+
+    // The other six days of the week are untouched: 1 December 2026 is a Tuesday, so the grid
+    // begins where it always began, on the 29th of November.
+    it('leaves a month that starts on any other day alone', () => {
+      useCalendarStore.setState({ selectedYear: 2026, selectedMonth: 11 })
+      render(<MonthView />)
+
+      expect(cells()).toHaveLength(42)
+      expect(cells()[0]).toHaveAccessibleName(/^2026-11-29,/)
+    })
+  })
 })
