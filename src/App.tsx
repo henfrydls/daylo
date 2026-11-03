@@ -31,6 +31,7 @@ import {
 import { TravelContext, useTravel } from './lib/travel'
 import { UpdateDot } from './components/updates/UpdateDot'
 import { UpdateNotice } from './components/updates/UpdateNotice'
+import { StreakChip } from './components/streak/StreakChip'
 import { sendComment, sendRating, sendShown } from './lib/feedback'
 import { FEEDBACK_MAILTO, openMailto, shouldInviteFeedback } from './lib/feedbackInvite'
 import { openLink } from './lib/openLink'
@@ -51,6 +52,8 @@ import { openLink } from './lib/openLink'
  */
 const STORE_REVIEW = 'ms-windows-store://review/?ProductId=9NJM37WMMC5Z'
 import { formatDate } from './lib/dates'
+import { completedDates } from './lib/activityYear'
+import { currentStreak } from './lib/streaks'
 import { sendCheckinIfDue, startCheckinOnNewInstall } from './lib/checkin'
 
 // Lazy load modals - they are rarely used
@@ -164,6 +167,14 @@ function App() {
   const markStoreReviewOffered = useCalendarStore((s) => s.markStoreReviewOffered)
   const offerStoreReview = checkinFields?.source === 'store' && !storeReviewOffered
   const logs = useCalendarStore((state) => state.logs)
+
+  // The run the chip says, read the way the rest of the app reads it: a day counts as soon
+  // as any one habit is logged, and today not being ticked yet does not end it.
+  const { streakToday, todayIsLogged } = useMemo(() => {
+    const now = new Date()
+    const done = completedDates(logs)
+    return { streakToday: currentStreak(done, now), todayIsLogged: done.has(formatDate(now)) }
+  }, [logs])
   const firstOpenedAt = useCalendarStore((state) => state.firstOpenedAt)
   const feedbackInviteSeen = useCalendarStore((state) => state.feedbackInviteSeen)
   const loggedThisSession = useCalendarStore((state) => state._loggedThisSession)
@@ -466,13 +477,26 @@ function App() {
                         </span>
                       </h1>
                     </div>
-                    {/* Menu button visible on mobile next to title */}
-                    <div className="sm:hidden">{headerControl('p-2.5')}</div>
+                    {/* The run, beside the gear, where it is the same two things in the
+                        same order at every width. The gap is what keeps a pill and a gear
+                        from reading as one control. */}
+                    <div className="flex items-center gap-2 sm:hidden">
+                      <StreakChip streak={streakToday} todayDone={todayIsLogged} />
+                      {/* Menu button visible on mobile next to title */}
+                      {headerControl('p-2.5')}
+                    </div>
                   </div>
                   <div className="flex items-center justify-between sm:justify-end gap-3">
                     <ViewToggle />
-                    {/* Menu button hidden on mobile, visible on larger screens */}
-                    <div className="hidden sm:block">{headerControl('p-2')}</div>
+                    {/* And the same pair up here, because 107 of the 115 copies are
+                        desktop and the Statistics tile that used to carry this number is
+                        gone in this version. A chip only on the phone would have left the
+                        streak nowhere for almost everybody. */}
+                    <div className="hidden items-center gap-2 sm:flex">
+                      <StreakChip streak={streakToday} todayDone={todayIsLogged} />
+                      {/* Menu button hidden on mobile, visible on larger screens */}
+                      {headerControl('p-2')}
+                    </div>
                   </div>
                 </div>
               </div>
