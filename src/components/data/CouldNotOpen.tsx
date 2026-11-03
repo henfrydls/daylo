@@ -1,6 +1,5 @@
 import { useState } from 'react'
 import { useRescueStore } from '../../store/rescue'
-import { saveTextFile, formatSavedMessage } from '../../lib/fileSave'
 
 /**
  * The screen for the one failure that used to have no screen at all.
@@ -32,6 +31,13 @@ export function CouldNotOpen() {
     try {
       const today = new Date()
       const name = `daylo-unopened-${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}.json`
+      // Loaded when the button is pressed, not when the app starts. fileSave pulls in
+      // dataExport, which is six hundred lines, and a static import here put all of it in
+      // the chunk every launch pays for: this screen exists for a failure almost nobody
+      // will ever meet. The screen itself stays static, because it has to draw even when
+      // nothing else works. Only the saving waits, and by then somebody has pressed a
+      // button and the chunk is on the same disk the app was loaded from.
+      const { saveTextFile, formatSavedMessage } = await import('../../lib/fileSave')
       const result = await saveTextFile(failure.raw, name, 'application/json')
 
       if (!result.saved) return
