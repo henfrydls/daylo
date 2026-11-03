@@ -716,3 +716,64 @@ describe('the line and the reminder, on a new Android installation', () => {
     expect(screen.getByTestId('checkin-notice')).toBeInTheDocument()
   })
 })
+
+describe('the streak in the header', () => {
+  const fourDaysRunning = () => {
+    const today = new Date()
+    const logs = [1, 2, 3, 4].map((back) => {
+      const day = new Date(today)
+      day.setDate(day.getDate() - back)
+      const date = formatDate(day)
+      return { id: `l${back}`, activityId: 'a1', date, completed: true, createdAt: date }
+    })
+    useCalendarStore.setState({
+      activities: [
+        {
+          id: 'a1',
+          name: 'Exercise',
+          color: '#10B981',
+          createdAt: '2026-01-01',
+          updatedAt: '2026-01-01',
+        },
+      ],
+      logs,
+    })
+  }
+
+  // The one that would have caught the fault: the chip mounted only in the group that the
+  // phone shows, so at desktop width there was no chip at all. With the Statistics tile
+  // gone in this version, that leaves 107 of the 115 copies with the streak nowhere. A
+  // screenshot of a phone says nothing about it.
+  it('is in both of the header groups, so neither width is left without it', async () => {
+    fourDaysRunning()
+    render(<App />)
+    await act(async () => {})
+
+    const chips = screen.getAllByTestId('streak-chip')
+
+    expect(chips).toHaveLength(2)
+    expect(
+      chips.filter((chip) => chip.parentElement?.className.includes('sm:hidden'))
+    ).toHaveLength(1)
+    expect(chips.filter((chip) => chip.parentElement?.className.includes('sm:flex'))).toHaveLength(
+      1
+    )
+  })
+
+  it('says the run, and that today is still open', async () => {
+    fourDaysRunning()
+    render(<App />)
+    await act(async () => {})
+
+    expect(screen.getAllByTestId('streak-chip')[0]).toHaveAccessibleName(
+      '4 days in a row, today not logged yet'
+    )
+  })
+
+  it('is nowhere at all when there is no run', async () => {
+    render(<App />)
+    await act(async () => {})
+
+    expect(screen.queryAllByTestId('streak-chip')).toHaveLength(0)
+  })
+})
