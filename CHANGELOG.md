@@ -3,6 +3,43 @@
 What changed in each release, for the people who use Daylo. Earlier versions are not
 listed: this file starts at 1.1.2, when the first change worth warning about arrived.
 
+## 1.5.2
+
+**With the anonymous check-in off, Daylo now sends nothing at all until you answer its
+question.** After a week of use it asks once how things are going, and that question used
+to report its own arrival the moment it appeared, before anybody had touched it. It carried no
+number and nothing about you, but it was still a connection to our server from a copy that
+had been told it would make none. Your answers still travel if you give them: a star when
+you press it, and what you write when you send it. Nothing else does.
+
+**Send feedback now says what pressing a star actually does.** It said "Only what you type,
+and only when you press Send", and in the app that was not true: the star is sent the
+moment you press it, with no draft and no Send button of its own. On the website the same
+row opens your email and Daylo sends nothing itself. Each one says its own thing now.
+
+**If Daylo cannot open your data, it now says so and offers you a copy of it.** Until now
+it showed the loading screen and stayed there, with no menu, so no way to export and no way
+to know anything had happened, while everything you had tracked sat on the device
+untouched. There is a screen now. It says your data is still there, and it hands you the
+file exactly as it is, which is the thing to keep and the thing to send us.
+
+**Restoring a backup brings your activities back exactly as you wrote them.** Daylo used to
+rewrite them on the way in: a name like "Read <10 pages>" came back as "Read", "Peso <->
+medidas" lost its middle, and "Gym <3" turned into something with an ampersand in it. It
+only ever happened when restoring, which is the one moment you are counting on nothing
+changing. And a long name used to stop the whole file loading, so a backup Daylo itself had
+written could be refused. Names are capped where you type them now instead.
+
+**On Android, deleting your last activity now takes the daily reminder down with it.** It
+was meant to, and it never did: Daylo asked the phone what was scheduled before cancelling,
+the phone answered with an empty list whatever was really set, and so nothing was
+cancelled. The reminder went on arriving every night over an app with nothing left in it.
+
+**Importing a backup can be done with the keyboard.** The place you drop a file could only
+be reached by clicking it: with a keyboard, or with a screen reader, Import opened and
+there was nothing to press but Cancel. It is an ordinary file control now, so Tab reaches
+it and Enter opens the chooser.
+
 ## 1.5.1
 
 **On Android, Daylo can now tell you when your reminder will not arrive at the time you
