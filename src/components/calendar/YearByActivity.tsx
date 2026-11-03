@@ -1,7 +1,7 @@
 import { memo, useMemo } from 'react'
 import { YearHeatmap } from './YearHeatmap'
 import { HeatmapLegend } from './HeatmapLegend'
-import { summariseActivities } from '../../lib/activityYear'
+import { habitsThatExistedOn, summariseActivities } from '../../lib/activityYear'
 import type { Activity, ActivityLog, HeatmapLevel } from '../../types'
 
 interface YearByActivityProps {
@@ -32,6 +32,8 @@ export const YearByActivity = memo(function YearByActivity({
   onSelectDate,
 }: YearByActivityProps) {
   const rows = useMemo(() => summariseActivities(activities, logs, new Date()), [activities, logs])
+  // The habits that existed on each day, not the ones that exist now.
+  const habitsOn = useMemo(() => habitsThatExistedOn(activities), [activities])
 
   if (activities.length === 0) {
     return (
@@ -64,7 +66,7 @@ export const YearByActivity = memo(function YearByActivity({
           <YearHeatmap
             year={year}
             dayData={dayData}
-            totalActivities={activities.length}
+            habitsOn={habitsOn}
             selectedDate={selectedDate}
             onSelectDate={onSelectDate}
             activity={{ name: activity.name, color: activity.color, done }}
@@ -86,7 +88,7 @@ export const YearByActivity = memo(function YearByActivity({
         <YearHeatmap
           year={year}
           dayData={dayData}
-          totalActivities={activities.length}
+          habitsOn={habitsOn}
           selectedDate={selectedDate}
           onSelectDate={onSelectDate}
           showMonthLabels={false}

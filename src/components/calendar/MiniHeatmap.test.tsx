@@ -160,4 +160,45 @@ describe('MiniHeatmap', () => {
       expect(emeraldCells.length).toBeGreaterThan(0)
     })
   })
+
+  // El punto 5 de la 1.6, mirado donde se ve: anadir un habito no decolora el pasado.
+  describe('a day keeps the colour it earned', () => {
+    const onlyJanuary: Activity[] = [
+      {
+        id: '1',
+        name: 'Exercise',
+        color: '#22c55e',
+        createdAt: '2024-01-01',
+        updatedAt: '2024-01-01',
+      },
+    ]
+    const alsoDecember: Activity[] = [
+      ...onlyJanuary,
+      {
+        id: '2',
+        name: 'Reading',
+        color: '#3b82f6',
+        createdAt: '2024-12-01',
+        updatedAt: '2024-12-01',
+      },
+    ]
+    const janTenth = createLogsByDate(['2024-01-10'], 1)
+
+    // Cuantas celdas llevan el verde mas fuerte. Con un habito y un dia hecho tiene que
+    // ser exactamente una; con la regla vieja, ese dia bajaba a uno de dos y el verde
+    // fuerte desaparecia de la pagina entera.
+    const fullCells = (activities: Activity[]): number => {
+      const { container, unmount } = render(
+        <MiniHeatmap {...defaultProps} activities={activities} logsByDate={janTenth} />
+      )
+      const count = container.querySelectorAll('.bg-emerald-500').length
+      unmount()
+      return count
+    }
+
+    it('does not fade when a habit arrives eleven months later', () => {
+      expect(fullCells(onlyJanuary)).toBe(1)
+      expect(fullCells(alsoDecember)).toBe(1)
+    })
+  })
 })

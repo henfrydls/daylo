@@ -6,7 +6,7 @@ describe('MonthCard', () => {
   const defaultProps = {
     year: 2024,
     month: 0, // January
-    totalActivities: 2,
+    habitsOn: () => 2,
     logsByDate: new Map<string, number>(),
     onSelect: vi.fn(),
   }

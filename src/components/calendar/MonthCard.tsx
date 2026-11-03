@@ -35,7 +35,8 @@ const MONTHS_SHORT = [
 interface MonthCardProps {
   year: number
   month: number
-  totalActivities: number
+  /** How many habits existed on the day being painted. See habitsThatExistedOn. */
+  habitsOn: (dateStr: string, completedThatDay: number) => number
   logsByDate: Map<string, number>
   onSelect: (month: number) => void
 }
@@ -43,7 +44,7 @@ interface MonthCardProps {
 export const MonthCard = memo(function MonthCard({
   year,
   month,
-  totalActivities,
+  habitsOn,
   logsByDate,
   onSelect,
 }: MonthCardProps) {
@@ -119,7 +120,7 @@ export const MonthCard = memo(function MonthCard({
 
           const dateStr = formatDate(date)
           const completedCount = logsByDate.get(dateStr) || 0
-          const level = calculateHeatmapLevel(completedCount, totalActivities)
+          const level = calculateHeatmapLevel(completedCount, habitsOn(dateStr, completedCount))
           const heatmapClass = getHeatmapColor(level)
 
           return (

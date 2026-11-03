@@ -12,6 +12,14 @@ export default defineConfig({
     __APP_VERSION__: JSON.stringify(packageJson.version),
   },
   test: {
+    // Las pruebas corren donde vive la gente, no en UTC.
+    //
+    // CI corre en UTC y esta maquina en UTC-4, asi que cualquier fallo de fecha que nazca
+    // de confundir el dia UTC con el dia local es invisible justo donde se comprueba todo.
+    // Kolkata porque es media hora: un desfase de media hora rompe tambien la aritmetica
+    // que sobrevive a los desfases enteros, y porque el 48 % de las sesiones de la Store
+    // salen de ahi.
+    env: { TZ: 'Asia/Kolkata' },
     globals: true,
     environment: 'jsdom',
     setupFiles: ['./src/test/setup.ts'],

@@ -1,6 +1,7 @@
 import { useMemo, useCallback, memo } from 'react'
 import { formatDate, checkIsToday } from '../../lib/dates'
 import { calculateHeatmapLevel, getHeatmapColor } from '../../lib/colors'
+import { habitsThatExistedOn } from '../../lib/activityYear'
 import type { Activity } from '../../types'
 
 const MONTHS_FULL = [
@@ -97,7 +98,8 @@ export const MonthHeatmapDetail = memo(function MonthHeatmapDetail({
   onDateSelect,
   onMonthChange,
 }: MonthHeatmapDetailProps) {
-  const totalActivities = activities.length
+  // The habits that existed on each day, not the ones that exist now.
+  const existedOn = useMemo(() => habitsThatExistedOn(activities), [activities])
 
   const cells = useMemo(() => {
     const baseCells = getMonthGridDays(year, month)
@@ -105,10 +107,10 @@ export const MonthHeatmapDetail = memo(function MonthHeatmapDetail({
     // Enrich with heatmap levels
     return baseCells.map((cell) => {
       const completedCount = logsByDate.get(cell.dateStr) || 0
-      const level = calculateHeatmapLevel(completedCount, totalActivities)
+      const level = calculateHeatmapLevel(completedCount, existedOn(cell.dateStr, completedCount))
       return { ...cell, level }
     })
-  }, [year, month, totalActivities, logsByDate])
+  }, [year, month, existedOn, logsByDate])
 
   const handlePrevMonth = useCallback(() => {
     if (month === 0) {
