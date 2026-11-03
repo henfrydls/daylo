@@ -3,6 +3,14 @@
 What changed in each release, for the people who use Daylo. Earlier versions are not
 listed: this file starts at 1.1.2, when the first change worth warning about arrived.
 
+## 1.5.3
+
+**On Android, the button that offers a new version now downloads Daylo itself.** It used
+to open the Daylo website, where the one file for your phone sits among the ones for
+Windows, Mac and Linux, and finding it was your errand. Now the download starts straight
+away, and it is the version the message just named rather than whatever happens to be
+newest that minute.
+
 ## 1.5.2
 
 **With the anonymous check-in off, Daylo now sends nothing at all until you answer its
