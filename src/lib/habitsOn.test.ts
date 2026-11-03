@@ -39,4 +39,28 @@ describe('how many habits existed on a day', () => {
     expect(on('2026-01-10', 2)).toBe(2)
     expect(on('2026-06-02', 1)).toBe(1)
   })
+
+  // `createdAt` se guarda con `toISOString()`, que es UTC, y `dateStr` sale de `formatDate`,
+  // que es local. Cortar los diez primeros caracteres mezcla los dos calendarios.
+  //
+  // Los dos casos, y los dos existen entre los usuarios de Daylo: en Santo Domingo (UTC-4)
+  // un habito creado despues de las 20:00 nacia al dia siguiente, asi que ese dia no
+  // contaba y se pintaba mas verde de lo que era; en India (UTC+5:30, de donde sale casi
+  // la mitad de las sesiones de la Store) uno creado antes de las 05:30 nacia el dia
+  // anterior, y ese dia salia mas palido.
+  //
+  // Las dos fechas se construyen con componentes locales, asi que la prueba dice lo mismo
+  // en cualquier zona. El banco esta fijado a Asia/Kolkata en vitest.config.ts para que
+  // esto no sea verde por accidente en el CI, que corre en UTC.
+  it('reads the day a habit was made in local time, not in UTC', () => {
+    const earlyOnThe15th = new Date(2026, 5, 15, 3, 0).toISOString()
+    const lateOnThe15th = new Date(2026, 5, 15, 23, 30).toISOString()
+
+    for (const createdAt of [earlyOnThe15th, lateOnThe15th]) {
+      const on = habitsThatExistedOn([{ ...made('a', '2026-01-01'), createdAt }])
+
+      expect(on('2026-06-14', 0)).toBe(0)
+      expect(on('2026-06-15', 0)).toBe(1)
+    }
+  })
 })

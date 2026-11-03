@@ -1,4 +1,5 @@
 import { currentStreak } from './streaks'
+import { formatDate } from './dates'
 import type { Activity, ActivityLog } from '../types'
 
 export interface ActivitySummary {
@@ -65,17 +66,30 @@ export function completedDates(logs: ActivityLog[]): Set<string> {
  * work in it, and a day with two things done would come out grey. A day never has more
  * done than there was to do.
  *
- * Built once over the sorted creation dates, so asking about 365 days is 365 lookups and
- * not 365 passes over every habit.
+ * The creation day is read in local time and not by cutting the first ten characters off
+ * `createdAt`. That string is written with `toISOString()`, which is UTC, while every date
+ * the heatmap asks about comes from `formatDate`, which is local, and cutting mixes the two
+ * calendars. Both halves of the mistake happen to real people: in Santo Domingo a habit
+ * made after 20:00 was born tomorrow, so today did not count it and came out greener than
+ * it was; in India a habit made before 05:30 was born yesterday, and that day came out
+ * paler. The suite is pinned to a half hour zone so neither can pass unnoticed.
+ *
+ * Sorted once and then bisected, so asking about 365 days is 365 bisections of the habits
+ * and not 365 walks over them.
  */
 export function habitsThatExistedOn(
   activities: Activity[]
 ): (dateStr: string, completedThatDay: number) => number {
-  const born = activities.map((activity) => activity.createdAt.slice(0, 10)).sort()
+  const born = activities.map((activity) => formatDate(new Date(activity.createdAt))).sort()
 
   return (dateStr, completedThatDay) => {
-    let count = 0
-    while (count < born.length && born[count] <= dateStr) count += 1
-    return Math.max(count, completedThatDay)
+    let low = 0
+    let high = born.length
+    while (low < high) {
+      const middle = (low + high) >> 1
+      if (born[middle] <= dateStr) low = middle + 1
+      else high = middle
+    }
+    return Math.max(low, completedThatDay)
   }
 }
