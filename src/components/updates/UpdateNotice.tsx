@@ -26,9 +26,9 @@ export type UpdateState =
   | { kind: 'elsewhere'; version: string }
   /**
    * The same situation on a phone, where the word is different because the errand is.
-   * A desktop is sent to a page that asks which of eight files is theirs; the landing's
-   * Android button hands over the one APK there is, and Android itself asks whether to
-   * update when it is opened.
+   * A desktop is sent to a page that asks which of eight files is theirs; a phone is
+   * handed the one APK there is, by name and by version, and Android itself asks whether
+   * to update when it is opened.
    */
   | { kind: 'download'; version: string }
   | { kind: 'unverified' }

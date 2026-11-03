@@ -117,10 +117,52 @@ export const DOWNLOADS_URL = 'https://daylo.henfrydls.com/#download'
  * the feedback letter uses.
  */
 export async function openDownloads(): Promise<void> {
+  await openThrough(DOWNLOADS_URL, 'the downloads page')
+}
+
+/**
+ * The one file an Android copy is offered, named after the version the card just named.
+ *
+ * Not `releases/latest/download`, which would have been the same line of code. The card
+ * says "Daylo 1.5.3 is out." and the button is pressed against that sentence; `latest`
+ * hands over whatever is newest at the moment of the press, and the first day two versions
+ * go out close together the sentence and the file stop being the same thing. A sentence
+ * that no longer describes what is under it is a sentence people stop reading.
+ *
+ * Null rather than an address that would 404: the version is read through the same rule
+ * the comparison uses, so a leading `v` and surrounding space are taken off rather than
+ * pasted into a URL. The caller has the downloads page to fall back on.
+ */
+export function apkUrlFor(version: string): string | null {
+  const numbers = threeNumbers(version)
+  if (numbers === null) return null
+  return `${RELEASES}/download/v${numbers.join('.')}/Daylo-android-arm64.apk`
+}
+
+const RELEASES = 'https://github.com/henfrydls/daylo/releases'
+
+/**
+ * Hand an Android copy the file itself, or the page if the version cannot name one.
+ *
+ * The fallback cannot be reached through the manifest today: a version that is not three
+ * numbers never gets as far as this, because `isNewer` has already said there is nothing
+ * newer. It is here because the alternative to a wrong turn is not a crash, and because
+ * whoever changes where the version comes from should find somewhere to land.
+ */
+export async function openApkFor(version: string): Promise<void> {
+  const url = apkUrlFor(version)
+  if (url === null) {
+    await openDownloads()
+    return
+  }
+  await openThrough(url, 'the Android download')
+}
+
+async function openThrough(url: string, whatItWas: string): Promise<void> {
   try {
-    await invoke('plugin:opener|open_url', { url: DOWNLOADS_URL })
+    await invoke('plugin:opener|open_url', { url })
   } catch (error) {
-    console.error('[Daylo] the downloads page did not open', error)
+    console.error(`[Daylo] ${whatItWas} did not open`, error)
   }
 }
 
