@@ -64,3 +64,60 @@ describe('what restoring a backup does not touch', () => {
     expect(state.checkinLastAttempt).toEqual({ date: '2026-09-14', at: NOW, ok: true })
   })
 })
+
+/**
+ * Restoring a backup without a mouse.
+ *
+ * The drop zone was a div with an onClick, carrying no role, no tabIndex and no key
+ * handler, and the file input beside it was `hidden`, which is display:none: not focusable
+ * and not in the accessibility tree at all. So somebody using a keyboard or a screen reader
+ * opened Import and found nothing to activate. The only enabled control was Cancel. The
+ * whole point of a backup is the day you need it, and on that day they could not reach it.
+ *
+ * The fix is the plain HTML one rather than a widget: the zone is a label, the input lives
+ * inside it, and the input is visually hidden instead of removed. Tab reaches it, a screen
+ * reader reads the zone's own words as its name, and Enter opens the picker because that is
+ * what a focused file input does.
+ */
+describe('restoring a backup without a mouse', () => {
+  const theInput = () => document.querySelector('input[type="file"]') as HTMLInputElement
+
+  // Tabbed to rather than focused by hand: calling .focus() would pass on a control the
+  // browser skips, which is precisely what display:none produced. Where it sits in the
+  // order is not the point; that the order contains it at all is.
+  it('puts the file control where a keyboard can reach it', async () => {
+    render(<ImportModal isOpen onClose={vi.fn()} />)
+
+    let reached = false
+    for (let press = 0; press < 10 && !reached; press++) {
+      await userEvent.tab()
+      reached = document.activeElement === theInput()
+    }
+
+    expect(reached).toBe(true)
+  })
+
+  // display:none is the thing that made it unreachable, and it is the thing a later tidy
+  // would put back while meaning well.
+  it('does not take the control out of the page to hide it', () => {
+    render(<ImportModal isOpen onClose={vi.fn()} />)
+
+    expect(theInput()).not.toHaveClass('hidden')
+  })
+
+  it('gives it a name a screen reader can read out', () => {
+    render(<ImportModal isOpen onClose={vi.fn()} />)
+
+    expect(theInput()).toHaveAccessibleName(/backup/i)
+  })
+
+  it('still restores the file once one is chosen', async () => {
+    render(<ImportModal isOpen onClose={vi.fn()} />)
+    await load(backup())
+
+    await userEvent.click(screen.getByRole('button', { name: /Import Data/ }))
+    await userEvent.click(await screen.findByRole('button', { name: 'Import' }))
+
+    await waitFor(() => expect(useCalendarStore.getState().activities).toHaveLength(2))
+  })
+})
