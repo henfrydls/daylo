@@ -49,3 +49,33 @@ export function completedDates(logs: ActivityLog[]): Set<string> {
   }
   return done
 }
+
+/**
+ * How many habits existed on a given day, as a function over the dates you ask about.
+ *
+ * The heatmap reads a day as `completed / total`, and `total` used to be the number of
+ * habits there are now. So creating a fourth habit repainted the whole year paler: a day
+ * in March where two of two were done became two of four, and half a year went grey
+ * without anybody having done anything differently in March. The past is finished and
+ * should stay the colour it earned.
+ *
+ * `completedThatDay` is not a detail. An imported file can carry logs older than the habit
+ * they belong to, because the export keeps the logs and the habit is created fresh on the
+ * way in; counting strictly by `createdAt` would then report fewer habits than the day has
+ * work in it, and a day with two things done would come out grey. A day never has more
+ * done than there was to do.
+ *
+ * Built once over the sorted creation dates, so asking about 365 days is 365 lookups and
+ * not 365 passes over every habit.
+ */
+export function habitsThatExistedOn(
+  activities: Activity[]
+): (dateStr: string, completedThatDay: number) => number {
+  const born = activities.map((activity) => activity.createdAt.slice(0, 10)).sort()
+
+  return (dateStr, completedThatDay) => {
+    let count = 0
+    while (count < born.length && born[count] <= dateStr) count += 1
+    return Math.max(count, completedThatDay)
+  }
+}

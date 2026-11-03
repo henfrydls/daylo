@@ -20,7 +20,7 @@ function paint(props: Partial<Parameters<typeof YearHeatmap>[0]> = {}) {
     <YearHeatmap
       year={2026}
       dayData={dayData({ '2026-03-04': [2, 3] })}
-      totalActivities={3}
+      habitsOn={() => 3}
       selectedDate={null}
       onSelectDate={onSelectDate}
       {...props}
@@ -63,7 +63,7 @@ describe('what it draws', () => {
 
   // Before there is anything to track, "0 of 0 completed" says nothing true.
   it('says something else when nothing is tracked yet', () => {
-    paint({ totalActivities: 0, dayData: dayData({}) })
+    paint({ habitsOn: () => 0, dayData: dayData({}) })
 
     expect(cellFor('2026-03-04')).toHaveAttribute('aria-label', 'Mar 4, 2026 — No activities yet')
   })

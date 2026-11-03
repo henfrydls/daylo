@@ -9,6 +9,7 @@ import { useCalendarStore } from '../../store'
 import { useTravel } from '../../lib/travel'
 import { getYearDays, formatDate } from '../../lib/dates'
 import { calculateHeatmapLevel } from '../../lib/colors'
+import { habitsThatExistedOn } from '../../lib/activityYear'
 import { completedDates, summariseActivities } from '../../lib/activityYear'
 import { currentStreak } from '../../lib/streaks'
 import { useMediaQuery } from '../../hooks/useMediaQuery'
@@ -49,20 +50,24 @@ export const YearView = memo(function YearView() {
     return index
   }, [logs])
 
+  const habitsOn = useMemo(() => habitsThatExistedOn(activities), [activities])
+
   // Build day data map using the pre-computed index - O(365) with O(1) lookups
   const dayDataMap = useMemo(() => {
     const map = new Map<string, { completedCount: number; level: 0 | 1 | 2 | 3 | 4 }>()
-    const totalActivities = activities.length
+    // The habits that existed on each day, not the ones that exist now: adding one used to
+    // repaint the whole year paler.
+    const existedOn = habitsThatExistedOn(activities)
 
     yearDays.forEach((date) => {
       const dateStr = formatDate(date)
       const completedCount = logsByDate.get(dateStr) || 0
-      const level = calculateHeatmapLevel(completedCount, totalActivities)
+      const level = calculateHeatmapLevel(completedCount, existedOn(dateStr, completedCount))
       map.set(dateStr, { completedCount, level })
     })
 
     return map
-  }, [yearDays, activities.length, logsByDate])
+  }, [yearDays, activities, logsByDate])
 
   // Memoize completed logs count to avoid filtering in render
   const completedLogsCount = useMemo(() => {
@@ -255,7 +260,7 @@ export const YearView = memo(function YearView() {
                   key={month}
                   year={selectedYear}
                   month={month}
-                  totalActivities={activities.length}
+                  habitsOn={habitsOn}
                   logsByDate={logsByDate}
                   onSelect={(m) =>
                     travel
@@ -378,7 +383,7 @@ export const YearView = memo(function YearView() {
             <YearHeatmap
               year={selectedYear}
               dayData={dayDataMap}
-              totalActivities={activities.length}
+              habitsOn={habitsOn}
               selectedDate={selectedDate}
               onSelectDate={setSelectedDate}
             />

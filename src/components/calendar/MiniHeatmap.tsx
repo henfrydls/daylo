@@ -1,6 +1,7 @@
 import { useMemo, memo } from 'react'
 import { formatDate } from '../../lib/dates'
 import { calculateHeatmapLevel, getHeatmapColor } from '../../lib/colors'
+import { habitsThatExistedOn } from '../../lib/activityYear'
 import type { Activity } from '../../types'
 
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
@@ -25,7 +26,8 @@ export const MiniHeatmap = memo(function MiniHeatmap({
   selectedMonth,
   onMonthSelect,
 }: MiniHeatmapProps) {
-  const totalActivities = activities.length
+  // The habits that existed on each day, not the ones that exist now.
+  const existedOn = habitsThatExistedOn(activities)
 
   // Build mini-month grids: 7 cols x enough rows per month
   const miniMonths = useMemo(() => {
@@ -98,7 +100,10 @@ export const MiniHeatmap = memo(function MiniHeatmap({
 
                 const dateStr = formatDate(date)
                 const completedCount = logsByDate.get(dateStr) || 0
-                const level = calculateHeatmapLevel(completedCount, totalActivities)
+                const level = calculateHeatmapLevel(
+                  completedCount,
+                  existedOn(dateStr, completedCount)
+                )
                 const heatmapClass = getHeatmapColor(level)
 
                 return (

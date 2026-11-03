@@ -13,7 +13,8 @@ const WEEKDAY_LABELS = ['', 'M', '', 'W', '', 'F', '']
 interface YearHeatmapProps {
   year: number
   dayData: Map<string, { completedCount: number; level: HeatmapLevel }>
-  totalActivities: number
+  /** How many habits existed on the day being painted. See habitsThatExistedOn. */
+  habitsOn: (dateStr: string, completedThatDay: number) => number
   selectedDate: string | null
   onSelectDate: (date: string) => void
   /**
@@ -58,7 +59,7 @@ function describe(date: Date, completedCount: number, totalActivities: number): 
 export const YearHeatmap = memo(function YearHeatmap({
   year,
   dayData,
-  totalActivities,
+  habitsOn,
   selectedDate,
   onSelectDate,
   activity,
@@ -184,7 +185,7 @@ export const YearHeatmap = memo(function YearHeatmap({
                 const wasDone = activity?.done.has(key) ?? false
                 const label = activity
                   ? `${formatDisplayDate(date)} — ${activity.name}${wasDone ? '' : ' not'} done`
-                  : describe(date, completedCount, totalActivities)
+                  : describe(date, completedCount, habitsOn(formatDate(date), completedCount))
                 const isSelected = selectedDate === key
 
                 return (
