@@ -518,14 +518,22 @@ export const useCalendarStore = create<CalendarState>()(
     {
       name: STORAGE_KEY,
       storage: createJSONStorage(() => createDeferredStorage()),
+      // Where somebody was is not kept, and the three missing names are the whole of this
+      // decision: `selectedDate`, `selectedMonth` and `selectedYear`.
+      //
+      // Daylo is for today, and it used to open wherever it was left. Somebody who looked
+      // at March in March came back in November and was shown March, with today a swipe
+      // away and nothing on the screen saying so; the day sheet came back open too, over a
+      // day that had stopped being the day. The defaults are today's, so leaving these out
+      // is the whole of the fix.
+      //
+      // What is kept is what is a preference rather than a place: which of the two views
+      // somebody likes, and how they like the year read.
       partialize: (state) => ({
         activities: state.activities,
         logs: state.logs,
-        selectedYear: state.selectedYear,
-        selectedDate: state.selectedDate,
         currentView: state.currentView,
         yearMode: state.yearMode,
-        selectedMonth: state.selectedMonth,
         reminderEnabled: state.reminderEnabled,
         reminderHour: state.reminderHour,
         reminderTimeChosen: state.reminderTimeChosen,
@@ -557,7 +565,15 @@ export const useCalendarStore = create<CalendarState>()(
       merge: (persisted, current) => {
         if (persisted == null) return { ...current, _checkinStart: 'new' }
 
-        const stored = persisted as Partial<CalendarState>
+        // Where somebody was is dropped on the way in, not only left out on the way out.
+        // Every copy already installed has these three on disk from before this change, and
+        // partialize only decides what is written: without this, the first launch after
+        // updating would still open on March, and the second one would be the fixed one.
+        // The fix that works on the next launch and not on this one is the fix nobody sees.
+        const stored = { ...(persisted as Partial<CalendarState>) }
+        delete stored.selectedDate
+        delete stored.selectedMonth
+        delete stored.selectedYear
         return {
           ...current,
           ...stored,
