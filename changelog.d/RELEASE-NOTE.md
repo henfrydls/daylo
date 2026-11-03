@@ -1,1 +1,1 @@
-Restoring a backup now brings back everything exactly as you wrote it, and with the check-in off Daylo sends nothing until you answer its question.
+On Android, the update message now downloads the new version straight away instead of sending you to the website.
