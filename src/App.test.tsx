@@ -770,6 +770,21 @@ describe('the streak in the header', () => {
     )
   })
 
+  // La regla que vivia en la baldosa de Estadisticas hasta la 1.6: el numero es el de hoy,
+  // mire quien mire el ano que mire. El panel lo tuvo mal una vez, porque solo miraba el
+  // ano seleccionado y una racha que cruzaba el ano quedaba partida por el calendario.
+  // Aqui el chip no ve ningun ano, y esta prueba es lo que dice que siga sin verlo.
+  it('says the same run whatever year is on screen', async () => {
+    fourDaysRunning()
+    useCalendarStore.setState({ selectedYear: 2024 })
+    render(<App />)
+    await act(async () => {})
+
+    expect(screen.getAllByTestId('streak-chip')[0]).toHaveAccessibleName(
+      '4 days in a row, today not logged yet'
+    )
+  })
+
   it('is nowhere at all when there is no run', async () => {
     render(<App />)
     await act(async () => {})
