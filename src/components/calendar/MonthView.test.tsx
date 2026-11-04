@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { render, screen, fireEvent } from '@testing-library/react'
 import { MonthView } from './MonthView'
 import { useCalendarStore } from '../../store'
+import { formatDate } from '../../lib/dates'
 
 // Helper to create mock matchMedia
 function createMockMatchMedia(matches: boolean) {
@@ -285,6 +286,120 @@ describe('MonthView', () => {
 
       expect(cells()).toHaveLength(42)
       expect(cells()[0]).toHaveAccessibleName(/^2026-11-29,/)
+    })
+  })
+
+  describe('the ring on a day that has not happened yet', () => {
+    const daysBack = (back: number): string => {
+      const day = new Date()
+      day.setDate(day.getDate() - back)
+      return formatDate(day)
+    }
+    const oneHabit = [
+      {
+        id: 'a1',
+        name: 'Exercise',
+        color: '#10B981',
+        createdAt: '2026-01-01',
+        updatedAt: '2026-01-01',
+      },
+    ]
+    const loggedOn = (backs: number[]) =>
+      backs.map((back) => ({
+        id: `l${back}`,
+        activityId: 'a1',
+        date: daysBack(back),
+        completed: true,
+        createdAt: daysBack(back),
+      }))
+
+    const cellFor = (dateStr: string) =>
+      screen.getByLabelText(new RegExp(`^${dateStr},`)).querySelector('span') as HTMLElement
+
+    // The green circle on today was there whether or not anything had been done, so the one
+    // strong green on the screen said something that was not true. Dashed is the day that
+    // exists and has not happened yet; filled is the day that has.
+    it('is dashed on today while today is empty', () => {
+      useCalendarStore.setState({ activities: oneHabit, logs: [] })
+      render(<MonthView />)
+
+      expect(cellFor(daysBack(0)).className).toContain('border-dashed')
+    })
+
+    it('is filled once anything at all is logged today', () => {
+      useCalendarStore.setState({ activities: oneHabit, logs: loggedOn([0]) })
+      render(<MonthView />)
+
+      const today = cellFor(daysBack(0))
+      expect(today.className).not.toContain('border-dashed')
+      expect(today.className).toContain('bg-emerald-700')
+    })
+
+    // White on emerald-500 is 2.47:1 and the floor is 4.5. It was published that way, and the
+    // fix is not a shade: it is that a day with nothing in it is not filled at all.
+    it('never puts white on the green that does not carry it', () => {
+      useCalendarStore.setState({ activities: oneHabit, logs: loggedOn([0]) })
+      render(<MonthView />)
+
+      expect(cellFor(daysBack(0)).className).not.toContain('bg-emerald-500')
+    })
+
+    // Yesterday, and the trap that would have made this invisible. Asked the ordinary way the
+    // streak is 0 here, because yesterday is empty, so a guard reading it would never fire.
+    // The run this speaks of is the one that ended the day before yesterday.
+    it('is dashed on an empty yesterday when a run was going', () => {
+      useCalendarStore.setState({ activities: oneHabit, logs: loggedOn([2, 3, 4, 5]) })
+      render(<MonthView />)
+
+      expect(cellFor(daysBack(1)).className).toContain('border-dashed')
+    })
+
+    it('leaves an empty yesterday alone when there was no run behind it', () => {
+      useCalendarStore.setState({ activities: oneHabit, logs: loggedOn([2]) })
+      render(<MonthView />)
+
+      expect(cellFor(daysBack(1)).className).not.toContain('border-dashed')
+    })
+
+    // A two day hole is not a yesterday worth rescuing: logging it would join nothing to
+    // anything. currentStreak has a day of grace, so asking about the day before yesterday
+    // without checking that it exists walks one further back and answers about a run that
+    // ended three days ago.
+    it('leaves yesterday alone when the day before it is empty too', () => {
+      useCalendarStore.setState({ activities: oneHabit, logs: loggedOn([3, 4, 5, 6]) })
+      render(<MonthView />)
+
+      expect(cellFor(daysBack(1)).className).not.toContain('border-dashed')
+    })
+
+    // Un ayer normal no lleva anillo, pero tampoco puede quedarse sin color: la condicion
+    // excluia todos los ayeres en vez de solo el que lleva anillo, asi que un ayer corriente
+    // heredaba el color de donde cayera.
+    it('leaves an ordinary yesterday the colour of any other day', () => {
+      useCalendarStore.setState({ activities: oneHabit, logs: loggedOn([1, 2]) })
+      render(<MonthView />)
+
+      expect(cellFor(daysBack(1)).className).toContain('text-gray-900')
+    })
+
+    // El dia 1 del mes, ayer cae en el mes anterior, asi que el ayer con anillo cogia a la
+    // vez text-gray-900 y text-gray-400. Gana uno por el orden de las reglas, que es una
+    // forma de decir que nadie lo decidio.
+    it('gives a ringed yesterday one colour even when it is in the month before', () => {
+      vi.useFakeTimers()
+      vi.setSystemTime(new Date(2026, 11, 1, 10, 0))
+      useCalendarStore.setState({
+        activities: oneHabit,
+        logs: loggedOn([2, 3, 4, 5]),
+        selectedYear: 2026,
+        selectedMonth: 11,
+      })
+      render(<MonthView />)
+
+      const yesterday = cellFor('2026-11-30')
+      expect(yesterday.className).toContain('border-dashed')
+      expect(yesterday.className).not.toContain('text-gray-400')
+      vi.useRealTimers()
     })
   })
 })

@@ -2,6 +2,9 @@ import { useMemo, useCallback, memo, useState } from 'react'
 import { useCalendarStore } from '../../store'
 import { useTravel } from '../../lib/travel'
 import { formatDate, formatMonthYear, checkIsToday } from '../../lib/dates'
+import { completedDates } from '../../lib/activityYear'
+import { currentStreak } from '../../lib/streaks'
+import { subDays } from 'date-fns'
 import { useMediaQuery } from '../../hooks/useMediaQuery'
 import type { Activity, ActivityLog } from '../../types'
 import { useShallow } from 'zustand/react/shallow'
@@ -73,6 +76,29 @@ function getMonthDays(year: number, month: number): DayInfo[] {
   }
 
   return days
+}
+
+/**
+ * What a day's number looks like, as one decision rather than four conditions.
+ *
+ * Four conditions pasted one under another can match twice: a ringed yesterday on the 1st
+ * of a month is in the month before, so it took `text-gray-900` from the ring and
+ * `text-gray-400` from being outside the month, and which one won was the order the rules
+ * happened to be written in. They could also match none: an ordinary yesterday was excluded
+ * from the plain branch along with the ringed one, so it inherited whatever colour it
+ * landed on.
+ *
+ * Returning one string from one branch makes both of those impossible to write.
+ */
+function tone(day: DayInfo, yesterdayStr: string, yesterdayIsWorthSaying: boolean): string {
+  if (day.isToday && day.logs.length > 0) return 'bg-emerald-700 text-white'
+
+  const ringed =
+    (day.isToday && day.logs.length === 0) ||
+    (day.dateStr === yesterdayStr && yesterdayIsWorthSaying)
+  if (ringed) return 'border-2 border-dashed border-emerald-700 text-gray-900'
+
+  return day.isCurrentMonth ? 'text-gray-900' : 'text-gray-400'
 }
 
 export const MonthView = memo(function MonthView() {
@@ -169,6 +195,32 @@ export const MonthView = memo(function MonthView() {
   const todayStr = formatDate(today)
   const isCurrentMonth = selectedYear === today.getFullYear() && selectedMonth === today.getMonth()
   const todayCompletedCount = logsMap.get(todayStr)?.length ?? 0
+
+  /**
+   * Yesterday, when it is empty and a run was going into it.
+   *
+   * The run this speaks of is the one that ended **the day before yesterday**, and that is
+   * not a detail. Asked the ordinary way the streak is already 0 here, because yesterday
+   * being empty is exactly what ends it, so a guard reading `currentStreak(done, today)`
+   * would never once fire and the ring would never appear. Nothing would break; it simply
+   * would not be there, which is the kind of fault that ships.
+   *
+   * The `has` is the other half. `currentStreak` has a day of grace built in, so asked
+   * about the day before yesterday without checking that the day itself is there, it walks
+   * one further back and answers about a run that ended earlier. The ring would then offer
+   * a yesterday whose logging joins nothing to anything.
+   */
+  const yesterdayIsWorthSaying = useMemo(() => {
+    const done = completedDates(logs)
+    const now = new Date()
+    const yesterday = subDays(now, 1)
+    const before = subDays(now, 2)
+    if (done.has(formatDate(yesterday))) return false
+    if (!done.has(formatDate(before))) return false
+    return currentStreak(done, before) >= 3
+  }, [logs])
+
+  const yesterdayStr = formatDate(subDays(new Date(), 1))
 
   return (
     <div className="p-3 sm:p-4 md:p-6">
@@ -307,13 +359,19 @@ export const MonthView = memo(function MonthView() {
                   `}
                   aria-label={`${day.dateStr}, ${day.logs.length} activities completed`}
                 >
-                  {/* Day Number */}
+                  {/* Day Number. Dashed is a day that exists and has not happened yet;
+                      filled is a day that has. One rule, two places: today and the
+                      yesterday that a run was walking into.
+
+                      Today used to be filled emerald-500 with white whether or not
+                      anything had been done, so the one strong green on the screen said
+                      something untrue, and said it at 2.47:1 against a floor of 4.5.
+                      Filled is emerald-700 now, which carries white at 5.36, and it is
+                      only filled once there is something in the day. */}
                   <span
                     className={`
                       inline-flex items-center justify-center w-6 h-6 sm:w-7 sm:h-7 text-xs sm:text-sm font-medium rounded-full
-                      ${day.isToday ? 'bg-emerald-500 text-white ring-2 ring-emerald-300' : ''}
-                      ${!day.isToday && day.isCurrentMonth ? 'text-gray-900' : ''}
-                      ${!day.isToday && !day.isCurrentMonth ? 'text-gray-400' : ''}
+                      ${tone(day, yesterdayStr, yesterdayIsWorthSaying)}
                     `}
                   >
                     {day.date.getDate()}
