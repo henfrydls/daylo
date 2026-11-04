@@ -36,41 +36,30 @@ afterEach(() => {
   vi.useRealTimers()
 })
 
-describe('the current streak', () => {
-  it('counts the run ending today', () => {
+describe('what the panel no longer says', () => {
+  // The run moved to the header in 1.6, where it is on every screen and at every width
+  // instead of in the corner of a panel the month view does not show on a phone. Two
+  // places with the same number is how they start disagreeing.
+  //
+  // The five tests that were here did not go with it. Three of them were about the rule
+  // itself and live in streaks.test.ts: the run ending today, a today that has not
+  // happened yet, and the end once yesterday is missing too, plus the one about crossing
+  // the new year. The fourth, that the number is the same whatever year is on screen, is
+  // now in App.test.tsx, because that is where the number is.
+  it('does not say the current streak any more', () => {
     show(['2026-03-02', '2026-03-03', '2026-03-04'])
 
-    expect(figure('Current Streak')).toBe('3')
+    expect(screen.queryByText('Current Streak')).not.toBeInTheDocument()
   })
 
-  // The panel used to say 0 for the whole of a day until the person ticked it, while the
-  // rows in the year view said 2 for the same data. One rule now, and it is this one.
-  it('counts from yesterday while today is still untouched', () => {
-    show(['2026-03-02', '2026-03-03'])
+  // Three cards in a two column grid leaves a hole. The two that follow the year on screen
+  // sit together and the one about the person takes the width, which is the difference the
+  // comment in the panel was already making in words.
+  it('gives the longest streak the width the other one left', () => {
+    show(['2026-03-04'])
 
-    expect(figure('Current Streak')).toBe('2')
-  })
-
-  it('is over once a whole day has gone by unticked', () => {
-    show(['2026-03-01', '2026-03-02'])
-
-    expect(figure('Current Streak')).toBe('0')
-  })
-
-  // It used to reset on 1 January because the panel only looked at the selected year, so
-  // a run through the new year was cut in half by the calendar.
-  it('carries on across the new year', () => {
-    vi.setSystemTime(new Date(2026, 0, 2, 12))
-    show(['2025-12-30', '2025-12-31', '2026-01-01', '2026-01-02'])
-
-    expect(figure('Current Streak')).toBe('4')
-  })
-
-  // Current means now. Looking at an old year does not change what run you are on today.
-  it('is the same number whatever year is on screen', () => {
-    show(['2026-03-03', '2026-03-04'], 2024)
-
-    expect(figure('Current Streak')).toBe('2')
+    const card = screen.getByText('Longest Streak').parentElement
+    expect(card?.className).toContain('col-span-2')
   })
 })
 
@@ -117,7 +106,6 @@ describe('with nothing logged', () => {
   it('shows zeros rather than nothing', () => {
     show([])
 
-    expect(figure('Current Streak')).toBe('0')
     expect(figure('Longest Streak')).toBe('0')
     expect(figure('Active Days')).toBe('0')
   })
@@ -135,7 +123,7 @@ describe('what period each figure covers', () => {
     const under = (label: string) => screen.getByText(label).nextElementSibling!.textContent!.trim()
 
     expect(under('Active Days')).toBe('this year')
-    expect(under('Current Streak')).toBe('today')
+    expect(under('This Month')).toBe('completion')
     expect(under('Longest Streak')).toBe('all time')
   })
 })
