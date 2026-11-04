@@ -78,6 +78,29 @@ function getMonthDays(year: number, month: number): DayInfo[] {
   return days
 }
 
+/**
+ * What a day's number looks like, as one decision rather than four conditions.
+ *
+ * Four conditions pasted one under another can match twice: a ringed yesterday on the 1st
+ * of a month is in the month before, so it took `text-gray-900` from the ring and
+ * `text-gray-400` from being outside the month, and which one won was the order the rules
+ * happened to be written in. They could also match none: an ordinary yesterday was excluded
+ * from the plain branch along with the ringed one, so it inherited whatever colour it
+ * landed on.
+ *
+ * Returning one string from one branch makes both of those impossible to write.
+ */
+function tone(day: DayInfo, yesterdayStr: string, yesterdayIsWorthSaying: boolean): string {
+  if (day.isToday && day.logs.length > 0) return 'bg-emerald-700 text-white'
+
+  const ringed =
+    (day.isToday && day.logs.length === 0) ||
+    (day.dateStr === yesterdayStr && yesterdayIsWorthSaying)
+  if (ringed) return 'border-2 border-dashed border-emerald-700 text-gray-900'
+
+  return day.isCurrentMonth ? 'text-gray-900' : 'text-gray-400'
+}
+
 export const MonthView = memo(function MonthView() {
   // Use individual selectors to prevent over-subscription
   const selectedYear = useCalendarStore((state) => state.selectedYear)
@@ -348,10 +371,7 @@ export const MonthView = memo(function MonthView() {
                   <span
                     className={`
                       inline-flex items-center justify-center w-6 h-6 sm:w-7 sm:h-7 text-xs sm:text-sm font-medium rounded-full
-                      ${day.isToday && day.logs.length > 0 ? 'bg-emerald-700 text-white' : ''}
-                      ${(day.isToday && day.logs.length === 0) || (day.dateStr === yesterdayStr && yesterdayIsWorthSaying) ? 'border-2 border-dashed border-emerald-700 text-gray-900' : ''}
-                      ${!day.isToday && day.dateStr !== yesterdayStr && day.isCurrentMonth ? 'text-gray-900' : ''}
-                      ${!day.isToday && !day.isCurrentMonth ? 'text-gray-400' : ''}
+                      ${tone(day, yesterdayStr, yesterdayIsWorthSaying)}
                     `}
                   >
                     {day.date.getDate()}

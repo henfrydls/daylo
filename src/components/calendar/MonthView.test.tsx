@@ -371,5 +371,35 @@ describe('MonthView', () => {
 
       expect(cellFor(daysBack(1)).className).not.toContain('border-dashed')
     })
+
+    // Un ayer normal no lleva anillo, pero tampoco puede quedarse sin color: la condicion
+    // excluia todos los ayeres en vez de solo el que lleva anillo, asi que un ayer corriente
+    // heredaba el color de donde cayera.
+    it('leaves an ordinary yesterday the colour of any other day', () => {
+      useCalendarStore.setState({ activities: oneHabit, logs: loggedOn([1, 2]) })
+      render(<MonthView />)
+
+      expect(cellFor(daysBack(1)).className).toContain('text-gray-900')
+    })
+
+    // El dia 1 del mes, ayer cae en el mes anterior, asi que el ayer con anillo cogia a la
+    // vez text-gray-900 y text-gray-400. Gana uno por el orden de las reglas, que es una
+    // forma de decir que nadie lo decidio.
+    it('gives a ringed yesterday one colour even when it is in the month before', () => {
+      vi.useFakeTimers()
+      vi.setSystemTime(new Date(2026, 11, 1, 10, 0))
+      useCalendarStore.setState({
+        activities: oneHabit,
+        logs: loggedOn([2, 3, 4, 5]),
+        selectedYear: 2026,
+        selectedMonth: 11,
+      })
+      render(<MonthView />)
+
+      const yesterday = cellFor('2026-11-30')
+      expect(yesterday.className).toContain('border-dashed')
+      expect(yesterday.className).not.toContain('text-gray-400')
+      vi.useRealTimers()
+    })
   })
 })
