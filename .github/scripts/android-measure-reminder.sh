@@ -62,9 +62,11 @@ log() { echo "[$(date +%T)] $*" | tee -a "$OUT/log.txt"; }
 sh_() { adb shell "$@" | tr -d '\r'; }
 
 wait_for_boot() {
-  adb wait-for-device
+  # Bounded: run 43602238149 hung here for 42 minutes after a reboot until the job was
+  # cancelled, and nothing it measured could be read.
+  timeout 300 adb wait-for-device || return 1
   for _ in $(seq 1 240); do
-    [ "$(sh_ getprop sys.boot_completed)" = 1 ] && return 0
+    [ "$(timeout 10 adb shell getprop sys.boot_completed | tr -d '\r')" = 1 ] && return 0
     sleep 1
   done
   return 1
