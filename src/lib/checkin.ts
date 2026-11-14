@@ -91,15 +91,29 @@ export async function sendCheckin(args: {
  * that runs once the store has hydrated, and the window becoming visible again.
  */
 let sending = false
+/**
+ * Somebody came back while a send was in the air. Their return is looked at again once it
+ * lands: if the send was for the same day there is nothing to add, and if the day changed
+ * while it was in the air, the new day goes then. Dropped, it would wait for the next
+ * time the window came back, which on a desktop left in front could be hours.
+ */
+let askedWhileSending = false
 
 async function send(id: string, last: boolean): Promise<boolean> {
   sending = true
   try {
-    const ok = await sendCheckin({ id, date: today(), last })
-    useCalendarStore.getState().recordCheckinAttempt(today(), new Date().toISOString(), ok)
+    // Read once. A send that crosses midnight records the day it said, not the day the
+    // answer came back on, or tomorrow would be spent on a message about today.
+    const date = today()
+    const ok = await sendCheckin({ id, date, last })
+    useCalendarStore.getState().recordCheckinAttempt(date, new Date().toISOString(), ok)
     return ok
   } finally {
     sending = false
+    if (askedWhileSending) {
+      askedWhileSending = false
+      void sendCheckinIfDue()
+    }
   }
 }
 
@@ -141,7 +155,10 @@ export async function sendCheckinIfDue(): Promise<void> {
   const { checkinEnabled, checkinId, checkinLastAttempt } = useCalendarStore.getState()
   if (!checkinEnabled || !checkinId) return
   if (checkinLastAttempt?.date === today()) return
-  if (sending) return
+  if (sending) {
+    askedWhileSending = true
+    return
+  }
 
   await send(checkinId, false)
 }

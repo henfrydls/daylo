@@ -111,6 +111,36 @@ export async function remindersAvailable(): Promise<boolean> {
 }
 
 /**
+ * Whether this build asks Android for SCHEDULE_EXACT_ALARM, which is what lets a reminder
+ * arrive on the minute.
+ *
+ * On in 1.5.3, as it has been since 1.5.1, and meant to go off in 1.5.4, the first build
+ * of the closed test on Google Play. Declaring the permission means justifying it to Play,
+ * and Play's policy asks for inexact alarms when a feature does not need the minute; a
+ * habit reminder does not, and USE_EXACT_ALARM, the one granted on sight, is reserved for
+ * alarm clocks and calendars. It is not dropped here because an update that drops it makes
+ * Android remove the exact alarm already pending (see refreshReminder), and the reminder
+ * has to be stored somewhere it can be set again from before that happens.
+ *
+ * With it on, the screen asks the phone whether exact alarms are allowed and, when they
+ * are not, offers the way to the phone's "Alarms & reminders" screen. With it off, Android
+ * does not list Daylo on that screen and the answer is always no, so the screen neither
+ * asks nor offers, and says the reminder arrives around its time. The reminder is
+ * scheduled the same way either way.
+ *
+ * Several things change together with this line, and each of them fails while they
+ * disagree:
+ * - the uses-permission line in src-tauri/gen/android/app/src/main/AndroidManifest.xml;
+ * - scripts/check-exact-alarm.js, which reads this line and runs in the unit tests on that
+ *   manifest, in Build Check (Android) on the debug manifests Gradle merged, and in
+ *   release.yml on the release ones before anything is uploaded;
+ * - the end to end test in e2e/app.spec.ts that checks what the published build shows
+ *   under the reminder's time, which expects the offer while this is on.
+ * Keep the line as `= true` or `= false`; anything else is refused rather than guessed.
+ */
+export const EXACT_ALARMS_DECLARED: boolean = true
+
+/**
  * Whether the reminder will arrive at the time it was set for.
  *
  * False does not mean it will not arrive. It means Android is free to move it, by about
@@ -121,6 +151,10 @@ export async function remindersAvailable(): Promise<boolean> {
  * True where the question cannot be put at all, which is the same direction the Rust side
  * takes and for the same reason: the only thing this decides is whether to offer a fix,
  * and offering one for a problem that may not exist is worse than saying nothing.
+ *
+ * Only asked while EXACT_ALARMS_DECLARED is on. In a build that does not declare the
+ * permission, Android 12 and up answer no whatever the person did, and the fix this would
+ * offer opens a screen that does not list Daylo, so the screen does not ask.
  */
 export async function exactAlarmsAllowed(): Promise<boolean> {
   if (!isTauri()) {
@@ -190,10 +224,40 @@ async function putOnTheQueue(hour: number, minute: number): Promise<string | nul
 }
 
 /**
+ * The order in which calls change the reminder, and a way to tell a call that it is stale.
+ *
+ * Opening the app re-arms the reminder, and that takes a few round trips to the phone. Two
+ * things can happen during them. Somebody deletes their last habit, the reminder is
+ * cancelled, and then the re-arm that was already on its way arrives and schedules it again:
+ * the plugin stores it, and it rings every evening, across restarts, over an app with
+ * nothing in it. Or somebody turns the switch on, and then the re-arm that started before
+ * the permission was given comes back saying it is off, and the screen cancels what was just
+ * armed. Each call reaching the phone on its own schedule is what let the older one win.
+ *
+ * So every call that arms or cancels waits for the ones before it, and the two that run by
+ * themselves, the re-arm at launch and the cancel when the habits are gone, stand down when
+ * a newer call has come in behind them. The calls somebody makes with the switch always
+ * act, in the order they were made.
+ *
+ * A call that never settles would hold up the ones behind it. Every call here settles on
+ * its own except the permission request, which waits for the person to answer, and while
+ * that question is on the screen there is nothing else to do.
+ */
+let issued = 0
+let tail: Promise<unknown> = Promise.resolve()
+
+function inTurn<T>(work: (overtaken: () => boolean) => Promise<T>): Promise<T> {
+  const turn = ++issued
+  const run = tail.then(() => work(() => turn !== issued))
+  tail = run.catch(() => {})
+  return run
+}
+
+/**
  * Turn the daily reminder on at the given local time.
  *
- * The schedule is an interval matching an hour and a minute, which Android re-arms by
- * itself. It does not survive a reboot: see refreshReminder, which is what brings it back.
+ * The schedule is an interval matching an hour and a minute, which the plugin re-arms by
+ * itself each day, and after a restart or an update of Daylo: see refreshReminder.
  * allowWhileIdle is set because without it the alarm will not wake a dozing phone, and an
  * evening reminder that waits for the phone to be picked up is no reminder at all.
  *
@@ -211,52 +275,63 @@ async function putOnTheQueue(hour: number, minute: number): Promise<string | nul
  * differently, on the minute once and four minutes late the next, which is what inexact
  * means even at its best, and why the wording says "usually close" rather than a number.
  *
- * Asking for the exact-alarm permission was weighed and refused here, and that decision
- * was reversed in 1.5: Henfry saw other apps arrive on the minute. Daylo now declares
- * SCHEDULE_EXACT_ALARM and the screen asks `exactAlarmsAllowed` whether it was granted,
- * because on Android 14 and up it comes denied by default and a sheet that promised
- * punctuality without it would be lying to most phones.
+ * Asking for the exact-alarm permission was weighed and refused here and reversed in 1.5.1:
+ * Henfry saw other apps arrive on the minute. Daylo declares SCHEDULE_EXACT_ALARM and the
+ * screen asks `exactAlarmsAllowed` whether it was granted, because from Android 14 it comes
+ * denied by default. It is meant to be taken out again in 1.5.4, for Google Play: see
+ * EXACT_ALARMS_DECLARED. Without it, every reminder is the inexact one described above.
  *
- * The other half is the plugin, which re-armed the following days in its receiver with
- * `setExact(RTC, ...)`, without RTC_WAKEUP and without allowWhileIdle, so the permission
- * bought one punctual reminder rather than punctual reminders. Daylo builds a patched
- * copy of the plugin where both paths decide the same way: see `[patch.crates-io]` in
- * src-tauri/Cargo.toml.
- *
- * What the sheet says has deliberately not changed yet. Both halves are in, and neither
- * has been watched arriving on a phone over two nights. The wording moves when somebody
- * has seen it, not when the code that should make it true was written.
+ * The plugin used to re-arm the following days in its receiver with plain RTC, without
+ * RTC_WAKEUP and without allowWhileIdle. Daylo builds a patched copy where the first
+ * alarm and the re-armed ones decide the same way, which matters to anybody who has not
+ * granted the permission too: the re-armed reminder still wakes a dozing phone, inexactly. See
+ * `[patch.crates-io]` in src-tauri/Cargo.toml.
  *
  * It will fire whether or not anything was logged that day. Suppressing it on a day
  * already logged would mean cancelling and re-arming from inside the app, and then a
  * person who does not open Daylo for three days stops being reminded on the days they
  * most need it. The wording is neutral for that reason.
  */
-export async function enableReminder(hour: number, minute: number): Promise<ReminderResult> {
-  if (!(await remindersAvailable())) {
-    return { outcome: 'unavailable' }
-  }
+export function enableReminder(hour: number, minute: number): Promise<ReminderResult> {
+  return inTurn(async () => {
+    if (!(await remindersAvailable())) {
+      return { outcome: 'unavailable' }
+    }
 
-  let granted = await isPermissionGranted()
-  if (!granted) {
-    granted = (await requestPermission()) === 'granted'
-  }
-  if (!granted) {
-    return { outcome: 'permission-denied' }
-  }
+    let granted = await isPermissionGranted()
+    if (!granted) {
+      granted = (await requestPermission()) === 'granted'
+    }
+    if (!granted) {
+      return { outcome: 'permission-denied' }
+    }
 
-  const reason = await putOnTheQueue(hour, minute)
-  return reason === null ? { outcome: 'on' } : { outcome: 'failed', reason }
+    const reason = await putOnTheQueue(hour, minute)
+    return reason === null ? { outcome: 'on' } : { outcome: 'failed', reason }
+  })
 }
 
 /**
  * Arm an already-enabled reminder again, without asking for anything.
  *
- * A reboot takes the reminder away and nothing brings it back on its own. The plugin has a
- * receiver for BOOT_COMPLETED, and it restores whatever is in its own store, and its store
- * is empty: a notification scheduled through `show`, which is the only path the Rust API
- * offers, is never written there. Only `batch` writes, and nothing reaches `batch`. So the
- * one thing that puts the alarm back after a restart is Daylo being opened, which is this.
+ * A restart used to take the reminder away until Daylo was opened again, which is what
+ * this was first for. The plugin has a receiver for BOOT_COMPLETED that restores whatever
+ * is in its own store, and the store was always empty: `show`, the only path the Rust API
+ * offers, wrote nothing. The patched copy pinned in src-tauri/Cargo.toml writes it now, and
+ * the same receiver also runs when Daylo is updated, so a restart or an update puts the
+ * reminder back without the app being opened.
+ *
+ * Only for a reminder stored by a build with that fix, though. One armed by 1.5.2 or
+ * earlier is not in the store until something schedules it again, and this call is that
+ * something: opening Daylo once after updating is what makes the reminder restorable. That
+ * matters most for the update that stops asking for exact alarms, because Android removes
+ * the exact alarm on that update and only the store can bring it back.
+ *
+ * That is also why 1.5.3 still declares SCHEDULE_EXACT_ALARM. Android's AlarmManagerService,
+ * on a package replaced, removes the exact alarms of an app that no longer has the
+ * permission, without telling it: read in the Android 13 to 16 source, not yet watched on a
+ * phone. 1.5.3 is the version that stores the reminder, so the update that stops declaring
+ * the permission finds something to restore; whoever skips it is back to opening Daylo.
  *
  * It also puts the switch back in step with the phone: a permission taken away in the
  * system settings leaves nothing scheduled, and this is how the app finds out. Returns
@@ -266,26 +341,42 @@ export async function enableReminder(hour: number, minute: number): Promise<Remi
  * plain RTC and no idle allowance, which this call undid for the next evening. That is
  * fixed in the plugin now, in the patched copy pinned in src-tauri/Cargo.toml, so this is
  * no longer the only thing standing between a daily reminder and a dozing phone.
+ *
+ * Null when another call to arm or cancel came in while this one was on its way: it then
+ * schedules nothing, and its answer is not acted on, because the newer call decides. See
+ * inTurn.
  */
-export async function refreshReminder(hour: number, minute: number): Promise<boolean> {
-  if (!(await remindersAvailable())) {
-    return false
-  }
-  // Deliberately does not request it. Being asked again on every launch is how an app
-  // teaches people to say no.
-  if (!(await isPermissionGranted())) {
-    return false
-  }
+export function refreshReminder(hour: number, minute: number): Promise<boolean | null> {
+  return inTurn(async (overtaken) => {
+    if (!(await remindersAvailable())) {
+      return overtaken() ? null : false
+    }
+    // Deliberately does not request it. Being asked again on every launch is how an app
+    // teaches people to say no.
+    if (!(await isPermissionGranted())) {
+      return overtaken() ? null : false
+    }
+    if (overtaken()) {
+      return null
+    }
 
-  return (await putOnTheQueue(hour, minute)) === null
+    const armed = (await putOnTheQueue(hour, minute)) === null
+    return overtaken() ? null : armed
+  })
 }
 
-/** Turn it off. Silent if it was never on. */
-export async function disableReminder(): Promise<void> {
-  if (!(await remindersAvailable())) {
-    return
-  }
-  await cancel([REMINDER_ID])
+/**
+ * Turn it off. Silent if it was never on.
+ *
+ * Cancelling also takes it out of the plugin's store, so a restart cannot bring it back.
+ */
+export function disableReminder(): Promise<void> {
+  return inTurn(async () => {
+    if (!(await remindersAvailable())) {
+      return
+    }
+    await cancel([REMINDER_ID])
+  })
 }
 
 /**
@@ -296,10 +387,10 @@ export async function disableReminder(): Promise<void> {
  * uninstalled.
  *
  * It used to ask the phone what was scheduled first, and that question was the bug. The
- * plugin answers it from its own store, and that store is only ever written by the Kotlin
- * `batch` path: Daylo schedules through `notify`, which reaches `show`, and `show` writes
+ * plugin answers it from its own store, and that store was only ever written by the Kotlin
+ * `batch` path: Daylo schedules through `notify`, which reaches `show`, and `show` wrote
  * nothing. So on a real phone, with the reminder live and ringing every night, `pending()`
- * answers with an empty list, the old condition read that as "nothing of ours is
+ * answered with an empty list, the old condition read that as "nothing of ours is
  * scheduled", and nothing was cancelled. The one case this function exists for was the one
  * case it could not act in, for the whole of its life.
  *
@@ -308,19 +399,26 @@ export async function disableReminder(): Promise<void> {
  * one that was never scheduled costs nothing. The old comment argued for exactly this and
  * then wrote a condition that did the opposite.
  *
- * The same empty store is why a reboot takes the reminder with it, which is known and
- * deliberate; see refreshReminder.
+ * That store is written by `show` now, in the patched plugin, so `pending()` would no
+ * longer answer empty. Asking it again would still be a question with nothing to decide;
+ * see refreshReminder for what the store is for.
  */
 export async function reconcileReminder(activityCount: number): Promise<void> {
-  if (activityCount > 0 || !(await remindersAvailable())) {
+  if (activityCount > 0) {
     return
   }
-  // Nothing here may throw. It runs from a screen somebody is looking at, in the moment
-  // just after they deleted something, and a failure to cancel is not their problem.
-  try {
-    await cancel([REMINDER_ID])
-  } catch {
-    // Deliberately swallowed, and nothing is reported: there is no screen to report it on
-    // and nothing the person could do about it.
-  }
+  return inTurn(async (overtaken) => {
+    // A habit added back, or the switch touched, while this waited: that call decides.
+    if (!(await remindersAvailable()) || overtaken()) {
+      return
+    }
+    // Nothing here may throw. It runs from a screen somebody is looking at, in the moment
+    // just after they deleted something, and a failure to cancel is not their problem.
+    try {
+      await cancel([REMINDER_ID])
+    } catch {
+      // Deliberately swallowed, and nothing is reported: there is no screen to report it
+      // on and nothing the person could do about it.
+    }
+  })
 }

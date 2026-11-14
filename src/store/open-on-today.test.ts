@@ -1,5 +1,17 @@
 import { describe, it, expect, beforeEach } from 'vitest'
-import { useCalendarStore, STORAGE_KEY } from './index'
+import { useCalendarStore, STORAGE_KEY, WHERE_SOMEBODY_IS } from './index'
+
+/**
+ * Every test starts from the store a launch starts from. Without this a test inherits
+ * whatever the one before it set (March 2024, the year view), and passes or fails by the
+ * order they run in. The write the reset schedules is let through before the storage is
+ * cleared, or it would land on top of what the test puts there.
+ */
+async function freshLaunch() {
+  useCalendarStore.setState(useCalendarStore.getInitialState(), true)
+  await new Promise((resolve) => setTimeout(resolve, 20))
+  localStorage.clear()
+}
 
 /**
  * Daylo is for today. Where it opened was wherever it was left, which is a different app:
@@ -26,9 +38,7 @@ function savedLookingAtMarch(): string {
 }
 
 describe('opening on today', () => {
-  beforeEach(() => {
-    localStorage.clear()
-  })
+  beforeEach(freshLaunch)
 
   it('does not reopen the day that was open when Daylo was closed', async () => {
     localStorage.setItem(STORAGE_KEY, savedLookingAtMarch())
@@ -63,9 +73,8 @@ describe('opening on today', () => {
     expect(stored.state).not.toHaveProperty('selectedYear')
   })
 
-  // What is still kept: which of the two views somebody prefers is a preference, not a
-  // place, and so is how they like the year read.
-  it('still remembers the view and the year mode', async () => {
+  // What is still kept: how somebody likes the year read is a preference, not a place.
+  it('still remembers how the year is read', async () => {
     localStorage.setItem(
       STORAGE_KEY,
       JSON.stringify({ state: { currentView: 'year', yearMode: 'byActivity' }, version: 0 })
@@ -73,7 +82,61 @@ describe('opening on today', () => {
 
     await useCalendarStore.persist.rehydrate()
 
-    expect(useCalendarStore.getState().currentView).toBe('year')
     expect(useCalendarStore.getState().yearMode).toBe('byActivity')
+  })
+})
+
+/**
+ * The view turned out to be a place too. Somebody who tapped Year once, or swiped sideways
+ * on a phone without meaning to, came back the next day to twelve cards with no Today bar
+ * and no obvious way to tick today off, which is what they had opened Daylo to do.
+ */
+describe('opening on the month', () => {
+  beforeEach(freshLaunch)
+
+  it('opens on the month even when the year was on screen when Daylo was closed', async () => {
+    localStorage.setItem(
+      STORAGE_KEY,
+      JSON.stringify({ state: { currentView: 'year', yearMode: 'byActivity' }, version: 0 })
+    )
+
+    await useCalendarStore.persist.rehydrate()
+
+    expect(useCalendarStore.getState().currentView).toBe('month')
+  })
+
+  // Not written, rather than written and then ignored, for the same reason as the three
+  // above.
+  it('does not write the view to disk', async () => {
+    await useCalendarStore.persist.rehydrate()
+    useCalendarStore.getState().setCurrentView('year')
+    await new Promise((resolve) => setTimeout(resolve, 20))
+
+    const stored = JSON.parse(localStorage.getItem(STORAGE_KEY) ?? '{"state":{}}')
+    expect(stored.state).not.toHaveProperty('currentView')
+    // And the write did happen, so the line above is about what it carried.
+    expect(stored.state).toHaveProperty('yearMode')
+  })
+})
+
+/**
+ * The two halves read the same list. partialize names what is kept and merge drops what is
+ * not, and the day a new place is added to the store it has to be left out of one and
+ * dropped by the other; checked here against the list rather than against four names
+ * written out again.
+ */
+describe('where somebody is', () => {
+  beforeEach(freshLaunch)
+
+  it.each(WHERE_SOMEBODY_IS)('is not written: %s', (place) => {
+    const partialize = useCalendarStore.persist.getOptions().partialize!
+    expect(partialize(useCalendarStore.getState())).not.toHaveProperty(place)
+  })
+
+  it.each(WHERE_SOMEBODY_IS)('is dropped when read back: %s', (place) => {
+    const merge = useCalendarStore.persist.getOptions().merge!
+    const current = useCalendarStore.getState()
+    const stored = { [place]: 'from disk' }
+    expect(merge(stored, current)[place]).toBe(current[place])
   })
 })

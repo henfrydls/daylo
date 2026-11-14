@@ -3,13 +3,14 @@ import { useCalendarStore } from '../../store'
 import { formatDate } from '../../lib/dates'
 import { longestStreak } from '../../lib/streaks'
 import { completedDates } from '../../lib/activityYear'
+import { useTodayDate } from '../../lib/today'
 
 export function StatsPanel() {
   const { selectedYear, activities, logs } = useCalendarStore()
+  // The app's day, not the clock's: see useTodayDate.
+  const today = useTodayDate()
 
   const stats = useMemo(() => {
-    const today = new Date()
-
     // Two sets, because the panel answers two kinds of question. Active days and this
     // month are about the year on screen. The longest streak is about the person: it is
     // read over every log there is, so a run through the new year is not cut in half by
@@ -46,7 +47,7 @@ export function StatsPanel() {
       longestStreak: longestStreak(everyDayWithActivity, today),
       completionRate,
     }
-  }, [selectedYear, logs])
+  }, [selectedYear, logs, today])
 
   if (activities.length === 0) {
     return null

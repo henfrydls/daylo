@@ -5,7 +5,6 @@ import {
   eachDayOfInterval,
   getDay,
   startOfWeek,
-  isToday,
   isSameDay,
   parseISO,
   differenceInDays,
@@ -40,10 +39,6 @@ export function getFirstDayOffset(year: number): number {
 
 export function getWeekStartDate(date: Date): Date {
   return startOfWeek(date, { weekStartsOn: 0 })
-}
-
-export function checkIsToday(date: Date): boolean {
-  return isToday(date)
 }
 
 export function checkIsSameDay(date1: Date, date2: Date): boolean {

@@ -69,6 +69,16 @@ apps:
       # If a backup ever lands somewhere nobody can find, the fix is in the app, as it was
       # the last time. Adding `home` here would widen what Daylo can read to the whole of
       # somebody's files, to fix a bug that would still be there.
+      #
+      # There is no dbus slot, and that is a choice still open rather than a decision. On
+      # Linux a second launch of Daylo asks the copy already running to show its window by
+      # owning io.github.henfrydls.daylo.SingleInstance on the session bus. Strict
+      # confinement does not let the snap own that name without a slot of the dbus
+      # interface. Read in the plugin's code and not measured: when it cannot take the name
+      # it carries on without a word, so each launch opens a window as before. A slot would
+      # let the first copy own the name, but whether the second copy is then allowed to
+      # call it, and whether the store accepts the slot without a manual review, is not
+      # known either. Followed in #250.
 
 parts:
   daylo:

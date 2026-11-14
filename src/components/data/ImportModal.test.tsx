@@ -121,3 +121,53 @@ describe('restoring a backup without a mouse', () => {
     await waitFor(() => expect(useCalendarStore.getState().activities).toHaveLength(2))
   })
 })
+
+// "1 activities, 1 logs" in the very question that asks whether to overwrite everything.
+describe('the counts it speaks of', () => {
+  it('says one activity and one log entry in what it found', async () => {
+    render(<ImportModal isOpen onClose={vi.fn()} />)
+    await load(backup())
+
+    expect(screen.getByText(/^1 activity$/)).toBeInTheDocument()
+    expect(screen.getByText(/^1 log entry$/)).toBeInTheDocument()
+  })
+
+  it('says one of each when asking to merge', async () => {
+    render(<ImportModal isOpen onClose={vi.fn()} />)
+    await load(backup())
+    await userEvent.click(screen.getByRole('button', { name: /Import Data/ }))
+
+    expect(
+      await screen.findByText(
+        'This will merge 1 activity and 1 log with your existing data. Duplicates will be skipped.'
+      )
+    ).toBeInTheDocument()
+  })
+
+  it('says one of each, on both sides, when asking to replace', async () => {
+    render(<ImportModal isOpen onClose={vi.fn()} />)
+    await load(backup())
+    await userEvent.click(screen.getByRole('radio', { name: /Replace all/ }))
+    await userEvent.click(screen.getByRole('button', { name: /Import Data/ }))
+
+    expect(
+      await screen.findByText(
+        'This will replace all your current data (1 activity, 1 log) with the imported data (1 activity, 1 log). This action cannot be undone.'
+      )
+    ).toBeInTheDocument()
+  })
+
+  it('still says activities and logs when there are more', async () => {
+    useCalendarStore.setState({
+      ...settled,
+      activities: [...settled.activities, { ...settled.activities[0], id: 'a2', name: 'Run' }],
+      logs: [...settled.logs, { ...settled.logs[0], id: 'l2', date: '2026-09-02' }],
+    })
+    render(<ImportModal isOpen onClose={vi.fn()} />)
+    await load(backup())
+    await userEvent.click(screen.getByRole('radio', { name: /Replace all/ }))
+    await userEvent.click(screen.getByRole('button', { name: /Import Data/ }))
+
+    expect(await screen.findByText(/current data \(2 activities, 2 logs\)/)).toBeInTheDocument()
+  })
+})

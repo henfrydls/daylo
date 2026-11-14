@@ -64,6 +64,12 @@ command: daylo
 # inspection and changed nothing, because the permission does not create the
 # user-dirs.dirs that the default handler reads. It would have widened the sandbox and
 # left the backup just as lost. The fix belonged in the app. This stays empty.
+#
+# No --own-name or --talk-name either, although a second launch of Daylo asks the copy
+# already running to show its window over the session bus. The plugin that does it owns
+# io.github.henfrydls.daylo.SingleInstance, a name under this app id, and Flatpak lets an
+# app own and call names under its own id without asking. src-tauri/src/lib.rs picks that
+# name for this reason. Not yet measured in a Flatpak build.
 finish-args:
   - --share=ipc
   # Only the check-in uses it, and only when it is on. See the argument above.

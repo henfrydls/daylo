@@ -1,13 +1,15 @@
 import { useMemo, useCallback, memo, useState } from 'react'
 import { useCalendarStore } from '../../store'
 import { useTravel } from '../../lib/travel'
-import { formatDate, formatMonthYear, checkIsToday } from '../../lib/dates'
+import { formatDate, formatMonthYear } from '../../lib/dates'
+import { useTodayDate } from '../../lib/today'
 import { completedDates } from '../../lib/activityYear'
 import { currentStreak } from '../../lib/streaks'
 import { subDays } from 'date-fns'
 import { useMediaQuery } from '../../hooks/useMediaQuery'
 import type { Activity, ActivityLog } from '../../types'
 import { useShallow } from 'zustand/react/shallow'
+import { count } from '../../lib/plural'
 
 const DAYS_OF_WEEK = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
 const DAYS_OF_WEEK_SHORT = ['S', 'M', 'T', 'W', 'T', 'F', 'S']
@@ -20,7 +22,7 @@ interface DayInfo {
   logs: ActivityLog[]
 }
 
-function getMonthDays(year: number, month: number): DayInfo[] {
+function getMonthDays(year: number, month: number, today: string): DayInfo[] {
   const firstDay = new Date(year, month, 1)
   const lastDay = new Date(year, month + 1, 0)
   // `|| 7` and not `getDay()`, because a Sunday answers 0 and the loop below then prepends
@@ -45,7 +47,7 @@ function getMonthDays(year: number, month: number): DayInfo[] {
       date,
       dateStr: formatDate(date),
       isCurrentMonth: false,
-      isToday: checkIsToday(date),
+      isToday: formatDate(date) === today,
       logs: [],
     })
   }
@@ -57,7 +59,7 @@ function getMonthDays(year: number, month: number): DayInfo[] {
       date,
       dateStr: formatDate(date),
       isCurrentMonth: true,
-      isToday: checkIsToday(date),
+      isToday: formatDate(date) === today,
       logs: [],
     })
   }
@@ -70,7 +72,7 @@ function getMonthDays(year: number, month: number): DayInfo[] {
       date,
       dateStr: formatDate(date),
       isCurrentMonth: false,
-      isToday: checkIsToday(date),
+      isToday: formatDate(date) === today,
       logs: [],
     })
   }
@@ -101,7 +103,15 @@ function tone(day: DayInfo, yesterdayStr: string, yesterdayIsWorthSaying: boolea
   return day.isCurrentMonth ? 'text-gray-900' : 'text-gray-400'
 }
 
-export const MonthView = memo(function MonthView() {
+interface MonthViewProps {
+  /**
+   * Opens Import, given the link that asked, so focus can go back to it. Without it the
+   * empty month offers no backup, because nothing could open one.
+   */
+  onImport?: (opener: HTMLElement) => void
+}
+
+export const MonthView = memo(function MonthView({ onImport }: MonthViewProps) {
   // Use individual selectors to prevent over-subscription
   const selectedYear = useCalendarStore((state) => state.selectedYear)
   const selectedMonth = useCalendarStore((state) => state.selectedMonth)
@@ -119,9 +129,15 @@ export const MonthView = memo(function MonthView() {
 
   const [slideDirection, setSlideDirection] = useState<'left' | 'right' | null>(null)
 
+  // The app's day and not the clock's: while a new day waits for somebody to finish, the
+  // clock has moved on and the rest of the screen has not, and the bar and the grid would
+  // each say a different day was today.
+  const today = useTodayDate()
+  const todayStr = formatDate(today)
+
   const monthDays = useMemo(
-    () => getMonthDays(selectedYear, selectedMonth),
-    [selectedYear, selectedMonth]
+    () => getMonthDays(selectedYear, selectedMonth, todayStr),
+    [selectedYear, selectedMonth, todayStr]
   )
 
   // Create a map of date -> completed logs
@@ -176,10 +192,9 @@ export const MonthView = memo(function MonthView() {
 
   const handleToday = useCallback((): void => {
     setSlideDirection(null)
-    const today = new Date()
     setSelectedYear(today.getFullYear())
     setSelectedMonth(today.getMonth())
-  }, [setSelectedYear, setSelectedMonth])
+  }, [today, setSelectedYear, setSelectedMonth])
 
   const handleDayClick = useCallback(
     (dateStr: string): void => {
@@ -191,8 +206,6 @@ export const MonthView = memo(function MonthView() {
   const displayDate = new Date(selectedYear, selectedMonth, 1)
 
   // Log Today bar data
-  const today = new Date()
-  const todayStr = formatDate(today)
   const isCurrentMonth = selectedYear === today.getFullYear() && selectedMonth === today.getMonth()
   const todayCompletedCount = logsMap.get(todayStr)?.length ?? 0
 
@@ -212,15 +225,14 @@ export const MonthView = memo(function MonthView() {
    */
   const yesterdayIsWorthSaying = useMemo(() => {
     const done = completedDates(logs)
-    const now = new Date()
-    const yesterday = subDays(now, 1)
-    const before = subDays(now, 2)
+    const yesterday = subDays(today, 1)
+    const before = subDays(today, 2)
     if (done.has(formatDate(yesterday))) return false
     if (!done.has(formatDate(before))) return false
     return currentStreak(done, before) >= 3
-  }, [logs])
+  }, [logs, today])
 
-  const yesterdayStr = formatDate(subDays(new Date(), 1))
+  const yesterdayStr = formatDate(subDays(today, 1))
 
   return (
     <div className="p-3 sm:p-4 md:p-6">
@@ -286,7 +298,7 @@ export const MonthView = memo(function MonthView() {
           onClick={() => handleDayClick(todayStr)}
           className="w-full flex items-center justify-between p-3 mb-4 bg-emerald-50 border border-emerald-200 rounded-xl min-h-[44px] transition-colors hover:bg-emerald-100 active:bg-emerald-100"
           data-testid="log-today-bar"
-          aria-label={`Log today: ${todayCompletedCount} of ${activities.length} activities completed`}
+          aria-label={`Log today: ${todayCompletedCount} of ${count(activities.length, 'activity', 'activities')} completed`}
         >
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 bg-emerald-500 text-white rounded-lg flex items-center justify-center font-bold text-sm">
@@ -295,7 +307,7 @@ export const MonthView = memo(function MonthView() {
             <div className="text-left">
               <div className="text-sm font-semibold text-gray-900">Today</div>
               <div className="text-xs text-gray-500">
-                {todayCompletedCount}/{activities.length} activities
+                {todayCompletedCount}/{count(activities.length, 'activity', 'activities')}
               </div>
             </div>
           </div>
@@ -357,7 +369,7 @@ export const MonthView = memo(function MonthView() {
                     ${!isLastColumn ? 'border-r border-gray-200' : ''}
                     ${isSelected ? 'bg-emerald-50 ring-2 ring-inset ring-emerald-500' : day.isCurrentMonth ? 'bg-white' : 'bg-gray-50'}
                   `}
-                  aria-label={`${day.dateStr}, ${day.logs.length} activities completed`}
+                  aria-label={`${day.dateStr}, ${count(day.logs.length, 'activity', 'activities')} completed`}
                 >
                   {/* Day Number. Dashed is a day that exists and has not happened yet;
                       filled is a day that has. One rule, two places: today and the
@@ -412,6 +424,28 @@ export const MonthView = memo(function MonthView() {
           <p className="text-gray-500 text-sm">
             No activities yet. Tap any day to create your first activity and start tracking.
           </p>
+          {/* An app that was reinstalled, or moved to a new phone or to the Store, opens
+              looking like the first day, and Import is behind the gear. People rebuilt
+              their activities by hand instead, and those collided with the backup once
+              they found it. Here, where they are already looking, and gone with the first
+              activity because by then it is not the first day any more.
+              The padding is the finger's 44px, all of it below the words: padded above as
+              well, it reached over the words before it, and a tap or a text selection
+              there opened Import. The negative margin keeps the line no taller. On a phone the link takes a
+              line of its own, centred: at the end of one line it sat under the round
+              activities button, which floats over that corner below lg. */}
+          {onImport === undefined ? null : (
+            <p className="mt-1 text-gray-500 text-sm" data-testid="month-empty-import">
+              Used Daylo before? <br className="sm:hidden" />
+              <button
+                type="button"
+                onClick={(event) => onImport(event.currentTarget)}
+                className="-mb-6 rounded-lg pb-6 font-medium text-emerald-700 underline underline-offset-2 hover:text-emerald-800 focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500"
+              >
+                Import your backup.
+              </button>
+            </p>
+          )}
         </div>
       )}
     </div>

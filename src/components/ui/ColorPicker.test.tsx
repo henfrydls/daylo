@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import { describe, it, expect, vi } from 'vitest'
 import { render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
@@ -61,5 +62,107 @@ describe('ColorPicker and the colors other activities already wear', () => {
     renderPicker()
 
     expect(screen.queryByRole('radio', { name: /already in use/i })).toBeNull()
+  })
+
+  // A backup can carry the same color written another way. It is still the color in use.
+  it('marks a color in use however its hex is written', () => {
+    renderPicker({
+      colors: [...COLORS, { name: 'Sea', value: '#11BB99' }],
+      colorsInUse: ['#3b82f6', '#1b9'],
+    })
+
+    expect(screen.getByRole('radio', { name: /blue color, already in use/i })).toBeInTheDocument()
+    expect(screen.getByRole('radio', { name: /sea color, already in use/i })).toBeInTheDocument()
+  })
+})
+
+// On a 360px phone with seven colors in use, the color a new activity starts on is the
+// eighth, past the row the picker shows collapsed. It used to give up on collapsing and
+// show all sixteen with no way to fold them away.
+describe('the chosen color, however its hex is written', () => {
+  it('marks the matching color as chosen', () => {
+    renderPicker({ value: '#10b981' })
+
+    expect(screen.getByRole('radio', { name: 'Green color' })).toHaveAttribute(
+      'aria-checked',
+      'true'
+    )
+  })
+
+  it('marks it from the short form too', () => {
+    renderPicker({ value: '#00a', colors: [{ name: 'Navy', value: '#0000AA' }] })
+    expect(screen.getByRole('radio', { name: 'Navy color' })).toHaveAttribute(
+      'aria-checked',
+      'true'
+    )
+  })
+})
+
+describe('a collapsed picker whose color is past the visible row', () => {
+  const SIXTEEN = Array.from({ length: 16 }, (_, i) => ({
+    name: `C${i}`,
+    value: `#0000${i.toString(16).padStart(2, '0').toUpperCase()}`,
+  }))
+
+  const paint = (value: string) =>
+    render(<ColorPicker value={value} onChange={vi.fn()} colors={SIXTEEN} collapsedCount={5} />)
+
+  it('keeps to one row and puts the chosen color in it', () => {
+    paint(SIXTEEN[7].value)
+
+    const shown = screen.getAllByRole('radio').map((r) => r.getAttribute('aria-label'))
+    expect(shown).toEqual(['C0 color', 'C1 color', 'C2 color', 'C3 color', 'C7 color'])
+    expect(screen.getByRole('radio', { name: 'C7 color' })).toHaveAttribute('aria-checked', 'true')
+    expect(screen.getByRole('button', { name: 'Show more colors' })).toBeInTheDocument()
+  })
+
+  it('still opens to all of them, in their order, and folds back', async () => {
+    paint(SIXTEEN[7].value)
+
+    await userEvent.click(screen.getByRole('button', { name: 'Show more colors' }))
+    expect(screen.getAllByRole('radio').map((r) => r.getAttribute('aria-label'))).toEqual(
+      SIXTEEN.map((c) => `${c.name} color`)
+    )
+
+    await userEvent.click(screen.getByRole('button', { name: 'Show fewer colors' }))
+    expect(screen.getAllByRole('radio')).toHaveLength(5)
+  })
+
+  it('puts the chosen color in the row however its hex is written', () => {
+    paint(SIXTEEN[11].value.toLowerCase())
+
+    const shown = screen.getAllByRole('radio').map((r) => r.getAttribute('aria-label'))
+    expect(shown).toEqual(['C0 color', 'C1 color', 'C2 color', 'C3 color', 'C11 color'])
+    expect(screen.getByRole('radio', { name: 'C11 color' })).toHaveAttribute('aria-checked', 'true')
+  })
+
+  // The slot the chosen color took is under somebody's finger. If it changed the moment
+  // another color in the row was tapped, a second tap in the same place would choose
+  // something else.
+  it('keeps the last place still while the picker is open, through two taps in a row', async () => {
+    function Controlled() {
+      const [value, setValue] = useState(SIXTEEN[7].value)
+      return <ColorPicker value={value} onChange={setValue} colors={SIXTEEN} collapsedCount={5} />
+    }
+    render(<Controlled />)
+    const row = () => screen.getAllByRole('radio').map((r) => r.getAttribute('aria-label'))
+
+    await userEvent.click(screen.getByRole('radio', { name: 'C1 color' }))
+    expect(row()).toEqual(['C0 color', 'C1 color', 'C2 color', 'C3 color', 'C7 color'])
+
+    await userEvent.click(screen.getAllByRole('radio')[4])
+    expect(screen.getByRole('radio', { name: 'C7 color' })).toHaveAttribute('aria-checked', 'true')
+  })
+
+  it('leaves the row alone when the chosen color is already in it', () => {
+    paint(SIXTEEN[2].value)
+
+    expect(screen.getAllByRole('radio').map((r) => r.getAttribute('aria-label'))).toEqual([
+      'C0 color',
+      'C1 color',
+      'C2 color',
+      'C3 color',
+      'C4 color',
+    ])
   })
 })
