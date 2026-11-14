@@ -1,8 +1,1 @@
-**Opening Daylo again brings back the window that is already open.** Before, opening
-Daylo a second time on a computer gave you a second window, each with its own copy of
-your days. If you ticked today in one and then did anything in the other, the other could
-save its older copy over yours, and today was unticked again without a word. Now there is
-only one Daylo window: opening it again brings it to the front, even if it was minimised.
-In a browser, a second tab now picks up what you saved in the other one when you switch
-back to it, which makes this much less likely there, but it can still happen, so it is
-best to keep Daylo open in a single tab.
+**Opening Daylo again brings back the window that is already open.** Before, opening Daylo a second time on a computer opened a second window, and one window could save over what you marked in the other, so a day you ticked could quietly come back unticked. Now opening Daylo again brings the window you already have to the front, even if it was minimised. This doesn't apply yet to the Snap Store version. In a browser, keep Daylo open in a single tab: a second tab now picks up what you saved in the other one when you switch to it, but it can still miss a change.
