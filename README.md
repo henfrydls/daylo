@@ -33,7 +33,7 @@ Your data stays on your device. No account, and nothing you track is ever upload
 - **Monthly detail view**: Drill down into any month with activity dots per day
 - **Quick daily logging**: Click any day to check off completed activities
 - **Activity management**: Create, edit, and delete activities with custom colors
-- **Statistics**: Current streak, longest streak, monthly completion rate
+- **Streaks and statistics**: Your current streak at the top of the screen, plus longest streak and monthly completion rate
 - **Export/Import**: Back up your data as JSON or CSV, restore from backup
 - **Offline-first**: All data stays on your device, works 100% offline
 - **Cross-platform**: Runs as a desktop app (Windows, macOS, Linux) or in the browser

@@ -14,7 +14,7 @@
     <ul>
       <li>Year view: the whole year as one strip of days, or one strip per habit</li>
       <li>Month view: a dot per habit on each day, one tap to mark it</li>
-      <li>Current streak, longest streak and monthly completion</li>
+      <li>Your current streak at the top of the screen, with longest streak and monthly completion</li>
       <li>Export and import your data as JSON or CSV</li>
     </ul>
   </description>

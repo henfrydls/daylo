@@ -770,6 +770,59 @@ describe('the streak in the header', () => {
     )
   })
 
+  // The rule that lived in the Statistics tile until 1.6: the number is today's, whatever
+  // year is being looked at. The panel had it wrong once, because it read only the selected
+  // year and a run through the new year was cut in half by the calendar. The chip is not
+  // handed a year at all, and this test is what says it stays that way.
+  it('says the same run whatever year is on screen', async () => {
+    fourDaysRunning()
+    useCalendarStore.setState({ selectedYear: 2024 })
+    render(<App />)
+    await act(async () => {})
+
+    expect(screen.getAllByTestId('streak-chip')[0]).toHaveAccessibleName(
+      '4 days in a row, today not logged yet'
+    )
+  })
+
+  // The other half of the same rule, and the one the tile's own test used to hold: a run
+  // that began in December is still one run on 2 January. Only the date is faked, so the
+  // rest of the app keeps its real timers.
+  it('carries a run across the new year', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] })
+    vi.setSystemTime(new Date(2027, 0, 2, 12))
+    try {
+      useCalendarStore.setState({
+        selectedYear: 2027,
+        selectedMonth: 0,
+        activities: [
+          {
+            id: 'a1',
+            name: 'Exercise',
+            color: '#10B981',
+            createdAt: '2026-01-01',
+            updatedAt: '2026-01-01',
+          },
+        ],
+        logs: ['2026-12-30', '2026-12-31', '2027-01-01', '2027-01-02'].map((date) => ({
+          id: date,
+          activityId: 'a1',
+          date,
+          completed: true,
+          createdAt: date,
+        })),
+      })
+      render(<App />)
+      await act(async () => {})
+
+      expect(screen.getAllByTestId('streak-chip')[0]).toHaveAccessibleName(
+        '4 days in a row, today included'
+      )
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
   it('is nowhere at all when there is no run', async () => {
     render(<App />)
     await act(async () => {})

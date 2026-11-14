@@ -372,11 +372,50 @@ test.describe('Activity Tracker App', () => {
     // an unscoped query now finds both and fails on strict mode rather than on the panel.
     const stats = page.getByTestId('stats-panel')
     await expect(stats.getByText('Statistics')).toBeVisible()
-    await expect(stats.getByText('Active Days')).toBeVisible()
-    await expect(page.getByText('Current Streak')).toBeVisible()
-    await expect(page.getByText('Longest Streak')).toBeVisible()
-    await expect(page.getByText('This Month')).toBeVisible()
+    // The whole list, in order. The run that is still going is said in the header and
+    // nowhere else, and naming the three that stay is what catches a fourth under any
+    // name, where a search for "Current Streak" only catches that one spelling.
+    await expect(stats.getByTestId('stat-label')).toHaveText([
+      'Active Days',
+      'This Month',
+      'Longest Streak',
+    ])
   })
+
+  // ── The run in the header ─────────────────────────────────
+
+  // The header carries a phone copy and a desktop copy of the chip and CSS shows one of
+  // them, so "it is in the page" proves nothing here: a wrapper left at `hidden` passes
+  // that and shows nobody their run. Exactly one, and visible, at each width. This is the
+  // only place the run is said now, so nothing else would notice it missing.
+  for (const [where, viewport] of [
+    ['a phone', { width: 360, height: 800 }],
+    ['a desktop window', { width: 1200, height: 800 }],
+  ] as const) {
+    test(`should show the run in the header once today is logged, on ${where}`, async ({
+      page,
+    }) => {
+      await page.setViewportSize(viewport)
+
+      // Through today's own sheet, which is the same road at both widths and leaves the
+      // first activity logged for today.
+      const now = new Date()
+      const today = [
+        now.getFullYear(),
+        String(now.getMonth() + 1).padStart(2, '0'),
+        String(now.getDate()).padStart(2, '0'),
+      ].join('-')
+      await page.getByLabel(new RegExp(`^${today}, `)).click()
+      await page.getByTestId('quicklog-create-first-activity').click()
+      await page.getByTestId('quicklog-new-activity-input').fill('Read')
+      await page.getByTestId('quicklog-add-activity').click()
+      await page.getByTestId('quicklog-done-button').click()
+
+      const chip = page.locator('[data-testid="streak-chip"]:visible')
+      await expect(chip).toHaveCount(1)
+      await expect(chip).toHaveText('1 day')
+    })
+  }
 
   test('should not show statistics when no activities exist', async ({ page }) => {
     await expect(page.getByText('Statistics')).not.toBeVisible()

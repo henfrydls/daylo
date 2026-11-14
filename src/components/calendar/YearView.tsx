@@ -9,8 +9,7 @@ import { useCalendarStore } from '../../store'
 import { useTravel } from '../../lib/travel'
 import { getYearDays, formatDate } from '../../lib/dates'
 import { calculateHeatmapLevel } from '../../lib/colors'
-import { completedDates, habitsThatExistedOn, summariseActivities } from '../../lib/activityYear'
-import { currentStreak } from '../../lib/streaks'
+import { habitsThatExistedOn, summariseActivities } from '../../lib/activityYear'
 import { useMediaQuery } from '../../hooks/useMediaQuery'
 import { useShallow } from 'zustand/react/shallow'
 
@@ -113,13 +112,6 @@ export const YearView = memo(function YearView() {
     const endOfSelected = new Date(selectedYear, 11, 31)
     return now < endOfSelected ? now : endOfSelected
   }, [selectedYear])
-
-  /**
-   * The run ending today, over every log rather than over the year on screen: a streak
-   * belongs to the person and not to the calendar, so it neither resets on 1 January nor
-   * changes because somebody looked at an older year.
-   */
-  const streakToday = useMemo(() => currentStreak(completedDates(logs), new Date()), [logs])
 
   const activityRows = useMemo(
     () => summariseActivities(activities, logs, stripEnd),
@@ -239,7 +231,6 @@ export const YearView = memo(function YearView() {
             year={selectedYear}
             logsByDate={logsByDate}
             totalActivities={activities.length}
-            currentStreak={streakToday}
           />
         </div>
 

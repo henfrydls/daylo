@@ -22,11 +22,3 @@ export interface DayData {
 }
 
 export type HeatmapLevel = 0 | 1 | 2 | 3 | 4
-
-export interface Stats {
-  totalDays: number
-  completedDays: number
-  currentStreak: number
-  longestStreak: number
-  monthlyPercentage: number
-}

@@ -36,41 +36,37 @@ afterEach(() => {
   vi.useRealTimers()
 })
 
-describe('the current streak', () => {
-  it('counts the run ending today', () => {
+describe('what the panel no longer says', () => {
+  // The run moved to the header in 1.6, where it is on every screen and at every width
+  // instead of in the corner of a panel the month view does not show on a phone. Two
+  // places with the same number is how they start disagreeing.
+  //
+  // The five tests that were here did not go with it. Three of them were about the rule
+  // itself and live in streaks.test.ts: the run ending today, a today that has not
+  // happened yet, and the end once yesterday is missing too, plus the one about crossing
+  // the new year. The fourth, that the number is the same whatever year is on screen, is
+  // now in App.test.tsx, because that is where the number is.
+  //
+  // The whole list rather than the absence of one label: a card for the run under any
+  // other name would walk straight past a search for "Current Streak".
+  it('has these three figures and no other', () => {
     show(['2026-03-02', '2026-03-03', '2026-03-04'])
 
-    expect(figure('Current Streak')).toBe('3')
+    expect(screen.getAllByTestId('stat-label').map((label) => label.textContent)).toEqual([
+      'Active Days',
+      'This Month',
+      'Longest Streak',
+    ])
   })
 
-  // The panel used to say 0 for the whole of a day until the person ticked it, while the
-  // rows in the year view said 2 for the same data. One rule now, and it is this one.
-  it('counts from yesterday while today is still untouched', () => {
-    show(['2026-03-02', '2026-03-03'])
+  // Three cards in a two column grid leaves a hole. The two that follow the year on screen
+  // sit together and the one about the person takes the width, which is the difference the
+  // comment in the panel was already making in words.
+  it('gives the longest streak the width the other one left', () => {
+    show(['2026-03-04'])
 
-    expect(figure('Current Streak')).toBe('2')
-  })
-
-  it('is over once a whole day has gone by unticked', () => {
-    show(['2026-03-01', '2026-03-02'])
-
-    expect(figure('Current Streak')).toBe('0')
-  })
-
-  // It used to reset on 1 January because the panel only looked at the selected year, so
-  // a run through the new year was cut in half by the calendar.
-  it('carries on across the new year', () => {
-    vi.setSystemTime(new Date(2026, 0, 2, 12))
-    show(['2025-12-30', '2025-12-31', '2026-01-01', '2026-01-02'])
-
-    expect(figure('Current Streak')).toBe('4')
-  })
-
-  // Current means now. Looking at an old year does not change what run you are on today.
-  it('is the same number whatever year is on screen', () => {
-    show(['2026-03-03', '2026-03-04'], 2024)
-
-    expect(figure('Current Streak')).toBe('2')
+    const card = screen.getByText('Longest Streak').parentElement
+    expect(card?.className).toContain('col-span-2')
   })
 })
 
@@ -99,6 +95,30 @@ describe('what stays tied to the year on screen', () => {
 // An import can carry dates in the future. They used to be counted as active days while
 // the days elapsed, which is the denominator, stopped at today: a file with next year in
 // it could say more days active than there have been.
+// Nothing held this figure's value until the way it is worked out changed, which is the
+// wrong moment to find that out.
+describe('this month', () => {
+  it('is the days with something done over the days gone by', () => {
+    // 2 and 4 March, read on the 4th: two of four.
+    show(['2026-03-02', '2026-03-04'])
+
+    expect(figure('This Month')).toBe('50%')
+  })
+
+  it('is over the whole of the month when the year on screen is over', () => {
+    // March 2025 has all 31 of its days behind it.
+    show(['2025-03-10'], 2025)
+
+    expect(figure('This Month')).toBe('3%')
+  })
+
+  it('is nothing in a year that has not come', () => {
+    show(['2026-03-04'], 2027)
+
+    expect(figure('This Month')).toBe('0%')
+  })
+})
+
 describe('days that have not happened', () => {
   it('does not count a day still to come as active', () => {
     show(['2026-03-04', '2026-06-01', '2026-06-02'])
@@ -117,16 +137,15 @@ describe('with nothing logged', () => {
   it('shows zeros rather than nothing', () => {
     show([])
 
-    expect(figure('Current Streak')).toBe('0')
     expect(figure('Longest Streak')).toBe('0')
     expect(figure('Active Days')).toBe('0')
   })
 })
 
-// Each figure says what period it covers, because the four are not all about the same
+// Each figure says what period it covers, because the three are not all about the same
 // one: looking at a year with nothing in it, "Active Days 0 this year" sits beside a
-// current streak that is alive today, and without the subtitles the 4 reads as if it
-// belonged to the year on screen.
+// longest streak of 4 earned in another year, and without the subtitles the 4 reads as
+// if it belonged to the year on screen.
 describe('what period each figure covers', () => {
   it('says it under the number', () => {
     show(['2026-03-04'])
@@ -135,7 +154,7 @@ describe('what period each figure covers', () => {
     const under = (label: string) => screen.getByText(label).nextElementSibling!.textContent!.trim()
 
     expect(under('Active Days')).toBe('this year')
-    expect(under('Current Streak')).toBe('today')
+    expect(under('This Month')).toBe('completion')
     expect(under('Longest Streak')).toBe('all time')
   })
 })

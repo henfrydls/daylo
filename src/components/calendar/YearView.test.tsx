@@ -527,6 +527,34 @@ describe('YearView', () => {
       expect(screen.getByTestId('year-progress-bar')).toBeInTheDocument()
     })
 
+    // The run that is still going is said in the header, on every screen. Under the year,
+    // on a phone, it was the same number a second time, worked out apart from the first.
+    it('leaves the run to the header', () => {
+      const activities: Activity[] = [
+        {
+          id: '1',
+          name: 'Exercise',
+          color: '#22c55e',
+          createdAt: '2024-01-01',
+          updatedAt: '2024-01-01',
+        },
+      ]
+      // Three days ending today, 15 June 2024: a run that is alive.
+      const logs: ActivityLog[] = ['2024-06-13', '2024-06-14', '2024-06-15'].map((date) => ({
+        id: date,
+        activityId: '1',
+        date,
+        completed: true,
+        createdAt: date,
+      }))
+      useCalendarStore.setState({ activities, logs, selectedYear: 2024 })
+      render(<YearView />)
+
+      const bar = screen.getByTestId('year-progress-bar')
+      expect(bar).toHaveTextContent('3 of 167 days so far')
+      expect(bar).not.toHaveTextContent(/streak/i)
+    })
+
     it('should render HeatmapLegend on mobile', () => {
       render(<YearView />)
 

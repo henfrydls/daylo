@@ -20,19 +20,12 @@ interface YearProgressBarProps {
   year: number
   logsByDate: Map<string, number>
   totalActivities: number
-  /**
-   * The run ending today, worked out over every log there is rather than over this year.
-   * It arrives as a number instead of being computed here so that this bar and the
-   * Statistics panel cannot disagree about the same run.
-   */
-  currentStreak: number
 }
 
 export const YearProgressBar = memo(function YearProgressBar({
   year,
   logsByDate,
   totalActivities,
-  currentStreak,
 }: YearProgressBarProps) {
   const isThisYear = year === new Date().getFullYear()
 
@@ -113,12 +106,9 @@ export const YearProgressBar = memo(function YearProgressBar({
           <span className="font-semibold text-gray-700">{activeDays}</span> of {totalDaysElapsed}{' '}
           days{isThisYear ? ' so far' : ''}
         </span>
+        {/* The run that is still going is not here. It is in the header, on every screen,
+            and this row sat under it saying the same number a second time. */}
         <div className="flex items-center gap-3">
-          {currentStreak > 0 && (
-            <span>
-              <span className="font-semibold text-gray-700">{currentStreak}</span>d streak
-            </span>
-          )}
           {bestMonth && (
             <span>
               Best: <span className="font-semibold text-gray-700">{bestMonth}</span>
