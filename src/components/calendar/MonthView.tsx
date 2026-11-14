@@ -5,7 +5,7 @@ import { formatDate, formatMonthYear, checkIsToday } from '../../lib/dates'
 import { useMediaQuery } from '../../hooks/useMediaQuery'
 import type { Activity, ActivityLog } from '../../types'
 import { useShallow } from 'zustand/react/shallow'
-import { plural } from '../../lib/plural'
+import { count } from '../../lib/plural'
 
 const DAYS_OF_WEEK = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
 const DAYS_OF_WEEK_SHORT = ['S', 'M', 'T', 'W', 'T', 'F', 'S']
@@ -226,7 +226,7 @@ export const MonthView = memo(function MonthView() {
           onClick={() => handleDayClick(todayStr)}
           className="w-full flex items-center justify-between p-3 mb-4 bg-emerald-50 border border-emerald-200 rounded-xl min-h-[44px] transition-colors hover:bg-emerald-100 active:bg-emerald-100"
           data-testid="log-today-bar"
-          aria-label={`Log today: ${todayCompletedCount} of ${activities.length} ${plural(activities.length, 'activity', 'activities')} completed`}
+          aria-label={`Log today: ${todayCompletedCount} of ${count(activities.length, 'activity', 'activities')} completed`}
         >
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 bg-emerald-500 text-white rounded-lg flex items-center justify-center font-bold text-sm">
@@ -235,8 +235,7 @@ export const MonthView = memo(function MonthView() {
             <div className="text-left">
               <div className="text-sm font-semibold text-gray-900">Today</div>
               <div className="text-xs text-gray-500">
-                {todayCompletedCount}/{activities.length}{' '}
-                {plural(activities.length, 'activity', 'activities')}
+                {todayCompletedCount}/{count(activities.length, 'activity', 'activities')}
               </div>
             </div>
           </div>
@@ -298,7 +297,7 @@ export const MonthView = memo(function MonthView() {
                     ${!isLastColumn ? 'border-r border-gray-200' : ''}
                     ${isSelected ? 'bg-emerald-50 ring-2 ring-inset ring-emerald-500' : day.isCurrentMonth ? 'bg-white' : 'bg-gray-50'}
                   `}
-                  aria-label={`${day.dateStr}, ${day.logs.length} ${plural(day.logs.length, 'activity', 'activities')} completed`}
+                  aria-label={`${day.dateStr}, ${count(day.logs.length, 'activity', 'activities')} completed`}
                 >
                   {/* Day Number */}
                   <span

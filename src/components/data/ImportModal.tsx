@@ -4,7 +4,7 @@ import { useCalendarStore } from '../../store'
 import { parseImportFileWithValidation, mergeData } from '../../lib/dataExport'
 import type { Activity, ActivityLog } from '../../types'
 import type { ValidationError } from '../../lib/dataExport'
-import { plural } from '../../lib/plural'
+import { count } from '../../lib/plural'
 
 interface ImportModalProps {
   isOpen: boolean
@@ -166,8 +166,6 @@ export function ImportModal({ isOpen, onClose }: ImportModalProps) {
       setIsImporting(false)
     }
   }
-
-  const count = (n: number, one: string, many: string) => `${n} ${plural(n, one, many)}`
 
   const getConfirmMessage = () => {
     if (!parsedData) return ''
@@ -368,13 +366,11 @@ export function ImportModal({ isOpen, onClose }: ImportModalProps) {
               <ul className="space-y-1 text-sm text-gray-600">
                 <li className="flex items-center gap-2">
                   <span className="w-2 h-2 rounded-full bg-emerald-500" />
-                  {parsedData.activities.length}{' '}
-                  {plural(parsedData.activities.length, 'activity', 'activities')}
+                  {count(parsedData.activities.length, 'activity', 'activities')}
                 </li>
                 <li className="flex items-center gap-2">
                   <span className="w-2 h-2 rounded-full bg-blue-500" />
-                  {parsedData.logs.length}{' '}
-                  {plural(parsedData.logs.length, 'log entry', 'log entries')}
+                  {count(parsedData.logs.length, 'log entry', 'log entries')}
                 </li>
               </ul>
             </div>

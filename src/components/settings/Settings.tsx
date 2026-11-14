@@ -17,7 +17,7 @@ import { openLink } from '../../lib/openLink'
 import { EXACT_ALARMS_DECLARED } from '../../lib/reminders'
 import { FEEDBACK_MAILTO } from '../../lib/feedbackInvite'
 import type { UpdateStatus } from '../../hooks/useUpdates'
-import { plural } from '../../lib/plural'
+import { count } from '../../lib/plural'
 
 /** How long the panel takes to arrive and to leave. */
 const TAKES = 250
@@ -201,7 +201,7 @@ export function Settings({
 
   if (!shouldRender) return null
 
-  const held = `${counts.activities} ${plural(counts.activities, 'activity', 'activities')}, ${counts.logs} ${plural(counts.logs, 'entry', 'entries')}`
+  const held = `${count(counts.activities, 'activity', 'activities')}, ${count(counts.logs, 'entry', 'entries')}`
 
   return (
     <div className="fixed inset-0 z-50" data-testid="settings">

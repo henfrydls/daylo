@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { plural } from './plural'
+import { count, plural } from './plural'
 
 describe('plural', () => {
   it('uses the plural for nothing', () => {
@@ -12,5 +12,13 @@ describe('plural', () => {
 
   it('uses the plural for more than one', () => {
     expect(plural(2, 'activity', 'activities')).toBe('activities')
+  })
+})
+
+describe('count', () => {
+  it('puts the number in front of the right word', () => {
+    expect(count(0, 'log', 'logs')).toBe('0 logs')
+    expect(count(1, 'log', 'logs')).toBe('1 log')
+    expect(count(2, 'log', 'logs')).toBe('2 logs')
   })
 })

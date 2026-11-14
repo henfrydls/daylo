@@ -3,7 +3,7 @@ import { YearHeatmap } from './YearHeatmap'
 import { HeatmapLegend } from './HeatmapLegend'
 import { summariseActivities } from '../../lib/activityYear'
 import type { Activity, ActivityLog, HeatmapLevel } from '../../types'
-import { plural } from '../../lib/plural'
+import { count } from '../../lib/plural'
 
 interface YearByActivityProps {
   year: number
@@ -58,7 +58,7 @@ export const YearByActivity = memo(function YearByActivity({
             />
             <span className="text-sm font-semibold text-gray-800">{activity.name}</span>
             <span className="text-xs text-gray-500">
-              {days} {plural(days, 'day', 'days')} · {streak} day streak
+              {count(days, 'day', 'days')} · {streak} day streak
             </span>
           </div>
 
@@ -78,7 +78,7 @@ export const YearByActivity = memo(function YearByActivity({
         <div className="mb-2 flex items-center gap-2">
           <span className="text-sm font-semibold text-gray-800">All activities</span>
           <span className="text-xs text-gray-500">
-            {activeDays} {plural(activeDays, 'active day', 'active days')}
+            {count(activeDays, 'active day', 'active days')}
           </span>
           {/* The five shades belong to this row and to no other one here. */}
           <div className="ml-auto">

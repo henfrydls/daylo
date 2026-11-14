@@ -10,3 +10,8 @@
 export function plural(count: number, one: string, many: string): string {
   return count === 1 ? one : many
 }
+
+/** The number and its word together: "1 log", "2 logs". */
+export function count(n: number, one: string, many: string): string {
+  return `${n} ${plural(n, one, many)}`
+}

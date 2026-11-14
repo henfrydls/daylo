@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Button, DIALOG_LEAVES_IN, Modal } from '../ui'
 import { newAnswer } from '../../lib/feedback'
-import { plural } from '../../lib/plural'
+import { count } from '../../lib/plural'
 
 interface FeedbackRatingProps {
   isOpen: boolean
@@ -227,7 +227,7 @@ export function FeedbackRating({
             type="button"
             onClick={() => rate(value)}
             aria-pressed={rated !== null && value <= rated}
-            aria-label={`${value} ${plural(value, 'star', 'stars')}`}
+            aria-label={count(value, 'star', 'stars')}
             // 56px, and the number is not a preference. Measured on a real phone at
             // 1080/420dpi: the first version drew a 42px button whose visible star came
             // out at about 24dp, half of Android's 48dp minimum for anything you touch.
