@@ -83,6 +83,40 @@ describe('BottomSheet', () => {
 })
 
 /**
+ * A sheet with a height, which jsdom does not give it.
+ *
+ * The sheet learns its height from a ResizeObserver, and the 30% that closes it is 30% of
+ * that. jsdom has neither layout nor a real observer, so without this every release reads
+ * as short of the distance, and "it did not close" would pass for any reason at all.
+ */
+function giveTheSheetAHeight(height: number, top = 0) {
+  const RealObserver = globalThis.ResizeObserver
+  globalThis.ResizeObserver = class {
+    report: ResizeObserverCallback
+    constructor(report: ResizeObserverCallback) {
+      this.report = report
+    }
+    observe() {
+      this.report([], this as unknown as ResizeObserver)
+    }
+    unobserve() {}
+    disconnect() {}
+  } as unknown as typeof ResizeObserver
+  const rect = vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockReturnValue({
+    height,
+    top,
+    bottom: top + height,
+    left: 0,
+    right: 360,
+    width: 360,
+  } as DOMRect)
+  return () => {
+    globalThis.ResizeObserver = RealObserver
+    rect.mockRestore()
+  }
+}
+
+/**
  * A tap is not a drag.
  *
  * Everything inside this sheet is something you tap, and it used to begin a drag on any
@@ -92,27 +126,33 @@ describe('BottomSheet', () => {
  */
 describe('telling a tap from a drag', () => {
   const pressed = vi.fn()
+  const onClose = vi.fn()
   const show = () =>
     render(
-      <BottomSheet isOpen onClose={vi.fn()} aria-label="Activities">
+      <BottomSheet isOpen onClose={onClose} aria-label="Activities">
         <button onClick={pressed}>Edit</button>
       </BottomSheet>
     )
   const backdrop = () => screen.getByTestId('bottom-sheet-backdrop')
   const sheet = () => screen.getByTestId('bottom-sheet')
-  // Where a drag to close is taken from. The content is for scrolling; see below.
+  // Where a drag to close is taken from by pointer. The list has its own, further down.
   const handle = () => screen.getByTestId('bottom-sheet-handle')
+  const at = (clientY: number, clientX = 100, pointerId = 1) => ({ pointerId, clientX, clientY })
   const settle = () =>
     act(() => {
       vi.advanceTimersByTime(60)
     })
+  let restore = () => {}
 
   beforeEach(() => {
     vi.useFakeTimers()
     pressed.mockReset()
+    onClose.mockReset()
   })
 
   afterEach(() => {
+    restore()
+    restore = () => {}
     vi.useRealTimers()
   })
 
@@ -121,8 +161,8 @@ describe('telling a tap from a drag', () => {
     settle()
     const before = backdrop().style.backdropFilter
 
-    fireEvent.pointerDown(sheet(), { clientX: 100, clientY: 300 })
-    fireEvent.pointerMove(sheet(), { clientX: 100, clientY: 302 })
+    fireEvent.pointerDown(handle(), at(300))
+    fireEvent.pointerMove(handle(), at(302))
 
     expect(backdrop().style.backdropFilter).toBe(before)
   })
@@ -131,8 +171,8 @@ describe('telling a tap from a drag', () => {
     show()
     settle()
 
-    fireEvent.pointerDown(screen.getByText('Edit'), { clientX: 100, clientY: 300 })
-    fireEvent.pointerUp(screen.getByText('Edit'), { clientX: 100, clientY: 300 })
+    fireEvent.pointerDown(screen.getByText('Edit'), at(300))
+    fireEvent.pointerUp(screen.getByText('Edit'), at(300))
     fireEvent.click(screen.getByText('Edit'))
 
     expect(pressed).toHaveBeenCalledOnce()
@@ -142,11 +182,27 @@ describe('telling a tap from a drag', () => {
     show()
     settle()
 
-    fireEvent.pointerDown(handle(), { clientX: 100, clientY: 300 })
-    fireEvent.pointerMove(sheet(), { clientX: 100, clientY: 340 })
+    fireEvent.pointerDown(handle(), at(300))
+    fireEvent.pointerMove(handle(), at(340))
+    fireEvent.pointerMove(handle(), at(360))
 
     // The sheet follows: it has left its resting place, which only a drag does.
-    expect(sheet().style.transform).toBe('translateY(40px)')
+    expect(sheet().style.transform).toBe('translateY(20px)')
+  })
+
+  // The eight pixels spent deciding are not part of the drag. Counted in, the sheet
+  // jumped by all of them the moment it began to move.
+  it('follows the finger from where the drag began, without a jump', () => {
+    show()
+    settle()
+
+    fireEvent.pointerDown(handle(), at(300))
+    fireEvent.pointerMove(handle(), at(330))
+
+    expect(sheet().style.transform).toBe('translateY(0px)')
+
+    fireEvent.pointerMove(handle(), at(331))
+    expect(sheet().style.transform).toBe('translateY(1px)')
   })
 
   // A finger crossing the sheet sideways is going somewhere else. Without this, a drag
@@ -155,8 +211,23 @@ describe('telling a tap from a drag', () => {
     show()
     settle()
 
-    fireEvent.pointerDown(handle(), { clientX: 100, clientY: 300 })
-    fireEvent.pointerMove(sheet(), { clientX: 220, clientY: 320 })
+    fireEvent.pointerDown(handle(), at(300))
+    fireEvent.pointerMove(handle(), at(320, 220))
+    fireEvent.pointerMove(handle(), at(330, 340))
+
+    expect(sheet().style.transform).toBe('translateY(0px)')
+  })
+
+  // Decided once, as the list decides: a press that went across first does not become a
+  // drag later by turning downwards.
+  it('keeps to what it decided when the finger turns down after going across', () => {
+    show()
+    settle()
+
+    fireEvent.pointerDown(handle(), at(300, 100))
+    fireEvent.pointerMove(handle(), at(305, 120))
+    fireEvent.pointerMove(handle(), at(500, 120))
+    fireEvent.pointerMove(handle(), at(540, 120))
 
     expect(sheet().style.transform).toBe('translateY(0px)')
   })
@@ -165,8 +236,9 @@ describe('telling a tap from a drag', () => {
     show()
     settle()
 
-    fireEvent.pointerDown(handle(), { clientX: 100, clientY: 300 })
-    fireEvent.pointerMove(sheet(), { clientX: 100, clientY: 240 })
+    fireEvent.pointerDown(handle(), at(300))
+    fireEvent.pointerMove(handle(), at(240))
+    fireEvent.pointerMove(handle(), at(200))
 
     expect(sheet().style.transform).toBe('translateY(0px)')
   })
@@ -178,8 +250,9 @@ describe('telling a tap from a drag', () => {
     settle()
     const atRest = backdrop().style.backdropFilter
 
-    fireEvent.pointerDown(handle(), { clientX: 100, clientY: 300 })
-    fireEvent.pointerMove(sheet(), { clientX: 100, clientY: 340 })
+    fireEvent.pointerDown(handle(), at(300))
+    fireEvent.pointerMove(handle(), at(310))
+    fireEvent.pointerMove(handle(), at(350))
     const moving = backdrop().style.backdropFilter
 
     expect(moving).not.toBe(atRest)
@@ -189,16 +262,568 @@ describe('telling a tap from a drag', () => {
     )
   })
 
-  // With five activities the sheet is taller than a phone and its content has to scroll
-  // under a finger. A finger going down on the content is that scroll, coming back up the
-  // list, and taking the sheet away with it is how it used to close instead of scrolling.
-  it('leaves the sheet where it is for a finger going down on the content', () => {
+  // Captured, so the release reaches the handle wherever it happens: a mouse let go above
+  // the sheet used to leave it dragging, following a pointer with no button down.
+  it('keeps hold of the pointer that went down on the handle', () => {
+    show()
+    settle()
+    const capture = vi.fn()
+    handle().setPointerCapture = capture
+
+    fireEvent.pointerDown(handle(), at(300, 100, 7))
+
+    expect(capture).toHaveBeenCalledWith(7)
+  })
+
+  it('ignores a second finger while the first is dragging', () => {
     show()
     settle()
 
-    fireEvent.pointerDown(screen.getByText('Edit'), { clientX: 100, clientY: 300 })
-    fireEvent.pointerMove(screen.getByText('Edit'), { clientX: 100, clientY: 340 })
+    fireEvent.pointerDown(handle(), at(300))
+    fireEvent.pointerMove(handle(), at(340))
+    fireEvent.pointerMove(handle(), at(360))
+    fireEvent.pointerMove(handle(), at(600, 100, 2))
+
+    expect(sheet().style.transform).toBe('translateY(20px)')
+  })
+
+  // A right click opens a menu, and the menu can swallow the release. The handle was then
+  // left believing a button was down, and the next move of the mouse dragged the sheet.
+  it('takes no press from any button but the main one', () => {
+    show()
+    settle()
+
+    fireEvent.pointerDown(handle(), { ...at(300), button: 2 })
+    fireEvent.pointerMove(handle(), at(340))
+    fireEvent.pointerMove(handle(), at(380))
 
     expect(sheet().style.transform).toBe('translateY(0px)')
+  })
+
+  it('forgets the press when it loses the pointer', () => {
+    show()
+    settle()
+
+    fireEvent.pointerDown(handle(), at(300))
+    fireEvent.lostPointerCapture(handle(), at(300))
+    fireEvent.pointerMove(handle(), at(340))
+    fireEvent.pointerMove(handle(), at(380))
+
+    expect(sheet().style.transform).toBe('translateY(0px)')
+  })
+
+  // A cancel is the system taking the finger: the notification shade, a call, another
+  // app. Read as a release, a sheet pulled past 30% closed on its own when the phone rang.
+  it('goes back up without closing when the system takes the pointer', () => {
+    restore = giveTheSheetAHeight(500)
+    show()
+    settle()
+
+    fireEvent.pointerDown(handle(), at(300))
+    fireEvent.pointerMove(handle(), at(310))
+    fireEvent.pointerMove(handle(), at(560))
+    fireEvent.pointerCancel(handle(), at(560))
+
+    expect(onClose).not.toHaveBeenCalled()
+    expect(sheet().style.transform).toBe('translateY(0px)')
+  })
+
+  // The same pull, let go: so the test above is about the cancel, not about a sheet that
+  // could not be closed at all.
+  it('closes when let go past 30% of its height', () => {
+    restore = giveTheSheetAHeight(500)
+    show()
+    settle()
+
+    fireEvent.pointerDown(handle(), at(300))
+    fireEvent.pointerMove(handle(), at(310))
+    fireEvent.pointerMove(handle(), at(560))
+    fireEvent.pointerUp(handle(), at(560))
+
+    expect(onClose).toHaveBeenCalledOnce()
+  })
+
+  // The strip above the edge is outside the sheet to the eye, so a tap there closes it as
+  // a tap outside does. On the grey bar itself a tap does nothing, as it always has.
+  it('closes for a tap in the strip above the edge, and not for one on the bar', () => {
+    restore = giveTheSheetAHeight(500, 200)
+    show()
+    settle()
+
+    fireEvent.pointerDown(handle(), at(210))
+    fireEvent.pointerUp(handle(), at(210))
+    expect(onClose).not.toHaveBeenCalled()
+
+    fireEvent.pointerDown(handle(), at(190))
+    fireEvent.pointerUp(handle(), at(191))
+    expect(onClose).toHaveBeenCalledOnce()
+  })
+})
+
+/**
+ * Pulling the list down from the top closes the sheet, as the handle does.
+ *
+ * The list scrolls, and with one to three activities there is nothing to scroll: a pull
+ * down on it did nothing, and only the handle and a tap outside closed the sheet. So the
+ * list keeps that one gesture from the browser, at the top and going down, and everything
+ * else stays the browser's scroll. `fireEvent` returns false when a listener called
+ * `preventDefault`, which is how these see whether the browser was told to keep out.
+ */
+describe('a drag from the list', () => {
+  const onClose = vi.fn()
+  const show = () =>
+    render(
+      <BottomSheet isOpen onClose={onClose} aria-label="Activities">
+        <button>Edit</button>
+      </BottomSheet>
+    )
+  const sheet = () => screen.getByTestId('bottom-sheet')
+  const list = () => screen.getByTestId('bottom-sheet-list')
+  const touch = (clientY: number, clientX = 100, identifier = 1) => ({
+    identifier,
+    clientX,
+    clientY,
+  })
+  /** One finger, the one these tests follow unless they say otherwise. */
+  const at = (clientY: number, clientX = 100) => {
+    const t = touch(clientY, clientX)
+    return { touches: [t], changedTouches: [t] }
+  }
+  const lift = (clientY = 0, identifier = 1) => ({
+    touches: [],
+    changedTouches: [touch(clientY, 100, identifier)],
+  })
+  const settle = () =>
+    act(() => {
+      vi.advanceTimersByTime(60)
+    })
+  let restore = () => {}
+
+  beforeEach(() => {
+    vi.useFakeTimers()
+    onClose.mockReset()
+  })
+
+  afterEach(() => {
+    restore()
+    restore = () => {}
+    vi.useRealTimers()
+  })
+
+  it('takes the sheet down from the top, and keeps the browser out of it', () => {
+    show()
+    settle()
+
+    fireEvent.touchStart(list(), at(300))
+    const first = fireEvent.touchMove(list(), at(303))
+    fireEvent.touchMove(list(), at(340))
+    fireEvent.touchMove(list(), at(360))
+
+    expect(first).toBe(false)
+    // From where the drag was recognised, at 340: no jump by the pixels spent deciding.
+    expect(sheet().style.transform).toBe('translateY(20px)')
+  })
+
+  it('leaves a list that is scrolled to the browser', () => {
+    show()
+    settle()
+    list().scrollTop = 120
+
+    fireEvent.touchStart(list(), at(300))
+    const moved = fireEvent.touchMove(list(), at(340))
+
+    expect(moved).toBe(true)
+    expect(sheet().style.transform).toBe('translateY(0px)')
+  })
+
+  it('leaves a finger going up to the browser', () => {
+    show()
+    settle()
+
+    fireEvent.touchStart(list(), at(300))
+    const moved = fireEvent.touchMove(list(), at(260))
+
+    expect(moved).toBe(true)
+    expect(sheet().style.transform).toBe('translateY(0px)')
+  })
+
+  // A gesture that went up first is a scroll for the rest of its life.
+  it('does not take the sheet when the finger went up before coming down', () => {
+    show()
+    settle()
+
+    fireEvent.touchStart(list(), at(300))
+    fireEvent.touchMove(list(), at(280))
+    const back = fireEvent.touchMove(list(), at(360))
+
+    expect(back).toBe(true)
+    expect(sheet().style.transform).toBe('translateY(0px)')
+  })
+
+  // A thumb that trembles two pixels down before going up to scroll. The tremble is held
+  // back, since it leans down, but what follows is the browser's: measured in Chromium,
+  // the next move that is not held back starts the scroll.
+  it('hands a finger back to the browser once it turns upwards', () => {
+    show()
+    settle()
+
+    fireEvent.touchStart(list(), at(300))
+    fireEvent.touchMove(list(), at(302))
+    const up = fireEvent.touchMove(list(), at(290))
+    const further = fireEvent.touchMove(list(), at(250))
+
+    expect([up, further]).toEqual([true, true])
+    expect(sheet().style.transform).toBe('translateY(0px)')
+  })
+
+  // Scrolling back up and reaching the top under the finger is still scrolling. The sheet
+  // setting off down the screen at that moment would be a surprise; the next pull closes.
+  it('does not take the sheet when the list reaches the top in the middle of a scroll', () => {
+    show()
+    settle()
+    list().scrollTop = 40
+
+    fireEvent.touchStart(list(), at(300))
+    list().scrollTop = 0
+    fireEvent.touchMove(list(), at(380))
+    // Read with the finger still down: letting go puts any sheet back at rest.
+    expect(sheet().style.transform).toBe('translateY(0px)')
+    fireEvent.touchEnd(list(), lift(380))
+
+    fireEvent.touchStart(list(), at(300))
+    fireEvent.touchMove(list(), at(303))
+    fireEvent.touchMove(list(), at(340))
+    fireEvent.touchMove(list(), at(380))
+    expect(sheet().style.transform).toBe('translateY(40px)')
+  })
+
+  // Not held back either: going across is not this sheet's gesture, and keeping it from
+  // the browser on the way to finding that out was keeping something that was not ours.
+  it('ignores a finger going more across than down, and leaves it to the browser', () => {
+    show()
+    settle()
+
+    fireEvent.touchStart(list(), at(300, 100))
+    const across = fireEvent.touchMove(list(), at(320, 220))
+
+    expect(across).toBe(true)
+    expect(sheet().style.transform).toBe('translateY(0px)')
+  })
+
+  it('does not hold back a small move that leans across', () => {
+    show()
+    settle()
+
+    fireEvent.touchStart(list(), at(300, 100))
+    const small = fireEvent.touchMove(list(), at(302, 105))
+
+    expect(small).toBe(true)
+  })
+
+  it('goes back up when let go short of the distance that closes it', () => {
+    show()
+    settle()
+
+    fireEvent.touchStart(list(), at(300))
+    fireEvent.touchMove(list(), at(310))
+    fireEvent.touchMove(list(), at(330))
+    fireEvent.touchEnd(list(), lift(330))
+
+    expect(onClose).not.toHaveBeenCalled()
+    expect(sheet().style.transform).toBe('translateY(0px)')
+  })
+
+  it('closes when let go past 30% of its height', () => {
+    restore = giveTheSheetAHeight(500)
+    show()
+    settle()
+
+    fireEvent.touchStart(list(), at(300))
+    fireEvent.touchMove(list(), at(310))
+    fireEvent.touchMove(list(), at(560))
+    fireEvent.touchEnd(list(), lift(560))
+
+    expect(onClose).toHaveBeenCalledOnce()
+  })
+
+  // The system taking the finger, not the person letting go: back up, never closed.
+  it('goes back up without closing when the system cancels the touch', () => {
+    restore = giveTheSheetAHeight(500)
+    show()
+    settle()
+
+    fireEvent.touchStart(list(), at(300))
+    fireEvent.touchMove(list(), at(310))
+    fireEvent.touchMove(list(), at(560))
+    fireEvent.touchCancel(list(), lift(560))
+
+    expect(onClose).not.toHaveBeenCalled()
+    expect(sheet().style.transform).toBe('translateY(0px)')
+  })
+
+  // A second finger on the list used to end the drag, and past 30% that closed the sheet.
+  // It follows the finger that began it, as the handle does.
+  it('follows the finger that began the drag and ignores a second one', () => {
+    restore = giveTheSheetAHeight(500)
+    show()
+    settle()
+    const first = touch(300)
+
+    fireEvent.touchStart(list(), at(300))
+    fireEvent.touchMove(list(), at(310))
+    fireEvent.touchMove(list(), at(500))
+    const second = touch(400, 200, 2)
+    fireEvent.touchStart(list(), { touches: [first, second], changedTouches: [second] })
+    fireEvent.touchMove(list(), {
+      touches: [touch(500), touch(700, 200, 2)],
+      changedTouches: [touch(700, 200, 2)],
+    })
+    fireEvent.touchEnd(list(), { touches: [touch(500)], changedTouches: [touch(700, 200, 2)] })
+
+    expect(onClose).not.toHaveBeenCalled()
+    expect(sheet().style.transform).toBe('translateY(190px)')
+
+    fireEvent.touchMove(list(), at(520))
+    expect(sheet().style.transform).toBe('translateY(210px)')
+  })
+
+  // A tie: one pixel down and one across is the first move of
+  // many pulls, and not holding it back gave the gesture to the browser.
+  it('holds back a first move that goes as far down as across', () => {
+    show()
+    settle()
+
+    fireEvent.touchStart(list(), at(300, 100))
+    const tie = fireEvent.touchMove(list(), at(301, 101))
+
+    expect(tie).toBe(false)
+  })
+})
+
+/**
+ * One drag at a time, whoever began it.
+ *
+ * The handle and the list each kept their own finger, so a thumb on the handle and a
+ * finger on the list could both drag the one sheet. When one let go, the other went on
+ * moving it with nothing left to release it: the sheet hung half way down the screen.
+ * Whoever begins the drag has it until they let go, and every other press waits until it
+ * is let go too. Both owners, both orders of letting go.
+ */
+describe('one drag at a time', () => {
+  const onClose = vi.fn()
+  const show = () =>
+    render(
+      <BottomSheet isOpen onClose={onClose} aria-label="Activities">
+        <button>Edit</button>
+      </BottomSheet>
+    )
+  const sheet = () => screen.getByTestId('bottom-sheet')
+  const list = () => screen.getByTestId('bottom-sheet-list')
+  const handle = () => screen.getByTestId('bottom-sheet-handle')
+  const press = (clientY: number) => ({ pointerId: 1, clientX: 100, clientY })
+  const finger = (clientY: number) => {
+    const t = { identifier: 5, clientX: 200, clientY }
+    return { touches: [t], changedTouches: [t] }
+  }
+  const lift = (clientY: number) => ({
+    touches: [],
+    changedTouches: [{ identifier: 5, clientX: 200, clientY }],
+  })
+  const transform = () => sheet().style.transform
+  let restore = () => {}
+
+  beforeEach(() => {
+    vi.useFakeTimers()
+    onClose.mockReset()
+    restore = giveTheSheetAHeight(500)
+    show()
+    act(() => {
+      vi.advanceTimersByTime(60)
+    })
+  })
+
+  afterEach(() => {
+    restore()
+    vi.useRealTimers()
+  })
+
+  /** The handle takes the sheet 20 pixels down; the list finger then pulls hard. */
+  function handleThenList() {
+    fireEvent.pointerDown(handle(), press(300))
+    fireEvent.pointerMove(handle(), press(310))
+    fireEvent.pointerMove(handle(), press(330))
+    fireEvent.touchStart(list(), finger(300))
+    fireEvent.touchMove(list(), finger(310))
+    fireEvent.touchMove(list(), finger(600))
+  }
+
+  /** The list takes the sheet 20 pixels down; the handle then pulls hard. */
+  function listThenHandle() {
+    fireEvent.touchStart(list(), finger(300))
+    fireEvent.touchMove(list(), finger(310))
+    fireEvent.touchMove(list(), finger(330))
+    fireEvent.pointerDown(handle(), press(300))
+    fireEvent.pointerMove(handle(), press(310))
+    fireEvent.pointerMove(handle(), press(600))
+  }
+
+  // Both down before either has decided: the first to decide has the drag, and the other
+  // does not take it from it when it decides in turn.
+  it('gives the drag to the first press to decide when both began at once', () => {
+    fireEvent.pointerDown(handle(), press(300))
+    fireEvent.touchStart(list(), finger(300))
+    fireEvent.pointerMove(handle(), press(310))
+    fireEvent.pointerMove(handle(), press(330))
+    fireEvent.touchMove(list(), finger(310))
+    fireEvent.touchMove(list(), finger(600))
+
+    expect(transform()).toBe('translateY(20px)')
+  })
+
+  // "Waits until it is let go too": a press that went down while somebody else was
+  // dragging does not take over the moment they let go, even if it has not moved yet.
+  it('a handle press made during a drag from the list stays out after the list lets go', () => {
+    fireEvent.touchStart(list(), finger(300))
+    fireEvent.touchMove(list(), finger(310))
+    fireEvent.touchMove(list(), finger(330))
+    fireEvent.pointerDown(handle(), press(300))
+    fireEvent.touchEnd(list(), lift(330))
+
+    fireEvent.pointerMove(handle(), press(310))
+    fireEvent.pointerMove(handle(), press(400))
+
+    expect(transform()).toBe('translateY(0px)')
+  })
+
+  it('a finger on the list during a drag from the handle stays out after the handle lets go', () => {
+    fireEvent.pointerDown(handle(), press(300))
+    fireEvent.pointerMove(handle(), press(310))
+    fireEvent.pointerMove(handle(), press(330))
+    fireEvent.touchStart(list(), finger(300))
+    fireEvent.pointerUp(handle(), press(330))
+
+    fireEvent.touchMove(list(), finger(310))
+    fireEvent.touchMove(list(), finger(400))
+
+    expect(transform()).toBe('translateY(0px)')
+  })
+
+  it('the handle drags, the list waits, and the handle is let go first', () => {
+    handleThenList()
+    expect(transform()).toBe('translateY(20px)')
+
+    fireEvent.pointerUp(handle(), press(330))
+    expect(transform()).toBe('translateY(0px)')
+
+    // The finger still on the list is not dragging anything: nothing left to hang.
+    fireEvent.touchMove(list(), finger(700))
+    expect(transform()).toBe('translateY(0px)')
+    fireEvent.touchEnd(list(), lift(700))
+    expect(onClose).not.toHaveBeenCalled()
+  })
+
+  it('the handle drags, the list waits, and the list is let go first', () => {
+    handleThenList()
+
+    fireEvent.touchEnd(list(), lift(600))
+    expect(transform()).toBe('translateY(20px)')
+
+    fireEvent.pointerMove(handle(), press(350))
+    expect(transform()).toBe('translateY(40px)')
+    fireEvent.pointerUp(handle(), press(350))
+    expect(transform()).toBe('translateY(0px)')
+    expect(onClose).not.toHaveBeenCalled()
+  })
+
+  it('the list drags, the handle waits, and the list is let go first', () => {
+    listThenHandle()
+    expect(transform()).toBe('translateY(20px)')
+
+    fireEvent.touchEnd(list(), lift(330))
+    expect(transform()).toBe('translateY(0px)')
+
+    fireEvent.pointerMove(handle(), press(700))
+    expect(transform()).toBe('translateY(0px)')
+    fireEvent.pointerUp(handle(), press(700))
+    expect(onClose).not.toHaveBeenCalled()
+  })
+
+  it('the list drags, the handle waits, and the handle is let go first', () => {
+    listThenHandle()
+
+    fireEvent.pointerUp(handle(), press(600))
+    expect(transform()).toBe('translateY(20px)')
+
+    fireEvent.touchMove(list(), finger(350))
+    expect(transform()).toBe('translateY(40px)')
+    fireEvent.touchEnd(list(), lift(350))
+    expect(transform()).toBe('translateY(0px)')
+    expect(onClose).not.toHaveBeenCalled()
+  })
+})
+
+/**
+ * Closed in the middle of a drag, nothing of the drag survives into the next opening.
+ *
+ * Escape while a finger was dragging the list closed the sheet and left that finger's
+ * gesture alive, and the same finger moving after the sheet opened again dragged it: a
+ * sheet that opened hanging half way down.
+ */
+describe('closing in the middle of a drag', () => {
+  const onClose = vi.fn()
+  const sheet = (isOpen: boolean) => (
+    <BottomSheet isOpen={isOpen} onClose={onClose} aria-label="Activities">
+      <button>Edit</button>
+    </BottomSheet>
+  )
+  const at = (clientY: number) => {
+    const t = { identifier: 1, clientX: 100, clientY }
+    return { touches: [t], changedTouches: [t] }
+  }
+  const lift = (clientY: number) => ({
+    touches: [],
+    changedTouches: [{ identifier: 1, clientX: 100, clientY }],
+  })
+  const settle = () =>
+    act(() => {
+      vi.advanceTimersByTime(60)
+    })
+
+  beforeEach(() => {
+    vi.useFakeTimers()
+    onClose.mockReset()
+  })
+
+  afterEach(() => {
+    vi.useRealTimers()
+  })
+
+  it('opens again at rest, and the next pull works as ever', () => {
+    const { rerender } = render(sheet(true))
+    settle()
+    const list = () => screen.getByTestId('bottom-sheet-list')
+    const transform = () => screen.getByTestId('bottom-sheet').style.transform
+
+    fireEvent.touchStart(list(), at(300))
+    fireEvent.touchMove(list(), at(310))
+    fireEvent.touchMove(list(), at(340))
+    expect(transform()).toBe('translateY(30px)')
+
+    fireEvent.keyDown(document, { key: 'Escape' })
+    expect(onClose).toHaveBeenCalledOnce()
+    rerender(sheet(false))
+    rerender(sheet(true))
+    settle()
+    expect(transform()).toBe('translateY(0px)')
+
+    // The finger from before, still moving: it belongs to the old opening.
+    fireEvent.touchMove(list(), at(400))
+    expect(transform()).toBe('translateY(0px)')
+    fireEvent.touchEnd(list(), lift(400))
+
+    fireEvent.touchStart(list(), at(300))
+    fireEvent.touchMove(list(), at(310))
+    fireEvent.touchMove(list(), at(330))
+    expect(transform()).toBe('translateY(20px)')
   })
 })
