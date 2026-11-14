@@ -1,5 +1,17 @@
 @import 'tailwindcss';
 
+/* Tailwind 4 stopped giving buttons a pointer, so on a computer the arrow stayed an arrow
+   over every day and every button, and nothing looked pressable. In the base layer so a
+   cursor utility on an element still wins over it; a disabled button is left out, so it
+   keeps its own cursor and does not invite a press that does nothing. */
+@layer base {
+  button:not(:disabled),
+  [role='button'],
+  label[for] {
+    cursor: pointer;
+  }
+}
+
 /* Custom CSS Variables - SaaS Modern Style */
 :root {
   /* Backgrounds */
