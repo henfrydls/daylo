@@ -985,6 +985,29 @@ test.describe('the reminder sheet on a phone', () => {
     const viewport = page.viewportSize()!
     expect(viewport.height - (box.y + box.height)).toBeGreaterThanOrEqual(34)
   })
+
+  /**
+   * What the build that is published says under the time, with EXACT_ALARMS_DECLARED as it
+   * is in src/lib/reminders.ts rather than as a unit test sets it.
+   *
+   * The fake above answers no to every command it does not name, exact_alarms_allowed
+   * included, which is what a phone that has not granted "Alarms & reminders" answers. 1.5.3
+   * declares the permission, so that person is told the reminder can be late and offered the
+   * phone's screen. When the switch goes off, as 1.5.4 is meant to, this screen shows one
+   * line and nothing to press instead, and this test has to change with it: it is in the
+   * list on EXACT_ALARMS_DECLARED.
+   */
+  test('offers the phone screen to somebody who has not allowed exact alarms', async ({ page }) => {
+    await openTheReminderSheet(page, { enabled: true })
+
+    const details = page.getByTestId('reminder-details')
+    await expect(details).toContainText(
+      'Android may send this an hour or more late, unless Daylo is allowed to remind you on time.'
+    )
+    await expect(page.getByTestId('reminder-exact')).toBeVisible()
+    await expect(page.getByTestId('reminder-exact')).toContainText('Allow on-time reminders')
+    await expect(details).not.toContainText('Android picks the exact moment')
+  })
 })
 
 // ── A window that is not tall ─────────────────────────────
