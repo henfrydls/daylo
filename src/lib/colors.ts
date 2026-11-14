@@ -28,17 +28,34 @@ export const ACTIVITY_COLORS = [
 ] as const
 
 /**
+ * A hex color in one spelling: uppercase, six digits. A backup can carry "#10b981" or
+ * "#1B9", which an import accepts, and read as written the first is not the #10B981 the
+ * palette calls green.
+ */
+function canonicalHex(color: string): string {
+  const hex = color.trim().toUpperCase()
+  return /^#[0-9A-F]{3}$/.test(hex)
+    ? `#${hex[1]}${hex[1]}${hex[2]}${hex[2]}${hex[3]}${hex[3]}`
+    : hex
+}
+
+/** Whether two hex colors are the same color, however each is written. */
+export function sameColor(a: string, b: string): boolean {
+  return canonicalHex(a) === canonicalHex(b)
+}
+
+/**
  * The color a new activity starts on: the first in the palette that no activity wears
  * yet. Starting every one on the first color made two or three activities created
  * without touching the picker all the same green, and their dots in the month could not
  * be told apart.
  *
- * Compared exactly, the way the picker decides which colors to dim, so what is offered
- * is never one the picker shows as taken. When every color is taken the first one is
- * offered, as before: repeating a color is allowed, just unhelpful.
+ * Compared with sameColor, the way the picker decides which colors to dim, so what is
+ * offered is never one the picker shows as taken. When every color is taken the first
+ * one is offered, as before: repeating a color is allowed, just unhelpful.
  */
 export function firstFreeColor(colorsInUse: readonly string[]): string {
-  const free = ACTIVITY_COLORS.find((c) => !colorsInUse.includes(c.value))
+  const free = ACTIVITY_COLORS.find((c) => !colorsInUse.some((used) => sameColor(used, c.value)))
   return (free ?? ACTIVITY_COLORS[0]).value
 }
 

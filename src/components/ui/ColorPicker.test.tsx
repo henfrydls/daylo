@@ -62,4 +62,15 @@ describe('ColorPicker and the colors other activities already wear', () => {
 
     expect(screen.queryByRole('radio', { name: /already in use/i })).toBeNull()
   })
+
+  // A backup can carry the same color written another way. It is still the color in use.
+  it('marks a color in use however its hex is written', () => {
+    renderPicker({
+      colors: [...COLORS, { name: 'Sea', value: '#11BB99' }],
+      colorsInUse: ['#3b82f6', '#1b9'],
+    })
+
+    expect(screen.getByRole('radio', { name: /blue color, already in use/i })).toBeInTheDocument()
+    expect(screen.getByRole('radio', { name: /sea color, already in use/i })).toBeInTheDocument()
+  })
 })

@@ -5,6 +5,7 @@ import {
   HEATMAP_COLORS,
   ACTIVITY_COLORS,
   firstFreeColor,
+  sameColor,
 } from './colors'
 
 describe('colors utility functions', () => {
@@ -78,6 +79,24 @@ describe('colors utility functions', () => {
 
   // Two or three activities made without touching the picker all came out the same green,
   // and their dots in the month could not be told apart.
+  // A backup can carry a color written by hand or by another tool: "#10b981" or "#1B9".
+  // Read as written, the first was not the green the palette calls #10B981, so it was
+  // neither dimmed in the picker nor skipped when a new activity was given a color.
+  describe('sameColor', () => {
+    it('ignores the case a color is written in', () => {
+      expect(sameColor('#10b981', '#10B981')).toBe(true)
+    })
+
+    it('reads the short form as the long one', () => {
+      expect(sameColor('#1b9', '#11BB99')).toBe(true)
+      expect(sameColor('#1B9', '#10B981')).toBe(false)
+    })
+
+    it('tells different colors apart', () => {
+      expect(sameColor('#10B981', '#3B82F6')).toBe(false)
+    })
+  })
+
   describe('firstFreeColor', () => {
     it('offers the first color when nothing wears one yet', () => {
       expect(firstFreeColor([])).toBe(ACTIVITY_COLORS[0].value)
@@ -86,6 +105,11 @@ describe('colors utility functions', () => {
     it('skips the colors other activities already wear', () => {
       expect(firstFreeColor(['#10B981'])).toBe('#3B82F6')
       expect(firstFreeColor(['#10B981', '#3B82F6'])).toBe('#8B5CF6')
+    })
+
+    it('counts a color written in lowercase as the palette color it is', () => {
+      expect(firstFreeColor(['#10b981'])).toBe('#3B82F6')
+      expect(firstFreeColor(['#10b981', '#3b82f6'])).toBe('#8B5CF6')
     })
 
     it('fills a gap before going further down the palette', () => {

@@ -1,4 +1,5 @@
 import { memo, useCallback, useEffect, useRef, useState } from 'react'
+import { sameColor } from '../../lib/colors'
 
 export interface ColorOption {
   name: string
@@ -70,9 +71,14 @@ export const ColorPicker = memo(function ColorPicker({
   // Dropped when every color is taken: dimming all of them tells the person nothing and
   // makes the palette look broken, and repeating a color has to stay possible or the
   // seventeenth activity could not be created at all.
-  const everyColorTaken = !!colorsInUse && colors.every((c) => colorsInUse.includes(c.value))
+  //
+  // Compared with sameColor rather than as strings: a backup can carry "#10b981" for the
+  // green the palette writes "#10B981", and it is still the green somebody is using.
+  const taken = (colorValue: string) =>
+    !!colorsInUse && colorsInUse.some((used) => sameColor(used, colorValue))
+  const everyColorTaken = !!colorsInUse && colors.every((c) => taken(c.value))
   const isInUse = (colorValue: string) =>
-    !!colorsInUse && !everyColorTaken && colorValue !== value && colorsInUse.includes(colorValue)
+    !everyColorTaken && !sameColor(colorValue, value) && taken(colorValue)
 
   const [expanded, setExpanded] = useState(false)
   const [autoCount, setAutoCount] = useState<number>(0)
