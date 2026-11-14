@@ -621,6 +621,10 @@ test.describe('modal actions', () => {
  * because the test is about a width, not about the flow that produces it.
  */
 async function seedFullYear(page: import('@playwright/test').Page) {
+  // Daylo opens on today, so the clock decides which year is on screen. Pinned to 2026,
+  // the year the logs below are in, or from January 2027 this would draw an empty year.
+  // Only Date is pinned: timers and animations run as they would.
+  await page.clock.setFixedTime(new Date('2026-11-13T12:00:00'))
   // addInitScript, not evaluate-then-reload: the store persists through a deferred write,
   // so its own empty state can land on top of a seed written after the app has started.
   // This runs before any app code does, and the app finds the data already there.
@@ -1058,6 +1062,11 @@ async function seedYear(
     },
     { count, mode }
   )
+  // Daylo opens on today, so the clock decides which month and year are on screen: the
+  // end of September 2026, the last month the logs above reach. Without it the month view
+  // opened on an empty November, and from 2027 the year on an empty year. Only Date is
+  // pinned: timers and animations run as they would.
+  await page.clock.setFixedTime(new Date('2026-09-30T12:00:00'))
   await page.goto('/')
   await page.waitForSelector('#main-content')
   // Daylo always opens on the month, so the year is reached the way a person reaches it.

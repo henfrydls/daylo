@@ -1,5 +1,17 @@
 import { describe, it, expect, beforeEach } from 'vitest'
-import { useCalendarStore, STORAGE_KEY } from './index'
+import { useCalendarStore, STORAGE_KEY, WHERE_SOMEBODY_IS } from './index'
+
+/**
+ * Every test starts from the store a launch starts from. Without this a test inherits
+ * whatever the one before it set (March 2024, the year view), and passes or fails by the
+ * order they run in. The write the reset schedules is let through before the storage is
+ * cleared, or it would land on top of what the test puts there.
+ */
+async function freshLaunch() {
+  useCalendarStore.setState(useCalendarStore.getInitialState(), true)
+  await new Promise((resolve) => setTimeout(resolve, 20))
+  localStorage.clear()
+}
 
 /**
  * Daylo is for today. Where it opened was wherever it was left, which is a different app:
@@ -26,9 +38,7 @@ function savedLookingAtMarch(): string {
 }
 
 describe('opening on today', () => {
-  beforeEach(() => {
-    localStorage.clear()
-  })
+  beforeEach(freshLaunch)
 
   it('does not reopen the day that was open when Daylo was closed', async () => {
     localStorage.setItem(STORAGE_KEY, savedLookingAtMarch())
@@ -82,14 +92,7 @@ describe('opening on today', () => {
  * and no obvious way to tick today off, which is what they had opened Daylo to do.
  */
 describe('opening on the month', () => {
-  beforeEach(async () => {
-    // A launch starts from the month, and the tests above leave the store on whatever
-    // they set. The write this reset schedules is let through before the storage is
-    // cleared, or it would land on top of what the test puts there.
-    useCalendarStore.setState({ currentView: 'month' })
-    await new Promise((resolve) => setTimeout(resolve, 20))
-    localStorage.clear()
-  })
+  beforeEach(freshLaunch)
 
   it('opens on the month even when the year was on screen when Daylo was closed', async () => {
     localStorage.setItem(
@@ -113,5 +116,27 @@ describe('opening on the month', () => {
     expect(stored.state).not.toHaveProperty('currentView')
     // And the write did happen, so the line above is about what it carried.
     expect(stored.state).toHaveProperty('yearMode')
+  })
+})
+
+/**
+ * The two halves read the same list. partialize names what is kept and merge drops what is
+ * not, and the day a new place is added to the store it has to be left out of one and
+ * dropped by the other; checked here against the list rather than against four names
+ * written out again.
+ */
+describe('where somebody is', () => {
+  beforeEach(freshLaunch)
+
+  it.each(WHERE_SOMEBODY_IS)('is not written: %s', (place) => {
+    const partialize = useCalendarStore.persist.getOptions().partialize!
+    expect(partialize(useCalendarStore.getState())).not.toHaveProperty(place)
+  })
+
+  it.each(WHERE_SOMEBODY_IS)('is dropped when read back: %s', (place) => {
+    const merge = useCalendarStore.persist.getOptions().merge!
+    const current = useCalendarStore.getState()
+    const stored = { [place]: 'from disk' }
+    expect(merge(stored, current)[place]).toBe(current[place])
   })
 })

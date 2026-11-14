@@ -300,12 +300,29 @@ interface CalendarState {
   getLogsForActivity: (activityId: string) => ActivityLog[]
 }
 
+/**
+ * Where somebody is, as opposed to what they have. None of these is written to disk, and
+ * merge drops each of them on the way in, because every copy installed before 1.5.3 has
+ * them stored. One list for both halves, so the next place added to the store cannot be
+ * left out of one of them; `src/store/open-on-today.test.ts` checks both against it.
+ */
+const OPENED_AT = new Date()
+
+export const WHERE_SOMEBODY_IS = [
+  'selectedDate',
+  'selectedMonth',
+  'selectedYear',
+  'currentView',
+] as const satisfies readonly (keyof CalendarState)[]
+
 export const useCalendarStore = create<CalendarState>()(
   persist(
     (set, get) => ({
       activities: [],
       logs: [],
-      selectedYear: new Date().getFullYear(),
+      // One reading of the clock for both, so a store built in the last instant of
+      // December cannot come up with this year's December's month and next year's year.
+      selectedYear: OPENED_AT.getFullYear(),
       selectedDate: null,
       // Month, everywhere. The year view answers "how did the year go"; the month view is
       // where a person ticks today off, which is what they open the app to do. This used
@@ -319,7 +336,7 @@ export const useCalendarStore = create<CalendarState>()(
       // today off. The year is one tap away for whoever wants it.
       currentView: 'month' as ViewType,
       yearMode: 'all' as const,
-      selectedMonth: new Date().getMonth(),
+      selectedMonth: OPENED_AT.getMonth(),
       _hasHydrated: false,
       _viewTransitionDirection: null as ViewTransitionDirection,
 
@@ -573,10 +590,7 @@ export const useCalendarStore = create<CalendarState>()(
         // the fixed one. The fix that works on the next launch and not on this one is the
         // fix nobody sees.
         const stored = { ...(persisted as Partial<CalendarState>) }
-        delete stored.selectedDate
-        delete stored.selectedMonth
-        delete stored.selectedYear
-        delete stored.currentView
+        for (const place of WHERE_SOMEBODY_IS) delete stored[place]
         return {
           ...current,
           ...stored,
