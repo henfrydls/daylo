@@ -61,6 +61,22 @@ done
 log() { echo "[$(date +%T)] $*" | tee -a "$OUT/log.txt"; }
 sh_() { adb shell "$@" | tr -d '\r'; }
 
+# The WebView's DevTools socket for the app's current process, waiting up to 60 s for it.
+# A fixed 10 s was not enough in run 43608923559: the control's first start had no socket
+# yet, and the whole control phase was lost.
+devtools_socket() {
+  local pid sock
+  for _ in $(seq 1 30); do
+    pid=$(sh_ pidof "$PKG")
+    if [ -n "$pid" ]; then
+      sock=$(sh_ cat /proc/net/unix | grep -o "webview_devtools_remote_$pid" | head -1)
+      [ -n "$sock" ] && { echo "$sock"; return 0; }
+    fi
+    sleep 2
+  done
+  return 1
+}
+
 wait_for_boot() {
   # Bounded: run 43602238149 hung here for 42 minutes after a reboot until the job was
   # cancelled, and nothing it measured could be read.
@@ -160,11 +176,8 @@ phase() {
 
   # First start, only so there is a WebView to talk to.
   sh_ am start -W -n "$ACTIVITY" >/dev/null
-  sleep 10
   local pid sock
-  pid=$(sh_ pidof "$PKG")
-  sock=$(sh_ cat /proc/net/unix | grep -o "webview_devtools_remote_$pid" | head -1)
-  [ -n "$sock" ] || { log "no DevTools socket (is this a debug APK?)"; return 1; }
+  sock=$(devtools_socket) || { log "no DevTools socket after 60 s (is this a debug APK?)"; return 1; }
   adb forward "tcp:$PORT" "localabstract:$sock" >/dev/null
 
   # Somebody with one activity and the reminder on, written where the app reads it. The
@@ -204,8 +217,7 @@ phase() {
 
   # Did the seed survive into the app that schedules? Without this, a lost seed reads as
   # "the change does not work" when nothing was ever turned on.
-  pid=$(sh_ pidof "$PKG")
-  sock=$(sh_ cat /proc/net/unix | grep -o "webview_devtools_remote_$pid" | head -1)
+  sock=$(devtools_socket) || sock=
   if [ -n "$sock" ]; then
     adb forward "tcp:$PORT" "localabstract:$sock" >/dev/null
     node "$HERE/cdp-eval.mjs" "$PORT" "(() => {
