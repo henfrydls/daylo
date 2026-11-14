@@ -169,7 +169,12 @@ strip = false
 # "null". Now `show` stores the request as it arrived from Rust, allowWhileIdle included,
 # the receivers read it with a mapper configured like the plugin's own, and the same
 # receiver also runs on MY_PACKAGE_REPLACED. Re-arming an alarm that is still there
-# replaces it under the same id rather than adding a second.
+# replaces it under the same id rather than adding a second, and leaves an unread reminder
+# in the tray where it is. Each stored entry is restored on its own, the reminder is shown
+# before anything else can fail, and an exact alarm is asked for only when the installed
+# manifest still requests the permission, so the update that drops it does not arm one
+# that Android removes a moment later. The plugin's unit tests run in Build Check
+# (Android), in ci.yml.
 #
 # The update case is the reason this ships before 1.5.4 drops SCHEDULE_EXACT_ALARM.
 # Android removes an app's exact alarms when an update stops declaring that permission,
@@ -186,4 +191,4 @@ strip = false
 #
 # It goes upstream once it has been measured on a phone over two nights.
 [patch.crates-io]
-tauri-plugin-notification = { git = "https://github.com/henfrydls/plugins-workspace", rev = "e09567158f84943bec3b8779136763e5e7394db5" }
+tauri-plugin-notification = { git = "https://github.com/henfrydls/plugins-workspace", rev = "5f31787a9e44d91bf3339ec693308cfc7a1d11f2" }
