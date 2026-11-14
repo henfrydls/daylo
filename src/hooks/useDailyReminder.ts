@@ -4,6 +4,7 @@ import {
   askForExactAlarms,
   disableReminder,
   enableReminder,
+  EXACT_ALARMS_DECLARED,
   exactAlarmsAllowed,
   formatReminderTime,
 } from '../lib/reminders'
@@ -22,6 +23,7 @@ interface DailyReminder {
   /**
    * Whether it will arrive at the time it was set for. False means it still arrives, but
    * Android is free to move it, so the screen says so and offers the way to change it.
+   * Always true in a build without EXACT_ALARMS_DECLARED, where nothing is asked.
    */
   onTime: boolean
   /** Open the phone's own screen where arriving on time is allowed. */
@@ -65,8 +67,11 @@ export function useDailyReminder(): DailyReminder {
   // granted on a screen that belongs to the phone and not to Daylo. Coming back is the
   // only moment the app can learn the answer changed, and without it the sheet would go
   // on offering a fix for something already fixed.
+  //
+  // Not at all in a build that does not declare the permission: there the answer is
+  // always no, and an answer that is always no would put up an offer nobody can take.
   useEffect(() => {
-    if (!enabled) return
+    if (!enabled || !EXACT_ALARMS_DECLARED) return
     let listening = true
     const ask = () => {
       void exactAlarmsAllowed().then((allowed) => {
@@ -157,6 +162,8 @@ export function useDailyReminder(): DailyReminder {
   // Nothing is awaited beyond the screen opening, and nothing is re-asked here: whatever
   // the person decides over there arrives through the effect above when they come back.
   const askForTime = async (): Promise<void> => {
+    // The screen it opens does not list Daylo when the permission is not declared.
+    if (!EXACT_ALARMS_DECLARED) return
     await askForExactAlarms()
   }
 
