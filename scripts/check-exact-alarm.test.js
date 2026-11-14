@@ -70,6 +70,19 @@ describe('the exact-alarm permission', () => {
     ).toBe(true)
   })
 
+  // The older spelling of the same element. The framework's parser still takes it
+  // (ParsingPackageUtils, TAG_USES_PERMISSION_SDK_M), so a manifest that uses it asks for
+  // the permission all the same.
+  it('is counted when it is declared with the older spelling for Android 6 and up', () => {
+    expect(
+      declaresExactAlarms(
+        inAManifest(
+          '<uses-permission-sdk-m android:name="android.permission.SCHEDULE_EXACT_ALARM" />'
+        )
+      )
+    ).toBe(true)
+  })
+
   it('is counted when the name is in single quotes', () => {
     expect(
       declaresExactAlarms(
@@ -153,9 +166,20 @@ describe('the switch, read from the source', () => {
     ).toBe(false)
     expect(
       switchIn(
-        '/*\nexport const EXACT_ALARMS_DECLARED: boolean = false\n*/\nexport const EXACT_ALARMS_DECLARED: boolean = true\n'
+        '  /** export const EXACT_ALARMS_DECLARED: boolean = false */\n  export const EXACT_ALARMS_DECLARED: boolean = true\n'
       )
     ).toBe(true)
+  })
+
+  // Only lines that begin with the declaration count, so a copy of it at the start of a
+  // line inside a block comment counts as a second switch. Refused rather than parsed: the
+  // reader does not understand comments, and says so instead of guessing which one is real.
+  it('refuses a second declaration even inside a block comment', () => {
+    expect(() =>
+      switchIn(
+        '/*\nexport const EXACT_ALARMS_DECLARED: boolean = false\n*/\nexport const EXACT_ALARMS_DECLARED: boolean = true\n'
+      )
+    ).toThrow()
   })
 
   it('refuses two switches rather than picking one', () => {

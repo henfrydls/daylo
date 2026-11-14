@@ -35,24 +35,31 @@ const TOOLS_NS = 'http://schemas.android.com/tools'
 /**
  * The value of EXACT_ALARMS_DECLARED, read from the source of reminders.ts.
  *
- * Comments are taken out first, so a line commented out above the real one cannot win.
- * Throws rather than guessing when the line is not there in the shape it is written in, or
- * is there twice: a switch this cannot read is a switch it cannot compare, and calling that
- * "off" would pass the one case this exists to catch.
+ * Only lines that begin, after their indentation, with `export const EXACT_ALARMS_DECLARED`
+ * are looked at, so a commented-out copy above the real one does not count: it begins with
+ * the comment. There has to be exactly one such line, and it has to say `= true` or
+ * `= false`. Anything else throws rather than guessing: a switch this cannot read is a
+ * switch it cannot compare, and calling that "off" would pass the one case this exists to
+ * catch. That includes a copy at the start of a line inside a block comment, which this
+ * does not try to understand and refuses instead.
  */
 export function switchIn(source) {
-  const withoutComments = source.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/.*$/gm, '')
-  const matches = [
-    ...withoutComments.matchAll(
-      /^\s*export const EXACT_ALARMS_DECLARED(?::\s*boolean)?\s*=\s*(true|false)\b/gm
-    ),
-  ]
-  if (matches.length !== 1) {
+  const declarations = source
+    .split(/\r?\n/)
+    .filter((line) => /^\s*export const EXACT_ALARMS_DECLARED\b/.test(line))
+  if (declarations.length !== 1) {
     throw new Error(
-      `EXACT_ALARMS_DECLARED is in reminders.ts ${matches.length} times as \`= true\` or \`= false\`, and has to be there once`
+      `EXACT_ALARMS_DECLARED is declared ${declarations.length} times in reminders.ts, and has to be declared once`
     )
   }
-  return matches[0][1] === 'true'
+  const value =
+    /^\s*export const EXACT_ALARMS_DECLARED(?::\s*boolean)?\s*=\s*(true|false)\s*;?\s*$/.exec(
+      declarations[0]
+    )
+  if (!value) {
+    throw new Error('EXACT_ALARMS_DECLARED is not written as `= true` or `= false` in reminders.ts')
+  }
+  return value[1] === 'true'
 }
 
 const withoutXmlComments = (xml) => xml.replace(/<!--[\s\S]*?-->/g, '')
@@ -78,9 +85,9 @@ function prefixFor(xml, namespace, usual) {
  * Comments are taken out first, because the comment beside that line is where the
  * permission gets explained, and it names the permission whether or not it is declared.
  *
- * Then every request is read, in both of the forms Android has: `uses-permission` and
- * `uses-permission-sdk-23`, which asks for the same thing on Android 6 and up and which
- * Play counts all the same. XML lets an attribute be quoted either way, and the prefixes
+ * Then every request is read, in every form Android has: `uses-permission`, and
+ * `uses-permission-sdk-23` with its older spelling `uses-permission-sdk-m`, which ask for
+ * the same thing on Android 6 and up and which Play counts all the same. XML lets an attribute be quoted either way, and the prefixes
  * are whatever the manifest binds the Android and tools namespaces to. And a line marked
  * `tools:node="remove"` names the permission to take it away: it is how an app removes one
  * a library brought in, so it is the opposite of a request.
@@ -90,7 +97,7 @@ export function exactAlarmPermissionsIn(xml) {
   const android = prefixFor(text, ANDROID_NS, 'android')
   const tools = prefixFor(text, TOOLS_NS, 'tools')
   if (android === null) return []
-  const requests = text.match(/<uses-permission(?:-sdk-23)?\s[^>]*>/g) ?? []
+  const requests = text.match(/<uses-permission(?:-sdk-23|-sdk-m)?\s[^>]*>/g) ?? []
   const found = new Set()
   for (const tag of requests) {
     const attributes = {}
