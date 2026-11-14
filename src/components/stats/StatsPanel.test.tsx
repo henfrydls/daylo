@@ -46,10 +46,17 @@ describe('what the panel no longer says', () => {
   // happened yet, and the end once yesterday is missing too, plus the one about crossing
   // the new year. The fourth, that the number is the same whatever year is on screen, is
   // now in App.test.tsx, because that is where the number is.
-  it('does not say the current streak any more', () => {
+  //
+  // The whole list rather than the absence of one label: a card for the run under any
+  // other name would walk straight past a search for "Current Streak".
+  it('has these three figures and no other', () => {
     show(['2026-03-02', '2026-03-03', '2026-03-04'])
 
-    expect(screen.queryByText('Current Streak')).not.toBeInTheDocument()
+    expect(screen.getAllByTestId('stat-label').map((label) => label.textContent)).toEqual([
+      'Active Days',
+      'This Month',
+      'Longest Streak',
+    ])
   })
 
   // Three cards in a two column grid leaves a hole. The two that follow the year on screen
@@ -111,10 +118,10 @@ describe('with nothing logged', () => {
   })
 })
 
-// Each figure says what period it covers, because the four are not all about the same
+// Each figure says what period it covers, because the three are not all about the same
 // one: looking at a year with nothing in it, "Active Days 0 this year" sits beside a
-// current streak that is alive today, and without the subtitles the 4 reads as if it
-// belonged to the year on screen.
+// longest streak of 4 earned in another year, and without the subtitles the 4 reads as
+// if it belonged to the year on screen.
 describe('what period each figure covers', () => {
   it('says it under the number', () => {
     show(['2026-03-04'])

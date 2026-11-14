@@ -1,3 +1,3 @@
-**Your current run is now only at the top of the screen, not in the statistics panel as
-well.** It was in both, and two places showing the same number is how they end up
-disagreeing. The panel still has your longest run ever, now across the full width.
+**The statistics panel now gives your longest run the full width.** Your current run moved
+to the top of the screen, so the panel and the line under the year on a phone no longer
+repeat it.

@@ -372,12 +372,14 @@ test.describe('Activity Tracker App', () => {
     // an unscoped query now finds both and fails on strict mode rather than on the panel.
     const stats = page.getByTestId('stats-panel')
     await expect(stats.getByText('Statistics')).toBeVisible()
-    await expect(stats.getByText('Active Days')).toBeVisible()
-    await expect(page.getByText('Longest Streak')).toBeVisible()
-    await expect(page.getByText('This Month')).toBeVisible()
-    // The run that is still going is said in the header and nowhere else. A tile for it
-    // here would be the same number twice on one screen, which is what this panel had.
-    await expect(stats.getByText('Current Streak')).toHaveCount(0)
+    // The whole list, in order. The run that is still going is said in the header and
+    // nowhere else, and naming the three that stay is what catches a fourth under any
+    // name, where a search for "Current Streak" only catches that one spelling.
+    await expect(stats.getByTestId('stat-label')).toHaveText([
+      'Active Days',
+      'This Month',
+      'Longest Streak',
+    ])
   })
 
   test('should not show statistics when no activities exist', async ({ page }) => {
