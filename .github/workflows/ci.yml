@@ -389,12 +389,16 @@ jobs:
           echo "plugin project: $dir"
           rm -rf "$results"
 
-          ./gradlew :tauri-plugin-notification:testDebugUnitTest --console=plain
+          # A failing test makes Gradle exit non-zero. That is not the end of the step: the
+          # results are still read, so a red run says which tests failed and how many ran.
+          # Seen in #243, where a failure stopped the step before the count.
+          gradle=0
+          ./gradlew :tauri-plugin-notification:testDebugUnitTest --console=plain || gradle=$?
 
           shopt -s nullglob
           xmls=( "$results"/*.xml )
           if [ ${#xmls[@]} -eq 0 ]; then
-            echo "::error::Gradle passed and wrote no test results in $results: no test ran."
+            echo "::error::Gradle exited $gradle and wrote no test results in $results: no test ran."
             exit 1
           fi
           tests=0; bad=0
@@ -415,6 +419,10 @@ jobs:
           fi
           if [ "$tests" -lt "$MIN_TESTS" ]; then
             echo "::error::Only $tests tests ran (skipped ones not counted), expected at least $MIN_TESTS."
+            status=1
+          fi
+          if [ "$gradle" -ne 0 ]; then
+            echo "::error::Gradle exited $gradle."
             status=1
           fi
           exit "$status"
