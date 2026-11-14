@@ -641,6 +641,35 @@ describe('QuickLog', () => {
       expect(second?.color).toBe('#3B82F6')
     })
 
+    // Closing the sheet with the form open used to leave the form open, holding the color
+    // it was opened with. Another day, after an activity made some other way, opened
+    // straight onto the form and onto a color that could be taken by then.
+    it('forgets a half-made activity when the sheet closes, and offers the color free now', async () => {
+      const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime })
+      setupStoreWithActivities()
+      render(<QuickLog />)
+
+      await user.click(screen.getByTestId('quicklog-new-activity-button'))
+      expect(screen.getByTestId('quicklog-color-pink')).toHaveAttribute('aria-checked', 'true')
+
+      // Through setState rather than the action: tests above replace the action and do
+      // not put it back.
+      act(() => useCalendarStore.setState({ selectedDate: null }))
+      act(() => {
+        vi.advanceTimersByTime(400)
+      })
+      act(() => useCalendarStore.getState().addActivity('Elsewhere', '#EC4899'))
+      act(() => useCalendarStore.setState({ selectedDate: '2024-01-16' }))
+      act(() => {
+        vi.advanceTimersByTime(400)
+      })
+
+      expect(screen.queryByTestId('quicklog-new-activity-input')).not.toBeInTheDocument()
+
+      await user.click(screen.getByTestId('quicklog-new-activity-button'))
+      expect(screen.getByTestId('quicklog-color-orange')).toHaveAttribute('aria-checked', 'true')
+    })
+
     it('moves on to the next free color for the activity after that', async () => {
       const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime })
       setupStoreWithActivities()

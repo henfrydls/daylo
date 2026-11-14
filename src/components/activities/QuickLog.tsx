@@ -18,7 +18,9 @@ export const QuickLog = memo(function QuickLog() {
 
   const [isCreating, setIsCreating] = useState(false)
   const [newName, setNewName] = useState('')
-  const [newColor, setNewColor] = useState<string>(ACTIVITY_COLORS[0].value)
+  // Only what the person picked. Until they pick, the form offers the first color free
+  // at that moment, worked out as it is drawn, so it cannot go stale while it waits.
+  const [pickedColor, setPickedColor] = useState<string | null>(null)
   const [bouncingId, setBouncingId] = useState<string | null>(null)
   const nameInputRef = useRef<HTMLInputElement>(null)
   const modalRef = useRef<HTMLDivElement>(null)
@@ -26,6 +28,7 @@ export const QuickLog = memo(function QuickLog() {
   // Every color already worn by an activity: this form only ever creates, so none of
   // them belongs to what is being edited.
   const colorsInUse = useMemo(() => activities.map((a) => a.color), [activities])
+  const newColor = pickedColor ?? firstFreeColor(colorsInUse)
 
   const handleClose = useCallback(() => {
     setSelectedDate(null)
@@ -41,6 +44,16 @@ export const QuickLog = memo(function QuickLog() {
 
   const isOpen = !!selectedDate
   const { shouldRender, isVisible } = useAnimatedPresence(isOpen, 250)
+
+  // A half-made activity goes with the sheet. Closing it with the form open used to leave
+  // the form open, holding the color it was opened with, and the next day opened straight
+  // onto it. Once the sheet has finished leaving, not as it starts to, so the form does
+  // not fold up while it is still sliding away.
+  if (!shouldRender && (isCreating || newName !== '' || pickedColor !== null)) {
+    setIsCreating(false)
+    setNewName('')
+    setPickedColor(null)
+  }
 
   /**
    * One frame under the bottom edge before it comes up.
@@ -122,13 +135,11 @@ export const QuickLog = memo(function QuickLog() {
     [selectedDate, toggleLog]
   )
 
-  // The color is chosen here, each time the form opens, and nowhere else: resetting it on
-  // the way out would pick from the activities as they were before the one just made.
   const handleStartCreating = useCallback((): void => {
     setIsCreating(true)
     setNewName('')
-    setNewColor(firstFreeColor(colorsInUse))
-  }, [colorsInUse])
+    setPickedColor(null)
+  }, [])
 
   const handleCancelCreating = useCallback((): void => {
     setIsCreating(false)
@@ -195,7 +206,7 @@ export const QuickLog = memo(function QuickLog() {
       </div>
       <ColorPicker
         value={newColor}
-        onChange={setNewColor}
+        onChange={setPickedColor}
         colors={ACTIVITY_COLORS}
         colorsInUse={colorsInUse}
         size="sm"
