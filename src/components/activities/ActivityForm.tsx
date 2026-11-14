@@ -2,7 +2,7 @@ import { useState, useCallback, useMemo, memo } from 'react'
 import { Button, Checkbox, ColorPicker, Modal } from '../ui'
 import { ACTIVITY_COLORS, firstFreeColor } from '../../lib/colors'
 import { useCalendarStore } from '../../store'
-import { formatDate } from '../../lib/dates'
+import { useToday } from '../../lib/today'
 import type { Activity } from '../../types'
 import { LONGEST_NAME } from '../../lib/limits'
 
@@ -32,7 +32,11 @@ export const ActivityForm = memo(function ActivityForm({
   // or for a new one the first color nobody wears yet, worked out as it is drawn.
   const [pickedColor, setPickedColor] = useState<string | null>(null)
   const [logForDate, setLogForDate] = useState(false)
-  const [selectedDate, setSelectedDate] = useState(formatDate(new Date()))
+  // The app's day and not the clock's. Opened just after midnight while the new day is
+  // still waiting, the form would otherwise offer tomorrow beside a calendar on today, and
+  // a habit logged from it would land on a day the screen is not showing.
+  const today = useToday()
+  const [selectedDate, setSelectedDate] = useState(today)
 
   // Use individual selectors to prevent over-subscription
   const activities = useCalendarStore((state) => state.activities)
@@ -64,7 +68,7 @@ export const ActivityForm = memo(function ActivityForm({
       setName(activity?.name || '')
       setPickedColor(null)
       setLogForDate(false)
-      setSelectedDate(formatDate(new Date()))
+      setSelectedDate(today)
     }
   }
 

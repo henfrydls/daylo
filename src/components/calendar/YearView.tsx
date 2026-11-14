@@ -12,6 +12,7 @@ import { calculateHeatmapLevel } from '../../lib/colors'
 import { completedDates, summariseActivities } from '../../lib/activityYear'
 import { currentStreak } from '../../lib/streaks'
 import { useMediaQuery } from '../../hooks/useMediaQuery'
+import { useTodayDate } from '../../lib/today'
 import { useShallow } from 'zustand/react/shallow'
 import { plural } from '../../lib/plural'
 
@@ -23,6 +24,8 @@ export const YearView = memo(function YearView() {
   const logs = useCalendarStore(useShallow((state) => state.logs))
   const selectedDate = useCalendarStore((state) => state.selectedDate)
   const setSelectedDate = useCalendarStore((state) => state.setSelectedDate)
+  // The app's day, not the clock's: see useTodayDate.
+  const today = useTodayDate()
   const setSelectedYear = useCalendarStore((state) => state.setSelectedYear)
   const navigateToMonth = useCalendarStore((state) => state.navigateToMonth)
   // On the phone a month card walks the same rail the finger would, so the three ways into
@@ -82,11 +85,10 @@ export const YearView = memo(function YearView() {
    * than a zero, because nothing was missed yet and 0% reads as a failure.
    */
   const monthCompletion = useMemo(() => {
-    const now = new Date()
     return Array.from({ length: 12 }, (_, month) => {
       if (
-        selectedYear > now.getFullYear() ||
-        (selectedYear === now.getFullYear() && month > now.getMonth())
+        selectedYear > today.getFullYear() ||
+        (selectedYear === today.getFullYear() && month > today.getMonth())
       ) {
         return { month, percentage: null }
       }
@@ -98,7 +100,7 @@ export const YearView = memo(function YearView() {
       }
       return { month, percentage: Math.round((done / daysInMonth) * 100) }
     })
-  }, [dayDataMap, selectedYear])
+  }, [dayDataMap, selectedYear, today])
 
   /**
    * The phone's strips end on the week we are in, or on the last week of a year already
@@ -106,17 +108,16 @@ export const YearView = memo(function YearView() {
    * today.
    */
   const stripEnd = useMemo(() => {
-    const now = new Date()
     const endOfSelected = new Date(selectedYear, 11, 31)
-    return now < endOfSelected ? now : endOfSelected
-  }, [selectedYear])
+    return today < endOfSelected ? today : endOfSelected
+  }, [selectedYear, today])
 
   /**
    * The run ending today, over every log rather than over the year on screen: a streak
    * belongs to the person and not to the calendar, so it neither resets on 1 January nor
    * changes because somebody looked at an older year.
    */
-  const streakToday = useMemo(() => currentStreak(completedDates(logs), new Date()), [logs])
+  const streakToday = useMemo(() => currentStreak(completedDates(logs), today), [logs, today])
 
   const activityRows = useMemo(
     () => summariseActivities(activities, logs, stripEnd),
@@ -132,8 +133,8 @@ export const YearView = memo(function YearView() {
     [setSelectedYear, selectedYear]
   )
   const handleCurrentYear = useCallback(
-    () => setSelectedYear(new Date().getFullYear()),
-    [setSelectedYear]
+    () => setSelectedYear(today.getFullYear()),
+    [setSelectedYear, today]
   )
 
   /**

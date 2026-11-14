@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach } from 'vitest'
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import { useCalendarStore } from './index'
 
 describe('useCalendarStore', () => {
@@ -395,6 +395,78 @@ describe('useCalendarStore', () => {
       const logsForActivity = useCalendarStore.getState().getLogsForActivity(activity.id)
       expect(logsForActivity.length).toBe(3)
     })
+  })
+})
+
+// A window left open overnight wakes up on a new day. What it was looking at yesterday
+// stops being where somebody wants to be, and yesterday's sheet open on "today" is the
+// failure this exists to end. What they chose to look at, and everything else about the
+// session, stays.
+describe('starting a new day', () => {
+  beforeEach(() => {
+    vi.useFakeTimers({ toFake: ['Date'] })
+    vi.setSystemTime(new Date(2026, 11, 1, 8, 30))
+  })
+
+  afterEach(() => {
+    vi.useRealTimers()
+  })
+
+  it('goes to the month that holds today and closes the day sheet', () => {
+    useCalendarStore.setState({ selectedYear: 2026, selectedMonth: 10, selectedDate: '2026-11-30' })
+
+    useCalendarStore.getState().startNewDay('2026-12-01')
+
+    const state = useCalendarStore.getState()
+    expect(state.selectedYear).toBe(2026)
+    expect(state.selectedMonth).toBe(11)
+    expect(state.selectedDate).toBeNull()
+  })
+
+  // The same place a fresh start opens on: Month, where today is ticked. An app that stays
+  // alive overnight, in the background on Android or open on a desktop, would otherwise
+  // greet the new day on whatever view it was left on, and a cold start would not.
+  // The day the app applied, not whatever the clock says by the time this runs. The two
+  // part when a day waited and the clock went on: the month must be the applied day's,
+  // the one the rest of the screen is drawing.
+  it('goes to the month of the day it is given, not the clock', () => {
+    vi.setSystemTime(new Date(2027, 0, 1, 0, 0, 5))
+
+    useCalendarStore.getState().startNewDay('2026-12-31')
+
+    const state = useCalendarStore.getState()
+    expect(state.selectedYear).toBe(2026)
+    expect(state.selectedMonth).toBe(11)
+  })
+
+  it('goes back to Month, as opening the app does', () => {
+    useCalendarStore.setState({ currentView: 'year', _viewTransitionDirection: 'drill-up' })
+
+    useCalendarStore.getState().startNewDay('2026-12-01')
+
+    expect(useCalendarStore.getState().currentView).toBe('month')
+    // Not the drill animation the last change of view left behind.
+    expect(useCalendarStore.getState()._viewTransitionDirection).toBeNull()
+  })
+
+  it('leaves the session alone', () => {
+    useCalendarStore.setState({
+      currentView: 'year',
+      _feedbackAsked: true,
+      _loggedThisSession: true,
+      _offerThisSession: 'reminder',
+      _checkinNoticeShown: true,
+      _hasHydrated: true,
+    })
+
+    useCalendarStore.getState().startNewDay('2026-12-01')
+
+    const state = useCalendarStore.getState()
+    expect(state._feedbackAsked).toBe(true)
+    expect(state._loggedThisSession).toBe(true)
+    expect(state._offerThisSession).toBe('reminder')
+    expect(state._checkinNoticeShown).toBe(true)
+    expect(state._hasHydrated).toBe(true)
   })
 })
 

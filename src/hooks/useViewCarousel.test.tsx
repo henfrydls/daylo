@@ -216,6 +216,50 @@ describe('crossing the rail', () => {
   })
 })
 
+// A new day waits while the views are on their way (lib/today.ts): the landing tells the
+// store which view it reached, and would write over the view the new day put there.
+describe('saying the views are on their way', () => {
+  const onItsWay = () => rail().hasAttribute('data-between-views')
+
+  it('from the moment the other view shows until the rail lands', () => {
+    render(<Harness onChange={vi.fn()} />)
+    expect(onItsWay()).toBe(false)
+
+    send('pointerdown', { x: 0, t: 0 })
+    send('pointermove', { x: -60, t: 16 })
+    expect(onItsWay()).toBe(true)
+    send('pointerup', { x: -WIDTH * 0.6, t: 32 })
+    expect(onItsWay()).toBe(true)
+
+    finish()
+    expect(onItsWay()).toBe(false)
+  })
+
+  it('when the drag goes back where it was, until it is back', () => {
+    render(<Harness onChange={vi.fn()} />)
+
+    dragBy(-40, { holdFor: 500 })
+    expect(onItsWay()).toBe(true)
+
+    finish()
+    expect(onItsWay()).toBe(false)
+  })
+
+  it('on a journey asked for by the toggle', async () => {
+    render(<Harness onChange={vi.fn()} />)
+
+    await act(async () => {
+      screen.getByText('travel').click()
+    })
+    expect(onItsWay()).toBe(true)
+
+    act(() => {
+      vi.advanceTimersByTime(1000)
+    })
+    expect(onItsWay()).toBe(false)
+  })
+})
+
 describe('what is not a gesture', () => {
   it('leaves a vertical drag to the page', () => {
     const onChange = vi.fn()
