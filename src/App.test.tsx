@@ -552,7 +552,8 @@ describe('the check-in in settings', () => {
 })
 
 // Two moments, because two kinds of device. A phone is closed and opened; a desktop is
-// left running for days and only the window coming back says a new day has started.
+// left running for days, and the day changing with it open is the other moment. Every way
+// a day can change is in App.newDay.test.tsx.
 describe('when the daily check-in is attempted', () => {
   it('asks once the store is there and the app can send', async () => {
     checkinFields.mockResolvedValue({ version: '1.3.0', os: 'linux', source: 'deb' })
@@ -569,7 +570,29 @@ describe('when the daily check-in is attempted', () => {
     expect(sendCheckinIfDue).not.toHaveBeenCalled()
   })
 
-  it('asks again when the window comes back', async () => {
+  it('asks again when the window comes back on a new day', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] })
+    try {
+      vi.setSystemTime(new Date(2026, 10, 13, 21, 0))
+      checkinFields.mockResolvedValue({ version: '1.3.0', os: 'linux', source: 'deb' })
+      render(<App />)
+      await act(async () => {})
+      sendCheckinIfDue.mockClear()
+
+      vi.setSystemTime(new Date(2026, 10, 14, 8, 30))
+      await act(async () => {
+        document.dispatchEvent(new Event('visibilitychange'))
+      })
+
+      expect(sendCheckinIfDue).toHaveBeenCalledTimes(1)
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  // Coming back on the same day asks nothing: today was already tried when the app opened,
+  // and a tried day is spent.
+  it('does not ask again when the window comes back on the same day', async () => {
     checkinFields.mockResolvedValue({ version: '1.3.0', os: 'linux', source: 'deb' })
     render(<App />)
     await act(async () => {})
@@ -579,7 +602,7 @@ describe('when the daily check-in is attempted', () => {
       document.dispatchEvent(new Event('visibilitychange'))
     })
 
-    expect(sendCheckinIfDue).toHaveBeenCalled()
+    expect(sendCheckinIfDue).not.toHaveBeenCalled()
   })
 })
 

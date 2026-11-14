@@ -277,6 +277,51 @@ describe('what the new day leaves alone', () => {
     expect(daysSent).toEqual(['2026-11-14'])
   })
 
+  describe("the new day's check-in, whichever way the day arrives", () => {
+    const daysSent: string[] = []
+
+    beforeEach(() => {
+      daysSent.length = 0
+      inTheApp.yes = true
+      checkinFields.mockResolvedValue({ version: '1.5.3', os: 'linux', source: 'deb' })
+      sendCheckinIfDue.mockImplementation(async () => {
+        daysSent.push(formatDate(new Date()))
+      })
+    })
+
+    it('is asked for once on opening, not twice', async () => {
+      render(<App />)
+      await act(async () => {})
+      await act(async () => {})
+
+      expect(daysSent).toEqual(['2026-11-13'])
+    })
+
+    it('is asked for when the window takes the focus on a new day', async () => {
+      render(<App />)
+      await act(async () => {})
+
+      await theNextMorningComes(2026, 10, 14)
+      await act(async () => {})
+
+      expect(daysSent).toEqual(['2026-11-13', '2026-11-14'])
+    })
+
+    it('is asked for when midnight passes in front of somebody', async () => {
+      // A moment before midnight, so the app's own timer is due a second or so from now.
+      vi.setSystemTime(new Date(2026, 10, 13, 23, 59, 59, 900))
+      render(<App />)
+      await act(async () => {})
+
+      vi.setSystemTime(new Date(2026, 10, 14, 0, 0, 0, 500))
+      await act(async () => {
+        await new Promise((resolve) => setTimeout(resolve, 1_500))
+      })
+
+      expect(daysSent).toEqual(['2026-11-13', '2026-11-14'])
+    })
+  })
+
   it('does not ask for a newer version because the day changed', async () => {
     inTheApp.yes = true
     installFormat.mockResolvedValue('appimage')

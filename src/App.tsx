@@ -317,10 +317,11 @@ function App() {
     DIALOG_STAYS_FOR + 50
   )
 
-  // Today's check-in, if the switch is on and today has not been tried. Twice, because
-  // there are two kinds of device: a phone is closed and opened again, which remounts
-  // this; a desktop is left running for days, and the window coming back is the only
-  // thing that says a new day has started. Whichever arrives second does nothing.
+  // Today's check-in, if the switch is on and today has not been tried. Once when the app
+  // opens, which on a phone that was closed is a new day already, and once more each time
+  // the day changes with the app open, however the app learned it: the window coming back,
+  // the focus, or midnight in front of somebody. It used to listen for the window coming
+  // back by itself, so a day that started any other way went without one.
   useEffect(() => {
     if (!hasHydrated || !canCheckIn) return
 
@@ -329,12 +330,17 @@ function App() {
     } else {
       void sendCheckinIfDue()
     }
-    const onVisible = () => {
-      if (document.visibilityState === 'visible') void sendCheckinIfDue()
-    }
-    document.addEventListener('visibilitychange', onVisible)
-    return () => document.removeEventListener('visibilitychange', onVisible)
   }, [hasHydrated, canCheckIn, checkinStart])
+
+  // The day the effect above, or this one, already asked for. Starting with the day the
+  // app opened on is what keeps this from asking a second time on opening.
+  const checkedInFor = useRef(shownDay)
+  useEffect(() => {
+    if (checkedInFor.current === shownDay) return
+    checkedInFor.current = shownDay
+    if (!hasHydrated || !canCheckIn) return
+    void sendCheckinIfDue()
+  }, [shownDay, hasHydrated, canCheckIn])
 
   // The carousel is the phone's. On a wide screen there is no finger to follow and the
   // sidebar is there instead, so the views keep changing the way they always did.
