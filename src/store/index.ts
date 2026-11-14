@@ -759,45 +759,56 @@ export const useCalendarStore = create<CalendarState>()(
 )
 
 /**
- * Whether a string from the disk is something zustand can open. Checked before taking it
- * in, because zustand answers one it cannot parse with the rescue screen, which is right
- * for a launch with nothing else to show and wrong for a window that holds good data.
+ * Whether a string from the disk is Daylo's, parsed once and checked before taking it in.
+ * zustand answers a value it cannot parse with the rescue screen, which is right for a
+ * launch with nothing else to show and wrong for a window that holds good data. And a value
+ * that parses but whose records are not lists would break every list on the screen on the
+ * first record it tried to read.
  */
-function isReadable(raw: string): boolean {
+function isDaylosData(raw: string): boolean {
+  let parsed: unknown
   try {
-    const parsed: unknown = JSON.parse(raw)
-    return (
-      typeof parsed === 'object' &&
-      parsed !== null &&
-      typeof (parsed as { state?: unknown }).state === 'object' &&
-      (parsed as { state?: unknown }).state !== null
-    )
+    parsed = JSON.parse(raw)
   } catch {
     return false
   }
+  if (typeof parsed !== 'object' || parsed === null) return false
+  const state = (parsed as { state?: unknown }).state
+  if (typeof state !== 'object' || state === null) return false
+  const { activities, logs } = state as { activities?: unknown; logs?: unknown }
+  return Array.isArray(activities) && Array.isArray(logs)
 }
 
 /**
- * Takes in what another window of Daylo wrote, before this one can write over it.
+ * Takes in what another tab of Daylo wrote, so that this tab's next write carries it.
  *
- * Somebody who thinks Daylo has not refreshed opens it again. They tick today in the new
- * window, close it, go back to the old one and tap anything: the old one wrote everything
- * it held in memory, which did not hold today, and the tick was gone without a word. Now
- * the old window reads the disk again first, so its next write carries the tick.
+ * Somebody opens Daylo in a second tab, ticks today there and closes it, goes back to the
+ * first and taps anything. The first tab wrote everything it held in memory, which did not
+ * hold today, and the tick was gone without a word. Now the first tab reads the disk again
+ * when it hears about the write, or when it comes back to the front, and its next write
+ * carries the tick. On the desktop a second launch no longer opens a second window at all:
+ * it brings back the one already open (see run() in src-tauri/src/lib.rs).
  *
- * Not when this window has a change of its own still waiting to be written: then this
- * window wins, as it always did, and the change goes out as usual. That takes ticking in
- * two windows within a second or two of each other; merging record by record would be
- * another piece of work.
+ * This narrows the window for writing over another tab and does not close it. A tab still
+ * writes its own copy over the other's when it writes before it has heard: a timer firing
+ * in a tab left in the background (the new day at midnight, the check-in), coming back to
+ * the front before the other tab's write has reached the disk, or a change of its own still
+ * on its way when the other tab's write arrives (then this tab wins, as it always did).
+ * Comparing the disk with what this tab last saw before every write, and merging record by
+ * record, is issue #248.
  *
- * Not on the rescue screen either, which exists to get the data off the disk intact, and
- * not over a disk that is empty or cannot be read: what this window holds is good, and an
+ * Not on the rescue screen, which exists to get the data off the disk intact, and not over
+ * a disk that is empty or does not hold Daylo's data: what this tab holds is good, and an
  * empty or half-written value from elsewhere must not replace it or bring up the rescue.
  *
+ * A change of its own that the disk refused is dropped first. It cannot be written anyway,
+ * and kept, it would be read back instead of the disk and tried again on hiding over what
+ * was taken in.
+ *
  * rehydrate() writes nothing (zustand hydrates through its internal set, and the callback
- * above returns early while this runs), which is what stops two windows answering each
- * other for ever. It is also synchronous, because the storage is: the flag around it is
- * cleared after merge has run, not before.
+ * above returns early while this runs), which is what stops two tabs answering each other
+ * for ever. It is also synchronous, because the storage is: the flag around it is cleared
+ * after merge has run, not before.
  */
 function takeInWhatAnotherWindowWrote() {
   if (deferredStorage.hasPendingWrite()) return
@@ -808,7 +819,8 @@ function takeInWhatAnotherWindowWrote() {
   } catch {
     return
   }
-  if (raw === null || raw === deferredStorage.lastSeen() || !isReadable(raw)) return
+  if (raw === null || raw === deferredStorage.lastSeen() || !isDaylosData(raw)) return
+  deferredStorage.dropRefusedWrite()
   adoptingFromAnotherWindow = true
   try {
     void useCalendarStore.persist.rehydrate()
@@ -817,11 +829,16 @@ function takeInWhatAnotherWindowWrote() {
   }
 }
 
-// Two ways to hear about another window. Browsers tell the other tabs with 'storage'. Two
-// processes of the desktop app's web view may never tell each other (likely with WebKitGTK
-// on Linux, not measured), so coming back to the front also compares the disk with what
-// this window last saw. Hooked here and not with the flush on hiding, because the store has
-// to exist first.
+// Two ways to hear about another tab. Browsers tell the other tabs with 'storage'. Coming
+// back to the front also compares the disk with what this tab last saw, for a web view that
+// does not deliver that event. Hooked here and not with the flush on hiding, because the
+// store has to exist first.
+//
+// Only a 'storage' event for Daylo's own key counts. One for every key at once (key null)
+// is what localStorage.clear() in another tab sends, and nothing in Daylo clears that way:
+// replacing everything on import writes the new data through the store like any change,
+// and the only removeItem is zustand's own clearStorage, which nothing calls. Somebody
+// clearing the site's data by hand leaves an empty disk, which is not taken in either.
 if (typeof window !== 'undefined') {
   window.addEventListener('storage', (event) => {
     if (event.key === STORAGE_KEY && event.storageArea === localStorage) {

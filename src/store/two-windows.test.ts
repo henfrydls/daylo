@@ -69,7 +69,7 @@ function anotherWindowWrites(raw: string | null, key = STORAGE_KEY) {
   )
 }
 
-/** The other window writes, and nobody tells this one: two WebKitGTK processes, probably. */
+/** The other window writes, and nobody tells this one: a web view without the event. */
 function anotherWindowWritesQuietly(raw: string) {
   localStorage.setItem(STORAGE_KEY, raw)
 }
@@ -238,6 +238,47 @@ describe('a second window', () => {
     expect(changes).not.toHaveBeenCalled()
     expect(useCalendarStore.getState().activities.map((a) => a.id)).toEqual(['a1'])
     expect(useRescueStore.getState().failure).toBeNull()
+    expect(setItem).not.toHaveBeenCalled()
+  })
+
+  // It parses as JSON and still is not Daylo's: taken in, every list on the screen would
+  // break on the first record it tried to read.
+  it('ignores a value whose records are not lists, without the rescue screen and without writing', async () => {
+    const setItem = vi.spyOn(Storage.prototype, 'setItem')
+
+    anotherWindowWrites(saved({ ...otherWindowState(), logs: { 'l-other': true } }))
+    anotherWindowWrites(saved({ ...otherWindowState(), activities: { a1: READ } }))
+    setItem.mockClear()
+    comeBackWithFocus()
+    await settle()
+
+    expect(useCalendarStore.getState().activities.map((a) => a.id)).toEqual(['a1'])
+    expect(useCalendarStore.getState().logs).toEqual([])
+    expect(useRescueStore.getState().failure).toBeNull()
+    expect(setItem).not.toHaveBeenCalled()
+  })
+
+  // A disk that refuses every write leaves this window's change waiting for ever. If that
+  // counted as a change still on its way, this window would never take in anything again.
+  it('is not kept out for good by a change of its own that the disk keeps refusing', async () => {
+    const realSetItem = Storage.prototype.setItem
+    vi.spyOn(console, 'error').mockImplementation(() => {})
+    const setItem = vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => {
+      throw new DOMException('quota exceeded', 'QuotaExceededError')
+    })
+    useCalendarStore.getState().toggleLog('a1', '2026-11-12')
+    await settle()
+
+    const raw = saved(otherWindowState())
+    realSetItem.call(localStorage, STORAGE_KEY, raw)
+    window.dispatchEvent(
+      new StorageEvent('storage', { key: STORAGE_KEY, newValue: raw, storageArea: localStorage })
+    )
+
+    expect(useCalendarStore.getState().logs.map((l) => l.id)).toEqual(['l-other'])
+    // And the refused change is not tried again on hiding, over what was just taken in.
+    setItem.mockClear()
+    window.dispatchEvent(new Event('pagehide'))
     expect(setItem).not.toHaveBeenCalled()
   })
 

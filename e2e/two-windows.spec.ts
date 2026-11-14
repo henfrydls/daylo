@@ -8,7 +8,9 @@ import { test, expect, type BrowserContext, type Page } from '@playwright/test'
  * write everything it held in memory, which did not include today, and the tick was gone.
  *
  * Two pages of one context share localStorage and hand each other the 'storage' event the
- * way two tabs do, which is the closest a test gets to two windows of the installed app.
+ * way two tabs do. This is the browser's case: on the desktop a second launch now brings
+ * back the window already open instead (src-tauri/src/lib.rs), and that cannot be driven
+ * from here.
  */
 
 /** Seeded only when nothing is there, so a reload does not put the seed back. */
@@ -106,8 +108,8 @@ test('a tick from the second window survives the first one writing', async ({ co
   expect(await stored(first)).toEqual({ activities: ['Read', 'Walk'], logs: 1 })
 })
 
-// The desktop app's web views may never hand each other the 'storage' event, so coming back
-// to the front reads the disk again. Playwright cannot minimise a window, so the first one
+// A web view may not hand the other tab the 'storage' event, so coming back to the front
+// reads the disk again. Playwright cannot minimise a window, so the first one
 // is told it has the focus, and is kept from hearing 'storage' at all by a listener that
 // runs before the app's own.
 test('a tick from the second window survives without being told, on coming back', async ({
