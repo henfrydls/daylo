@@ -18,11 +18,23 @@ export const STORAGE_KEY = 'simple-calendar-storage'
 type ViewType = 'year' | 'month'
 type ViewTransitionDirection = 'drill-down' | 'drill-up' | null
 
+interface DeferredStorage extends StateStorage {
+  /**
+   * The exact string this window last read from the disk or wrote to it. Anything else
+   * there was written by another window, and that is how coming back to the front tells
+   * whether there is something to take in.
+   */
+  lastSeen: () => string | null
+  /** Whether this window has a change of its own still waiting to be written. */
+  hasPendingWrite: () => boolean
+}
+
 // Deferred localStorage adapter for optimistic UI
 // UI updates immediately, persistence happens during idle time
-const createDeferredStorage = (): StateStorage => {
+const createDeferredStorage = (): DeferredStorage => {
   let pendingWrite: string | null = null
   let pendingKey: string | null = null
+  let lastSeen: string | null = null
   let scheduledWrite: ReturnType<typeof setTimeout> | number | null = null
   let useIdleCallback = false
   let failureReported = false
@@ -47,6 +59,7 @@ const createDeferredStorage = (): StateStorage => {
     if (pendingWrite !== null) {
       try {
         localStorage.setItem(key, pendingWrite)
+        lastSeen = pendingWrite
         // Solo se descarta el pendiente cuando de verdad se escribio. Si falla se
         // conserva para que el siguiente flush lo reintente.
         pendingWrite = null
@@ -94,7 +107,8 @@ const createDeferredStorage = (): StateStorage => {
       if (pendingWrite !== null) {
         return pendingWrite
       }
-      return localStorage.getItem(name)
+      lastSeen = localStorage.getItem(name)
+      return lastSeen
     },
     setItem: (name: string, value: string): void => {
       pendingWrite = value
@@ -125,8 +139,23 @@ const createDeferredStorage = (): StateStorage => {
       cancelScheduledWrite()
       localStorage.removeItem(name)
     },
+    lastSeen: () => lastSeen,
+    hasPendingWrite: () => pendingWrite !== null,
   }
 }
+
+/**
+ * Created once, here, so that the code listening for other windows after the store exists
+ * can ask it what this window last saw.
+ */
+const deferredStorage = createDeferredStorage()
+
+/**
+ * True only while this window is taking in what another window wrote. merge and the
+ * rehydrate callback read it: taking in somebody else's records is not a launch, and must
+ * not decide the launch's questions again.
+ */
+let adoptingFromAnotherWindow = false
 
 interface CalendarState {
   activities: Activity[]
@@ -324,6 +353,25 @@ export const WHERE_SOMEBODY_IS = [
   'selectedYear',
   'currentView',
 ] as const satisfies readonly (keyof CalendarState)[]
+
+/**
+ * Another window's records, over this window's session.
+ *
+ * Only what is kept on disk comes across. Whatever starts with `_` belongs to this session
+ * and is left as it is, `_checkinStart` above all: it was decided at launch, it says which
+ * line of the check-in a new copy sees and whether the check-in starts, and a second window
+ * writing must not decide it again. Where somebody is stays too: nobody should be moved to
+ * another month because they ticked a day somewhere else.
+ */
+function takeInRecords(persisted: unknown, current: CalendarState): CalendarState {
+  if (persisted == null || typeof persisted !== 'object') return current
+  const records = { ...(persisted as Record<string, unknown>) }
+  for (const key of Object.keys(records)) {
+    if (key.startsWith('_')) delete records[key]
+  }
+  for (const place of WHERE_SOMEBODY_IS) delete records[place]
+  return { ...current, ...records }
+}
 
 export const useCalendarStore = create<CalendarState>()(
   persist(
@@ -562,7 +610,7 @@ export const useCalendarStore = create<CalendarState>()(
     }),
     {
       name: STORAGE_KEY,
-      storage: createJSONStorage(() => createDeferredStorage()),
+      storage: createJSONStorage(() => deferredStorage),
       // Where somebody was is not kept, and the four missing names are the whole of this
       // decision: `selectedDate`, `selectedMonth`, `selectedYear` and `currentView`.
       //
@@ -609,6 +657,7 @@ export const useCalendarStore = create<CalendarState>()(
       // wrong line. Nothing at all is a new installation; an object without the switch is
       // an update.
       merge: (persisted, current) => {
+        if (adoptingFromAnotherWindow) return takeInRecords(persisted, current)
         if (persisted == null) return { ...current, _checkinStart: 'new' }
 
         // Where somebody was is dropped on the way in, not only left out on the way out.
@@ -645,6 +694,11 @@ export const useCalendarStore = create<CalendarState>()(
        * raises exists to get it off intact.
        */
       onRehydrateStorage: () => (state, error) => {
+        // Taking in another window's records: this window is already open and already
+        // hydrated, and what it holds stays on screen whatever happened. Marking it
+        // hydrated again would also be a write, and two windows that answered each other's
+        // writes with one of their own would never stop.
+        if (adoptingFromAnotherWindow) return
         if (error) {
           useRescueStore
             .getState()
@@ -656,3 +710,79 @@ export const useCalendarStore = create<CalendarState>()(
     }
   )
 )
+
+/**
+ * Whether a string from the disk is something zustand can open. Checked before taking it
+ * in, because zustand answers one it cannot parse with the rescue screen, which is right
+ * for a launch with nothing else to show and wrong for a window that holds good data.
+ */
+function isReadable(raw: string): boolean {
+  try {
+    const parsed: unknown = JSON.parse(raw)
+    return (
+      typeof parsed === 'object' &&
+      parsed !== null &&
+      typeof (parsed as { state?: unknown }).state === 'object' &&
+      (parsed as { state?: unknown }).state !== null
+    )
+  } catch {
+    return false
+  }
+}
+
+/**
+ * Takes in what another window of Daylo wrote, before this one can write over it.
+ *
+ * Somebody who thinks Daylo has not refreshed opens it again. They tick today in the new
+ * window, close it, go back to the old one and tap anything: the old one wrote everything
+ * it held in memory, which did not hold today, and the tick was gone without a word. Now
+ * the old window reads the disk again first, so its next write carries the tick.
+ *
+ * Not when this window has a change of its own still waiting to be written: then this
+ * window wins, as it always did, and the change goes out as usual. That takes ticking in
+ * two windows within a second or two of each other; merging record by record would be
+ * another piece of work.
+ *
+ * Not on the rescue screen either, which exists to get the data off the disk intact, and
+ * not over a disk that is empty or cannot be read: what this window holds is good, and an
+ * empty or half-written value from elsewhere must not replace it or bring up the rescue.
+ *
+ * rehydrate() writes nothing (zustand hydrates through its internal set, and the callback
+ * above returns early while this runs), which is what stops two windows answering each
+ * other for ever. It is also synchronous, because the storage is: the flag around it is
+ * cleared after merge has run, not before.
+ */
+function takeInWhatAnotherWindowWrote() {
+  if (deferredStorage.hasPendingWrite()) return
+  if (!useCalendarStore.getState()._hasHydrated) return
+  let raw: string | null
+  try {
+    raw = localStorage.getItem(STORAGE_KEY)
+  } catch {
+    return
+  }
+  if (raw === null || raw === deferredStorage.lastSeen() || !isReadable(raw)) return
+  adoptingFromAnotherWindow = true
+  try {
+    void useCalendarStore.persist.rehydrate()
+  } finally {
+    adoptingFromAnotherWindow = false
+  }
+}
+
+// Two ways to hear about another window. Browsers tell the other tabs with 'storage'. Two
+// processes of the desktop app's web view may never tell each other (likely with WebKitGTK
+// on Linux, not measured), so coming back to the front also compares the disk with what
+// this window last saw. Hooked here and not with the flush on hiding, because the store has
+// to exist first.
+if (typeof window !== 'undefined') {
+  window.addEventListener('storage', (event) => {
+    if (event.key === STORAGE_KEY && event.storageArea === localStorage) {
+      takeInWhatAnotherWindowWrote()
+    }
+  })
+  window.addEventListener('focus', takeInWhatAnotherWindowWrote)
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible') takeInWhatAnotherWindowWrote()
+  })
+}
