@@ -83,7 +83,6 @@ test.beforeEach(async ({ page }) => {
               createdAt: '2026-02-02',
             },
           ],
-          currentView: 'year',
         },
         version: 0,
       })

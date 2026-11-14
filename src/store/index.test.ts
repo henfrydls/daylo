@@ -38,10 +38,11 @@ describe('useCalendarStore', () => {
       expect(useCalendarStore.getState().yearMode).toBe('byActivity')
     })
 
-    // Persisted like the view itself: somebody who reads their year a row per activity
-    // should not have to say so again after every reload. The wait is not decoration: the
-    // store's storage defers its write, so reading straight after the set finds the old
-    // value. That same race is what loses a seeded state in the end-to-end tests.
+    // Persisted, unlike the view, because it is a preference and not a place: somebody who
+    // reads their year a row per activity should not have to say so again after every
+    // reload. The wait is not decoration: the store's storage defers its write, so reading
+    // straight after the set finds the old value. That same race is what loses a seeded
+    // state in the end-to-end tests.
     it('is written to storage', async () => {
       useCalendarStore.getState().setYearMode('byActivity')
 

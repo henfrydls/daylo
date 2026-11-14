@@ -417,8 +417,9 @@ test.describe('Activity Tracker App', () => {
     // Verify heatmap
     await expect(dayCell).toHaveClass(/bg-emerald/)
 
-    // Reload
+    // Reload, which lands on the month, and go back to the year the heatmap is in
     await page.reload()
+    await openYearView(page)
 
     // Heatmap color should persist
     const dayCellAfterReload = page.getByTestId('day-cell').first()
@@ -643,13 +644,13 @@ async function seedFullYear(page: import('@playwright/test').Page) {
             },
           ],
           logs,
-          currentView: 'year',
         },
         version: 0,
       })
     )
   })
   await page.goto('/')
+  await openYearView(page)
   await page.waitForSelector('[data-testid="month-card"]')
 }
 
@@ -684,6 +685,59 @@ test.describe('month cards on a narrow phone', () => {
       }
     })
   }
+})
+
+// ── Opening again ─────────────────────────────────────────
+
+test.describe('opening Daylo again on a phone', () => {
+  test.use({ viewport: { width: 360, height: 800 } })
+
+  // One tap on Year, or one sideways swipe without meaning to, used to be where every
+  // launch after it opened: twelve cards with no Today bar and no obvious way to tick
+  // today off. Last month as well, so the bar is looked for in the month that is today's.
+  test('comes back on this month, with the Today bar, after leaving it on the year', async ({
+    page,
+  }) => {
+    // Seeded only when nothing is there: an init script runs again on the reload, and an
+    // unconditional one would put back a state without a view and hide the very write
+    // this test is about.
+    await page.addInitScript(() => {
+      if (localStorage.getItem('simple-calendar-storage')) return
+      localStorage.setItem(
+        'simple-calendar-storage',
+        JSON.stringify({
+          state: {
+            activities: [
+              {
+                id: 'a1',
+                name: 'Read',
+                color: '#10B981',
+                createdAt: '2026-01-01T00:00:00.000Z',
+                updatedAt: '2026-01-01T00:00:00.000Z',
+              },
+            ],
+            logs: [],
+            reminderOffered: true,
+          },
+          version: 0,
+        })
+      )
+    })
+    await page.goto('/')
+    await expect(page.getByTestId('log-today-bar')).toBeVisible()
+
+    await page.getByRole('button', { name: 'Previous month' }).click()
+    await expect(page.getByTestId('log-today-bar')).toHaveCount(0)
+    await openYearView(page)
+
+    await page.reload()
+
+    await expect(page.getByRole('button', { name: 'Month', exact: true })).toHaveAttribute(
+      'aria-pressed',
+      'true'
+    )
+    await expect(page.getByTestId('log-today-bar')).toBeInViewport()
+  })
 })
 
 // ── Touch ────────────────────────────────────────────────
@@ -795,7 +849,6 @@ async function openTheReminderSheet(
             },
           ],
           logs: [],
-          currentView: 'month',
           yearMode: 'all',
           reminderEnabled: on,
           reminderHour: 19,
@@ -953,7 +1006,7 @@ async function seedYear(
   }: { activities: number; view: 'year' | 'month'; mode: 'all' | 'byActivity' }
 ) {
   await page.addInitScript(
-    ({ count, view, mode }) => {
+    ({ count, mode }) => {
       const activities = Array.from({ length: count }, (_, i) => ({
         id: `a${i}`,
         name:
@@ -993,7 +1046,6 @@ async function seedYear(
           state: {
             activities,
             logs,
-            currentView: view,
             yearMode: mode,
             reminderEnabled: false,
             reminderHour: 21,
@@ -1004,10 +1056,12 @@ async function seedYear(
         })
       )
     },
-    { count, view, mode }
+    { count, mode }
   )
   await page.goto('/')
   await page.waitForSelector('#main-content')
+  // Daylo always opens on the month, so the year is reached the way a person reaches it.
+  if (view === 'year') await openYearView(page)
   await page.waitForFunction(() => document.getAnimations().every((a) => a.playState !== 'running'))
 }
 
@@ -1195,7 +1249,6 @@ async function seedPastTheGate(
             },
           ],
           logs,
-          currentView: 'month',
           yearMode: 'all',
           reminderEnabled: false,
           reminderHour: 21,

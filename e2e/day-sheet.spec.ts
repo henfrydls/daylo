@@ -58,7 +58,6 @@ test.beforeEach(async ({ page }) => {
             },
           ],
           logs: [],
-          currentView: 'month',
         },
         version: 0,
       })

@@ -63,9 +63,8 @@ describe('opening on today', () => {
     expect(stored.state).not.toHaveProperty('selectedYear')
   })
 
-  // What is still kept: which of the two views somebody prefers is a preference, not a
-  // place, and so is how they like the year read.
-  it('still remembers the view and the year mode', async () => {
+  // What is still kept: how somebody likes the year read is a preference, not a place.
+  it('still remembers how the year is read', async () => {
     localStorage.setItem(
       STORAGE_KEY,
       JSON.stringify({ state: { currentView: 'year', yearMode: 'byActivity' }, version: 0 })
@@ -73,7 +72,46 @@ describe('opening on today', () => {
 
     await useCalendarStore.persist.rehydrate()
 
-    expect(useCalendarStore.getState().currentView).toBe('year')
     expect(useCalendarStore.getState().yearMode).toBe('byActivity')
+  })
+})
+
+/**
+ * The view turned out to be a place too. Somebody who tapped Year once, or swiped sideways
+ * on a phone without meaning to, came back the next day to twelve cards with no Today bar
+ * and no obvious way to tick today off, which is what they had opened Daylo to do.
+ */
+describe('opening on the month', () => {
+  beforeEach(async () => {
+    // A launch starts from the month, and the tests above leave the store on whatever
+    // they set. The write this reset schedules is let through before the storage is
+    // cleared, or it would land on top of what the test puts there.
+    useCalendarStore.setState({ currentView: 'month' })
+    await new Promise((resolve) => setTimeout(resolve, 20))
+    localStorage.clear()
+  })
+
+  it('opens on the month even when the year was on screen when Daylo was closed', async () => {
+    localStorage.setItem(
+      STORAGE_KEY,
+      JSON.stringify({ state: { currentView: 'year', yearMode: 'byActivity' }, version: 0 })
+    )
+
+    await useCalendarStore.persist.rehydrate()
+
+    expect(useCalendarStore.getState().currentView).toBe('month')
+  })
+
+  // Not written, rather than written and then ignored, for the same reason as the three
+  // above.
+  it('does not write the view to disk', async () => {
+    await useCalendarStore.persist.rehydrate()
+    useCalendarStore.getState().setCurrentView('year')
+    await new Promise((resolve) => setTimeout(resolve, 20))
+
+    const stored = JSON.parse(localStorage.getItem(STORAGE_KEY) ?? '{"state":{}}')
+    expect(stored.state).not.toHaveProperty('currentView')
+    // And the write did happen, so the line above is about what it carried.
+    expect(stored.state).toHaveProperty('yearMode')
   })
 })

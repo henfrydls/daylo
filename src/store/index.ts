@@ -102,11 +102,11 @@ const createDeferredStorage = (): StateStorage => {
       // Cancel any existing scheduled write
       cancelScheduledWrite()
 
-      // El diferido coalesce escrituras a localStorage: la durabilidad no depende de
-      // esta ventana, sino del flush de 'pagehide' y visibilitychange de arriba, asi que
-      // conviene que sea holgada. Con una ventana corta cada clic de navegacion
-      // (cambiar de mes, de vista, elegir un dia) acaba en una escritura propia, porque
-      // partialize tambien persiste esos campos.
+      // The deferral coalesces writes to localStorage. Durability does not depend on this
+      // window but on the 'pagehide' and visibilitychange flush above, so it can be
+      // generous. With a short one every navigation tap (another month, the other view, a
+      // day) ends in a write of its own: persist writes on every set(), even one that only
+      // changes fields partialize leaves out.
       //
       // Ojo: esto NO ahorra serializacion. createJSONStorage hace el JSON.stringify de
       // forma sincrona en cada set(), antes de llamar a este adaptador; lo que se
@@ -312,11 +312,11 @@ export const useCalendarStore = create<CalendarState>()(
       // to depend on the window being narrower than 640px, so the same person got a
       // different first screen on their phone and on their laptop.
       //
-      // Only a fresh install sees it. currentView is persisted, and anything that touches
-      // the store writes the whole persisted slice, so anyone who has ever used Daylo
-      // already has a view stored and keeps it. That is deliberate: changing it for them
-      // would overrule a choice some of them made on purpose, and there is no way to tell
-      // those apart from the ones who never touched the toggle.
+      // And every launch sees it, not only a fresh install. The view used to be kept, on
+      // the grounds that some people chose the year on purpose; what it did in practice was
+      // bring back to the year anybody who had tapped Year once, or swiped sideways on a
+      // phone without meaning to, where there is no Today bar and no obvious way to tick
+      // today off. The year is one tap away for whoever wants it.
       currentView: 'month' as ViewType,
       yearMode: 'all' as const,
       selectedMonth: new Date().getMonth(),
@@ -518,21 +518,22 @@ export const useCalendarStore = create<CalendarState>()(
     {
       name: STORAGE_KEY,
       storage: createJSONStorage(() => createDeferredStorage()),
-      // Where somebody was is not kept, and the three missing names are the whole of this
-      // decision: `selectedDate`, `selectedMonth` and `selectedYear`.
+      // Where somebody was is not kept, and the four missing names are the whole of this
+      // decision: `selectedDate`, `selectedMonth`, `selectedYear` and `currentView`.
       //
       // Daylo is for today, and it used to open wherever it was left. Somebody who looked
       // at March in March came back in November and was shown March, with today a swipe
       // away and nothing on the screen saying so; the day sheet came back open too, over a
-      // day that had stopped being the day. The defaults are today's, so leaving these out
-      // is the whole of the fix.
+      // day that had stopped being the day. The view was the same kind of thing: one tap on
+      // Year, or one sideways swipe on a phone, and every launch after that opened on
+      // twelve cards with no Today bar. The defaults are today's month, so leaving these
+      // out is the whole of the fix.
       //
-      // What is kept is what is a preference rather than a place: which of the two views
-      // somebody likes, and how they like the year read.
+      // What is kept is what is a preference rather than a place: how somebody likes the
+      // year read.
       partialize: (state) => ({
         activities: state.activities,
         logs: state.logs,
-        currentView: state.currentView,
         yearMode: state.yearMode,
         reminderEnabled: state.reminderEnabled,
         reminderHour: state.reminderHour,
@@ -566,14 +567,16 @@ export const useCalendarStore = create<CalendarState>()(
         if (persisted == null) return { ...current, _checkinStart: 'new' }
 
         // Where somebody was is dropped on the way in, not only left out on the way out.
-        // Every copy already installed has these three on disk from before this change, and
+        // Every copy already installed has these four on disk from before this change, and
         // partialize only decides what is written: without this, the first launch after
-        // updating would still open on March, and the second one would be the fixed one.
-        // The fix that works on the next launch and not on this one is the fix nobody sees.
+        // updating would still open on March, or on the year, and the second one would be
+        // the fixed one. The fix that works on the next launch and not on this one is the
+        // fix nobody sees.
         const stored = { ...(persisted as Partial<CalendarState>) }
         delete stored.selectedDate
         delete stored.selectedMonth
         delete stored.selectedYear
+        delete stored.currentView
         return {
           ...current,
           ...stored,

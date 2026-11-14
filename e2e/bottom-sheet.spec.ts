@@ -35,7 +35,6 @@ test.beforeEach(async ({ page }) => {
             },
           ],
           logs: [],
-          currentView: 'year',
         },
         version: 0,
       })
