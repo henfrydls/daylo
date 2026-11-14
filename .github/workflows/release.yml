@@ -235,6 +235,35 @@ jobs:
         env:
           NDK_HOME: ${{ env.ANDROID_HOME }}/ndk/29.0.14206865
 
+      # The same check Build Check (Android) runs on a pull request, on the build that is
+      # actually published: the release variant's merged manifests, the bundle one that goes
+      # into the AAB Play is given and the packaged one that goes into the APK. Here and not
+      # only in the pull request because a pull request builds debug, and because this is
+      # the last moment before anything is signed or uploaded: past it, a declaration Play
+      # asks to be justified is already in the release.
+      #
+      # Both have to be found. A path AGP renamed holds no permission either, and read as
+      # "not declared" it would agree with EXACT_ALARMS_DECLARED being off.
+      #
+      # Only a tag runs this. To see it red: tag a build where EXACT_ALARMS_DECLARED in
+      # src/lib/reminders.ts says false and the manifest still declares SCHEDULE_EXACT_ALARM
+      # (the unit test fails too, but a tag does not wait for it). The step names both
+      # merged files and the permission, and nothing after it runs.
+      - name: The release manifests agree with EXACT_ALARMS_DECLARED
+        run: |
+          set -uo pipefail
+          shopt -s nullglob globstar
+          dir=src-tauri/gen/android/app/build/intermediates
+          bundle=( "$dir"/bundle_manifest/*Release/**/AndroidManifest.xml )
+          packaged=( "$dir"/packaged_manifests/*Release/**/AndroidManifest.xml )
+          if [ ${#bundle[@]} -eq 0 ] || [ ${#packaged[@]} -eq 0 ]; then
+            echo "::error::The release manifests are not where this step looks for them, so"
+            echo "::error::nothing was checked. Where AGP writes them now:"
+            find "$dir" -name AndroidManifest.xml 2>/dev/null || true
+            exit 1
+          fi
+          node scripts/check-exact-alarm.js "${bundle[@]}" "${packaged[@]}"
+
       - name: Sign APK
         env:
           ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}

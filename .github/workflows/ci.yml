@@ -348,6 +348,41 @@ jobs:
           # through the same SIGPIPE. -m5 stops grep itself, which needs no pipe at all.
           grep -m5 -E 'lib/arm64-v8a/.*\.so' <<< "$listing" || true
 
+      # The unit tests compare EXACT_ALARMS_DECLARED with the manifest written by hand. What
+      # Play reads is the merged one, where any library can add SCHEDULE_EXACT_ALARM or
+      # USE_EXACT_ALARM of its own, and then Play asks for the declaration whatever the
+      # hand-written file says. So
+      # the same check runs here on what Gradle merged: the bundle manifest, which goes into
+      # the AAB, and the packaged one, which goes into the APK.
+      #
+      # Both have to be found. A path AGP renamed holds no permission either, and read as
+      # "not declared" it would agree with the switch being off, which is the direction this
+      # is for. This build is debug; the release build merges the same libraries.
+      #
+      # To see it fail without the unit test failing first: take the permission out in a
+      # manifest the unit test does not read but Gradle merges into this debug build,
+      # src-tauri/gen/android/app/src/debug/AndroidManifest.xml, as
+      #   <manifest xmlns:android="http://schemas.android.com/apk/res/android"
+      #       xmlns:tools="http://schemas.android.com/tools">
+      #     <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM"
+      #         tools:node="remove" />
+      #   </manifest>
+      # With EXACT_ALARMS_DECLARED on, the step names both merged files as declaring none.
+      - name: The merged manifests agree with EXACT_ALARMS_DECLARED
+        run: |
+          set -uo pipefail
+          shopt -s nullglob globstar
+          dir=src-tauri/gen/android/app/build/intermediates
+          bundle=( "$dir"/bundle_manifest/**/AndroidManifest.xml )
+          packaged=( "$dir"/packaged_manifests/**/AndroidManifest.xml )
+          if [ ${#bundle[@]} -eq 0 ] || [ ${#packaged[@]} -eq 0 ]; then
+            echo "::error::The merged manifests are not where this step looks for them, so"
+            echo "::error::nothing was checked. Where AGP writes them now:"
+            find "$dir" -name AndroidManifest.xml 2>/dev/null || true
+            exit 1
+          fi
+          node scripts/check-exact-alarm.js "${bundle[@]}" "${packaged[@]}"
+
       # Saved here, not by a post step, so that 'if: always()' applies: actions/cache does
       # not save when the job fails, and a red job is exactly when the cycle needs to be
       # short. Only on a miss, because writing over an existing key logs a warning and
