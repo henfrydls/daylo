@@ -1,4 +1,14 @@
-import { useState, useEffect, useMemo, useRef, lazy, Suspense, type ReactNode } from 'react'
+import {
+  Fragment,
+  useState,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  lazy,
+  Suspense,
+  type ReactNode,
+} from 'react'
 import { YearView, MonthView } from './components/calendar'
 import { ActivityList, QuickLog } from './components/activities'
 import { StatsPanel } from './components/stats'
@@ -50,7 +60,7 @@ import { openLink } from './lib/openLink'
  * next to it is a sentence that stops being read.
  */
 const STORE_REVIEW = 'ms-windows-store://review/?ProductId=9NJM37WMMC5Z'
-import { formatDate } from './lib/dates'
+import { useToday } from './lib/today'
 import { sendCheckinIfDue, startCheckinOnNewInstall } from './lib/checkin'
 
 // Lazy load modals - they are rarely used
@@ -187,6 +197,39 @@ function App() {
 
   const reminderOfferOwed = hasReminders && !reminderOffered
 
+  // The day on screen, and what happens when it is no longer today.
+  //
+  // `shownDay` is the key on everything below that draws a date or a number that depends
+  // on one: the month and year views, the sidebar, the phone's sheet of activities and
+  // statistics, and the day sheet. When the day changes React takes those down and builds
+  // them again, so every useMemo is worked out afresh and every `new Date()` is read
+  // again. That is the point of doing it with a key rather than passing today down: a
+  // component added later inside those cannot bring the stale day back by forgetting a
+  // dependency, whereas a prop has to be remembered in every one of them and fails without
+  // a sound the day somebody forgets.
+  //
+  // The key is not on App itself, on purpose. App holds state that pairs with session
+  // flags in the store, and starting App again would split the pair: `questionClosed`
+  // would go back to false while `_feedbackAsked` stayed true, and a question already
+  // answered would open itself the next morning. Everything in App with an effect stays
+  // out for the same reason: the check-in, the update check and a download in progress,
+  // the reminder, the first-day mark. So does the calendar's container, which the swipe
+  // between views hangs its listeners on.
+  //
+  // It is a state of its own and not `today` directly so that the new key and the new
+  // month arrive in the same render. With the key on `today`, the day sheet would be
+  // built again still holding yesterday, and only then be told to close.
+  const today = useToday()
+  const [shownDay, setShownDay] = useState(today)
+  useLayoutEffect(() => {
+    if (today === shownDay) return
+    // Before the paint, so no frame shows the old month under the new day.
+    useCalendarStore.getState().startNewDay()
+    /* eslint-disable react-hooks/set-state-in-effect */
+    setShownDay(today)
+    /* eslint-enable react-hooks/set-state-in-effect */
+  }, [today, shownDay])
+
   // The first day this installation was opened, written once, as soon as there is a store
   // to write it to. Everything that asks how long somebody has been here reads it.
   useEffect(() => {
@@ -215,7 +258,7 @@ function App() {
   const shouldInvite = useMemo(
     () =>
       shouldInviteFeedback({
-        today: formatDate(new Date()),
+        today: shownDay,
         firstOpenedAt,
         logs,
         feedbackInviteSeen,
@@ -230,6 +273,7 @@ function App() {
         checkinNoticePending: shouldTellAboutCheckin || checkinNoticeShown,
       }),
     [
+      shownDay,
       firstOpenedAt,
       logs,
       feedbackInviteSeen,
@@ -522,10 +566,15 @@ function App() {
                   // Both views, side by side, in the order the toggle shows them: Year on the
                   // left, Month on the right. The one that is not in flow sits beside it and
                   // is hidden from everything, eyes and screen readers alike, until a gesture
-                  // reveals it. No key here on purpose: nothing remounts, because a view that
-                  // remounts cannot be dragged.
+                  // reveals it. No key on the view here on purpose: changing view remounts
+                  // nothing, because a view that remounts cannot be dragged. The only key is
+                  // the day's, and it goes inside the rail and not on it: the rail and the
+                  // panel beside it are what the gesture moves, and they stay. A new day
+                  // remounts the views once, between gestures, never under a finger.
                   <div ref={railRef} className="relative">
-                    <div>{currentView === 'year' ? <YearView /> : <MonthView />}</div>
+                    <div key={shownDay}>
+                      {currentView === 'year' ? <YearView /> : <MonthView />}
+                    </div>
                     <div
                       ref={otherRef}
                       className="absolute w-full"
@@ -536,7 +585,9 @@ function App() {
                       aria-hidden="true"
                       inert
                     >
-                      {currentView === 'year' ? <MonthView /> : <YearView />}
+                      <Fragment key={shownDay}>
+                        {currentView === 'year' ? <MonthView /> : <YearView />}
+                      </Fragment>
                     </div>
                   </div>
                 ) : (
@@ -551,13 +602,17 @@ function App() {
                             : 'view-fade 200ms ease both',
                     }}
                   >
-                    {currentView === 'year' ? <YearView /> : <MonthView />}
+                    {/* Inside the view's own key, so a new day does not play the change of
+                        view again. */}
+                    <Fragment key={shownDay}>
+                      {currentView === 'year' ? <YearView /> : <MonthView />}
+                    </Fragment>
                   </div>
                 )}
               </div>
 
               {/* Sidebar - Hidden on mobile, visible on large screens */}
-              <div className="hidden lg:block space-y-6">
+              <div key={shownDay} className="hidden lg:block space-y-6">
                 <ActivityList />
                 <StatsPanel />
               </div>
@@ -593,7 +648,7 @@ function App() {
             onClose={() => setIsBottomSheetOpen(false)}
             aria-label="Activities and statistics"
           >
-            <div className="space-y-6">
+            <div key={shownDay} className="space-y-6">
               <ActivityList />
               <StatsPanel />
             </div>
@@ -603,7 +658,7 @@ function App() {
           {/* Always mounted: it has to be on the page before the day is chosen, or there
               is no frame for it to come up from, and it has to stay there after the day is
               cleared, or it has nowhere to go back to. It renders nothing when closed. */}
-          <QuickLog />
+          <QuickLog key={shownDay} />
 
           {/* Export and Import, which are loaded the first time they are asked for and
               then stay. Not `{isExportOpen && ...}`: with that, the prop can never be

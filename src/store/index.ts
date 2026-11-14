@@ -274,6 +274,8 @@ interface CalendarState {
   setYearMode: (mode: 'all' | 'byActivity') => void
   setSelectedMonth: (month: number) => void
   navigateToMonth: (year: number, month: number) => void
+  /** The day changed with the app open: to the month that holds it, with no day sheet. */
+  startNewDay: () => void
 
   // Reminder
   setReminder: (enabled: boolean, hour?: number, minute?: number) => void
@@ -528,6 +530,15 @@ export const useCalendarStore = create<CalendarState>()(
           currentView: 'month',
           _viewTransitionDirection: 'drill-down',
         }),
+
+      // Where somebody was yesterday is not where they want to be today, and yesterday's
+      // sheet left open would let them tick yesterday believing it was today. Only those
+      // three: the view is a choice they made, and the session flags pair with state in
+      // App that does not start again with the day.
+      startNewDay: () => {
+        const now = new Date()
+        set({ selectedYear: now.getFullYear(), selectedMonth: now.getMonth(), selectedDate: null })
+      },
 
       getLogsForDate: (date) => {
         return get().logs.filter((l) => l.date === date && l.completed)

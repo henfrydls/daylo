@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach } from 'vitest'
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import { useCalendarStore } from './index'
 
 describe('useCalendarStore', () => {
@@ -395,6 +395,53 @@ describe('useCalendarStore', () => {
       const logsForActivity = useCalendarStore.getState().getLogsForActivity(activity.id)
       expect(logsForActivity.length).toBe(3)
     })
+  })
+})
+
+// A window left open overnight wakes up on a new day. What it was looking at yesterday
+// stops being where somebody wants to be, and yesterday's sheet open on "today" is the
+// failure this exists to end. What they chose to look at, and everything else about the
+// session, stays.
+describe('starting a new day', () => {
+  beforeEach(() => {
+    vi.useFakeTimers({ toFake: ['Date'] })
+    vi.setSystemTime(new Date(2026, 11, 1, 8, 30))
+  })
+
+  afterEach(() => {
+    vi.useRealTimers()
+  })
+
+  it('goes to the month that holds today and closes the day sheet', () => {
+    useCalendarStore.setState({ selectedYear: 2026, selectedMonth: 10, selectedDate: '2026-11-30' })
+
+    useCalendarStore.getState().startNewDay()
+
+    const state = useCalendarStore.getState()
+    expect(state.selectedYear).toBe(2026)
+    expect(state.selectedMonth).toBe(11)
+    expect(state.selectedDate).toBeNull()
+  })
+
+  it('leaves the view and the session alone', () => {
+    useCalendarStore.setState({
+      currentView: 'year',
+      _feedbackAsked: true,
+      _loggedThisSession: true,
+      _offerThisSession: 'reminder',
+      _checkinNoticeShown: true,
+      _hasHydrated: true,
+    })
+
+    useCalendarStore.getState().startNewDay()
+
+    const state = useCalendarStore.getState()
+    expect(state.currentView).toBe('year')
+    expect(state._feedbackAsked).toBe(true)
+    expect(state._loggedThisSession).toBe(true)
+    expect(state._offerThisSession).toBe('reminder')
+    expect(state._checkinNoticeShown).toBe(true)
+    expect(state._hasHydrated).toBe(true)
   })
 })
 
