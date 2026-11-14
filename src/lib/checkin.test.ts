@@ -233,6 +233,45 @@ describe('the daily one', () => {
 
     expect(invoke).toHaveBeenCalledOnce()
   })
+
+  // A send that starts just before midnight and is still in the air after it. The day it
+  // records is the day it said, so the window coming back on the new day still sends the
+  // new day's. Recording the day the answer arrived spent tomorrow on a message that was
+  // about today, and a return while it was in the air could not make up for it.
+  it('records the day it sent, even when the answer arrives the day after', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] })
+    try {
+      vi.setSystemTime(new Date(2026, 10, 13, 23, 59, 59))
+      on('2026-11-12')
+      let release = () => {}
+      invoke.mockImplementation(
+        () =>
+          new Promise<void>((resolve) => {
+            release = () => resolve()
+          })
+      )
+
+      const opening = sendCheckinIfDue()
+      vi.setSystemTime(new Date(2026, 10, 14, 0, 0, 2))
+      // The window takes the focus while the first one is still in the air: nothing.
+      await sendCheckinIfDue()
+      release()
+      await opening
+      expect(useCalendarStore.getState().checkinLastAttempt?.date).toBe('2026-11-13')
+
+      invoke.mockResolvedValue(undefined)
+      await sendCheckinIfDue()
+
+      expect(invoke).toHaveBeenCalledTimes(2)
+      expect(invoke).toHaveBeenLastCalledWith('send_checkin', {
+        id: '4f9c2a7e1b60d3a8c5e2f1b74a9d0c6e',
+        date: '2026-11-14',
+        last: false,
+      })
+    } finally {
+      vi.useRealTimers()
+    }
+  })
 })
 
 describe('turning it off', () => {

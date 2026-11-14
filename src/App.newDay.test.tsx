@@ -26,10 +26,14 @@ const refreshReminder = vi.hoisted(() => vi.fn())
 const reconcileReminder = vi.hoisted(() => vi.fn())
 const installFormat = vi.hoisted(() => vi.fn())
 const checkForUpdate = vi.hoisted(() => vi.fn())
+// The one native call the check-in makes, for the tests that let the real sendCheckinIfDue
+// run. Everything else is refused, the way a call outside the native app is.
+const tauriInvoke = vi.hoisted(() => vi.fn())
 
 vi.mock('@tauri-apps/api/core', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@tauri-apps/api/core')>()),
   isTauri: () => inTheApp.yes,
+  invoke: (...args: unknown[]) => tauriInvoke(...args),
 }))
 
 vi.mock('./lib/feedback', async (importOriginal) => ({
@@ -289,48 +293,108 @@ describe('what the new day leaves alone', () => {
     expect(daysSent).toEqual(['2026-11-14'])
   })
 
-  describe("the new day's check-in, whichever way the day arrives", () => {
-    const daysSent: string[] = []
+  /**
+   * The check-in says "Daylo was opened on this date", so it goes only when somebody has
+   * Daylo in front of them: on opening, and when the window comes back or takes the focus.
+   * The real sendCheckinIfDue runs here, so "once a day" is the real rule and what is
+   * counted is what would leave the device.
+   */
+  describe('the check-in, and somebody having Daylo in front of them', () => {
+    const sent = () =>
+      tauriInvoke.mock.calls
+        .filter(([command]) => command === 'send_checkin')
+        .map(([, args]) => (args as { date: string }).date)
 
-    beforeEach(() => {
-      daysSent.length = 0
+    const show = (state: 'visible' | 'hidden') => {
+      Object.defineProperty(document, 'visibilityState', { configurable: true, value: state })
+      document.dispatchEvent(new Event('visibilitychange'))
+    }
+
+    beforeEach(async () => {
+      const real = await vi.importActual<typeof import('./lib/checkin')>('./lib/checkin')
       inTheApp.yes = true
       checkinFields.mockResolvedValue({ version: '1.5.3', os: 'linux', source: 'deb' })
-      sendCheckinIfDue.mockImplementation(async () => {
-        daysSent.push(formatDate(new Date()))
+      sendCheckinIfDue.mockImplementation(real.sendCheckinIfDue)
+      tauriInvoke.mockReset().mockImplementation(async (command: string) => {
+        if (command !== 'send_checkin') throw new Error('not here')
+      })
+      useCalendarStore.setState({
+        checkinEnabled: true,
+        checkinId: '4f9c2a7e1b60d3a8c5e2f1b74a9d0c6e',
+        checkinLastAttempt: { date: '2026-11-12', at: '2026-11-12T20:00:00.000Z', ok: true },
       })
     })
 
-    it('is asked for once on opening, not twice', async () => {
-      render(<App />)
-      await act(async () => {})
-      await act(async () => {})
-
-      expect(daysSent).toEqual(['2026-11-13'])
+    afterEach(() => {
+      show('visible')
     })
 
-    it('is asked for when the window takes the focus on a new day', async () => {
+    it('goes once on opening, not twice', async () => {
+      render(<App />)
+      await act(async () => {})
+      await act(async () => {
+        window.dispatchEvent(new Event('focus'))
+      })
+      await act(async () => {})
+
+      expect(sent()).toEqual(['2026-11-13'])
+    })
+
+    it('goes when the window takes the focus on a new day', async () => {
       render(<App />)
       await act(async () => {})
 
       await theNextMorningComes(2026, 10, 14)
       await act(async () => {})
 
-      expect(daysSent).toEqual(['2026-11-13', '2026-11-14'])
+      expect(sent()).toEqual(['2026-11-13', '2026-11-14'])
     })
 
-    it('is asked for when midnight passes in front of somebody', async () => {
-      // A moment before midnight, so the app's own timer is due a second or so from now.
-      vi.setSystemTime(new Date(2026, 10, 13, 23, 59, 59, 900))
+    // A desktop copy minimised all night. The day on screen changes by timer, which is
+    // right, and the check-in does not, because nobody opened anything.
+    it('does not go at midnight with the window hidden, only when it comes back', async () => {
+      vi.useRealTimers()
+      vi.useFakeTimers({ shouldAdvanceTime: true })
+      vi.setSystemTime(new Date(2026, 10, 13, 23, 50))
       render(<App />)
       await act(async () => {})
+      await act(async () => {})
+      await act(async () => show('hidden'))
 
-      vi.setSystemTime(new Date(2026, 10, 14, 0, 0, 0, 500))
+      // Past midnight, and five readings of the clock after it.
       await act(async () => {
-        await new Promise((resolve) => setTimeout(resolve, 1_500))
+        vi.advanceTimersByTime(13 * 60 * 1000)
       })
+      expect(isTodayIn('2026-11-14')).toBe(true)
+      expect(sent()).toEqual(['2026-11-13'])
 
-      expect(daysSent).toEqual(['2026-11-13', '2026-11-14'])
+      await act(async () => show('visible'))
+      await act(async () => {})
+      expect(sent()).toEqual(['2026-11-13', '2026-11-14'])
+
+      await act(async () => {
+        window.dispatchEvent(new Event('focus'))
+      })
+      await act(async () => {})
+      expect(sent()).toEqual(['2026-11-13', '2026-11-14'])
+    })
+
+    // The day on screen can be held back by words being written. Daylo was still opened
+    // on the new day, and the check-in says so with the clock's date.
+    it('goes for the new day even while the screen waits on words being written', async () => {
+      useCalendarStore.setState({ selectedDate: '2026-11-13' })
+      render(<App />)
+      await act(async () => {})
+      await userEvent.click(screen.getByTestId('quicklog-new-activity-button'))
+      await userEvent.type(screen.getByTestId('quicklog-new-activity-input'), 'Walk')
+      await act(async () => show('hidden'))
+
+      vi.setSystemTime(new Date(2026, 10, 14, 8, 30))
+      await act(async () => show('visible'))
+      await act(async () => {})
+
+      expect(isTodayIn('2026-11-13')).toBe(true)
+      expect(sent()).toEqual(['2026-11-13', '2026-11-14'])
     })
   })
 

@@ -317,11 +317,15 @@ function App() {
     DIALOG_STAYS_FOR + 50
   )
 
-  // Today's check-in, if the switch is on and today has not been tried. Once when the app
-  // opens, which on a phone that was closed is a new day already, and once more each time
-  // the day changes with the app open, however the app learned it: the window coming back,
-  // the focus, or midnight in front of somebody. It used to listen for the window coming
-  // back by itself, so a day that started any other way went without one.
+  // Today's check-in, if the switch is on and today has not been tried. Only when somebody
+  // has Daylo in front of them: when it opens, and when the window comes back or takes the
+  // focus. Never from a timer. The check-in says "Daylo was opened on this date", and a
+  // desktop copy left minimised for a week would otherwise say so every midnight, which
+  // is seven people coming back who never did. That is why it does not follow the day on
+  // screen, which does change by timer, and why it does not wait for it either: a new day
+  // held back by a form being written is still a day Daylo was opened on, and the date
+  // sent is the clock's, read by sendCheckinIfDue at that moment. Whichever of these
+  // arrives second on the same day does nothing.
   useEffect(() => {
     if (!hasHydrated || !canCheckIn) return
 
@@ -330,17 +334,16 @@ function App() {
     } else {
       void sendCheckinIfDue()
     }
+    const onBack = () => {
+      if (document.visibilityState === 'visible') void sendCheckinIfDue()
+    }
+    document.addEventListener('visibilitychange', onBack)
+    window.addEventListener('focus', onBack)
+    return () => {
+      document.removeEventListener('visibilitychange', onBack)
+      window.removeEventListener('focus', onBack)
+    }
   }, [hasHydrated, canCheckIn, checkinStart])
-
-  // The day the effect above, or this one, already asked for. Starting with the day the
-  // app opened on is what keeps this from asking a second time on opening.
-  const checkedInFor = useRef(shownDay)
-  useEffect(() => {
-    if (checkedInFor.current === shownDay) return
-    checkedInFor.current = shownDay
-    if (!hasHydrated || !canCheckIn) return
-    void sendCheckinIfDue()
-  }, [shownDay, hasHydrated, canCheckIn])
 
   // The carousel is the phone's. On a wide screen there is no finger to follow and the
   // sidebar is there instead, so the views keep changing the way they always did.

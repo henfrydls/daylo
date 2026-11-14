@@ -552,8 +552,9 @@ describe('the check-in in settings', () => {
 })
 
 // Two moments, because two kinds of device. A phone is closed and opened; a desktop is
-// left running for days, and the day changing with it open is the other moment. Every way
-// a day can change is in App.newDay.test.tsx.
+// left running for days and only the window coming back says somebody is there again. A
+// second ask on the same day is refused by sendCheckinIfDue itself; App.newDay.test.tsx
+// runs the real one to count what leaves the device.
 describe('when the daily check-in is attempted', () => {
   it('asks once the store is there and the app can send', async () => {
     checkinFields.mockResolvedValue({ version: '1.3.0', os: 'linux', source: 'deb' })
@@ -588,21 +589,6 @@ describe('when the daily check-in is attempted', () => {
     } finally {
       vi.useRealTimers()
     }
-  })
-
-  // Coming back on the same day asks nothing: today was already tried when the app opened,
-  // and a tried day is spent.
-  it('does not ask again when the window comes back on the same day', async () => {
-    checkinFields.mockResolvedValue({ version: '1.3.0', os: 'linux', source: 'deb' })
-    render(<App />)
-    await act(async () => {})
-    sendCheckinIfDue.mockClear()
-
-    await act(async () => {
-      document.dispatchEvent(new Event('visibilitychange'))
-    })
-
-    expect(sendCheckinIfDue).not.toHaveBeenCalled()
   })
 })
 

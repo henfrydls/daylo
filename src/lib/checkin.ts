@@ -95,8 +95,11 @@ let sending = false
 async function send(id: string, last: boolean): Promise<boolean> {
   sending = true
   try {
-    const ok = await sendCheckin({ id, date: today(), last })
-    useCalendarStore.getState().recordCheckinAttempt(today(), new Date().toISOString(), ok)
+    // Read once. A send that crosses midnight records the day it said, not the day the
+    // answer came back on, or tomorrow would be spent on a message about today.
+    const date = today()
+    const ok = await sendCheckin({ id, date, last })
+    useCalendarStore.getState().recordCheckinAttempt(date, new Date().toISOString(), ok)
     return ok
   } finally {
     sending = false
