@@ -63,7 +63,7 @@ async function theEveningBefore(page: Page) {
   await page.goto('/')
   await expect(page.locator(BAR)).toHaveAttribute(
     'aria-label',
-    'Log today: 1 of 1 activities completed'
+    'Log today: 1 of 1 activity completed'
   )
   await expect(circle(page, '2026-11-13')).toHaveClass(/bg-emerald-500/)
   await page.locator(BAR).click()
@@ -104,7 +104,7 @@ async function itIsTheNextDay(page: Page) {
   await expect(circle(page, '2026-11-13')).not.toHaveClass(/bg-emerald-500/)
   await expect(page.locator(BAR)).toHaveAttribute(
     'aria-label',
-    'Log today: 0 of 1 activities completed'
+    'Log today: 0 of 1 activity completed'
   )
   await expect(page.locator(SHEET)).toHaveCount(0)
   await page.screenshot({ path: test.info().outputPath('the-next-day.png') })
@@ -116,7 +116,7 @@ async function itIsTheNextDay(page: Page) {
   await expect(page.locator(SHEET)).toHaveCount(0)
   await expect(page.locator(BAR)).toHaveAttribute(
     'aria-label',
-    'Log today: 1 of 1 activities completed'
+    'Log today: 1 of 1 activity completed'
   )
 
   const width = (await page.locator('.lg\\:col-span-3').first().boundingBox())!.width

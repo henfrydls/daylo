@@ -147,14 +147,14 @@ describe('the morning after, with the app left open', () => {
     render(<App />)
     await act(async () => {})
     expect(screen.getByTestId('log-today-bar')).toHaveAccessibleName(
-      'Log today: 1 of 1 activities completed'
+      'Log today: 1 of 1 activity completed'
     )
     expect(isTodayIn('2026-11-13')).toBe(true)
 
     await theNextMorningComes(2026, 10, 14)
 
     expect(screen.getByTestId('log-today-bar')).toHaveAccessibleName(
-      'Log today: 0 of 1 activities completed'
+      'Log today: 0 of 1 activity completed'
     )
     expect(isTodayIn('2026-11-14')).toBe(true)
     expect(isTodayIn('2026-11-13')).toBe(false)
@@ -254,7 +254,7 @@ describe('while the new day is waiting', () => {
     expect(isTodayIn('2026-11-13')).toBe(true)
     expect(within(screen.getByTestId('log-today-bar')).getByText('13')).toBeInTheDocument()
     expect(screen.getByTestId('log-today-bar')).toHaveAccessibleName(
-      'Log today: 1 of 1 activities completed'
+      'Log today: 1 of 1 activity completed'
     )
   })
 })
@@ -507,7 +507,7 @@ describe('opening the app the morning after', () => {
     expect(isTodayIn(today)).toBe(true)
     expect(screen.queryByTestId('quicklog-modal')).not.toBeInTheDocument()
     expect(screen.getByTestId('log-today-bar')).toHaveAccessibleName(
-      'Log today: 0 of 1 activities completed'
+      'Log today: 0 of 1 activity completed'
     )
   })
 })
