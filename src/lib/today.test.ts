@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { renderHook, act } from '@testing-library/react'
-import { useToday, PENDING_GIVES_WAY_AFTER } from './today'
+import { useToday, useTodayDate, PENDING_GIVES_WAY_AFTER } from './today'
 
 /**
  * The day the app believes it is, and the three ways it learns otherwise.
@@ -34,8 +34,22 @@ function openADialog(): () => void {
   return () => dialog.remove()
 }
 
+/** A finger, or a button, by pointer. */
+const pointer = (type: string, id = 1) => Object.assign(new Event(type), { pointerId: id })
+
+/** A tap: down and up again. */
 function touch() {
-  window.dispatchEvent(new Event('pointerdown'))
+  window.dispatchEvent(pointer('pointerdown'))
+  window.dispatchEvent(pointer('pointerup'))
+}
+
+/** A field with words in it that nobody has saved, with the focus somewhere else. */
+function writeInAField(words = 'Walk the dog'): HTMLInputElement {
+  const field = document.createElement('input')
+  field.type = 'text'
+  field.value = words
+  document.body.appendChild(field)
+  return field
 }
 
 describe('useToday', () => {
@@ -293,6 +307,199 @@ describe('useToday', () => {
     expect(onWindow.mock.calls.length).toBeGreaterThan(0)
     expect(pairs(onWindow, offWindow).every(Boolean)).toBe(true)
     expect(pairs(onDocument, offDocument).every(Boolean)).toBe(true)
+  })
+
+  // Words somebody wrote and has not saved go with the form if the day comes in, so they
+  // hold the day for as long as they are there: not a minute, not until the window comes
+  // back, until they are saved or rubbed out.
+  describe('with words written and not saved', () => {
+    it('keeps the old day however long nobody touches anything', () => {
+      vi.setSystemTime(at(13, 23, 59, 50))
+      const { result } = renderHook(() => useToday())
+      writeInAField()
+
+      act(() => {
+        vi.advanceTimersByTime(10 * 60 * 1000)
+      })
+
+      expect(result.current).toBe('2026-11-13')
+    })
+
+    it('keeps the old day when the window comes back', () => {
+      vi.setSystemTime(at(13, 21, 0))
+      const { result } = renderHook(() => useToday())
+      writeInAField()
+
+      // Gone to look at something else, or back from the system's colour picker.
+      vi.setSystemTime(at(14, 8, 30))
+      act(() => {
+        window.dispatchEvent(new Event('focus'))
+        becomeVisible()
+        window.dispatchEvent(new Event('pageshow'))
+      })
+
+      expect(result.current).toBe('2026-11-13')
+    })
+
+    it('lets the day in once the words are gone', () => {
+      vi.setSystemTime(at(13, 23, 59, 50))
+      const { result } = renderHook(() => useToday())
+      const field = writeInAField()
+      act(() => {
+        vi.advanceTimersByTime(10 * 60 * 1000)
+      })
+      expect(result.current).toBe('2026-11-13')
+
+      // Saved: the form closes and takes its field with it.
+      act(() => {
+        field.remove()
+        vi.advanceTimersByTime(5_000)
+      })
+
+      expect(result.current).toBe('2026-11-14')
+    })
+
+    it('lets the day in once the field is emptied', () => {
+      vi.setSystemTime(at(13, 21, 0))
+      const { result } = renderHook(() => useToday())
+      const field = writeInAField()
+      vi.setSystemTime(at(14, 8, 30))
+      act(() => {
+        window.dispatchEvent(new Event('focus'))
+      })
+      expect(result.current).toBe('2026-11-13')
+
+      act(() => {
+        field.value = '  '
+        vi.advanceTimersByTime(5_000)
+      })
+
+      expect(result.current).toBe('2026-11-14')
+    })
+  })
+
+  // A laptop suspended with the window in front: WebKitGTK sends neither focus nor
+  // visibilitychange on waking, and the midnight timeout, paused with the machine, goes off
+  // hours late. Here the clock jumps and no timer is due.
+  it('reads the clock every half a minute, whatever the midnight timer is doing', () => {
+    const { result } = renderHook(() => useToday())
+
+    vi.setSystemTime(at(14, 8, 30))
+    act(() => {
+      vi.advanceTimersByTime(30_000)
+    })
+
+    expect(result.current).toBe('2026-11-14')
+  })
+
+  it('does not stay waiting for ever when the clock goes back while it waits', () => {
+    vi.setSystemTime(at(13, 23, 59, 50))
+    const { result } = renderHook(() => useToday())
+    const close = openADialog()
+    act(() => {
+      vi.advanceTimersByTime(5_000)
+      touch()
+      vi.advanceTimersByTime(10_000)
+    })
+    expect(result.current).toBe('2026-11-13')
+
+    // Back to yesterday evening while the day was waiting, so there is nothing to wait for.
+    act(() => {
+      vi.setSystemTime(at(13, 23, 0))
+      vi.advanceTimersByTime(5_000)
+    })
+    act(() => close())
+
+    // And then the day really does change. It must still come in.
+    act(() => {
+      vi.setSystemTime(at(14, 0, 0, 5))
+      vi.advanceTimersByTime(30_000)
+    })
+
+    expect(result.current).toBe('2026-11-14')
+  })
+
+  describe('with a finger on the screen', () => {
+    it('waits while it is down, and lets the day in when it lifts', () => {
+      vi.setSystemTime(at(13, 23, 59, 50))
+      const { result } = renderHook(() => useToday())
+
+      // Halfway through swiping from Month to Year when midnight comes.
+      act(() => {
+        vi.advanceTimersByTime(5_000)
+        window.dispatchEvent(pointer('pointerdown'))
+        vi.advanceTimersByTime(10_000)
+      })
+      expect(result.current).toBe('2026-11-13')
+
+      act(() => {
+        window.dispatchEvent(pointer('pointerup'))
+        vi.advanceTimersByTime(5_000)
+      })
+      expect(result.current).toBe('2026-11-14')
+    })
+
+    it('lets the day in when the gesture is taken over by the browser', () => {
+      vi.setSystemTime(at(13, 23, 59, 50))
+      const { result } = renderHook(() => useToday())
+      act(() => {
+        vi.advanceTimersByTime(5_000)
+        window.dispatchEvent(pointer('pointerdown', 7))
+        vi.advanceTimersByTime(10_000)
+      })
+      expect(result.current).toBe('2026-11-13')
+
+      act(() => {
+        window.dispatchEvent(pointer('pointercancel', 7))
+        vi.advanceTimersByTime(5_000)
+      })
+      expect(result.current).toBe('2026-11-14')
+    })
+  })
+
+  // A finger that went down here and came up in another window never says so here. The
+  // window coming back is what says it is no longer down.
+  it('forgets a finger that was lifted somewhere else', () => {
+    vi.setSystemTime(at(13, 23, 59, 50))
+    const { result } = renderHook(() => useToday())
+    act(() => {
+      vi.advanceTimersByTime(5_000)
+      window.dispatchEvent(pointer('pointerdown'))
+      vi.advanceTimersByTime(1_000)
+      window.dispatchEvent(new Event('focus'))
+      vi.advanceTimersByTime(6_000)
+    })
+
+    expect(result.current).toBe('2026-11-14')
+  })
+
+  it('leaves no timer behind after waiting on words through several returns', () => {
+    vi.setSystemTime(at(13, 21, 0))
+    const { unmount } = renderHook(() => useToday())
+    writeInAField()
+    vi.setSystemTime(at(14, 8, 30))
+    act(() => {
+      window.dispatchEvent(new Event('focus'))
+      window.dispatchEvent(new Event('focus'))
+      window.dispatchEvent(new Event('pageshow'))
+    })
+
+    unmount()
+
+    expect(vi.getTimerCount()).toBe(0)
+  })
+
+  it('gives the same day as a date, and keeps it while the new day waits', () => {
+    vi.setSystemTime(at(13, 23, 59, 50))
+    const { result } = renderHook(() => useTodayDate())
+    expect(result.current).toEqual(new Date(2026, 10, 13))
+    writeInAField()
+
+    act(() => {
+      vi.advanceTimersByTime(60_000)
+    })
+
+    expect(result.current).toEqual(new Date(2026, 10, 13))
   })
 
   it('is one day for everybody who asks', () => {

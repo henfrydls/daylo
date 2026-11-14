@@ -1,4 +1,4 @@
-import { useSyncExternalStore } from 'react'
+import { useMemo, useSyncExternalStore } from 'react'
 import { formatDate } from './dates'
 
 /**
@@ -16,14 +16,23 @@ import { formatDate } from './dates'
 
 /**
  * How long after the last key or touch somebody still counts as in the middle of
- * something. A minute: long enough to cover a pause to think while writing a habit's
- * name, short enough that a window left with a sheet open overnight wakes up in today,
- * because nobody has touched it for hours.
+ * something, when nothing they wrote is at stake: a sheet open, a field with the focus and
+ * nothing in it, a finger down. A minute: long enough to cover a pause, short enough that
+ * a window left with a sheet open overnight wakes up in today, because nobody has touched
+ * it for hours. Words written are not on this clock at all.
  */
 export const PENDING_GIVES_WAY_AFTER = 60_000
 
 /** How often a waiting day looks again to see whether it can come in. */
 const LOOK_AGAIN_EVERY = 5_000
+
+/**
+ * How often the clock is read regardless of anything else. The midnight timer is one long
+ * timeout, and a laptop suspended with the window in front pauses it: WebKitGTK sends
+ * neither focus nor visibilitychange on waking, and the paused timer goes off hours late.
+ * Half a minute is cheap, and it is the most a day can be late by.
+ */
+const READ_THE_CLOCK_EVERY = 30_000
 
 /** Every sheet and dialog in Daylo marks itself with one of these. */
 const SOMETHING_OPEN = '[role="dialog"], [aria-modal="true"]'
@@ -46,6 +55,9 @@ let pending = false
 let lastGesture = Number.NEGATIVE_INFINITY
 let midnight: ReturnType<typeof setTimeout> | null = null
 let lookAgain: ReturnType<typeof setTimeout> | null = null
+let readTheClock: ReturnType<typeof setInterval> | null = null
+/** Fingers and buttons down right now, by pointer. A drag in progress is one of these. */
+const pressed = new Set<number>()
 const listeners = new Set<() => void>()
 
 const now = () => formatDate(new Date())
@@ -57,12 +69,37 @@ function getSnapshot(): string {
   return day
 }
 
-/** Somebody writing in a field, or a sheet open that somebody is still using. */
+/** Fields that hold words somebody typed. A date or a time picked from a list does not count. */
+const WORDS = 'textarea, input:not([type]), input[type="text"], input[type="search"]'
+
+/**
+ * Whether there is anything on the page that somebody wrote and has not saved yet. Every
+ * field Daylo puts words in lives inside what the new day builds again, so a day that came
+ * in now would take those words with it. However long it has been since the last key.
+ */
+function somethingWritten(): boolean {
+  return Array.from(document.querySelectorAll<HTMLInputElement | HTMLTextAreaElement>(WORDS)).some(
+    (field) => field.value.trim() !== ''
+  )
+}
+
+/**
+ * Somebody with words in a field, somebody writing in one, somebody with a finger on the
+ * screen, or a sheet open that somebody is still using.
+ *
+ * Words wait for ever: they go when the field is saved or emptied, never on a timer. The
+ * rest wait at most a minute after the last key or touch, so a window left with a sheet
+ * open all night still wakes up in today.
+ */
 function inTheMiddleOfSomething(): boolean {
+  if (somethingWritten()) return true
   // A clock moved backwards makes the last touch look like it is in the future, and that
   // would keep the day waiting for as long as the clock was moved. Not a touch, then.
   const since = Date.now() - lastGesture
   if (since < 0 || since >= PENDING_GIVES_WAY_AFTER) return false
+  // A finger in the middle of swiping between views, or of pulling a sheet: building the
+  // views again under it would leave the gesture holding a view that is gone.
+  if (pressed.size > 0) return true
   if (document.querySelector(SOMETHING_OPEN) !== null) return true
   const focused = document.activeElement
   if (focused instanceof HTMLTextAreaElement) return true
@@ -89,7 +126,17 @@ function apply() {
  * a form being typed into does not get closed under their fingers.
  */
 function tryApply() {
-  if (now() === day) return
+  if (lookAgain !== null) {
+    clearTimeout(lookAgain)
+    lookAgain = null
+  }
+  // Nothing to wait for any more, which is also what a clock moved back looks like. Left
+  // set, nothing would ever look again: the midnight timer and the clock reading both
+  // leave a day that is already waiting alone.
+  if (now() === day) {
+    pending = false
+    return
+  }
   if (!inTheMiddleOfSomething()) {
     apply()
     return
@@ -123,15 +170,20 @@ function armMidnight() {
 }
 
 /**
- * Coming back always brings the new day at once: nobody is in the middle of anything.
+ * Coming back brings the new day at once: nobody is in the middle of anything. Except
+ * somebody who left words in a field, went to look at something else and came back to
+ * finish them: those wait, as they would at midnight, until the field is saved or emptied.
  *
  * It also sets the midnight timer again, from the clock as it is now. A timer that sat
  * through a suspended laptop, or a clock somebody moved, would otherwise go off at the
  * wrong hour or not at all.
  */
 function comeBack() {
+  // Whatever was held down when the window went away was let go somewhere else.
+  pressed.clear()
   armMidnight()
-  apply()
+  if (somethingWritten()) tryApply()
+  else apply()
 }
 
 function onVisible() {
@@ -141,6 +193,19 @@ function onVisible() {
 /** Only the time is kept: what was pressed is nobody's business here. */
 function onGesture() {
   lastGesture = Date.now()
+}
+
+function onPress(event: Event) {
+  lastGesture = Date.now()
+  pressed.add((event as PointerEvent).pointerId ?? 0)
+}
+
+function onRelease(event: Event) {
+  pressed.delete((event as PointerEvent).pointerId ?? 0)
+}
+
+function onClockReading() {
+  if (!pending && now() !== day) tryApply()
 }
 
 const passiveCapture = { capture: true, passive: true } as const
@@ -154,8 +219,11 @@ function subscribe(listener: () => void): () => void {
     window.addEventListener('focus', comeBack)
     window.addEventListener('pageshow', comeBack)
     window.addEventListener('keydown', onGesture, passiveCapture)
-    window.addEventListener('pointerdown', onGesture, passiveCapture)
+    window.addEventListener('pointerdown', onPress, passiveCapture)
+    window.addEventListener('pointerup', onRelease, passiveCapture)
+    window.addEventListener('pointercancel', onRelease, passiveCapture)
     armMidnight()
+    readTheClock = setInterval(onClockReading, READ_THE_CLOCK_EVERY)
   }
   return () => {
     listeners.delete(listener)
@@ -164,11 +232,16 @@ function subscribe(listener: () => void): () => void {
     window.removeEventListener('focus', comeBack)
     window.removeEventListener('pageshow', comeBack)
     window.removeEventListener('keydown', onGesture, passiveCapture)
-    window.removeEventListener('pointerdown', onGesture, passiveCapture)
+    window.removeEventListener('pointerdown', onPress, passiveCapture)
+    window.removeEventListener('pointerup', onRelease, passiveCapture)
+    window.removeEventListener('pointercancel', onRelease, passiveCapture)
     if (midnight !== null) clearTimeout(midnight)
     if (lookAgain !== null) clearTimeout(lookAgain)
+    if (readTheClock !== null) clearInterval(readTheClock)
     midnight = null
     lookAgain = null
+    readTheClock = null
+    pressed.clear()
     pending = false
     lastGesture = Number.NEGATIVE_INFINITY
     day = null
@@ -183,4 +256,19 @@ function subscribe(listener: () => void): () => void {
  */
 export function useToday(): string {
   return useSyncExternalStore(subscribe, getSnapshot)
+}
+
+/**
+ * The same day as a Date, at its first moment, for the components that compare dates.
+ *
+ * Read this instead of `new Date()` anywhere that draws today. While a new day is waiting
+ * for somebody to finish, the clock has moved on and this has not, and a part of the screen
+ * that read the clock would draw tomorrow beside a calendar still showing today.
+ */
+export function useTodayDate(): Date {
+  const today = useToday()
+  return useMemo(() => {
+    const [year, month, date] = today.split('-').map(Number)
+    return new Date(year, month - 1, date)
+  }, [today])
 }
