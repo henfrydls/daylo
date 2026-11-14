@@ -216,6 +216,13 @@ function onVisible() {
   if (document.visibilityState === 'visible') comeBack()
 }
 
+/**
+ * Every sign of somebody using the page: a key, the wheel or the trackpad, a finger moving,
+ * a field changing, a scroll. A scroll does not bubble, which is why all of these are
+ * heard on the way down (capture) rather than on the way up.
+ */
+const GESTURES = ['keydown', 'wheel', 'scroll', 'touchmove', 'input'] as const
+
 /** Only the time is kept: what was pressed is nobody's business here. */
 function onGesture() {
   lastGesture = Date.now()
@@ -244,7 +251,7 @@ function subscribe(listener: () => void): () => void {
     document.addEventListener('visibilitychange', onVisible)
     window.addEventListener('focus', comeBack)
     window.addEventListener('pageshow', comeBack)
-    window.addEventListener('keydown', onGesture, passiveCapture)
+    GESTURES.forEach((type) => window.addEventListener(type, onGesture, passiveCapture))
     window.addEventListener('focusin', onFocusIn, passiveCapture)
     window.addEventListener('pointerdown', onPress, passiveCapture)
     window.addEventListener('pointerup', onRelease, passiveCapture)
@@ -258,7 +265,7 @@ function subscribe(listener: () => void): () => void {
     document.removeEventListener('visibilitychange', onVisible)
     window.removeEventListener('focus', comeBack)
     window.removeEventListener('pageshow', comeBack)
-    window.removeEventListener('keydown', onGesture, passiveCapture)
+    GESTURES.forEach((type) => window.removeEventListener(type, onGesture, passiveCapture))
     window.removeEventListener('focusin', onFocusIn, passiveCapture)
     window.removeEventListener('pointerdown', onPress, passiveCapture)
     window.removeEventListener('pointerup', onRelease, passiveCapture)

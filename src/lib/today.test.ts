@@ -200,6 +200,39 @@ describe('useToday', () => {
       expect(result.current).toBe('2026-11-14')
     })
 
+    // Reading down a long sheet with the wheel or the trackpad, or a finger moving across
+    // it, is using it as much as a tap is. A scroll does not bubble, so only somebody
+    // listening on the way down hears one inside a sheet.
+    it.each([
+      [
+        'the wheel',
+        (inside: Element) => inside.dispatchEvent(new Event('wheel', { bubbles: true })),
+      ],
+      ['a scroll inside a sheet', (inside: Element) => inside.dispatchEvent(new Event('scroll'))],
+      [
+        'a finger moving',
+        (inside: Element) => inside.dispatchEvent(new Event('touchmove', { bubbles: true })),
+      ],
+      [
+        'a field changing',
+        (inside: Element) => inside.dispatchEvent(new Event('input', { bubbles: true })),
+      ],
+    ])('counts %s as somebody still using a dialog', (_, gesture) => {
+      vi.setSystemTime(at(13, 23, 59, 0))
+      const { result } = renderHook(() => useToday())
+      openADialog()
+      const inside = document.createElement('div')
+      document.querySelector('[role="dialog"]')!.appendChild(inside)
+
+      act(() => {
+        vi.advanceTimersByTime(50_000)
+        gesture(inside)
+        vi.advanceTimersByTime(15_000)
+      })
+
+      expect(result.current).toBe('2026-11-13')
+    })
+
     it('waits while somebody is typing in a field', () => {
       vi.setSystemTime(at(13, 23, 59, 50))
       const { result } = renderHook(() => useToday())
