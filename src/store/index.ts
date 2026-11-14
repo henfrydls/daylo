@@ -15,6 +15,14 @@ import { useRescueStore, whatIsOnDisk } from './rescue'
  */
 export const STORAGE_KEY = 'simple-calendar-storage'
 
+/**
+ * What Daylo says when the disk refuses a write. Agreed word for word: it is the one
+ * moment Daylo knows it is about to lose something and can still prevent it, because what
+ * was not written is still in memory and Export still works.
+ */
+export const COULD_NOT_SAVE =
+  'Daylo could not save your last changes. Open Settings and export a backup so nothing is lost.'
+
 type ViewType = 'year' | 'month'
 type ViewTransitionDirection = 'drill-down' | 'drill-up' | null
 
@@ -60,22 +68,24 @@ const createDeferredStorage = (): DeferredStorage => {
       try {
         localStorage.setItem(key, pendingWrite)
         lastSeen = pendingWrite
-        // Solo se descarta el pendiente cuando de verdad se escribio. Si falla se
-        // conserva para que el siguiente flush lo reintente.
+        // The pending value is only dropped once it has really been written. If the write
+        // fails it is kept, so the next flush tries it again.
         pendingWrite = null
         pendingKey = null
+        // The disk works again. If it fails after this, that is news, and is said again.
+        failureReported = false
       } catch (error) {
-        // No se silencia: perder datos sin avisar es lo peor que puede hacer una app
-        // cuyo argumento es que tus datos son tuyos.
-        console.error('[Daylo] No se pudieron guardar los cambios en localStorage:', error)
+        // Not swallowed: losing data without a word is the worst thing an app can do when
+        // its whole case is that your data is yours.
+        console.error('[Daylo] Could not save changes to localStorage:', error)
+        // Once per run of failures, not once per tap: every tap is another write. And
+        // never a second copy over one still on the screen.
         if (!failureReported) {
           failureReported = true
-          useToastStore
-            .getState()
-            .addToast(
-              'No se pudieron guardar tus cambios. Exporta tus datos por seguridad.',
-              'error'
-            )
+          const toasts = useToastStore.getState()
+          if (!toasts.toasts.some((t) => t.message === COULD_NOT_SAVE)) {
+            toasts.addToast(COULD_NOT_SAVE, 'error', { untilDismissed: true })
+          }
         }
       }
     }

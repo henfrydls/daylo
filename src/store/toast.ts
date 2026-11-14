@@ -7,22 +7,32 @@ export interface Toast {
   variant: 'success' | 'error' | 'info'
 }
 
+interface ToastOptions {
+  /**
+   * Stays on the screen until the person closes it. For the notice that asks them to do
+   * something before it is too late: three seconds is shorter than it takes to read it.
+   */
+  untilDismissed?: boolean
+}
+
 interface ToastState {
   toasts: Toast[]
-  addToast: (message: string, variant: Toast['variant']) => void
+  addToast: (message: string, variant: Toast['variant'], options?: ToastOptions) => void
   removeToast: (id: string) => void
 }
 
 export const useToastStore = create<ToastState>((set) => ({
   toasts: [],
 
-  addToast: (message, variant) => {
+  addToast: (message, variant, options) => {
     const id = `toast-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`
     const newToast: Toast = { id, message, variant }
 
     set((state) => ({
       toasts: [...state.toasts, newToast],
     }))
+
+    if (options?.untilDismissed) return
 
     // Auto-dismiss after 3 seconds
     setTimeout(() => {
