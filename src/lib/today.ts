@@ -118,6 +118,19 @@ function onFocusIn(event: Event) {
 }
 
 /**
+ * Left as it was found: forget what it held, so the next time it takes the focus starts
+ * from what it holds then. A dialog that closes and opens again before it has finished
+ * leaving keeps the same field and puts something else in it ("Edit activity" cancelled
+ * on Read and opened on Run), and Run measured against Read would look written.
+ */
+function onFocusOut(event: Event) {
+  const field = event.target
+  if (!(field instanceof HTMLInputElement || field instanceof HTMLTextAreaElement)) return
+  const opened = openedWith.get(field)
+  if (opened !== undefined && field.value.trim() === opened.trim()) openedWith.delete(field)
+}
+
+/**
  * Somebody with words in a field, somebody writing in one, somebody with a finger on the
  * screen, or a sheet open that somebody is still using.
  *
@@ -261,6 +274,7 @@ function subscribe(listener: () => void): () => void {
     window.addEventListener('pageshow', comeBack)
     GESTURES.forEach((type) => window.addEventListener(type, onGesture, passiveCapture))
     window.addEventListener('focusin', onFocusIn, passiveCapture)
+    window.addEventListener('focusout', onFocusOut, passiveCapture)
     window.addEventListener('pointerdown', onPress, passiveCapture)
     window.addEventListener('pointerup', onRelease, passiveCapture)
     window.addEventListener('pointercancel', onRelease, passiveCapture)
@@ -275,6 +289,7 @@ function subscribe(listener: () => void): () => void {
     window.removeEventListener('pageshow', comeBack)
     GESTURES.forEach((type) => window.removeEventListener(type, onGesture, passiveCapture))
     window.removeEventListener('focusin', onFocusIn, passiveCapture)
+    window.removeEventListener('focusout', onFocusOut, passiveCapture)
     window.removeEventListener('pointerdown', onPress, passiveCapture)
     window.removeEventListener('pointerup', onRelease, passiveCapture)
     window.removeEventListener('pointercancel', onRelease, passiveCapture)

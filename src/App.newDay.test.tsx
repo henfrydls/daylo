@@ -275,6 +275,25 @@ describe('while the new day is waiting', () => {
     expect(isTodayIn('2026-11-14')).toBe(true)
   })
 
+  // Cancelled on one activity and opened on another before the dialog had gone: the name
+  // field stays the same field, and what it held the first time is not the baseline any
+  // more. Run is what the form opened with, and nobody wrote it.
+  it('comes in past an Edit form cancelled and opened again on another activity', async () => {
+    useCalendarStore.setState({ activities: [READ, { ...READ, id: 'a2', name: 'Run' }] })
+    render(<App />)
+    await act(async () => {})
+    await userEvent.click(screen.getAllByRole('button', { name: 'Edit Read' })[0])
+    await userEvent.click(screen.getByTestId('activity-name-input'))
+    await userEvent.click(screen.getByRole('button', { name: 'Cancel' }))
+    await userEvent.click(screen.getAllByRole('button', { name: 'Edit Run' })[0])
+    await userEvent.click(screen.getByTestId('activity-name-input'))
+    expect(screen.getByTestId('activity-name-input')).toHaveValue('Run')
+
+    await theNextMorningComes(2026, 10, 14)
+
+    expect(isTodayIn('2026-11-14')).toBe(true)
+  })
+
   it('waits for an Edit form whose name was changed and not saved', async () => {
     render(<App />)
     await act(async () => {})

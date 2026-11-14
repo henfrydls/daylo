@@ -519,6 +519,25 @@ describe('useToday', () => {
       expect(result.current).toBe('2026-11-14')
     })
 
+    // The same field shown again with something else in it: "Edit activity" cancelled on
+    // Read and opened on Run before the dialog had finished leaving keeps its input, and
+    // the form puts Run in it. Compared with Read, Run would look written by somebody.
+    it('starts again from what a field holds when it is shown again untouched', () => {
+      vi.setSystemTime(at(13, 21, 0))
+      const { result } = renderHook(() => useToday())
+      const field = aField({ opened: 'Read' })
+      write(field, 'Read')
+      field.value = 'Run'
+      write(field, 'Run')
+      vi.setSystemTime(at(14, 8, 30))
+
+      act(() => {
+        window.dispatchEvent(new Event('focus'))
+      })
+
+      expect(result.current).toBe('2026-11-14')
+    })
+
     // To write in a field it has to have the focus first.
     it('does not count a field that never had the focus', () => {
       vi.setSystemTime(at(13, 21, 0))
