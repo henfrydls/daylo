@@ -216,6 +216,38 @@ describe('the morning after, with the app left open', () => {
 })
 
 /**
+ * While the new day waits for somebody to finish, the whole screen goes on saying the old
+ * one. The bar used to read the clock every time it was drawn, so anything that drew it
+ * again after midnight put tomorrow in the bar beside a calendar still on today.
+ */
+describe('while the new day is waiting', () => {
+  it('keeps the bar and the calendar on the same day when something is drawn again', async () => {
+    useCalendarStore.setState({ selectedDate: '2026-11-13' })
+    render(<App />)
+    await act(async () => {})
+    // Halfway through naming a new habit in the sheet of the 13th: words not yet saved.
+    await userEvent.click(screen.getByTestId('quicklog-new-activity-button'))
+    await userEvent.type(screen.getByTestId('quicklog-new-activity-input'), 'Walk')
+
+    vi.setSystemTime(new Date(2026, 10, 14, 0, 0, 30))
+    await act(async () => {
+      window.dispatchEvent(new Event('focus'))
+    })
+    // Something that draws the month again: a tick lands while the day waits.
+    await act(async () => {
+      useCalendarStore.getState().toggleLog('a1', '2026-11-12')
+    })
+
+    expect(screen.getByTestId('quicklog-new-activity-input')).toHaveValue('Walk')
+    expect(isTodayIn('2026-11-13')).toBe(true)
+    expect(within(screen.getByTestId('log-today-bar')).getByText('13')).toBeInTheDocument()
+    expect(screen.getByTestId('log-today-bar')).toHaveAccessibleName(
+      'Log today: 1 of 1 activities completed'
+    )
+  })
+})
+
+/**
  * What runs when the app opens, and what the new day must not do to it.
  *
  * App is not started again, only what draws the day, so each of these should go on as if

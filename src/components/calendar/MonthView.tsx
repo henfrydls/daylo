@@ -1,7 +1,8 @@
 import { useMemo, useCallback, memo, useState } from 'react'
 import { useCalendarStore } from '../../store'
 import { useTravel } from '../../lib/travel'
-import { formatDate, formatMonthYear, checkIsToday } from '../../lib/dates'
+import { formatDate, formatMonthYear } from '../../lib/dates'
+import { useToday, useTodayDate } from '../../lib/today'
 import { useMediaQuery } from '../../hooks/useMediaQuery'
 import type { Activity, ActivityLog } from '../../types'
 import { useShallow } from 'zustand/react/shallow'
@@ -18,7 +19,7 @@ interface DayInfo {
   logs: ActivityLog[]
 }
 
-function getMonthDays(year: number, month: number): DayInfo[] {
+function getMonthDays(year: number, month: number, today: string): DayInfo[] {
   const firstDay = new Date(year, month, 1)
   const lastDay = new Date(year, month + 1, 0)
   const startDayOfWeek = firstDay.getDay()
@@ -34,7 +35,7 @@ function getMonthDays(year: number, month: number): DayInfo[] {
       date,
       dateStr: formatDate(date),
       isCurrentMonth: false,
-      isToday: checkIsToday(date),
+      isToday: formatDate(date) === today,
       logs: [],
     })
   }
@@ -46,7 +47,7 @@ function getMonthDays(year: number, month: number): DayInfo[] {
       date,
       dateStr: formatDate(date),
       isCurrentMonth: true,
-      isToday: checkIsToday(date),
+      isToday: formatDate(date) === today,
       logs: [],
     })
   }
@@ -59,7 +60,7 @@ function getMonthDays(year: number, month: number): DayInfo[] {
       date,
       dateStr: formatDate(date),
       isCurrentMonth: false,
-      isToday: checkIsToday(date),
+      isToday: formatDate(date) === today,
       logs: [],
     })
   }
@@ -85,9 +86,15 @@ export const MonthView = memo(function MonthView() {
 
   const [slideDirection, setSlideDirection] = useState<'left' | 'right' | null>(null)
 
+  // The app's day and not the clock's: while a new day waits for somebody to finish, the
+  // clock has moved on and the rest of the screen has not, and the bar and the grid would
+  // each say a different day was today.
+  const todayStr = useToday()
+  const today = useTodayDate()
+
   const monthDays = useMemo(
-    () => getMonthDays(selectedYear, selectedMonth),
-    [selectedYear, selectedMonth]
+    () => getMonthDays(selectedYear, selectedMonth, todayStr),
+    [selectedYear, selectedMonth, todayStr]
   )
 
   // Create a map of date -> completed logs
@@ -142,10 +149,9 @@ export const MonthView = memo(function MonthView() {
 
   const handleToday = useCallback((): void => {
     setSlideDirection(null)
-    const today = new Date()
     setSelectedYear(today.getFullYear())
     setSelectedMonth(today.getMonth())
-  }, [setSelectedYear, setSelectedMonth])
+  }, [today, setSelectedYear, setSelectedMonth])
 
   const handleDayClick = useCallback(
     (dateStr: string): void => {
@@ -157,8 +163,6 @@ export const MonthView = memo(function MonthView() {
   const displayDate = new Date(selectedYear, selectedMonth, 1)
 
   // Log Today bar data
-  const today = new Date()
-  const todayStr = formatDate(today)
   const isCurrentMonth = selectedYear === today.getFullYear() && selectedMonth === today.getMonth()
   const todayCompletedCount = logsMap.get(todayStr)?.length ?? 0
 

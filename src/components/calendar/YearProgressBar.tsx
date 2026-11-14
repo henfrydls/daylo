@@ -1,5 +1,6 @@
 import { useMemo, memo } from 'react'
 import { formatDate, getYearDays } from '../../lib/dates'
+import { useTodayDate } from '../../lib/today'
 
 const MONTHS_SHORT = [
   'Jan',
@@ -34,11 +35,12 @@ export const YearProgressBar = memo(function YearProgressBar({
   totalActivities,
   currentStreak,
 }: YearProgressBarProps) {
-  const isThisYear = year === new Date().getFullYear()
+  // The app's day, not the clock's: see useTodayDate.
+  const today = useTodayDate()
+  const isThisYear = year === today.getFullYear()
 
   const { activeDays, totalDaysElapsed, percentage, bestMonth } = useMemo(() => {
     const yearDays = getYearDays(year)
-    const today = new Date()
 
     // Count days elapsed up to today
     const elapsed = yearDays.filter((d) => d <= today).length
@@ -79,7 +81,7 @@ export const YearProgressBar = memo(function YearProgressBar({
       percentage: pct,
       bestMonth: bestMonthCount > 0 ? MONTHS_SHORT[bestMonthIdx] : null,
     }
-  }, [year, logsByDate])
+  }, [year, logsByDate, today])
 
   if (totalActivities === 0) {
     return null

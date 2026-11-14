@@ -1,5 +1,5 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { render, screen, fireEvent } from '@testing-library/react'
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
+import { act, render, screen, fireEvent } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { ActivityForm } from './ActivityForm'
 import { useCalendarStore } from '../../store'
@@ -514,5 +514,33 @@ describe('how long a name may be', () => {
     render(<ActivityForm isOpen onClose={vi.fn()} />)
 
     expect(screen.getByTestId('activity-name-input')).toHaveAttribute('maxLength', '100')
+  })
+})
+
+// Opened just after midnight while the new day is still waiting for somebody to finish
+// writing elsewhere. The calendar is still on the 13th, so the day the form offers to log
+// is the 13th: the one on screen, not the one on the clock.
+describe('the day it offers to log, while a new day waits', () => {
+  afterEach(() => {
+    vi.useRealTimers()
+  })
+
+  it('is the day on screen and not the one on the clock', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] })
+    vi.setSystemTime(new Date(2026, 10, 13, 23, 59))
+    const { rerender } = render(<ActivityForm isOpen={false} onClose={vi.fn()} />)
+    const elsewhere = document.createElement('textarea')
+    elsewhere.value = 'a note not yet saved'
+    document.body.appendChild(elsewhere)
+
+    vi.setSystemTime(new Date(2026, 10, 14, 0, 0, 30))
+    act(() => {
+      window.dispatchEvent(new Event('focus'))
+    })
+    rerender(<ActivityForm isOpen onClose={vi.fn()} />)
+    fireEvent.click(screen.getByTestId('log-for-date-checkbox'))
+
+    expect(screen.getByTestId('selected-date-input')).toHaveValue('2026-11-13')
+    elsewhere.remove()
   })
 })

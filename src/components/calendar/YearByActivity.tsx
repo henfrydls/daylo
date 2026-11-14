@@ -2,6 +2,7 @@ import { memo, useMemo } from 'react'
 import { YearHeatmap } from './YearHeatmap'
 import { HeatmapLegend } from './HeatmapLegend'
 import { summariseActivities } from '../../lib/activityYear'
+import { useTodayDate } from '../../lib/today'
 import type { Activity, ActivityLog, HeatmapLevel } from '../../types'
 import { count } from '../../lib/plural'
 
@@ -32,7 +33,12 @@ export const YearByActivity = memo(function YearByActivity({
   selectedDate,
   onSelectDate,
 }: YearByActivityProps) {
-  const rows = useMemo(() => summariseActivities(activities, logs, new Date()), [activities, logs])
+  // The app's day, not the clock's: see useTodayDate.
+  const today = useTodayDate()
+  const rows = useMemo(
+    () => summariseActivities(activities, logs, today),
+    [activities, logs, today]
+  )
 
   if (activities.length === 0) {
     return (
