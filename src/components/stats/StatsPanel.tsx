@@ -1,6 +1,6 @@
 import { useMemo } from 'react'
 import { useCalendarStore } from '../../store'
-import { formatDate, getYearDays } from '../../lib/dates'
+import { formatDate } from '../../lib/dates'
 import { longestStreak } from '../../lib/streaks'
 import { completedDates } from '../../lib/activityYear'
 
@@ -8,15 +8,6 @@ export function StatsPanel() {
   const { selectedYear, activities, logs } = useCalendarStore()
 
   const stats = useMemo(() => {
-    if (activities.length === 0) {
-      return {
-        activeDays: 0,
-        longestStreak: 0,
-        completionRate: 0,
-      }
-    }
-
-    const yearDays = getYearDays(selectedYear)
     const today = new Date()
 
     // Two sets, because the panel answers two kinds of question. Active days and this
@@ -34,9 +25,14 @@ export function StatsPanel() {
       )
     )
 
-    // Completion rate for the current month of the year on screen
+    // Completion rate for the current month of the year on screen: its days up to today,
+    // which in an older year is all of them and in a year still to come is none.
     const currentMonth = today.getMonth()
-    const currentMonthDays = yearDays.filter((d) => d.getMonth() === currentMonth && d <= today)
+    const daysInMonth = new Date(selectedYear, currentMonth + 1, 0).getDate()
+    const currentMonthDays = Array.from(
+      { length: daysInMonth },
+      (_, day) => new Date(selectedYear, currentMonth, day + 1)
+    ).filter((d) => d <= today)
     const currentMonthCompleted = currentMonthDays.filter((d) =>
       daysWithActivity.has(formatDate(d))
     ).length
@@ -50,7 +46,7 @@ export function StatsPanel() {
       longestStreak: longestStreak(everyDayWithActivity, today),
       completionRate,
     }
-  }, [selectedYear, activities, logs])
+  }, [selectedYear, logs])
 
   if (activities.length === 0) {
     return null

@@ -1,3 +1,3 @@
-**The statistics panel now gives your longest run the full width.** Your current run moved
-to the top of the screen, so the panel and the line under the year on a phone no longer
-repeat it.
+**Statistics now shows three figures: Active Days, This Month and Longest Streak.** Your
+current streak is no longer repeated there, or in the line under the year on a phone, and
+Longest Streak takes the full width of the panel.

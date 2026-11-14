@@ -95,6 +95,30 @@ describe('what stays tied to the year on screen', () => {
 // An import can carry dates in the future. They used to be counted as active days while
 // the days elapsed, which is the denominator, stopped at today: a file with next year in
 // it could say more days active than there have been.
+// Nothing held this figure's value until the way it is worked out changed, which is the
+// wrong moment to find that out.
+describe('this month', () => {
+  it('is the days with something done over the days gone by', () => {
+    // 2 and 4 March, read on the 4th: two of four.
+    show(['2026-03-02', '2026-03-04'])
+
+    expect(figure('This Month')).toBe('50%')
+  })
+
+  it('is over the whole of the month when the year on screen is over', () => {
+    // March 2025 has all 31 of its days behind it.
+    show(['2025-03-10'], 2025)
+
+    expect(figure('This Month')).toBe('3%')
+  })
+
+  it('is nothing in a year that has not come', () => {
+    show(['2026-03-04'], 2027)
+
+    expect(figure('This Month')).toBe('0%')
+  })
+})
+
 describe('days that have not happened', () => {
   it('does not count a day still to come as active', () => {
     show(['2026-03-04', '2026-06-01', '2026-06-02'])
