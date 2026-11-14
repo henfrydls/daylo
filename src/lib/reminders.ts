@@ -224,10 +224,40 @@ async function putOnTheQueue(hour: number, minute: number): Promise<string | nul
 }
 
 /**
+ * The order in which calls change the reminder, and a way to tell a call that it is stale.
+ *
+ * Opening the app re-arms the reminder, and that takes a few round trips to the phone. Two
+ * things can happen during them. Somebody deletes their last habit, the reminder is
+ * cancelled, and then the re-arm that was already on its way arrives and schedules it again:
+ * the plugin stores it, and it rings every evening, across restarts, over an app with
+ * nothing in it. Or somebody turns the switch on, and then the re-arm that started before
+ * the permission was given comes back saying it is off, and the screen cancels what was just
+ * armed. Each call reaching the phone on its own schedule is what let the older one win.
+ *
+ * So every call that arms or cancels waits for the ones before it, and the two that run by
+ * themselves, the re-arm at launch and the cancel when the habits are gone, stand down when
+ * a newer call has come in behind them. The calls somebody makes with the switch always
+ * act, in the order they were made.
+ *
+ * A call that never settles would hold up the ones behind it. Every call here settles on
+ * its own except the permission request, which waits for the person to answer, and while
+ * that question is on the screen there is nothing else to do.
+ */
+let issued = 0
+let tail: Promise<unknown> = Promise.resolve()
+
+function inTurn<T>(work: (overtaken: () => boolean) => Promise<T>): Promise<T> {
+  const turn = ++issued
+  const run = tail.then(() => work(() => turn !== issued))
+  tail = run.catch(() => {})
+  return run
+}
+
+/**
  * Turn the daily reminder on at the given local time.
  *
- * The schedule is an interval matching an hour and a minute, which Android re-arms by
- * itself. It does not survive a reboot: see refreshReminder, which is what brings it back.
+ * The schedule is an interval matching an hour and a minute, which the plugin re-arms by
+ * itself each day, and after a restart or an update of Daylo: see refreshReminder.
  * allowWhileIdle is set because without it the alarm will not wake a dozing phone, and an
  * evening reminder that waits for the phone to be picked up is no reminder at all.
  *
@@ -262,38 +292,46 @@ async function putOnTheQueue(hour: number, minute: number): Promise<string | nul
  * person who does not open Daylo for three days stops being reminded on the days they
  * most need it. The wording is neutral for that reason.
  */
-export async function enableReminder(hour: number, minute: number): Promise<ReminderResult> {
-  if (!(await remindersAvailable())) {
-    return { outcome: 'unavailable' }
-  }
+export function enableReminder(hour: number, minute: number): Promise<ReminderResult> {
+  return inTurn(async () => {
+    if (!(await remindersAvailable())) {
+      return { outcome: 'unavailable' }
+    }
 
-  let granted = await isPermissionGranted()
-  if (!granted) {
-    granted = (await requestPermission()) === 'granted'
-  }
-  if (!granted) {
-    return { outcome: 'permission-denied' }
-  }
+    let granted = await isPermissionGranted()
+    if (!granted) {
+      granted = (await requestPermission()) === 'granted'
+    }
+    if (!granted) {
+      return { outcome: 'permission-denied' }
+    }
 
-  const reason = await putOnTheQueue(hour, minute)
-  return reason === null ? { outcome: 'on' } : { outcome: 'failed', reason }
+    const reason = await putOnTheQueue(hour, minute)
+    return reason === null ? { outcome: 'on' } : { outcome: 'failed', reason }
+  })
 }
 
 /**
  * Arm an already-enabled reminder again, without asking for anything.
  *
- * A reboot takes the reminder away and nothing brings it back on its own. The plugin has a
- * receiver for BOOT_COMPLETED, and it restores whatever is in its own store, and its store
- * is empty: a notification scheduled through `show`, which is the only path the Rust API
- * offers, is never written there. Only `batch` writes, and nothing reaches `batch`. So the
- * one thing that puts the alarm back after a restart is Daylo being opened, which is this.
+ * A restart used to take the reminder away until Daylo was opened again, which is what
+ * this was first for. The plugin has a receiver for BOOT_COMPLETED that restores whatever
+ * is in its own store, and the store was always empty: `show`, the only path the Rust API
+ * offers, wrote nothing. The patched copy pinned in src-tauri/Cargo.toml writes it now, and
+ * the same receiver also runs when Daylo is updated, so a restart or an update puts the
+ * reminder back without the app being opened.
  *
- * The same goes for an update that stops declaring SCHEDULE_EXACT_ALARM, which is why 1.5.3
- * still declares it. Android's AlarmManagerService, on a package replaced, removes the exact
- * alarms of an app that no longer has the permission, without telling it: read in the
- * Android 13 to 16 source, not yet watched on a phone. With nothing stored to set it again
- * from, somebody who granted the permission would have no reminder after that update until
- * they opened Daylo, and this is what would put it back.
+ * Only for a reminder stored by a build with that fix, though. One armed by 1.5.2 or
+ * earlier is not in the store until something schedules it again, and this call is that
+ * something: opening Daylo once after updating is what makes the reminder restorable. That
+ * matters most for the update that stops asking for exact alarms, because Android removes
+ * the exact alarm on that update and only the store can bring it back.
+ *
+ * That is also why 1.5.3 still declares SCHEDULE_EXACT_ALARM. Android's AlarmManagerService,
+ * on a package replaced, removes the exact alarms of an app that no longer has the
+ * permission, without telling it: read in the Android 13 to 16 source, not yet watched on a
+ * phone. 1.5.3 is the version that stores the reminder, so the update that stops declaring
+ * the permission finds something to restore; whoever skips it is back to opening Daylo.
  *
  * It also puts the switch back in step with the phone: a permission taken away in the
  * system settings leaves nothing scheduled, and this is how the app finds out. Returns
@@ -303,26 +341,42 @@ export async function enableReminder(hour: number, minute: number): Promise<Remi
  * plain RTC and no idle allowance, which this call undid for the next evening. That is
  * fixed in the plugin now, in the patched copy pinned in src-tauri/Cargo.toml, so this is
  * no longer the only thing standing between a daily reminder and a dozing phone.
+ *
+ * Null when another call to arm or cancel came in while this one was on its way: it then
+ * schedules nothing, and its answer is not acted on, because the newer call decides. See
+ * inTurn.
  */
-export async function refreshReminder(hour: number, minute: number): Promise<boolean> {
-  if (!(await remindersAvailable())) {
-    return false
-  }
-  // Deliberately does not request it. Being asked again on every launch is how an app
-  // teaches people to say no.
-  if (!(await isPermissionGranted())) {
-    return false
-  }
+export function refreshReminder(hour: number, minute: number): Promise<boolean | null> {
+  return inTurn(async (overtaken) => {
+    if (!(await remindersAvailable())) {
+      return overtaken() ? null : false
+    }
+    // Deliberately does not request it. Being asked again on every launch is how an app
+    // teaches people to say no.
+    if (!(await isPermissionGranted())) {
+      return overtaken() ? null : false
+    }
+    if (overtaken()) {
+      return null
+    }
 
-  return (await putOnTheQueue(hour, minute)) === null
+    const armed = (await putOnTheQueue(hour, minute)) === null
+    return overtaken() ? null : armed
+  })
 }
 
-/** Turn it off. Silent if it was never on. */
-export async function disableReminder(): Promise<void> {
-  if (!(await remindersAvailable())) {
-    return
-  }
-  await cancel([REMINDER_ID])
+/**
+ * Turn it off. Silent if it was never on.
+ *
+ * Cancelling also takes it out of the plugin's store, so a restart cannot bring it back.
+ */
+export function disableReminder(): Promise<void> {
+  return inTurn(async () => {
+    if (!(await remindersAvailable())) {
+      return
+    }
+    await cancel([REMINDER_ID])
+  })
 }
 
 /**
@@ -333,10 +387,10 @@ export async function disableReminder(): Promise<void> {
  * uninstalled.
  *
  * It used to ask the phone what was scheduled first, and that question was the bug. The
- * plugin answers it from its own store, and that store is only ever written by the Kotlin
- * `batch` path: Daylo schedules through `notify`, which reaches `show`, and `show` writes
+ * plugin answers it from its own store, and that store was only ever written by the Kotlin
+ * `batch` path: Daylo schedules through `notify`, which reaches `show`, and `show` wrote
  * nothing. So on a real phone, with the reminder live and ringing every night, `pending()`
- * answers with an empty list, the old condition read that as "nothing of ours is
+ * answered with an empty list, the old condition read that as "nothing of ours is
  * scheduled", and nothing was cancelled. The one case this function exists for was the one
  * case it could not act in, for the whole of its life.
  *
@@ -345,19 +399,26 @@ export async function disableReminder(): Promise<void> {
  * one that was never scheduled costs nothing. The old comment argued for exactly this and
  * then wrote a condition that did the opposite.
  *
- * The same empty store is why a reboot takes the reminder with it, which is known and
- * deliberate; see refreshReminder.
+ * That store is written by `show` now, in the patched plugin, so `pending()` would no
+ * longer answer empty. Asking it again would still be a question with nothing to decide;
+ * see refreshReminder for what the store is for.
  */
 export async function reconcileReminder(activityCount: number): Promise<void> {
-  if (activityCount > 0 || !(await remindersAvailable())) {
+  if (activityCount > 0) {
     return
   }
-  // Nothing here may throw. It runs from a screen somebody is looking at, in the moment
-  // just after they deleted something, and a failure to cancel is not their problem.
-  try {
-    await cancel([REMINDER_ID])
-  } catch {
-    // Deliberately swallowed, and nothing is reported: there is no screen to report it on
-    // and nothing the person could do about it.
-  }
+  return inTurn(async (overtaken) => {
+    // A habit added back, or the switch touched, while this waited: that call decides.
+    if (!(await remindersAvailable()) || overtaken()) {
+      return
+    }
+    // Nothing here may throw. It runs from a screen somebody is looking at, in the moment
+    // just after they deleted something, and a failure to cancel is not their problem.
+    try {
+      await cancel([REMINDER_ID])
+    } catch {
+      // Deliberately swallowed, and nothing is reported: there is no screen to report it
+      // on and nothing the person could do about it.
+    }
+  })
 }

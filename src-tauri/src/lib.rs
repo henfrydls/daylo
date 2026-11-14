@@ -223,8 +223,9 @@ pub fn run() {
 
     // Android writes through the filesystem plugin rather than through write_text_file:
     // the picker returns a content:// URI and std::fs cannot open one. The notification
-    // plugin is here and nowhere else: it is what survives a reboot, because it persists
-    // what it scheduled and re-arms it from a BOOT_COMPLETED receiver of its own.
+    // plugin is here and nowhere else. The daily reminder survives a restart and an update
+    // because the patched copy pinned in Cargo.toml stores what it scheduled and re-arms it
+    // from a receiver of its own, on BOOT_COMPLETED and on MY_PACKAGE_REPLACED.
     #[cfg(target_os = "android")]
     let builder = builder
         .plugin(tauri_plugin_fs::init())

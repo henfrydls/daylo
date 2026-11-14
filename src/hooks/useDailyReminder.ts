@@ -146,6 +146,12 @@ export function useDailyReminder(): DailyReminder {
         showToast('Daylo could not set the reminder on this phone', 'error')
         setFailure(reason ?? 'the phone did not say why')
       }
+      // A refusal can come while it was on, with a new time picked after the permission
+      // was taken away. The switch goes off, and the alarm already on the phone goes with
+      // it: the plugin restores what it scheduled after a restart, so one left behind would
+      // ring under a switch that says off. A cancel that fails is not a reason to leave the
+      // switch on.
+      await disableReminder().catch(() => {})
       setReminder(false, nextHour, nextMinute)
       return false
     } finally {

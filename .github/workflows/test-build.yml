@@ -51,6 +51,14 @@ on:
         description: 'Build the diagnostic debug APK instead of the installers'
         type: boolean
         default: false
+      measure_reminder:
+        description: 'Measure whether the daily reminder survives a restart, on an emulator, instead of the installers'
+        type: boolean
+        default: false
+      control_ref:
+        description: 'Full SHA of the commit the reminder measurement compares against (1.5.3 before #235)'
+        type: string
+        default: 'a797fcf552de526557f1bbc30f496d8dd9ab6ae1'
 
 # Declared for the whole workflow rather than per job, so a job added later cannot quietly
 # inherit the repository defaults. Nothing here publishes: it reads the code, builds it,
@@ -75,6 +83,7 @@ jobs:
     if: >-
       (github.event_name == 'workflow_dispatch' || github.event.label.name == 'build-installers')
       && !inputs.debug_apk
+      && !inputs.measure_reminder
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
@@ -138,6 +147,7 @@ jobs:
     if: >-
       (github.event_name == 'workflow_dispatch' || github.event.label.name == 'build-installers')
       && !inputs.debug_apk
+      && !inputs.measure_reminder
     strategy:
       fail-fast: false
       matrix:
@@ -253,6 +263,7 @@ jobs:
       && (github.event_name == 'workflow_dispatch'
           || github.event.pull_request.head.repo.full_name == github.repository)
       && !inputs.debug_apk
+      && !inputs.measure_reminder
     runs-on: ubuntu-latest
     timeout-minutes: 60
 
@@ -747,6 +758,7 @@ jobs:
     if: >-
       (github.event_name == 'workflow_dispatch' || github.event.label.name == 'build-installers')
       && !inputs.debug_apk
+      && !inputs.measure_reminder
     runs-on: ubuntu-24.04
     name: Test build (snap)
     timeout-minutes: 30
@@ -812,3 +824,202 @@ jobs:
           path: ${{ steps.build.outputs.snap }}
           retention-days: 7
           if-no-files-found: error
+
+  # ── Does the daily reminder survive a restart? (measurement A of #202) ──────
+  #
+  # WHY IT EXISTS: the reminder's alarm used to vanish when the phone restarted, until
+  # Daylo was opened. The fix lives in the notification plugin, and the only way to see it
+  # is a device: arm the reminder, restart, and read the alarm queue without opening the
+  # app. A control build from before the fix is measured the same way, because a test
+  # build that keeps the alarm proves nothing unless the old one loses it.
+  #
+  # Run it with:
+  #
+  #   gh workflow run "Test build" --ref <branch> -f measure_reminder=true
+  #   gh workflow run "Test build" --ref <branch> -f measure_reminder=true -f control_ref=<sha>
+  #
+  # THE CHECK-IN: an emulator with a fresh install is exactly what used to write fake rows
+  # to the production check-in server. The network is cut before anything is installed and
+  # read back after every boot (android-measure-reminder.sh, network_off). And not trusted
+  # to have held: the emulator captures every packet the device sends, from the host side,
+  # and the job fails if the check-in host appears in that capture, or in logcat other than
+  # as the app's own "did not go through". An empty capture is not a failure: with the radio
+  # off from the start nothing reaches the network card, and the step only says so; the
+  # logcat record is then what shows each install's one attempt failing.
+  #
+  # WHAT IT IS NOT: a check. It runs only when asked for, publishes nothing, and both APKs
+  # are debug builds signed with the runner's throwaway debug key.
+  build-measure-apks:
+    name: Reminder measurement APK (${{ matrix.which }})
+    if: github.event_name == 'workflow_dispatch' && inputs.measure_reminder
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    strategy:
+      matrix:
+        which: [test, control]
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ matrix.which == 'control' && inputs.control_ref || github.sha }}
+
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v3
+        with:
+          packages: 'platforms;android-36 build-tools;35.0.0 platform-tools'
+
+      - name: Install Android NDK
+        run: sdkmanager "ndk;29.0.14206865"
+
+      # x86_64, the emulator's own architecture, as in smoke-android.
+      - name: Install Rust stable with the emulator's Android target
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: x86_64-linux-android
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+
+      # Debug and x86_64, the same pair android-slow-start.yml builds, so the same key.
+      # The two matrix legs share it and only one of them saves it.
+      - name: Cache Rust dependencies
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: './src-tauri -> target'
+          shared-key: android-x86_64-debug
+          save-if: ${{ matrix.which == 'test' }}
+
+      - name: Install Node.js dependencies
+        run: npm ci
+
+      - name: Install Tauri CLI
+        run: npm install --save-dev @tauri-apps/cli
+
+      - name: Build the debug APK
+        run: npx tauri android build --apk --debug --target x86_64
+        env:
+          NDK_HOME: ${{ env.ANDROID_HOME }}/ndk/29.0.14206865
+
+      - name: Find it
+        run: |
+          set -euo pipefail
+          shopt -s nullglob globstar
+          apks=( src-tauri/gen/android/app/build/outputs/apk/**/debug/*.apk )
+          if [ ${#apks[@]} -ne 1 ]; then
+            echo "::error::Expected exactly one debug APK, found ${#apks[@]}."
+            printf '::error::  %s\n' "${apks[@]}"
+            exit 1
+          fi
+          cp "${apks[0]}" "daylo-${{ matrix.which }}.apk"
+          echo "built from $(git rev-parse HEAD)" | tee "daylo-${{ matrix.which }}.txt"
+
+      - name: Upload it
+        uses: actions/upload-artifact@v4
+        with:
+          name: measure-apk-${{ matrix.which }}
+          path: |
+            daylo-${{ matrix.which }}.apk
+            daylo-${{ matrix.which }}.txt
+          retention-days: 3
+          if-no-files-found: error
+
+  measure-reminder:
+    name: Reminder measurement (emulator)
+    needs: build-measure-apks
+    if: github.event_name == 'workflow_dispatch' && inputs.measure_reminder
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Fetch both APKs
+        uses: actions/download-artifact@v4
+        with:
+          pattern: measure-apk-*
+          merge-multiple: true
+          path: apks
+
+      # 22 for the global WebSocket cdp-eval.mjs talks to the WebView with.
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Let the runner use KVM
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' \
+            | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+          # The emulator writes its capture here and will not create the folder.
+          mkdir -p measure-a
+
+      # The same emulator as smoke-android, plus -tcpdump: the emulator writes every packet
+      # the device sends to a file on the runner. That is the record the check-in guard
+      # below reads, and it is taken outside Android, so nothing the app or the system does
+      # inside the device can keep a packet out of it.
+      - name: Measure
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 34
+          target: google_apis
+          arch: x86_64
+          profile: pixel_2
+          force-avd-creation: false
+          emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none -tcpdump ${{ github.workspace }}/measure-a/emulator.pcap
+          disable-animations: true
+          script: bash .github/scripts/android-measure-reminder.sh apks/daylo-test.apk apks/daylo-control.apk measure-a
+
+      # Not one check-in may have left the emulator. Two records say so, and either one
+      # naming the host fails the job: the script's (every logcat line naming the host has
+      # to be the app's own "did not go through", see network.txt), and this capture of the
+      # emulator's network card. The capture is empty when the radio was off from the
+      # start, as it is here: the first run of this job got a 24-byte file, a header and no
+      # packets. Empty is therefore not a failure on its own; the logcat record is what
+      # shows the one attempt per install failing.
+      - name: Not one check-in left the emulator
+        if: always()
+        run: |
+          set -uo pipefail
+          pcap=measure-a/emulator.pcap
+          cp apks/*.txt measure-a/ 2>/dev/null || true
+          if [ ! -s "$pcap" ] || [ "$(stat -c%s "$pcap")" -le 24 ]; then
+            echo "::notice::The packet capture holds no packets: nothing went out on the emulator's network card."
+            exit 0
+          fi
+          echo "capture: $(stat -c%s "$pcap") bytes"
+          if python3 - "$pcap" <<'PY'
+          import sys
+          data = open(sys.argv[1], "rb").read()
+          labels = b"\x07checkin\x09henfrydls\x03com"
+          whole = b"checkin.henfrydls.com"
+          found = [name for name, needle in (("DNS", labels), ("plain", whole)) if needle in data]
+          print("check-in host in the capture:", ", ".join(found) if found else "nowhere")
+          sys.exit(0 if found else 1)
+          PY
+          then
+            echo "::error::The emulator sent something naming the check-in host. Find the run"
+            echo "::error::in the server's rows and remove it, and close the path that let it out."
+            exit 1
+          fi
+
+      - name: Upload what was measured
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: reminder-measurement
+          path: measure-a/
+          retention-days: 7
+          if-no-files-found: warn

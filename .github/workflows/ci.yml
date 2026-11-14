@@ -348,6 +348,85 @@ jobs:
           # through the same SIGPIPE. -m5 stops grep itself, which needs no pipe at all.
           grep -m5 -E 'lib/arm64-v8a/.*\.so' <<< "$listing" || true
 
+      # The notification plugin's own unit tests, from the fork pinned in Cargo.toml. They
+      # cover what the store and the restore receiver decide (Arming.kt) and that a stored
+      # reminder reads back with its hour, its minute and allowWhileIdle. Nothing else runs
+      # them: the fork has no Gradle workflow, and the build above compiles the plugin's
+      # main sources and not its tests. Here, because the build has just written
+      # tauri.settings.gradle, which is what makes the plugin a Gradle project at all.
+      #
+      # The project is named by tauri-build after the crate's `links` key
+      # (tauri-build 2.5.5, src/mobile.rs, generate_gradle_files): links =
+      # "tauri-plugin-notification" in the fork, so ':tauri-plugin-notification'.
+      #
+      # A green Gradle run is not taken as proof. A task or project name that drifts runs
+      # nothing and still exits 0, so the step reads the JUnit XML that the task writes and
+      # fails unless it finds at least MIN_TESTS tests that ran, with no failures. Skipped
+      # tests do not count as run: JUnit lists an @Ignore'd test in `tests` and again in
+      # `skipped`, so counting `tests` alone let an ignored test keep the step green. The
+      # XML is looked for where tauri.settings.gradle says the project lives, which is
+      # inside the cargo git checkout, and that folder's results are deleted first so
+      # nothing stale counts.
+      #
+      # To see it red: henfrydls/plugins-workspace branch daylo/tmp-mutation-202b carries a
+      # mutation for each decision the tests cover, and an @Ignore on one more test so that
+      # the skipped count is seen to fail the threshold. Pin Cargo.toml and Cargo.lock to it
+      # on a throwaway branch and this step fails, naming the tests.
+      - name: The notification plugin's unit tests
+        working-directory: src-tauri/gen/android
+        env:
+          MIN_TESTS: 26
+        run: |
+          set -euo pipefail
+          line=$(grep -F "project(':tauri-plugin-notification').projectDir" tauri.settings.gradle || true)
+          if [ -z "$line" ]; then
+            echo "::error::tauri.settings.gradle has no ':tauri-plugin-notification' project."
+            cat tauri.settings.gradle
+            exit 1
+          fi
+          dir=$(sed -E 's/.*new File\("(.*)"\).*/\1/' <<< "$line")
+          results="$dir/build/test-results/testDebugUnitTest"
+          echo "plugin project: $dir"
+          rm -rf "$results"
+
+          # A failing test makes Gradle exit non-zero. That is not the end of the step: the
+          # results are still read, so a red run says which tests failed and how many ran.
+          # Seen in #243, where a failure stopped the step before the count.
+          gradle=0
+          ./gradlew :tauri-plugin-notification:testDebugUnitTest --console=plain || gradle=$?
+
+          shopt -s nullglob
+          xmls=( "$results"/*.xml )
+          if [ ${#xmls[@]} -eq 0 ]; then
+            echo "::error::Gradle exited $gradle and wrote no test results in $results: no test ran."
+            exit 1
+          fi
+          tests=0; bad=0
+          for x in "${xmls[@]}"; do
+            n=$(grep -m1 -oE '<testsuite [^>]*' "$x" | grep -oE ' tests="[0-9]+"' | grep -oE '[0-9]+')
+            f=$(grep -m1 -oE '<testsuite [^>]*' "$x" | grep -oE ' failures="[0-9]+"' | grep -oE '[0-9]+')
+            e=$(grep -m1 -oE '<testsuite [^>]*' "$x" | grep -oE ' errors="[0-9]+"' | grep -oE '[0-9]+')
+            s=$(grep -m1 -oE '<testsuite [^>]*' "$x" | grep -oE ' skipped="[0-9]+"' | grep -oE '[0-9]+')
+            echo "$(basename "$x"): tests=$n skipped=$s failures=$f errors=$e"
+            tests=$(( tests + n - s )); bad=$(( bad + f + e ))
+          done
+          echo "total: $tests tests ran, $bad failed"
+          # Both checks speak before the step fails, so one red run names every reason.
+          status=0
+          if [ "$bad" -ne 0 ]; then
+            echo "::error::$bad of the plugin's unit tests failed."
+            status=1
+          fi
+          if [ "$tests" -lt "$MIN_TESTS" ]; then
+            echo "::error::Only $tests tests ran (skipped ones not counted), expected at least $MIN_TESTS."
+            status=1
+          fi
+          if [ "$gradle" -ne 0 ]; then
+            echo "::error::Gradle exited $gradle."
+            status=1
+          fi
+          exit "$status"
+
       # The unit tests compare EXACT_ALARMS_DECLARED with the manifest written by hand. What
       # Play reads is the merged one, where any library can add SCHEDULE_EXACT_ALARM or
       # USE_EXACT_ALARM of its own, and then Play asks for the declaration whatever the
