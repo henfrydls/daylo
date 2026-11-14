@@ -381,6 +381,27 @@ test.describe('scrolling and closing at phone size', () => {
     await expect(page.locator(SHEET)).toBeHidden()
   })
 
+  // The strip that makes the handle 44 pixels tall sits above the sheet's edge, where the
+  // eye sees the page behind. A tap there closes the sheet as a tap anywhere else above it
+  // does; it was the one place above the sheet where a tap did nothing.
+  test('a tap in the strip just above the edge closes it too', async ({ page }) => {
+    await open(page, 8)
+    const top = await sheetTop(page)
+
+    await page.touchscreen.tap(180, top - 8)
+
+    await expect(page.locator(SHEET)).toBeHidden()
+  })
+
+  test('and a pull that starts in that strip closes it', async ({ page }) => {
+    await open(page, 8)
+    const top = await sheetTop(page)
+
+    await swipe(page, 180, top - 8, top + 400)
+
+    await expect(page.locator(SHEET)).toBeHidden()
+  })
+
   // The grey bar and the gap under it are 28 pixels, short of the 44 a thumb needs. The
   // rest is an invisible strip above the sheet's edge, so the list has not moved and none
   // of it is under the handle.
