@@ -3,11 +3,15 @@
 /* Tailwind 4 stopped giving buttons a pointer, so on a computer the arrow stayed an arrow
    over every day and every button, and nothing looked pressable. In the base layer so a
    cursor utility on an element still wins over it; a disabled button is left out, so it
-   keeps its own cursor and does not invite a press that does nothing. */
+   keeps its own cursor and does not invite a press that does nothing.
+
+   Labels get it only beside a box that can be ticked, which is what pressing one does.
+   Over a text or date field's label the hand promised more than focusing the field. The
+   checkbox is always the plain input here, before its label or inside it. */
 @layer base {
   button:not(:disabled),
-  [role='button'],
-  label[for] {
+  input[type='checkbox']:not(:disabled) + label,
+  label:has(> input[type='checkbox']:not(:disabled)) {
     cursor: pointer;
   }
 }

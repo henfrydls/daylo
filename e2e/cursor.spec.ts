@@ -67,7 +67,9 @@ test('does not show a hand over a button that cannot be pressed', async ({ page 
   const add = page.getByTestId('quicklog-add-activity')
   await expect(add).toBeDisabled()
 
-  expect(['default', 'not-allowed']).toContain(await cursorOf(add))
+  // The button says so itself, with not-allowed. Accepting default as well let this pass
+  // whatever the cursor was, short of a hand.
+  expect(await cursorOf(add)).toBe('not-allowed')
 
   // Add carries its own not-allowed, so it would pass whatever the global rule said. The
   // switch in settings does not, and it is disabled only while it is busy; a bare button
@@ -81,4 +83,30 @@ test('does not show a hand over a button that cannot be pressed', async ({ page 
     return cursor
   })
   expect(bare).toBe('default')
+})
+
+// A hand over a label says pressing it does something, and over a text field's label it
+// only focuses the field. The hand belongs on the label of a box that ticks, and only
+// while it can be ticked.
+test('shows a hand over the label of a checkbox, not over the label of a field', async ({
+  page,
+}) => {
+  await page.locator('[data-testid="add-activity-button"]:visible').click()
+  await expect(page.getByTestId('activity-form-modal')).toBeVisible()
+
+  const nameLabel = page.locator('label[for="activity-name"]')
+  const tickLabel = page.locator('label[for="log-for-date"]')
+  expect(await cursorOf(nameLabel)).not.toBe('pointer')
+  expect(await cursorOf(tickLabel)).toBe('pointer')
+
+  await tickLabel.click()
+  const dateLabel = page.locator('label[for="selected-date"]')
+  await expect(dateLabel).toBeVisible()
+  expect(await cursorOf(dateLabel)).not.toBe('pointer')
+
+  // The same label beside a box that cannot be ticked.
+  await page.getByTestId('log-for-date-checkbox').evaluate((box) => {
+    ;(box as HTMLInputElement).disabled = true
+  })
+  expect(await cursorOf(tickLabel)).not.toBe('pointer')
 })
