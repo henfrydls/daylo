@@ -154,10 +154,15 @@
   border: 1.5px solid var(--color-gray-500);
   border-radius: 4px;
   background-color: #fff;
-  cursor: pointer;
   transition:
     background-color 120ms var(--ease-standard),
     border-color 120ms var(--ease-standard);
+}
+
+/* The hand only while it can be ticked. This rule sits outside the layers, so it beats
+   anything a component says, and a disabled box was inviting a press that does nothing. */
+.app-checkbox:not(:disabled) {
+  cursor: pointer;
 }
 
 /* Only where a pointer can actually hover. On a touch screen the hover state sticks to

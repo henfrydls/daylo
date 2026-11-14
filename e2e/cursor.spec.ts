@@ -98,6 +98,7 @@ test('shows a hand over the label of a checkbox, not over the label of a field',
   const tickLabel = page.locator('label[for="log-for-date"]')
   expect(await cursorOf(nameLabel)).not.toBe('pointer')
   expect(await cursorOf(tickLabel)).toBe('pointer')
+  expect(await cursorOf(page.getByTestId('log-for-date-checkbox'))).toBe('pointer')
 
   await tickLabel.click()
   const dateLabel = page.locator('label[for="selected-date"]')
@@ -109,4 +110,6 @@ test('shows a hand over the label of a checkbox, not over the label of a field',
     ;(box as HTMLInputElement).disabled = true
   })
   expect(await cursorOf(tickLabel)).not.toBe('pointer')
+  // Nor over the box itself, whose own rule sits outside the layers.
+  expect(await cursorOf(page.getByTestId('log-for-date-checkbox'))).not.toBe('pointer')
 })
