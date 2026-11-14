@@ -1,5 +1,6 @@
 import { useMemo, useSyncExternalStore } from 'react'
 import { formatDate } from './dates'
+import { DAY_SCOPE } from './dayScope'
 
 /**
  * The one answer to "what day is it" for everything on screen.
@@ -58,6 +59,12 @@ let lookAgain: ReturnType<typeof setTimeout> | null = null
 let readTheClock: ReturnType<typeof setInterval> | null = null
 /** Fingers and buttons down right now, by pointer. A drag in progress is one of these. */
 const pressed = new Set<number>()
+/**
+ * What each field held the first time it took the focus. Words are only somebody's when
+ * they differ from what the field opened with: "Edit activity" opens with the name in it,
+ * and a name nobody touched is not something a new day would take away from anybody.
+ */
+let openedWith = new WeakMap<Element, string>()
 const listeners = new Set<() => void>()
 
 const now = () => formatDate(new Date())
@@ -70,17 +77,36 @@ function getSnapshot(): string {
 }
 
 /** Fields that hold words somebody typed. A date or a time picked from a list does not count. */
-const WORDS = 'textarea, input:not([type]), input[type="text"], input[type="search"]'
+const WORDS = ['textarea', 'input:not([type])', 'input[type="text"]', 'input[type="search"]']
+
+/** The same fields, only inside what the new day builds again. */
+const WORDS_THE_DAY_WOULD_TAKE = WORDS.map((field) => `[${DAY_SCOPE}] ${field}`).join(', ')
 
 /**
- * Whether there is anything on the page that somebody wrote and has not saved yet. Every
- * field Daylo puts words in lives inside what the new day builds again, so a day that came
- * in now would take those words with it. However long it has been since the last key.
+ * Whether somebody wrote something, not saved yet, in a field the new day would build
+ * again and so empty. However long it has been since the last key.
+ *
+ * Only inside what App marks with DayScope: a field anywhere else stays as it is when the
+ * day changes, and has nothing to lose. And only when it differs from what the field held
+ * when it first took the focus: to write in a field it has to have the focus first, so a
+ * field that never had it holds nothing anybody wrote, and one emptied and put back as it
+ * was holds nothing new.
  */
 function somethingWritten(): boolean {
-  return Array.from(document.querySelectorAll<HTMLInputElement | HTMLTextAreaElement>(WORDS)).some(
-    (field) => field.value.trim() !== ''
-  )
+  return Array.from(
+    document.querySelectorAll<HTMLInputElement | HTMLTextAreaElement>(WORDS_THE_DAY_WOULD_TAKE)
+  ).some((field) => {
+    const opened = openedWith.get(field)
+    return opened !== undefined && field.value.trim() !== opened.trim()
+  })
+}
+
+/** The first time a field takes the focus, what it held then. */
+function onFocusIn(event: Event) {
+  const field = event.target
+  if (!(field instanceof HTMLInputElement || field instanceof HTMLTextAreaElement)) return
+  if (openedWith.has(field) || !field.matches(WORDS.join(', '))) return
+  openedWith.set(field, field.value)
 }
 
 /**
@@ -219,6 +245,7 @@ function subscribe(listener: () => void): () => void {
     window.addEventListener('focus', comeBack)
     window.addEventListener('pageshow', comeBack)
     window.addEventListener('keydown', onGesture, passiveCapture)
+    window.addEventListener('focusin', onFocusIn, passiveCapture)
     window.addEventListener('pointerdown', onPress, passiveCapture)
     window.addEventListener('pointerup', onRelease, passiveCapture)
     window.addEventListener('pointercancel', onRelease, passiveCapture)
@@ -232,6 +259,7 @@ function subscribe(listener: () => void): () => void {
     window.removeEventListener('focus', comeBack)
     window.removeEventListener('pageshow', comeBack)
     window.removeEventListener('keydown', onGesture, passiveCapture)
+    window.removeEventListener('focusin', onFocusIn, passiveCapture)
     window.removeEventListener('pointerdown', onPress, passiveCapture)
     window.removeEventListener('pointerup', onRelease, passiveCapture)
     window.removeEventListener('pointercancel', onRelease, passiveCapture)
@@ -242,6 +270,7 @@ function subscribe(listener: () => void): () => void {
     lookAgain = null
     readTheClock = null
     pressed.clear()
+    openedWith = new WeakMap()
     pending = false
     lastGesture = Number.NEGATIVE_INFINITY
     day = null

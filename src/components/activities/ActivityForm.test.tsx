@@ -529,9 +529,15 @@ describe('the day it offers to log, while a new day waits', () => {
     vi.useFakeTimers({ toFake: ['Date'] })
     vi.setSystemTime(new Date(2026, 10, 13, 23, 59))
     const { rerender } = render(<ActivityForm isOpen={false} onClose={vi.fn()} />)
+    // Words written and not saved somewhere the new day would build again: they hold it.
+    const scope = document.createElement('div')
+    scope.setAttribute('data-day-scope', '')
     const elsewhere = document.createElement('textarea')
+    scope.appendChild(elsewhere)
+    document.body.appendChild(scope)
+    elsewhere.focus()
     elsewhere.value = 'a note not yet saved'
-    document.body.appendChild(elsewhere)
+    elsewhere.blur()
 
     vi.setSystemTime(new Date(2026, 10, 14, 0, 0, 30))
     act(() => {
@@ -541,6 +547,6 @@ describe('the day it offers to log, while a new day waits', () => {
     fireEvent.click(screen.getByTestId('log-for-date-checkbox'))
 
     expect(screen.getByTestId('selected-date-input')).toHaveValue('2026-11-13')
-    elsewhere.remove()
+    scope.remove()
   })
 })

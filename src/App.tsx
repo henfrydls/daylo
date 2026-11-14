@@ -1,5 +1,4 @@
 import {
-  Fragment,
   useState,
   useEffect,
   useLayoutEffect,
@@ -23,6 +22,7 @@ import {
   useToast,
 } from './components/ui'
 import { DIALOG_STAYS_FOR } from './components/ui'
+import { DayScope } from './components/DayScope'
 import type { DropdownMenuItem } from './components/ui'
 import { AppSkeleton } from './components/skeletons'
 import { CheckinNotice, DailyReminder, Settings } from './components/settings'
@@ -207,6 +207,9 @@ function App() {
   // component added later inside those cannot bring the stale day back by forgetting a
   // dependency, whereas a prop has to be remembered in every one of them and fails without
   // a sound the day somebody forgets.
+  //
+  // The key goes through DayScope, which also marks what it holds, so lib/today.ts can
+  // tell words that a new day would take away from words that it would leave alone.
   //
   // The key is not on App itself, on purpose. App holds state that pairs with session
   // flags in the store, and starting App again would split the pair: `questionClosed`
@@ -581,9 +584,9 @@ function App() {
                   // panel beside it are what the gesture moves, and they stay. A new day
                   // remounts the views once, between gestures, never under a finger.
                   <div ref={railRef} className="relative">
-                    <div key={shownDay}>
+                    <DayScope day={shownDay}>
                       {currentView === 'year' ? <YearView /> : <MonthView />}
-                    </div>
+                    </DayScope>
                     <div
                       ref={otherRef}
                       className="absolute w-full"
@@ -594,9 +597,9 @@ function App() {
                       aria-hidden="true"
                       inert
                     >
-                      <Fragment key={shownDay}>
+                      <DayScope day={shownDay}>
                         {currentView === 'year' ? <MonthView /> : <YearView />}
-                      </Fragment>
+                      </DayScope>
                     </div>
                   </div>
                 ) : (
@@ -613,18 +616,18 @@ function App() {
                   >
                     {/* Inside the view's own key, so a new day does not play the change of
                         view again. */}
-                    <Fragment key={shownDay}>
+                    <DayScope day={shownDay}>
                       {currentView === 'year' ? <YearView /> : <MonthView />}
-                    </Fragment>
+                    </DayScope>
                   </div>
                 )}
               </div>
 
               {/* Sidebar - Hidden on mobile, visible on large screens */}
-              <div key={shownDay} className="hidden lg:block space-y-6">
+              <DayScope day={shownDay} className="hidden lg:block space-y-6">
                 <ActivityList />
                 <StatsPanel />
-              </div>
+              </DayScope>
             </div>
           </main>
 
@@ -657,17 +660,19 @@ function App() {
             onClose={() => setIsBottomSheetOpen(false)}
             aria-label="Activities and statistics"
           >
-            <div key={shownDay} className="space-y-6">
+            <DayScope day={shownDay} className="space-y-6">
               <ActivityList />
               <StatsPanel />
-            </div>
+            </DayScope>
           </BottomSheet>
 
           {/* Quick Log Modal */}
           {/* Always mounted: it has to be on the page before the day is chosen, or there
               is no frame for it to come up from, and it has to stay there after the day is
               cleared, or it has nowhere to go back to. It renders nothing when closed. */}
-          <QuickLog key={shownDay} />
+          <DayScope day={shownDay} className="contents">
+            <QuickLog />
+          </DayScope>
 
           {/* Export and Import, which are loaded the first time they are asked for and
               then stay. Not `{isExportOpen && ...}`: with that, the prop can never be

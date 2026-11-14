@@ -230,3 +230,20 @@ test('words left in a form keep the old day until they are saved', async ({ page
     'Log today: 0 of 2 activities completed'
   )
 })
+
+// "Edit activity" opens with the name already in it. A form left open like that overnight
+// holds nothing anybody wrote, and the morning must come in past it.
+test('an Edit form left open with nothing changed does not keep yesterday', async ({ page }) => {
+  await seed(page)
+  await page.clock.install({ time: new Date('2026-11-13T23:59:40') })
+  await page.goto('/')
+  await expect(page.locator(BAR)).toBeVisible()
+
+  await page.getByTestId('fab-button').click()
+  await page.getByRole('button', { name: 'Edit Read' }).locator('visible=true').click()
+  await expect(page.getByTestId('activity-name-input')).toHaveValue('Read')
+
+  await page.clock.fastForward('01:00:00')
+
+  await expect(circle(page, '2026-11-14')).toHaveClass(/bg-emerald-500/)
+})

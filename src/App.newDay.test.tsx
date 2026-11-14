@@ -261,6 +261,55 @@ describe('while the new day is waiting', () => {
       'Log today: 1 of 1 activity completed'
     )
   })
+
+  // "Edit activity" opens with the name already in it. Words that only say what the field
+  // opened with are nobody's, and a form left open all night must not keep yesterday.
+  it('comes in past an Edit form left open with the name untouched', async () => {
+    render(<App />)
+    await act(async () => {})
+    await userEvent.click(screen.getAllByRole('button', { name: 'Edit Read' })[0])
+    expect(screen.getByTestId('activity-name-input')).toHaveValue('Read')
+
+    await theNextMorningComes(2026, 10, 14)
+
+    expect(isTodayIn('2026-11-14')).toBe(true)
+  })
+
+  it('waits for an Edit form whose name was changed and not saved', async () => {
+    render(<App />)
+    await act(async () => {})
+    await userEvent.click(screen.getAllByRole('button', { name: 'Edit Read' })[0])
+    await userEvent.clear(screen.getByTestId('activity-name-input'))
+    await userEvent.type(screen.getByTestId('activity-name-input'), 'Read a chapter')
+
+    await theNextMorningComes(2026, 10, 14)
+
+    expect(screen.getByTestId('activity-name-input')).toHaveValue('Read a chapter')
+    expect(isTodayIn('2026-11-13')).toBe(true)
+  })
+
+  // The rating question belongs to App, which the new day does not build again: what is
+  // written under it stays put, so there is nothing for the day to wait for.
+  it('comes in past words under the rating question, and leaves them there', async () => {
+    inTheApp.yes = true
+    checkinFields.mockResolvedValue({ version: '1.5.3', os: 'linux', source: 'deb' })
+    useCalendarStore.setState({
+      logs: ['2026-11-06', '2026-11-09', '2026-11-13'].map(done),
+      firstOpenedAt: '2026-11-06',
+      feedbackInviteSeen: false,
+      _loggedThisSession: true,
+    })
+    render(<App />)
+    await act(async () => {})
+    await screen.findByTestId('feedback-rating')
+    await userEvent.click(screen.getByRole('button', { name: '4 stars' }))
+    await userEvent.type(screen.getByLabelText('Anything to add? Optional'), 'Love it')
+
+    await theNextMorningComes(2026, 10, 14)
+
+    expect(isTodayIn('2026-11-14')).toBe(true)
+    expect(screen.getByLabelText('Anything to add? Optional')).toHaveValue('Love it')
+  })
 })
 
 /**

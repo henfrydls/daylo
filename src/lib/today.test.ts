@@ -43,12 +43,37 @@ function touch() {
   window.dispatchEvent(pointer('pointerup'))
 }
 
-/** A field with words in it that nobody has saved, with the focus somewhere else. */
-function writeInAField(words = 'Walk the dog'): HTMLInputElement {
+/**
+ * A text field, by default inside what the new day builds again (App marks that with
+ * DayScope), holding what it opened with.
+ */
+function aField({ opened = '', inTheDay = true } = {}): HTMLInputElement {
   const field = document.createElement('input')
   field.type = 'text'
+  field.value = opened
+  const where = document.createElement('div')
+  if (inTheDay) where.setAttribute('data-day-scope', '')
+  where.appendChild(field)
+  document.body.appendChild(where)
+  return field
+}
+
+/**
+ * Somebody puts the cursor in a field, writes, and leaves the focus somewhere else. The
+ * page announces the moved cursor a moment later (jsdom's selectionchange, on a timer of
+ * its own), and that moment is let pass so the tests that count timers count only ours.
+ */
+function write(field: HTMLInputElement, words: string) {
+  field.focus()
   field.value = words
-  document.body.appendChild(field)
+  field.blur()
+  vi.advanceTimersByTime(0)
+}
+
+/** A field with words in it that nobody has saved, with the focus somewhere else. */
+function writeInAField(words = 'Walk the dog'): HTMLInputElement {
+  const field = aField()
+  write(field, words)
   return field
 }
 
@@ -372,6 +397,82 @@ describe('useToday', () => {
       act(() => {
         field.value = '  '
         vi.advanceTimersByTime(5_000)
+      })
+
+      expect(result.current).toBe('2026-11-14')
+    })
+
+    // "Edit activity" opens with the name in it. Left open, a name nobody touched used to
+    // hold the day for ever: the very thing this was written to stop.
+    it('lets the day in past a field that holds only what it opened with', () => {
+      vi.setSystemTime(at(13, 21, 0))
+      const { result } = renderHook(() => useToday())
+      write(aField({ opened: 'Read' }), 'Read')
+      vi.setSystemTime(at(14, 8, 30))
+
+      act(() => {
+        window.dispatchEvent(new Event('focus'))
+      })
+
+      expect(result.current).toBe('2026-11-14')
+    })
+
+    it('waits for a field whose words were changed from what it opened with', () => {
+      vi.setSystemTime(at(13, 21, 0))
+      const { result } = renderHook(() => useToday())
+      write(aField({ opened: 'Read' }), 'Read a chapter')
+      vi.setSystemTime(at(14, 8, 30))
+
+      act(() => {
+        window.dispatchEvent(new Event('focus'))
+      })
+
+      expect(result.current).toBe('2026-11-13')
+    })
+
+    it('lets the day in once a field is put back to what it opened with', () => {
+      vi.setSystemTime(at(13, 21, 0))
+      const { result } = renderHook(() => useToday())
+      const field = aField({ opened: 'Read' })
+      write(field, '')
+      vi.setSystemTime(at(14, 8, 30))
+      act(() => {
+        window.dispatchEvent(new Event('focus'))
+      })
+      expect(result.current).toBe('2026-11-13')
+
+      act(() => {
+        write(field, 'Read')
+        vi.advanceTimersByTime(5_000)
+      })
+
+      expect(result.current).toBe('2026-11-14')
+    })
+
+    // The comment under the rating question lives in App, which a new day does not build
+    // again: its words stay where they are, and there is nothing for the day to wait on.
+    it('does not wait for words in a field the new day leaves alone', () => {
+      vi.setSystemTime(at(13, 21, 0))
+      const { result } = renderHook(() => useToday())
+      write(aField({ inTheDay: false }), 'Love it')
+      vi.setSystemTime(at(14, 8, 30))
+
+      act(() => {
+        window.dispatchEvent(new Event('focus'))
+      })
+
+      expect(result.current).toBe('2026-11-14')
+    })
+
+    // To write in a field it has to have the focus first.
+    it('does not count a field that never had the focus', () => {
+      vi.setSystemTime(at(13, 21, 0))
+      const { result } = renderHook(() => useToday())
+      aField({ opened: 'Read' }).value = 'Something else'
+      vi.setSystemTime(at(14, 8, 30))
+
+      act(() => {
+        window.dispatchEvent(new Event('focus'))
       })
 
       expect(result.current).toBe('2026-11-14')
