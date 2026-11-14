@@ -44,6 +44,28 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
+      # Before anything is public. Every other job waits for this one, so a refusal here
+      # stops the whole tag in seconds with nothing published. The same check runs again on
+      # the merged Android manifests after the Android build, for a permission a library
+      # brings in; by then the release exists, which is why the common case, the switch and
+      # the hand-written manifest disagreeing, is asked here first.
+      #
+      # Node only: the script reads two files and imports nothing outside Node itself.
+      #
+      # To see it red on a lab tag without touching what the later check reads: move the
+      # uses-permission line out of src-tauri/gen/android/app/src/main/AndroidManifest.xml
+      # into a new src-tauri/gen/android/app/src/release/AndroidManifest.xml. The release
+      # build still merges the permission in, so the later check would agree, but this one
+      # reads the main manifest and stops the tag. (It never gets as far as the later one:
+      # every job needs this one.)
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: The Android manifest agrees with EXACT_ALARMS_DECLARED
+        run: node scripts/check-exact-alarm.js src-tauri/gen/android/app/src/main/AndroidManifest.xml
+
       - name: Create it, or find the one an earlier attempt made
         id: make
         env:
@@ -234,6 +256,52 @@ jobs:
         run: npx tauri android build --apk --aab --target aarch64
         env:
           NDK_HOME: ${{ env.ANDROID_HOME }}/ndk/29.0.14206865
+
+      # The same check Build Check (Android) runs on a pull request, on the build that is
+      # actually published: the release variant's merged manifests, the bundle one that goes
+      # into the AAB Play is given and the packaged one that goes into the APK. Here and not
+      # only in the pull request because a pull request builds debug, and because this is
+      # the last moment before anything is signed or uploaded: past it, a declaration Play
+      # asks to be justified is already in the release.
+      #
+      # Both have to be found. A path AGP renamed holds no permission either, and read as
+      # "not declared" it would agree with EXACT_ALARMS_DECLARED being off.
+      #
+      # The hand-written manifest has already been checked in create-release, before the
+      # release existed. What only this step can see is a permission a library adds in the
+      # merge, and Build Check (Android) asks the same of every pull request on its debug
+      # build, so reaching this step red should be rare.
+      #
+      # If it is red, the release is already public: create-release made it, the desktop
+      # jobs upload into it, and updater-manifest waits only for them, so latest.json goes
+      # out without an APK or an AAB, and an Android copy told about this version would be
+      # sent to a file that is not there. Turn the release back into a draft at once, which
+      # takes it out of /releases/latest so every copy goes back to the version before:
+      #   gh release edit <tag> --draft=true
+      # then fix the manifest and tag again, after deleting the draft and its tag with
+      #   gh release delete <tag> --cleanup-tag --yes
+      #
+      # Only a tag runs this. To see it red on its own, the earlier check has to pass: take
+      # the permission out in a manifest only the release build merges, a new
+      # src-tauri/gen/android/app/src/release/AndroidManifest.xml with
+      #   <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM"
+      #       tools:node="remove" />
+      # (and the tools namespace on its <manifest>). The main manifest still declares it,
+      # so create-release agrees, and this step names both merged files as declaring none.
+      - name: The release manifests agree with EXACT_ALARMS_DECLARED
+        run: |
+          set -uo pipefail
+          shopt -s nullglob globstar
+          dir=src-tauri/gen/android/app/build/intermediates
+          bundle=( "$dir"/bundle_manifest/*Release/**/AndroidManifest.xml )
+          packaged=( "$dir"/packaged_manifests/*Release/**/AndroidManifest.xml )
+          if [ ${#bundle[@]} -eq 0 ] || [ ${#packaged[@]} -eq 0 ]; then
+            echo "::error::The release manifests are not where this step looks for them, so"
+            echo "::error::nothing was checked. Where AGP writes them now:"
+            find "$dir" -name AndroidManifest.xml 2>/dev/null || true
+            exit 1
+          fi
+          node scripts/check-exact-alarm.js "${bundle[@]}" "${packaged[@]}"
 
       - name: Sign APK
         env:

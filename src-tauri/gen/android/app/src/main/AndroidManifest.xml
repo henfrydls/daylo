@@ -7,7 +7,14 @@
          the settings screen can say so and offer the way to the system's own screen.
          Not USE_EXACT_ALARM, which is granted on sight: Google reserves that one for
          alarm clocks and calendars, and a habit tracker is neither. Without this the
-         reminder still arrives, just inexactly. -->
+         reminder still arrives, just inexactly.
+
+         Meant to go in 1.5.4, the first build for Google Play, and not before: an update
+         that drops this line makes Android remove the exact alarm already pending, so the
+         reminder has to be stored where it can be set again from first. It goes together
+         with EXACT_ALARMS_DECLARED in src/lib/reminders.ts; scripts/check-exact-alarm.js
+         fails in the unit tests, in Build Check (Android) and in release.yml while the two
+         disagree. -->
     <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" />
 
     <!-- AndroidTV support -->
