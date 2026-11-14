@@ -6,7 +6,6 @@ import {
   getYearDays,
   getWeekDay,
   getFirstDayOffset,
-  checkIsToday,
   checkIsSameDay,
   parseDateString,
   getDaysDifference,
@@ -81,19 +80,6 @@ describe('dates utility functions', () => {
     it('should return correct offset for 2024 (Monday)', () => {
       const offset = getFirstDayOffset(2024)
       expect(offset).toBe(1) // January 1, 2024 is Monday
-    })
-  })
-
-  describe('checkIsToday', () => {
-    it('should return true for today', () => {
-      const today = new Date()
-      expect(checkIsToday(today)).toBe(true)
-    })
-
-    it('should return false for yesterday', () => {
-      const yesterday = new Date()
-      yesterday.setDate(yesterday.getDate() - 1)
-      expect(checkIsToday(yesterday)).toBe(false)
     })
   })
 

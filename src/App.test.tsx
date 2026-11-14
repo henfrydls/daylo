@@ -552,7 +552,9 @@ describe('the check-in in settings', () => {
 })
 
 // Two moments, because two kinds of device. A phone is closed and opened; a desktop is
-// left running for days and only the window coming back says a new day has started.
+// left running for days and only the window coming back says somebody is there again. A
+// second ask on the same day is refused by sendCheckinIfDue itself; App.newDay.test.tsx
+// runs the real one to count what leaves the device.
 describe('when the daily check-in is attempted', () => {
   it('asks once the store is there and the app can send', async () => {
     checkinFields.mockResolvedValue({ version: '1.3.0', os: 'linux', source: 'deb' })
@@ -569,17 +571,24 @@ describe('when the daily check-in is attempted', () => {
     expect(sendCheckinIfDue).not.toHaveBeenCalled()
   })
 
-  it('asks again when the window comes back', async () => {
-    checkinFields.mockResolvedValue({ version: '1.3.0', os: 'linux', source: 'deb' })
-    render(<App />)
-    await act(async () => {})
-    sendCheckinIfDue.mockClear()
+  it('asks again when the window comes back on a new day', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] })
+    try {
+      vi.setSystemTime(new Date(2026, 10, 13, 21, 0))
+      checkinFields.mockResolvedValue({ version: '1.3.0', os: 'linux', source: 'deb' })
+      render(<App />)
+      await act(async () => {})
+      sendCheckinIfDue.mockClear()
 
-    await act(async () => {
-      document.dispatchEvent(new Event('visibilitychange'))
-    })
+      vi.setSystemTime(new Date(2026, 10, 14, 8, 30))
+      await act(async () => {
+        document.dispatchEvent(new Event('visibilitychange'))
+      })
 
-    expect(sendCheckinIfDue).toHaveBeenCalled()
+      expect(sendCheckinIfDue).toHaveBeenCalledTimes(1)
+    } finally {
+      vi.useRealTimers()
+    }
   })
 })
 

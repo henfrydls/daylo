@@ -114,25 +114,31 @@ export async function remindersAvailable(): Promise<boolean> {
  * Whether this build asks Android for SCHEDULE_EXACT_ALARM, which is what lets a reminder
  * arrive on the minute.
  *
- * Off since 1.5.3, the build the closed test on Google Play starts with. Declaring the
- * permission means justifying it to Play, and Play's policy asks for inexact alarms when a
- * feature does not need the minute; a habit reminder does not, and USE_EXACT_ALARM, the one
- * granted on sight, is reserved for alarm clocks and calendars. It is meant to come back
- * during the closed test.
+ * On in 1.5.3, as it has been since 1.5.1, and meant to go off in 1.5.4, the first build
+ * of the closed test on Google Play. Declaring the permission means justifying it to Play,
+ * and Play's policy asks for inexact alarms when a feature does not need the minute; a
+ * habit reminder does not, and USE_EXACT_ALARM, the one granted on sight, is reserved for
+ * alarm clocks and calendars. It is not dropped here because an update that drops it makes
+ * Android remove the exact alarm already pending (see refreshReminder), and the reminder
+ * has to be stored somewhere it can be set again from before that happens.
  *
- * Without the permission declared, Android does not list Daylo on its "Alarms & reminders"
- * screen, and asking whether exact alarms are allowed always answers no. So with this off
- * the settings screen neither asks nor offers the way there: the offer would be a button
- * that opens a screen with nothing on it to switch on. The reminder is scheduled exactly
- * as before and Android delivers it inexactly, which is what already happened to anybody
- * who had not granted the permission.
+ * With it on, the screen asks the phone whether exact alarms are allowed and, when they
+ * are not, offers the way to the phone's "Alarms & reminders" screen. With it off, Android
+ * does not list Daylo on that screen and the answer is always no, so the screen neither
+ * asks nor offers, and says the reminder arrives around its time. The reminder is
+ * scheduled the same way either way.
  *
- * To bring it back, turn this on and put the uses-permission line back in
- * src-tauri/gen/android/app/src/main/AndroidManifest.xml, together: a test reads the
- * manifest and fails while the two disagree. The Rust commands behind the offer are still
- * registered, and the offer and its tests are still here, switched on in the tests.
+ * Several things change together with this line, and each of them fails while they
+ * disagree:
+ * - the uses-permission line in src-tauri/gen/android/app/src/main/AndroidManifest.xml;
+ * - scripts/check-exact-alarm.js, which reads this line and runs in the unit tests on that
+ *   manifest, in Build Check (Android) on the debug manifests Gradle merged, and in
+ *   release.yml on the release ones before anything is uploaded;
+ * - the end to end test in e2e/app.spec.ts that checks what the published build shows
+ *   under the reminder's time, which expects the offer while this is on.
+ * Keep the line as `= true` or `= false`; anything else is refused rather than guessed.
  */
-export const EXACT_ALARMS_DECLARED: boolean = false
+export const EXACT_ALARMS_DECLARED: boolean = true
 
 /**
  * Whether the reminder will arrive at the time it was set for.
@@ -145,6 +151,10 @@ export const EXACT_ALARMS_DECLARED: boolean = false
  * True where the question cannot be put at all, which is the same direction the Rust side
  * takes and for the same reason: the only thing this decides is whether to offer a fix,
  * and offering one for a problem that may not exist is worse than saying nothing.
+ *
+ * Only asked while EXACT_ALARMS_DECLARED is on. In a build that does not declare the
+ * permission, Android 12 and up answer no whatever the person did, and the fix this would
+ * offer opens a screen that does not list Daylo, so the screen does not ask.
  */
 export async function exactAlarmsAllowed(): Promise<boolean> {
   if (!isTauri()) {
@@ -235,15 +245,16 @@ async function putOnTheQueue(hour: number, minute: number): Promise<string | nul
  * differently, on the minute once and four minutes late the next, which is what inexact
  * means even at its best, and why the wording says "usually close" rather than a number.
  *
- * Asking for the exact-alarm permission was weighed and refused here, reversed in 1.5.1,
- * and taken out again for 1.5.3, the first build that goes to Google Play: see
- * EXACT_ALARMS_DECLARED for why, and for what comes back with it. Without it, every
- * reminder is the inexact one described above.
+ * Asking for the exact-alarm permission was weighed and refused here and reversed in 1.5.1:
+ * Henfry saw other apps arrive on the minute. Daylo declares SCHEDULE_EXACT_ALARM and the
+ * screen asks `exactAlarmsAllowed` whether it was granted, because from Android 14 it comes
+ * denied by default. It is meant to be taken out again in 1.5.4, for Google Play: see
+ * EXACT_ALARMS_DECLARED. Without it, every reminder is the inexact one described above.
  *
  * The plugin used to re-arm the following days in its receiver with plain RTC, without
  * RTC_WAKEUP and without allowWhileIdle. Daylo builds a patched copy where the first
- * alarm and the re-armed ones decide the same way, which matters without the permission
- * too: the re-armed reminder still wakes a dozing phone, inexactly. See
+ * alarm and the re-armed ones decide the same way, which matters to anybody who has not
+ * granted the permission too: the re-armed reminder still wakes a dozing phone, inexactly. See
  * `[patch.crates-io]` in src-tauri/Cargo.toml.
  *
  * It will fire whether or not anything was logged that day. Suppressing it on a day
@@ -276,6 +287,13 @@ export async function enableReminder(hour: number, minute: number): Promise<Remi
  * is empty: a notification scheduled through `show`, which is the only path the Rust API
  * offers, is never written there. Only `batch` writes, and nothing reaches `batch`. So the
  * one thing that puts the alarm back after a restart is Daylo being opened, which is this.
+ *
+ * The same goes for an update that stops declaring SCHEDULE_EXACT_ALARM, which is why 1.5.3
+ * still declares it. Android's AlarmManagerService, on a package replaced, removes the exact
+ * alarms of an app that no longer has the permission, without telling it: read in the
+ * Android 13 to 16 source, not yet watched on a phone. With nothing stored to set it again
+ * from, somebody who granted the permission would have no reminder after that update until
+ * they opened Daylo, and this is what would put it back.
  *
  * It also puts the switch back in step with the phone: a permission taken away in the
  * system settings leaves nothing scheduled, and this is how the app finds out. Returns

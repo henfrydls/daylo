@@ -2,19 +2,20 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
     <uses-permission android:name="android.permission.INTERNET" />
 
-    <!-- No SCHEDULE_EXACT_ALARM, on purpose, since 1.5.3: the build that goes to Google Play.
-         Declaring it means justifying it to Play, and Play's policy asks for inexact alarms
-         when a feature does not need the minute. USE_EXACT_ALARM, which is granted on sight,
-         is reserved for alarm clocks and calendars, and a habit tracker is neither. Without
-         it the daily reminder still arrives, inexactly: around the time it was set for, and
-         later out of a deep doze.
+    <!-- So the daily reminder arrives at the time it was set for. Android 12 made this
+         something to be allowed and Android 14 made it denied by default, which is why
+         the settings screen can say so and offer the way to the system's own screen.
+         Not USE_EXACT_ALARM, which is granted on sight: Google reserves that one for
+         alarm clocks and calendars, and a habit tracker is neither. Without this the
+         reminder still arrives, just inexactly.
 
-         It is meant to come back during the closed test. When it does, put back
-             <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" />
-         here and turn on EXACT_ALARMS_DECLARED in src/lib/reminders.ts in the same change.
-         That switch is what lets the settings screen offer the phone's "Alarms & reminders"
-         screen, which does not list Daylo while this is missing. A test reads this file and
-         fails while the two disagree. -->
+         Meant to go in 1.5.4, the first build for Google Play, and not before: an update
+         that drops this line makes Android remove the exact alarm already pending, so the
+         reminder has to be stored where it can be set again from first. It goes together
+         with EXACT_ALARMS_DECLARED in src/lib/reminders.ts; scripts/check-exact-alarm.js
+         fails in the unit tests, in Build Check (Android) and in release.yml while the two
+         disagree. -->
+    <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" />
 
     <!-- AndroidTV support -->
     <uses-feature android:name="android.software.leanback" android:required="false" />

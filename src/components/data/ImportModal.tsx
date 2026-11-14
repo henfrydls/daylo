@@ -4,6 +4,7 @@ import { useCalendarStore } from '../../store'
 import { parseImportFileWithValidation, mergeData } from '../../lib/dataExport'
 import type { Activity, ActivityLog } from '../../types'
 import type { ValidationError } from '../../lib/dataExport'
+import { count } from '../../lib/plural'
 
 interface ImportModalProps {
   isOpen: boolean
@@ -170,10 +171,10 @@ export function ImportModal({ isOpen, onClose }: ImportModalProps) {
     if (!parsedData) return ''
 
     if (importMode === 'replace') {
-      return `This will replace all your current data (${activities.length} activities, ${logs.length} logs) with the imported data (${parsedData.activities.length} activities, ${parsedData.logs.length} logs). This action cannot be undone.`
+      return `This will replace all your current data (${count(activities.length, 'activity', 'activities')}, ${count(logs.length, 'log', 'logs')}) with the imported data (${count(parsedData.activities.length, 'activity', 'activities')}, ${count(parsedData.logs.length, 'log', 'logs')}). This action cannot be undone.`
     }
 
-    return `This will merge ${parsedData.activities.length} activities and ${parsedData.logs.length} logs with your existing data. Duplicates will be skipped.`
+    return `This will merge ${count(parsedData.activities.length, 'activity', 'activities')} and ${count(parsedData.logs.length, 'log', 'logs')} with your existing data. Duplicates will be skipped.`
   }
 
   return (
@@ -365,13 +366,11 @@ export function ImportModal({ isOpen, onClose }: ImportModalProps) {
               <ul className="space-y-1 text-sm text-gray-600">
                 <li className="flex items-center gap-2">
                   <span className="w-2 h-2 rounded-full bg-emerald-500" />
-                  {parsedData.activities.length}{' '}
-                  {parsedData.activities.length === 1 ? 'activity' : 'activities'}
+                  {count(parsedData.activities.length, 'activity', 'activities')}
                 </li>
                 <li className="flex items-center gap-2">
                   <span className="w-2 h-2 rounded-full bg-blue-500" />
-                  {parsedData.logs.length}{' '}
-                  {parsedData.logs.length === 1 ? 'log entry' : 'log entries'}
+                  {count(parsedData.logs.length, 'log entry', 'log entries')}
                 </li>
               </ul>
             </div>

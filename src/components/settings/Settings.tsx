@@ -14,9 +14,9 @@ import { WhatGetsSent } from './WhatGetsSent'
 import { turnOffCheckin, turnOnCheckin } from '../../lib/checkin'
 import { isTauri } from '@tauri-apps/api/core'
 import { openLink } from '../../lib/openLink'
-import { EXACT_ALARMS_DECLARED } from '../../lib/reminders'
 import { FEEDBACK_MAILTO } from '../../lib/feedbackInvite'
 import type { UpdateStatus } from '../../hooks/useUpdates'
+import { count } from '../../lib/plural'
 
 /** How long the panel takes to arrive and to leave. */
 const TAKES = 250
@@ -200,8 +200,7 @@ export function Settings({
 
   if (!shouldRender) return null
 
-  const say = (plural: number, one: string, many: string) => (plural === 1 ? one : many)
-  const held = `${counts.activities} ${say(counts.activities, 'activity', 'activities')}, ${counts.logs} ${say(counts.logs, 'entry', 'entries')}`
+  const held = `${count(counts.activities, 'activity', 'activities')}, ${count(counts.logs, 'entry', 'entries')}`
 
   return (
     <div className="fixed inset-0 z-50" data-testid="settings">
@@ -296,14 +295,17 @@ export function Settings({
                       }`}
                     />
                   </div>
-                  {!EXACT_ALARMS_DECLARED ? (
+                  {/* Nothing while the phone has not answered: a guess drawn now would be
+                      swapped for the real answer a moment later, in front of the person. */}
+                  {reminder.punctuality === 'unknown' ? null : reminder.punctuality ===
+                    'inexact' ? (
                     // The same words as the offer that turned it on. Not "a few minutes
                     // late": without the permission an inexact alarm has been measured
                     // over an hour late on a phone left asleep.
                     <p className="pb-3 text-sm text-gray-500">
                       It arrives around this time. Android picks the exact moment.
                     </p>
-                  ) : reminder.onTime ? (
+                  ) : reminder.punctuality === 'exact' ? (
                     <p className="pb-3 text-sm text-gray-500">
                       Android may deliver it a few minutes late.
                     </p>

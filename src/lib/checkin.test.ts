@@ -233,6 +233,65 @@ describe('the daily one', () => {
 
     expect(invoke).toHaveBeenCalledOnce()
   })
+
+  // A return while the send is in the air is looked at again when it lands, and on the
+  // same day finds that day already tried.
+  it('sends nothing more for a return on the same day while one was in the air', async () => {
+    on('2020-01-01')
+    let release = () => {}
+    invoke.mockImplementationOnce(
+      () =>
+        new Promise<void>((resolve) => {
+          release = () => resolve()
+        })
+    )
+
+    const opening = sendCheckinIfDue()
+    await sendCheckinIfDue()
+    release()
+    await opening
+    await new Promise((resolve) => setTimeout(resolve, 0))
+
+    expect(invoke).toHaveBeenCalledOnce()
+  })
+
+  // A send that starts just before midnight and is still in the air after it. The day it
+  // records is the day it said, so the window coming back on the new day still sends the
+  // new day's. Recording the day the answer arrived spent tomorrow on a message that was
+  // about today, and a return while it was in the air could not make up for it.
+  it('records the day it sent, even when the answer arrives the day after', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] })
+    try {
+      vi.setSystemTime(new Date(2026, 10, 13, 23, 59, 59))
+      on('2026-11-12')
+      let release = () => {}
+      invoke.mockImplementationOnce(
+        () =>
+          new Promise<void>((resolve) => {
+            release = () => resolve()
+          })
+      )
+
+      const opening = sendCheckinIfDue()
+      vi.setSystemTime(new Date(2026, 10, 14, 0, 0, 2))
+      // The window takes the focus while the first one is still in the air: it waits.
+      await sendCheckinIfDue()
+      expect(invoke).toHaveBeenCalledOnce()
+      release()
+      await opening
+
+      // And goes once the first one has landed, for the day it is now. Had the first
+      // recorded the day its answer came back on, the 14th would look spent already.
+      await vi.waitFor(() => expect(invoke).toHaveBeenCalledTimes(2))
+      expect(invoke).toHaveBeenLastCalledWith('send_checkin', {
+        id: '4f9c2a7e1b60d3a8c5e2f1b74a9d0c6e',
+        date: '2026-11-14',
+        last: false,
+      })
+    } finally {
+      vi.useRealTimers()
+    }
+  })
 })
 
 describe('turning it off', () => {

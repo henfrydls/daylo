@@ -1,5 +1,21 @@
 @import 'tailwindcss';
 
+/* Tailwind 4 stopped giving buttons a pointer, so on a computer the arrow stayed an arrow
+   over every day and every button, and nothing looked pressable. In the base layer so a
+   cursor utility on an element still wins over it; a disabled button is left out, so it
+   keeps its own cursor and does not invite a press that does nothing.
+
+   Labels get it only beside a box that can be ticked, which is what pressing one does.
+   Over a text or date field's label the hand promised more than focusing the field. The
+   checkbox is always the plain input here, before its label or inside it. */
+@layer base {
+  button:not(:disabled),
+  input[type='checkbox']:not(:disabled) + label,
+  label:has(> input[type='checkbox']:not(:disabled)) {
+    cursor: pointer;
+  }
+}
+
 /* Custom CSS Variables - SaaS Modern Style */
 :root {
   /* Backgrounds */
@@ -138,10 +154,15 @@
   border: 1.5px solid var(--color-gray-500);
   border-radius: 4px;
   background-color: #fff;
-  cursor: pointer;
   transition:
     background-color 120ms var(--ease-standard),
     border-color 120ms var(--ease-standard);
+}
+
+/* The hand only while it can be ticked. This rule sits outside the layers, so it beats
+   anything a component says, and a disabled box was inviting a press that does nothing. */
+.app-checkbox:not(:disabled) {
+  cursor: pointer;
 }
 
 /* Only where a pointer can actually hover. On a touch screen the hover state sticks to

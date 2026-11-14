@@ -2,7 +2,9 @@ import { memo, useMemo } from 'react'
 import { YearHeatmap } from './YearHeatmap'
 import { HeatmapLegend } from './HeatmapLegend'
 import { summariseActivities } from '../../lib/activityYear'
+import { useTodayDate } from '../../lib/today'
 import type { Activity, ActivityLog, HeatmapLevel } from '../../types'
+import { count } from '../../lib/plural'
 
 interface YearByActivityProps {
   year: number
@@ -31,7 +33,12 @@ export const YearByActivity = memo(function YearByActivity({
   selectedDate,
   onSelectDate,
 }: YearByActivityProps) {
-  const rows = useMemo(() => summariseActivities(activities, logs, new Date()), [activities, logs])
+  // The app's day, not the clock's: see useTodayDate.
+  const today = useTodayDate()
+  const rows = useMemo(
+    () => summariseActivities(activities, logs, today),
+    [activities, logs, today]
+  )
 
   if (activities.length === 0) {
     return (
@@ -57,7 +64,7 @@ export const YearByActivity = memo(function YearByActivity({
             />
             <span className="text-sm font-semibold text-gray-800">{activity.name}</span>
             <span className="text-xs text-gray-500">
-              {days} {days === 1 ? 'day' : 'days'} · {streak} day streak
+              {count(days, 'day', 'days')} · {streak} day streak
             </span>
           </div>
 
@@ -76,7 +83,9 @@ export const YearByActivity = memo(function YearByActivity({
       <div className="py-4" data-testid="activity-row-All">
         <div className="mb-2 flex items-center gap-2">
           <span className="text-sm font-semibold text-gray-800">All activities</span>
-          <span className="text-xs text-gray-500">{activeDays} active days</span>
+          <span className="text-xs text-gray-500">
+            {count(activeDays, 'active day', 'active days')}
+          </span>
           {/* The five shades belong to this row and to no other one here. */}
           <div className="ml-auto">
             <HeatmapLegend compact />

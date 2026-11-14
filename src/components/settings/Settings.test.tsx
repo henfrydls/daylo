@@ -70,8 +70,8 @@ function show({
 beforeEach(() => {
   exactAlarmsAllowed.mockReset().mockResolvedValue(true)
   askForExactAlarms.mockReset().mockResolvedValue(true)
-  // On, so the tests of the offer keep testing the offer: it is switched off in the build,
-  // not deleted, and it has to still work the day the permission comes back.
+  // On, as 1.5.3 ships. Set here rather than read from the module so that a test which
+  // needs it off, as 1.5.4 will be, cannot leave it off for the next one.
   exact.declared = true
   inTheApp.yes = false
   check.mockReset()
@@ -281,12 +281,15 @@ describe('what it says about a new version', () => {
 })
 
 describe('the reminder row', () => {
-  it('says the time it is set for', () => {
+  it('says the time it is set for', async () => {
     useCalendarStore.setState({ reminderEnabled: true, reminderHour: 20, reminderMinute: 0 })
 
     show({ hasReminders: true })
 
     expect(screen.getByText('At 8:00 PM')).toBeInTheDocument()
+    // The phone's answer about timing lands after the first render; let it, so it lands
+    // inside this test and not on top of the next one.
+    await screen.findByText('Android may deliver it a few minutes late.')
   })
 
   it('says it is off when it is', () => {
@@ -358,10 +361,13 @@ describe('what the switches cost', () => {
     expect(screen.getByText('Turning it off deletes the random number.')).toBeInTheDocument()
   })
 
-  it('says the reminder may arrive late, because Android decides when', () => {
+  it('says the reminder may arrive late, because Android decides when', async () => {
+    useCalendarStore.setState({ reminderEnabled: true })
     show({ hasReminders: true })
 
-    expect(screen.getByText('Android may deliver it a few minutes late.')).toBeInTheDocument()
+    expect(
+      await screen.findByText('Android may deliver it a few minutes late.')
+    ).toBeInTheDocument()
   })
 
   /**
@@ -458,7 +464,7 @@ describe('the reminder, folded away while it is off', () => {
     expect(inner).toHaveAttribute('aria-hidden', 'true')
   })
 
-  it('opens them out once there is a reminder', () => {
+  it('opens them out once there is a reminder', async () => {
     useCalendarStore.setState({ reminderEnabled: true, reminderHour: 20, reminderMinute: 0 })
 
     show({ hasReminders: true })
@@ -466,7 +472,9 @@ describe('the reminder, folded away while it is off', () => {
     expect(details().className).toContain('grid-rows-[1fr]')
     const inner = details().firstElementChild
     expect(inner).not.toHaveAttribute('inert')
-    expect(screen.getByText('Android may deliver it a few minutes late.')).toBeInTheDocument()
+    expect(
+      await screen.findByText('Android may deliver it a few minutes late.')
+    ).toBeInTheDocument()
   })
 
   // The switch itself never folds: turning it back on has to be possible from where
@@ -653,6 +661,31 @@ describe('a reminder that arrives when it was set for', () => {
   })
 })
 
+describe('the line about timing, before the phone has answered', () => {
+  // The answer comes back after the first render. Drawn as "exact" until then, a phone
+  // that had refused showed "a few minutes late" and then swapped it for the warning and a
+  // row, under the person's eyes. Nothing is said until there is something true to say.
+  const timingLines = () => [
+    screen.queryByText('Android may deliver it a few minutes late.'),
+    screen.queryByText(/an hour or more late/),
+    screen.queryByTestId('reminder-exact'),
+  ]
+
+  it('says nothing about timing until the phone answers, then says what it answered', async () => {
+    let answer: (allowed: boolean) => void = () => {}
+    exactAlarmsAllowed.mockReturnValue(new Promise<boolean>((resolve) => (answer = resolve)))
+    useCalendarStore.setState({ reminderEnabled: true })
+    show({ hasReminders: true })
+
+    expect(timingLines()).toEqual([null, null, null])
+
+    await act(async () => answer(false))
+
+    expect(screen.getByTestId('reminder-exact')).toBeInTheDocument()
+    expect(screen.queryByText('Android may deliver it a few minutes late.')).toBeNull()
+  })
+})
+
 describe('a reminder in a build without exact alarms', () => {
   // Without the permission declared, Android does not list Daylo on its "Alarms &
   // reminders" screen, so the row would open a screen with nothing on it to switch on.
@@ -667,7 +700,9 @@ describe('a reminder in a build without exact alarms', () => {
 
     expect(await screen.findByText(/around this time/i)).toBeInTheDocument()
     expect(screen.queryByTestId('reminder-exact')).not.toBeInTheDocument()
-    expect(screen.queryByText(/on time/i)).not.toBeInTheDocument()
+    // Both spellings: the row says "on-time" and the sentence above it "on time", and a
+    // pattern for one of them let the row through unseen.
+    expect(screen.queryAllByText(/on[- ]time/i)).toHaveLength(0)
     expect(exactAlarmsAllowed).not.toHaveBeenCalled()
     expect(askForExactAlarms).not.toHaveBeenCalled()
   })

@@ -1,7 +1,8 @@
 import { memo, useCallback, useMemo, useRef, useState } from 'react'
 import type { KeyboardEvent, PointerEvent, FocusEvent } from 'react'
 import { buildYearGrid } from '../../lib/yearGrid'
-import { formatDate, formatDisplayDate, checkIsToday } from '../../lib/dates'
+import { formatDate, formatDisplayDate } from '../../lib/dates'
+import { useToday } from '../../lib/today'
 import { getHeatmapColor } from '../../lib/colors'
 import type { HeatmapLevel } from '../../types'
 
@@ -65,6 +66,8 @@ export const YearHeatmap = memo(function YearHeatmap({
   showMonthLabels = true,
 }: YearHeatmapProps) {
   const { weeks, monthLabels } = useMemo(() => buildYearGrid(year), [year])
+  // The app's day, not the clock's: see useTodayDate.
+  const today = useToday()
   const gridRef = useRef<HTMLDivElement>(null)
   const [tip, setTip] = useState<{ text: string; x: number; y: number } | null>(null)
   // The one cell that answers to Tab. The arrows move it, so the grid is a single stop on
@@ -202,7 +205,7 @@ export const YearHeatmap = memo(function YearHeatmap({
                     } ${
                       isSelected
                         ? 'shadow-[0_0_0_1px_#fff,0_0_0_2px_var(--color-emerald-600)]'
-                        : checkIsToday(date)
+                        : key === today
                           ? 'shadow-[0_0_0_1px_#fff,0_0_0_2px_var(--color-blue-500)]'
                           : ''
                     } hover:shadow-[0_0_0_1px_#fff,0_0_0_2px_var(--color-gray-500)] focus:shadow-[0_0_0_1px_#fff,0_0_0_2px_var(--color-emerald-600)] focus:outline-none`}
