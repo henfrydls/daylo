@@ -13,17 +13,33 @@ const ANIMATION_DURATION = 300
 const DISMISS_THRESHOLD = 0.3
 
 /**
- * What a finger on the list is doing, decided once per gesture.
- *
- * `undecided` only while the list is at the top and the finger has not gone anywhere yet;
- * `scroll` is the list's own, and stays that for the rest of the gesture even if the list
- * reaches the top under it; `drag` takes the sheet down; `none` is a finger going across.
+ * What a press is doing, decided once and kept: `undecided` until it has gone far enough
+ * to tell, then `drag` to take the sheet down, or one of the list's own: `scroll`, or
+ * `none` for a finger going across or a press that came too late to drag.
+ */
+type Gesture = 'undecided' | 'scroll' | 'drag' | 'none'
+
+/**
+ * Where a press that has moved (dx, dy) since it went down is going, as far as this sheet
+ * cares. One answer for the handle and the list, so the two cannot disagree about what a
+ * drag is.
  *
  * Whether a finger is going down or across is the carousel's question, asked with its
  * `axisOf` and its eight pixels: the first two or three pixels of any press are noise, and
- * deciding there turns a tap into a drag.
+ * deciding there turns a tap into a drag. Before that, a press that leans down, a tie
+ * included, is `leaning-down`: the list holds it back from the browser while it waits.
+ * One pixel down and one across is the first move of many pulls, and not holding it back
+ * gave the gesture to the browser and the pull no longer closed the sheet.
  */
-type ListGesture = 'undecided' | 'scroll' | 'drag' | 'none'
+function decideDrag(
+  dx: number,
+  dy: number
+): 'drag' | 'up' | 'across' | 'leaning-down' | 'undecided' {
+  const axis = axisOf(dx, dy)
+  if (axis === 'horizontal') return 'across'
+  if (axis === 'vertical') return dy > 0 ? 'drag' : 'up'
+  return dy > 0 && dy >= Math.abs(dx) ? 'leaning-down' : 'undecided'
+}
 
 export function BottomSheet({
   isOpen,
@@ -48,7 +64,16 @@ export function BottomSheet({
   const [dragOffset, setDragOffset] = useState(0)
   const [isDragging, setIsDragging] = useState(false)
   const [sheetHeight, setSheetHeight] = useState(0)
-  const dragging = useRef(false)
+  /**
+   * Who is dragging the sheet, or null: one pointer on the handle, or one finger on the
+   * list. Whoever begins a drag has it until they let go, and every other press is ignored
+   * until it is let go too.
+   *
+   * The handle and the list each kept their own finger, so both could drag at once on the
+   * same offset. When one let go, the other went on moving the sheet with nothing left to
+   * release it, and it hung half way down the screen.
+   */
+  const owner = useRef<string | null>(null)
   const offset = useRef(0)
   const height = useRef(0)
   const onCloseRef = useRef(onClose)
@@ -72,26 +97,18 @@ export function BottomSheet({
     return () => observer.disconnect()
   }, [isVisible])
 
-  const beginDrag = useCallback(() => {
-    dragging.current = true
+  /** Takes the drag for `who`, if nobody has it. Says whether it did. */
+  const beginDrag = useCallback((who: string) => {
+    if (owner.current !== null) return false
+    owner.current = who
     setIsDragging(true)
+    return true
   }, [])
 
-  const moveDrag = useCallback((deltaY: number) => {
+  const moveDrag = useCallback((who: string, deltaY: number) => {
+    if (owner.current !== who) return
     offset.current = Math.max(0, deltaY)
     setDragOffset(offset.current)
-  }, [])
-
-  /** Let go: past 30% of the sheet it closes, short of that it goes back up. */
-  const endDrag = useCallback(() => {
-    if (!dragging.current) return
-    dragging.current = false
-    setIsDragging(false)
-    if (height.current > 0 && offset.current > height.current * DISMISS_THRESHOLD) {
-      onCloseRef.current()
-    }
-    offset.current = 0
-    setDragOffset(0)
   }, [])
 
   /**
@@ -101,13 +118,25 @@ export function BottomSheet({
    * notification shade coming down, a call, switching apps. Read as a release, a sheet
    * pulled past 30% closed on its own when the phone rang.
    */
-  const cancelDrag = useCallback(() => {
-    if (!dragging.current) return
-    dragging.current = false
+  const cancelDrag = useCallback((who: string) => {
+    if (owner.current !== who) return
+    owner.current = null
     setIsDragging(false)
     offset.current = 0
     setDragOffset(0)
   }, [])
+
+  /** Let go: past 30% of the sheet it closes, and either way the drag is over. */
+  const endDrag = useCallback(
+    (who: string) => {
+      if (owner.current !== who) return
+      if (height.current > 0 && offset.current > height.current * DISMISS_THRESHOLD) {
+        onCloseRef.current()
+      }
+      cancelDrag(who)
+    },
+    [cancelDrag]
+  )
 
   // --- The handle: a drag from here, by finger or by mouse ---------------------------
 
@@ -130,6 +159,9 @@ export function BottomSheet({
   const pointer = useRef<number | null>(null)
   /** Whether the press began in the invisible strip above the sheet's edge. */
   const pressedAbove = useRef(false)
+  /** What this press on the handle is doing, decided once, as the list's is. */
+  const handleGesture = useRef<Gesture>('none')
+  const handleOwner = (pointerId: number) => `pointer:${pointerId}`
 
   /**
    * Where the finger went down, and nothing decided yet.
@@ -151,24 +183,28 @@ export function BottomSheet({
     dragStartY.current = e.clientY
     dragStartX.current = e.clientX
     pressedAbove.current = e.clientY < e.currentTarget.getBoundingClientRect().top
+    // Somebody is already dragging from the list: this press waits until it is let go.
+    handleGesture.current = owner.current === null ? 'undecided' : 'none'
     e.currentTarget.setPointerCapture?.(e.pointerId)
   }, [])
 
   const handlePointerMove = useCallback(
     (e: React.PointerEvent) => {
       if (pointer.current !== e.pointerId) return
-      if (!dragging.current) {
+      const who = handleOwner(e.pointerId)
+      if (handleGesture.current === 'undecided') {
         // Downwards, far enough to mean it, and more down than across. A tap never gets
-        // here; a finger crossing the sheet diagonally does not take it with it.
-        const deltaY = e.clientY - dragStartY.current
-        const axis = axisOf(e.clientX - dragStartX.current, deltaY)
-        if (axis !== 'vertical' || deltaY <= 0) return
+        // here; a finger crossing the sheet diagonally does not take it with it, and does
+        // not take it later either by turning downwards.
+        const went = decideDrag(e.clientX - dragStartX.current, e.clientY - dragStartY.current)
+        if (went === 'across' || went === 'up') handleGesture.current = 'none'
+        if (went !== 'drag') return
         // Followed from here, not from where the finger went down: counting the pixels
         // spent deciding made the sheet jump that far the moment it began to move.
         dragStartY.current = e.clientY
-        beginDrag()
+        handleGesture.current = beginDrag(who) ? 'drag' : 'none'
       }
-      moveDrag(e.clientY - dragStartY.current)
+      if (handleGesture.current === 'drag') moveDrag(who, e.clientY - dragStartY.current)
     },
     [beginDrag, moveDrag]
   )
@@ -177,15 +213,19 @@ export function BottomSheet({
     (e: React.PointerEvent) => {
       if (pointer.current !== e.pointerId) return
       pointer.current = null
-      if (dragging.current) {
-        endDrag()
+      const was = handleGesture.current
+      handleGesture.current = 'none'
+      if (was === 'drag') {
+        endDrag(handleOwner(e.pointerId))
         return
       }
       // The strip above the edge is outside the sheet to the eye, so a tap there is a tap
       // outside, and closes it like one. Without this, it was the one place above the
       // sheet where tapping did nothing.
       const went = axisOf(e.clientX - dragStartX.current, e.clientY - dragStartY.current)
-      if (pressedAbove.current && went === 'undecided') onCloseRef.current()
+      if (was === 'undecided' && pressedAbove.current && went === 'undecided') {
+        onCloseRef.current()
+      }
     },
     [endDrag]
   )
@@ -194,7 +234,8 @@ export function BottomSheet({
     (e: React.PointerEvent) => {
       if (pointer.current !== e.pointerId) return
       pointer.current = null
-      cancelDrag()
+      handleGesture.current = 'none'
+      cancelDrag(handleOwner(e.pointerId))
     },
     [cancelDrag]
   )
@@ -222,16 +263,26 @@ export function BottomSheet({
    * the screen in the middle of somebody scrolling back up; the next one can close it. And
    * a gesture that went up first is a scroll even if it comes back down.
    *
-   * One finger: the one that began it. A second finger on the list used to end the drag,
-   * and past 30% that closed the sheet.
+   * One finger: the one that began it, and only if nobody else is dragging the sheet. A
+   * second finger on the list used to end the drag, and past 30% that closed the sheet.
+   *
+   * Two limits, known and accepted. A gesture that has become a drag stays one: if the
+   * finger turns back up, the sheet follows it back to rest but the list does not scroll in
+   * that same touch; the next touch does. And the list reads its own `scrollTop` only: a
+   * child with a scroll of its own would have its pulls taken for the list's, at the top
+   * and going down. No sheet has one today.
    */
   useEffect(() => {
     const list = listRef.current
-    if (!shouldRender || !list) return
-    let gesture: ListGesture = 'none'
+    // Made again each time the sheet opens or closes, which forgets any finger and any
+    // gesture from before. Closed with Escape in the middle of a drag, the finger that was
+    // dragging lived on, and moved the sheet of the next opening.
+    if (!shouldRender || !list || !isOpen) return
+    let gesture: Gesture = 'none'
     let finger: number | null = null
     let startX = 0
     let startY = 0
+    const who = () => `touch:${finger}`
 
     const ours = (touches: TouchList) => {
       for (let i = 0; i < touches.length; i++) {
@@ -246,7 +297,8 @@ export function BottomSheet({
       finger = touch.identifier
       startX = touch.clientX
       startY = touch.clientY
-      gesture = list.scrollTop <= 0 ? 'undecided' : 'scroll'
+      if (owner.current !== null) gesture = 'none'
+      else gesture = list.scrollTop <= 0 ? 'undecided' : 'scroll'
     }
 
     const onMove = (e: TouchEvent) => {
@@ -255,35 +307,44 @@ export function BottomSheet({
       if (gesture === 'undecided') {
         const deltaX = touch.clientX - startX
         const deltaY = touch.clientY - startY
-        if (deltaY < 0 || list.scrollTop > 0) {
+        if (deltaX === 0 && deltaY === 0) return
+        if (list.scrollTop > 0) {
           gesture = 'scroll'
           return
         }
-        const axis = axisOf(deltaX, deltaY)
-        if (axis === 'undecided') {
-          if (deltaY > Math.abs(deltaX) && e.cancelable) e.preventDefault()
+        const went = decideDrag(deltaX, deltaY)
+        if (went === 'leaning-down') {
+          if (e.cancelable) e.preventDefault()
           return
         }
-        if (axis === 'horizontal') {
+        if (went === 'across') {
+          gesture = 'none'
+          return
+        }
+        if (went !== 'drag') {
+          // Up, or not leaning down, and not held back: from here the browser has it.
+          gesture = 'scroll'
+          return
+        }
+        // Followed from here, as the handle is: no jump by the pixels spent deciding.
+        startY = touch.clientY
+        if (!beginDrag(who())) {
           gesture = 'none'
           return
         }
         gesture = 'drag'
-        // Followed from here, as the handle is: no jump by the pixels spent deciding.
-        startY = touch.clientY
-        beginDrag()
       }
       if (e.cancelable) e.preventDefault()
-      moveDrag(touch.clientY - startY)
+      moveDrag(who(), touch.clientY - startY)
     }
 
     const finish = (e: TouchEvent, release: boolean) => {
       if (!ours(e.changedTouches)) return
-      finger = null
       if (gesture === 'drag') {
-        if (release) endDrag()
-        else cancelDrag()
+        if (release) endDrag(who())
+        else cancelDrag(who())
       }
+      finger = null
       gesture = 'none'
     }
     const onEnd = (e: TouchEvent) => finish(e, true)
@@ -299,19 +360,19 @@ export function BottomSheet({
       list.removeEventListener('touchend', onEnd)
       list.removeEventListener('touchcancel', onCancel)
     }
-  }, [shouldRender, beginDrag, moveDrag, endDrag, cancelDrag])
+  }, [shouldRender, isOpen, beginDrag, moveDrag, endDrag, cancelDrag])
 
-  // Reset drag state when closing
+  // Nothing carried over from one opening to the next, in either direction: closed in the
+  // middle of a drag, the drag ends there, and a sheet that opens always opens at rest.
   useEffect(() => {
-    if (!isOpen) {
-      dragging.current = false
-      offset.current = 0
-      pointer.current = null
-      /* eslint-disable react-hooks/set-state-in-effect */
-      setDragOffset(0)
-      setIsDragging(false)
-      /* eslint-enable react-hooks/set-state-in-effect */
-    }
+    owner.current = null
+    offset.current = 0
+    pointer.current = null
+    handleGesture.current = 'none'
+    /* eslint-disable react-hooks/set-state-in-effect */
+    setDragOffset(0)
+    setIsDragging(false)
+    /* eslint-enable react-hooks/set-state-in-effect */
   }, [isOpen])
 
   if (!shouldRender) return null

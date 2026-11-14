@@ -218,6 +218,20 @@ describe('telling a tap from a drag', () => {
     expect(sheet().style.transform).toBe('translateY(0px)')
   })
 
+  // Decided once, as the list decides: a press that went across first does not become a
+  // drag later by turning downwards.
+  it('keeps to what it decided when the finger turns down after going across', () => {
+    show()
+    settle()
+
+    fireEvent.pointerDown(handle(), at(300, 100))
+    fireEvent.pointerMove(handle(), at(305, 120))
+    fireEvent.pointerMove(handle(), at(500, 120))
+    fireEvent.pointerMove(handle(), at(540, 120))
+
+    expect(sheet().style.transform).toBe('translateY(0px)')
+  })
+
   it('will not be dragged upwards', () => {
     show()
     settle()
@@ -571,5 +585,245 @@ describe('a drag from the list', () => {
 
     fireEvent.touchMove(list(), at(520))
     expect(sheet().style.transform).toBe('translateY(210px)')
+  })
+
+  // A tie: one pixel down and one across is the first move of
+  // many pulls, and not holding it back gave the gesture to the browser.
+  it('holds back a first move that goes as far down as across', () => {
+    show()
+    settle()
+
+    fireEvent.touchStart(list(), at(300, 100))
+    const tie = fireEvent.touchMove(list(), at(301, 101))
+
+    expect(tie).toBe(false)
+  })
+})
+
+/**
+ * One drag at a time, whoever began it.
+ *
+ * The handle and the list each kept their own finger, so a thumb on the handle and a
+ * finger on the list could both drag the one sheet. When one let go, the other went on
+ * moving it with nothing left to release it: the sheet hung half way down the screen.
+ * Whoever begins the drag has it until they let go, and every other press waits until it
+ * is let go too. Both owners, both orders of letting go.
+ */
+describe('one drag at a time', () => {
+  const onClose = vi.fn()
+  const show = () =>
+    render(
+      <BottomSheet isOpen onClose={onClose} aria-label="Activities">
+        <button>Edit</button>
+      </BottomSheet>
+    )
+  const sheet = () => screen.getByTestId('bottom-sheet')
+  const list = () => screen.getByTestId('bottom-sheet-list')
+  const handle = () => screen.getByTestId('bottom-sheet-handle')
+  const press = (clientY: number) => ({ pointerId: 1, clientX: 100, clientY })
+  const finger = (clientY: number) => {
+    const t = { identifier: 5, clientX: 200, clientY }
+    return { touches: [t], changedTouches: [t] }
+  }
+  const lift = (clientY: number) => ({
+    touches: [],
+    changedTouches: [{ identifier: 5, clientX: 200, clientY }],
+  })
+  const transform = () => sheet().style.transform
+  let restore = () => {}
+
+  beforeEach(() => {
+    vi.useFakeTimers()
+    onClose.mockReset()
+    restore = giveTheSheetAHeight(500)
+    show()
+    act(() => {
+      vi.advanceTimersByTime(60)
+    })
+  })
+
+  afterEach(() => {
+    restore()
+    vi.useRealTimers()
+  })
+
+  /** The handle takes the sheet 20 pixels down; the list finger then pulls hard. */
+  function handleThenList() {
+    fireEvent.pointerDown(handle(), press(300))
+    fireEvent.pointerMove(handle(), press(310))
+    fireEvent.pointerMove(handle(), press(330))
+    fireEvent.touchStart(list(), finger(300))
+    fireEvent.touchMove(list(), finger(310))
+    fireEvent.touchMove(list(), finger(600))
+  }
+
+  /** The list takes the sheet 20 pixels down; the handle then pulls hard. */
+  function listThenHandle() {
+    fireEvent.touchStart(list(), finger(300))
+    fireEvent.touchMove(list(), finger(310))
+    fireEvent.touchMove(list(), finger(330))
+    fireEvent.pointerDown(handle(), press(300))
+    fireEvent.pointerMove(handle(), press(310))
+    fireEvent.pointerMove(handle(), press(600))
+  }
+
+  // Both down before either has decided: the first to decide has the drag, and the other
+  // does not take it from it when it decides in turn.
+  it('gives the drag to the first press to decide when both began at once', () => {
+    fireEvent.pointerDown(handle(), press(300))
+    fireEvent.touchStart(list(), finger(300))
+    fireEvent.pointerMove(handle(), press(310))
+    fireEvent.pointerMove(handle(), press(330))
+    fireEvent.touchMove(list(), finger(310))
+    fireEvent.touchMove(list(), finger(600))
+
+    expect(transform()).toBe('translateY(20px)')
+  })
+
+  // "Waits until it is let go too": a press that went down while somebody else was
+  // dragging does not take over the moment they let go, even if it has not moved yet.
+  it('a handle press made during a drag from the list stays out after the list lets go', () => {
+    fireEvent.touchStart(list(), finger(300))
+    fireEvent.touchMove(list(), finger(310))
+    fireEvent.touchMove(list(), finger(330))
+    fireEvent.pointerDown(handle(), press(300))
+    fireEvent.touchEnd(list(), lift(330))
+
+    fireEvent.pointerMove(handle(), press(310))
+    fireEvent.pointerMove(handle(), press(400))
+
+    expect(transform()).toBe('translateY(0px)')
+  })
+
+  it('a finger on the list during a drag from the handle stays out after the handle lets go', () => {
+    fireEvent.pointerDown(handle(), press(300))
+    fireEvent.pointerMove(handle(), press(310))
+    fireEvent.pointerMove(handle(), press(330))
+    fireEvent.touchStart(list(), finger(300))
+    fireEvent.pointerUp(handle(), press(330))
+
+    fireEvent.touchMove(list(), finger(310))
+    fireEvent.touchMove(list(), finger(400))
+
+    expect(transform()).toBe('translateY(0px)')
+  })
+
+  it('the handle drags, the list waits, and the handle is let go first', () => {
+    handleThenList()
+    expect(transform()).toBe('translateY(20px)')
+
+    fireEvent.pointerUp(handle(), press(330))
+    expect(transform()).toBe('translateY(0px)')
+
+    // The finger still on the list is not dragging anything: nothing left to hang.
+    fireEvent.touchMove(list(), finger(700))
+    expect(transform()).toBe('translateY(0px)')
+    fireEvent.touchEnd(list(), lift(700))
+    expect(onClose).not.toHaveBeenCalled()
+  })
+
+  it('the handle drags, the list waits, and the list is let go first', () => {
+    handleThenList()
+
+    fireEvent.touchEnd(list(), lift(600))
+    expect(transform()).toBe('translateY(20px)')
+
+    fireEvent.pointerMove(handle(), press(350))
+    expect(transform()).toBe('translateY(40px)')
+    fireEvent.pointerUp(handle(), press(350))
+    expect(transform()).toBe('translateY(0px)')
+    expect(onClose).not.toHaveBeenCalled()
+  })
+
+  it('the list drags, the handle waits, and the list is let go first', () => {
+    listThenHandle()
+    expect(transform()).toBe('translateY(20px)')
+
+    fireEvent.touchEnd(list(), lift(330))
+    expect(transform()).toBe('translateY(0px)')
+
+    fireEvent.pointerMove(handle(), press(700))
+    expect(transform()).toBe('translateY(0px)')
+    fireEvent.pointerUp(handle(), press(700))
+    expect(onClose).not.toHaveBeenCalled()
+  })
+
+  it('the list drags, the handle waits, and the handle is let go first', () => {
+    listThenHandle()
+
+    fireEvent.pointerUp(handle(), press(600))
+    expect(transform()).toBe('translateY(20px)')
+
+    fireEvent.touchMove(list(), finger(350))
+    expect(transform()).toBe('translateY(40px)')
+    fireEvent.touchEnd(list(), lift(350))
+    expect(transform()).toBe('translateY(0px)')
+    expect(onClose).not.toHaveBeenCalled()
+  })
+})
+
+/**
+ * Closed in the middle of a drag, nothing of the drag survives into the next opening.
+ *
+ * Escape while a finger was dragging the list closed the sheet and left that finger's
+ * gesture alive, and the same finger moving after the sheet opened again dragged it: a
+ * sheet that opened hanging half way down.
+ */
+describe('closing in the middle of a drag', () => {
+  const onClose = vi.fn()
+  const sheet = (isOpen: boolean) => (
+    <BottomSheet isOpen={isOpen} onClose={onClose} aria-label="Activities">
+      <button>Edit</button>
+    </BottomSheet>
+  )
+  const at = (clientY: number) => {
+    const t = { identifier: 1, clientX: 100, clientY }
+    return { touches: [t], changedTouches: [t] }
+  }
+  const lift = (clientY: number) => ({
+    touches: [],
+    changedTouches: [{ identifier: 1, clientX: 100, clientY }],
+  })
+  const settle = () =>
+    act(() => {
+      vi.advanceTimersByTime(60)
+    })
+
+  beforeEach(() => {
+    vi.useFakeTimers()
+    onClose.mockReset()
+  })
+
+  afterEach(() => {
+    vi.useRealTimers()
+  })
+
+  it('opens again at rest, and the next pull works as ever', () => {
+    const { rerender } = render(sheet(true))
+    settle()
+    const list = () => screen.getByTestId('bottom-sheet-list')
+    const transform = () => screen.getByTestId('bottom-sheet').style.transform
+
+    fireEvent.touchStart(list(), at(300))
+    fireEvent.touchMove(list(), at(310))
+    fireEvent.touchMove(list(), at(340))
+    expect(transform()).toBe('translateY(30px)')
+
+    fireEvent.keyDown(document, { key: 'Escape' })
+    expect(onClose).toHaveBeenCalledOnce()
+    rerender(sheet(false))
+    rerender(sheet(true))
+    settle()
+    expect(transform()).toBe('translateY(0px)')
+
+    // The finger from before, still moving: it belongs to the old opening.
+    fireEvent.touchMove(list(), at(400))
+    expect(transform()).toBe('translateY(0px)')
+    fireEvent.touchEnd(list(), lift(400))
+
+    fireEvent.touchStart(list(), at(300))
+    fireEvent.touchMove(list(), at(310))
+    fireEvent.touchMove(list(), at(330))
+    expect(transform()).toBe('translateY(20px)')
   })
 })

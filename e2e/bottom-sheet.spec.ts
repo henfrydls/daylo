@@ -364,6 +364,47 @@ test.describe('scrolling and closing at phone size', () => {
     await expect(page.locator(SHEET)).toBeHidden()
   })
 
+  // A thumb on the handle and a finger on the list both used to drag the one sheet. When
+  // the thumb let go, the finger went on moving it with nothing left to release it, and
+  // the sheet hung half way down. Whoever begins the drag has it; the other waits.
+  test('a thumb on the handle and a finger on the list leave nothing hanging', async ({ page }) => {
+    await open(page, 2)
+    const top = await sheetTop(page)
+    const client = await page.context().newCDPSession(page)
+    const send = (type: string, points: { x: number; y: number; id: number }[]) =>
+      client.send('Input.dispatchTouchEvent', { type, touchPoints: points })
+    const thumb = (y: number) => ({ x: 180, y, id: 1 })
+    const other = (y: number) => ({ x: 120, y, id: 2 })
+
+    await send('touchStart', [thumb(top + 14)])
+    for (const y of [top + 34, top + 54, top + 74]) {
+      await send('touchMove', [thumb(y)])
+      await page.waitForTimeout(16)
+    }
+    await send('touchStart', [thumb(top + 74), other(top + 200)])
+    for (const y of [top + 260, top + 330, top + 400]) {
+      await send('touchMove', [thumb(top + 74), other(y)])
+      await page.waitForTimeout(16)
+    }
+    // Followed by the thumb alone: forty pixels from where its drag began.
+    await expect.poll(() => sheetTop(page), { timeout: 2000 }).toBe(top + 40)
+
+    // The thumb lets go; the finger on the list goes on moving. A touchEnd lifts only the
+    // points it names, so this is one finger up and the other still down.
+    await send('touchEnd', [thumb(top + 74)])
+    for (const y of [top + 420, top + 460, top + 500]) {
+      await send('touchMove', [other(y)])
+      await page.waitForTimeout(16)
+    }
+    await expect.poll(() => sheetTop(page), { timeout: 2000 }).toBe(top)
+
+    await send('touchEnd', [other(top + 500)])
+    await client.detach()
+    await page.waitForTimeout(400)
+    await expect(page.locator(SHEET)).toBeVisible()
+    expect(await sheetTop(page)).toBe(top)
+  })
+
   test('pulling the handle down still closes it', async ({ page }) => {
     await open(page, 8)
     const top = await sheetTop(page)
