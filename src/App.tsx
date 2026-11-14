@@ -150,6 +150,8 @@ function App() {
   // at all. See where they are rendered for why it is not simply whether it is open.
   const [exportAsked, setExportAsked] = useState(false)
   const [importAsked, setImportAsked] = useState(false)
+  // From the empty month too. One function for the life of the app, so MonthView's memo holds.
+  const openImport = useMemo(() => () => (setImportAsked(true), setIsImportOpen(true)), [])
   const [isBottomSheetOpen, setIsBottomSheetOpen] = useState(false)
   // One surface for everything there is to decide, and one flag for it. Reminders first
   // when that is what was asked for, which is the only thing the menu still chooses.
@@ -597,7 +599,7 @@ function App() {
                   // remounts the views once, between gestures, never under a finger.
                   <div ref={railRef} className="relative">
                     <DayScope day={shownDay}>
-                      {currentView === 'year' ? <YearView /> : <MonthView />}
+                      {currentView === 'year' ? <YearView /> : <MonthView onImport={openImport} />}
                     </DayScope>
                     <div
                       ref={otherRef}
@@ -610,7 +612,11 @@ function App() {
                       inert
                     >
                       <DayScope day={shownDay}>
-                        {currentView === 'year' ? <MonthView /> : <YearView />}
+                        {currentView === 'year' ? (
+                          <MonthView onImport={openImport} />
+                        ) : (
+                          <YearView />
+                        )}
                       </DayScope>
                     </div>
                   </div>
@@ -629,7 +635,7 @@ function App() {
                     {/* Inside the view's own key, so a new day does not play the change of
                         view again. */}
                     <DayScope day={shownDay}>
-                      {currentView === 'year' ? <YearView /> : <MonthView />}
+                      {currentView === 'year' ? <YearView /> : <MonthView onImport={openImport} />}
                     </DayScope>
                   </div>
                 )}

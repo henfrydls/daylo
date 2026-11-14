@@ -185,6 +185,20 @@ describe('the way into settings', () => {
   })
 })
 
+// Import used to be three levels down, behind the gear and Settings, on the one day it
+// matters: the first day of a reinstalled app, which looks exactly like a new one.
+describe('the way into import from an empty app', () => {
+  it('opens Import from the line under the empty month', async () => {
+    render(<App />)
+    await act(async () => {})
+
+    await userEvent.click(screen.getByRole('button', { name: 'Import your backup.' }))
+
+    expect(await screen.findByRole('dialog', { name: 'Import Data' })).toBeInTheDocument()
+    expect(screen.queryByTestId('settings')).not.toBeInTheDocument()
+  })
+})
+
 // In a browser there is no command to send through, and a browser is the one place a
 // mailto: actually opens something, so there the letter stays. The app's half of this is
 // the describe below.
