@@ -17,7 +17,8 @@ interface ToastOptions {
 
 interface ToastState {
   toasts: Toast[]
-  addToast: (message: string, variant: Toast['variant'], options?: ToastOptions) => void
+  /** Returns the notice's id, so whoever put it up can take it down when it stops being true. */
+  addToast: (message: string, variant: Toast['variant'], options?: ToastOptions) => string
   removeToast: (id: string) => void
 }
 
@@ -32,7 +33,7 @@ export const useToastStore = create<ToastState>((set) => ({
       toasts: [...state.toasts, newToast],
     }))
 
-    if (options?.untilDismissed) return
+    if (options?.untilDismissed) return id
 
     // Auto-dismiss after 3 seconds
     setTimeout(() => {
@@ -40,6 +41,7 @@ export const useToastStore = create<ToastState>((set) => ({
         toasts: state.toasts.filter((t) => t.id !== id),
       }))
     }, 3000)
+    return id
   },
 
   removeToast: (id) => {

@@ -105,6 +105,47 @@ describe('a write the disk refuses', { timeout: 30_000 }, () => {
     expect(said()).toBe(1)
   })
 
+  // The disk works again, so the notice is no longer true. Left up, it would ask for a
+  // backup that is no longer needed, and the next real failure would look like the old one.
+  it('goes away by itself once a later write goes through', async () => {
+    const { useCalendarStore, useToastStore, COULD_NOT_SAVE } = await freshStore()
+
+    refuseWrites()
+    useCalendarStore.getState().addActivity('Run')
+    vi.advanceTimersByTime(10)
+    expect(useToastStore.getState().toasts.map((t) => t.message)).toEqual([COULD_NOT_SAVE])
+
+    acceptWrites()
+    useCalendarStore.getState().addActivity('Swim')
+    vi.advanceTimersByTime(10)
+
+    expect(useToastStore.getState().toasts).toEqual([])
+  })
+
+  // Closing it is not the same as the problem going away. Once per tap would bury the
+  // screen; never again would leave somebody losing changes for the rest of the day
+  // because they closed one notice in the morning.
+  it('says it again five minutes later if it was closed and the writes still fail', async () => {
+    const { useCalendarStore, useToastStore, COULD_NOT_SAVE } = await freshStore()
+    const said = () =>
+      useToastStore.getState().toasts.filter((t) => t.message === COULD_NOT_SAVE).length
+
+    refuseWrites()
+    useCalendarStore.getState().addActivity('Run')
+    vi.advanceTimersByTime(10)
+    useToastStore.getState().removeToast(useToastStore.getState().toasts[0].id)
+
+    vi.advanceTimersByTime(4 * 60_000 + 59_000)
+    useCalendarStore.getState().addActivity('Swim')
+    vi.advanceTimersByTime(10)
+    expect(said()).toBe(0)
+
+    vi.advanceTimersByTime(1_000)
+    useCalendarStore.getState().addActivity('Walk')
+    vi.advanceTimersByTime(10)
+    expect(said()).toBe(1)
+  })
+
   it('does not stack a second copy over one still on the screen', async () => {
     const { useCalendarStore, useToastStore, COULD_NOT_SAVE } = await freshStore()
 

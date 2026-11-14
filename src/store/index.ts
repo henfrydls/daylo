@@ -33,9 +33,25 @@ interface DeferredStorage extends StateStorage {
    * whether there is something to take in.
    */
   lastSeen: () => string | null
-  /** Whether this window has a change of its own still waiting to be written. */
+  /**
+   * Whether this window has a change of its own on its way to the disk. Not one the disk
+   * refused: that one is still kept, to try again on hiding, but a disk that refuses every
+   * write would otherwise count as a change on its way for ever.
+   */
   hasPendingWrite: () => boolean
+  /**
+   * Forgets a change the disk refused, so it is neither read back as this window's latest
+   * nor tried again on hiding over what another window wrote and this one just took in.
+   */
+  dropRefusedWrite: () => void
 }
+
+/**
+ * How long a closed notice about failed writes stays closed while the writes go on failing.
+ * Once per tap would bury the screen; never again would leave somebody losing changes all
+ * day because they closed one notice in the morning.
+ */
+const SAY_IT_AGAIN_AFTER_MS = 5 * 60_000
 
 // Deferred localStorage adapter for optimistic UI
 // UI updates immediately, persistence happens during idle time
@@ -46,6 +62,9 @@ const createDeferredStorage = (): DeferredStorage => {
   let scheduledWrite: ReturnType<typeof setTimeout> | number | null = null
   let useIdleCallback = false
   let failureReported = false
+  let lastWriteRefused = false
+  let noticeId: string | null = null
+  let noticeShownAt = 0
 
   // Check if requestIdleCallback is available (browser environment)
   if (typeof window !== 'undefined' && typeof window.requestIdleCallback === 'function') {
@@ -72,20 +91,29 @@ const createDeferredStorage = (): DeferredStorage => {
         // fails it is kept, so the next flush tries it again.
         pendingWrite = null
         pendingKey = null
-        // The disk works again. If it fails after this, that is news, and is said again.
+        // The disk works again. If it fails after this, that is news, and is said again, and
+        // a notice still asking for a backup is no longer true.
         failureReported = false
+        lastWriteRefused = false
+        if (noticeId !== null) {
+          useToastStore.getState().removeToast(noticeId)
+          noticeId = null
+        }
       } catch (error) {
         // Not swallowed: losing data without a word is the worst thing an app can do when
         // its whole case is that your data is yours.
         console.error('[Daylo] Could not save changes to localStorage:', error)
-        // Once per run of failures, not once per tap: every tap is another write. And
-        // never a second copy over one still on the screen.
-        if (!failureReported) {
+        lastWriteRefused = true
+        // Once per run of failures, not once per tap: every tap is another write. Again if
+        // the person closed it and the writes still fail five minutes after it was said.
+        // And never a second copy over one still on the screen.
+        const toasts = useToastStore.getState()
+        const onScreen = noticeId !== null && toasts.toasts.some((t) => t.id === noticeId)
+        const sayItAgain = Date.now() - noticeShownAt >= SAY_IT_AGAIN_AFTER_MS
+        if (!onScreen && (!failureReported || sayItAgain)) {
           failureReported = true
-          const toasts = useToastStore.getState()
-          if (!toasts.toasts.some((t) => t.message === COULD_NOT_SAVE)) {
-            toasts.addToast(COULD_NOT_SAVE, 'error', { untilDismissed: true })
-          }
+          noticeShownAt = Date.now()
+          noticeId = toasts.addToast(COULD_NOT_SAVE, 'error', { untilDismissed: true })
         }
       }
     }
@@ -123,6 +151,7 @@ const createDeferredStorage = (): DeferredStorage => {
     setItem: (name: string, value: string): void => {
       pendingWrite = value
       pendingKey = name
+      lastWriteRefused = false
 
       // Cancel any existing scheduled write
       cancelScheduledWrite()
@@ -146,11 +175,19 @@ const createDeferredStorage = (): DeferredStorage => {
     removeItem: (name: string): void => {
       pendingWrite = null
       pendingKey = null
+      lastWriteRefused = false
       cancelScheduledWrite()
       localStorage.removeItem(name)
     },
     lastSeen: () => lastSeen,
-    hasPendingWrite: () => pendingWrite !== null,
+    hasPendingWrite: () => pendingWrite !== null && !lastWriteRefused,
+    dropRefusedWrite: () => {
+      if (!lastWriteRefused) return
+      pendingWrite = null
+      pendingKey = null
+      lastWriteRefused = false
+      cancelScheduledWrite()
+    },
   }
 }
 
