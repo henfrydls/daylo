@@ -1,5 +1,5 @@
 import { useMemo, useSyncExternalStore } from 'react'
-import { formatDate } from './dates'
+import { formatDate, parseDateString } from './dates'
 import { DAY_SCOPE } from './dayScope'
 
 /**
@@ -311,8 +311,5 @@ export function useToday(): string {
  */
 export function useTodayDate(): Date {
   const today = useToday()
-  return useMemo(() => {
-    const [year, month, date] = today.split('-').map(Number)
-    return new Date(year, month - 1, date)
-  }, [today])
+  return useMemo(() => parseDateString(today), [today])
 }

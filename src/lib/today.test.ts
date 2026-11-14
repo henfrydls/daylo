@@ -658,6 +658,22 @@ describe('useToday', () => {
     expect(result.current).toEqual(new Date(2026, 10, 13))
   })
 
+  // Read as a date of the local calendar, not as a moment in UTC. West of Greenwich the
+  // second would be the evening before, and the month would draw yesterday as today.
+  it('gives the first moment of the local day, wherever the device is', () => {
+    vi.stubEnv('TZ', 'America/Santo_Domingo')
+    try {
+      vi.setSystemTime(new Date(2026, 10, 13, 21, 0))
+      const { result } = renderHook(() => useTodayDate())
+
+      expect(result.current.getDate()).toBe(13)
+      expect(result.current.getHours()).toBe(0)
+      expect(result.current.getMinutes()).toBe(0)
+    } finally {
+      vi.unstubAllEnvs()
+    }
+  })
+
   it('is one day for everybody who asks', () => {
     vi.setSystemTime(at(13, 23, 59, 50))
     const first = renderHook(() => useToday())
