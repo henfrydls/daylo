@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useCalendarStore } from '../store'
 import {
   askForExactAlarms,
@@ -19,8 +19,12 @@ import { useToast } from '../components/ui'
  * - `exact`: it asks, and the phone allows it, or the phone could not be asked.
  * - `denied`: it asks, and the phone says no. It still arrives, later, and the screen says
  *   so and offers the way to change it.
+ * - `unknown`: it asks, and the phone has not answered yet, or the reminder is off and
+ *   nothing has been asked. The screen says nothing about timing rather than guess: a
+ *   guess of `exact` showed "a few minutes late" to a phone that had refused, and then
+ *   swapped it for the warning a moment later.
  */
-export type Punctuality = 'inexact' | 'exact' | 'denied'
+export type Punctuality = 'inexact' | 'exact' | 'denied' | 'unknown'
 
 interface DailyReminder {
   enabled: boolean
@@ -64,13 +68,9 @@ export function useDailyReminder(): DailyReminder {
   const { showToast } = useToast()
   const [busy, setBusy] = useState(false)
   const [failure, setFailure] = useState<string | null>(null)
-  // Exact until something says otherwise, so a phone that cannot be asked is a phone the
-  // screen offers nothing to.
-  const [exactAllowed, setExactAllowed] = useState(true)
-  // The same answer as exactAllowed, kept a second time in a ref because the callback
-  // below compares against it, and a callback reads state as it was in the render it was
-  // created in. One value, two places to read it from, not two values.
-  const exactAllowedSeen = useRef(true)
+  // The phone's last answer, or null while there is none: before the first answer comes
+  // back, and while the reminder is off.
+  const [exactAllowed, setExactAllowed] = useState<boolean | null>(null)
 
   // Only while the reminder is on: there is nothing to say about the punctuality of a
   // reminder nobody has set, and turning it on re-runs this because `enabled` changes.
@@ -85,6 +85,12 @@ export function useDailyReminder(): DailyReminder {
   useEffect(() => {
     if (!enabled || !EXACT_ALARMS_DECLARED) return
     let listening = true
+    // The answer before this one, for this run of the effect only. The state holds the
+    // same thing for the screen, but this callback would read the state of the render it
+    // was made in, so the comparison keeps its own copy. Starting empty on every run means
+    // the first answer after turning the reminder on is never taken for a change: turning
+    // it on has just scheduled it.
+    let previous: boolean | null = null
     const ask = () => {
       void exactAlarmsAllowed().then((allowed) => {
         if (!listening) return
@@ -99,8 +105,8 @@ export function useDailyReminder(): DailyReminder {
         // Only on the change, and only in that direction. Coming back to the front is an
         // ordinary thing that happens many times a day, and replacing a pending alarm on
         // each of them would be churn for nothing.
-        const justGranted = !exactAllowedSeen.current && allowed
-        exactAllowedSeen.current = allowed
+        const justGranted = previous === false && allowed
+        previous = allowed
         setExactAllowed(allowed)
         if (justGranted) {
           // From the store rather than from this closure, which belongs to the render
@@ -118,6 +124,8 @@ export function useDailyReminder(): DailyReminder {
     return () => {
       listening = false
       document.removeEventListener('visibilitychange', onReturn)
+      // Turned off, or gone: the next time it is on, nothing is known until it is asked.
+      setExactAllowed(null)
     }
   }, [enabled])
 
@@ -186,7 +194,13 @@ export function useDailyReminder(): DailyReminder {
     at: formatReminderTime(hour, minute),
     busy,
     failure,
-    punctuality: !EXACT_ALARMS_DECLARED ? 'inexact' : exactAllowed ? 'exact' : 'denied',
+    punctuality: !EXACT_ALARMS_DECLARED
+      ? 'inexact'
+      : exactAllowed === null
+        ? 'unknown'
+        : exactAllowed
+          ? 'exact'
+          : 'denied',
     askForTime,
     turnOn,
     turnOff,

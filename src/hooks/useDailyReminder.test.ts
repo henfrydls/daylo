@@ -281,6 +281,19 @@ describe('whether it will arrive on time', () => {
     await waitFor(() => expect(enableReminder).toHaveBeenCalledWith(21, 0))
   })
 
+  // The first answer is not a change. Nothing was known before it, and the reminder was
+  // already set when it was turned on, so setting it again would only replace the alarm
+  // that was just made.
+  it('leaves the reminder alone when the first answer is already allowed', async () => {
+    useCalendarStore.setState({ reminderEnabled: true })
+    exactAlarmsAllowed.mockResolvedValue(true)
+    const { result } = renderHook(() => useDailyReminder())
+
+    await waitFor(() => expect(result.current.punctuality).toBe('exact'))
+
+    expect(enableReminder).not.toHaveBeenCalled()
+  })
+
   // The other direction, which is the one that would make this expensive: coming back to
   // the front is an ordinary thing a person does many times a day, and rescheduling on
   // each of them would replace a pending alarm for no reason.
@@ -307,6 +320,43 @@ describe('whether it will arrive on time', () => {
     })
 
     expect(askForExactAlarms).toHaveBeenCalled()
+  })
+})
+
+describe('before the phone has answered', () => {
+  const pending = () => {
+    let answer: (allowed: boolean) => void = () => {}
+    exactAlarmsAllowed.mockReturnValueOnce(new Promise<boolean>((resolve) => (answer = resolve)))
+    return (allowed: boolean) => act(async () => answer(allowed))
+  }
+
+  it('does not know yet, rather than guessing that it will be on time', async () => {
+    useCalendarStore.setState({ reminderEnabled: true })
+    const answer = pending()
+    const { result } = renderHook(() => useDailyReminder())
+
+    expect(result.current.punctuality).toBe('unknown')
+
+    await answer(false)
+    expect(result.current.punctuality).toBe('denied')
+  })
+
+  it('goes back to not knowing when the reminder is turned off and on again', async () => {
+    useCalendarStore.setState({ reminderEnabled: true })
+    const first = pending()
+    const { result } = renderHook(() => useDailyReminder())
+    await first(true)
+    expect(result.current.punctuality).toBe('exact')
+
+    act(() => useCalendarStore.setState({ reminderEnabled: false }))
+    expect(result.current.punctuality).toBe('unknown')
+
+    const second = pending()
+    act(() => useCalendarStore.setState({ reminderEnabled: true }))
+    expect(result.current.punctuality).toBe('unknown')
+
+    await second(false)
+    expect(result.current.punctuality).toBe('denied')
   })
 })
 
