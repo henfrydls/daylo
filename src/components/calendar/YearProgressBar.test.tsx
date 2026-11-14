@@ -18,7 +18,6 @@ describe('YearProgressBar', () => {
     year: 2024,
     logsByDate: new Map<string, number>(),
     totalActivities: 2,
-    currentStreak: 0,
   }
 
   // Henfry read "20/277 days active" on his phone and took the 277 for a mistake. It was
@@ -74,22 +73,6 @@ describe('YearProgressBar', () => {
     // 10 active days out of ~167 elapsed days (Jan 1 - Jun 15)
     expect(screen.getByText('10')).toBeInTheDocument()
     expect(screen.getByText(/days so far/)).toBeInTheDocument()
-  })
-
-  // The bar no longer works the run out for itself. It shows the one it is handed, which
-  // is worked out over every log there is, so this and the Statistics panel cannot end up
-  // reporting different numbers for the same run.
-  it('shows the streak it is given', () => {
-    render(<YearProgressBar {...defaultProps} currentStreak={3} />)
-
-    const streakText = screen.getByText(/d streak/)
-    expect(streakText.textContent).toContain('3')
-  })
-
-  it('says nothing about a streak of nothing', () => {
-    render(<YearProgressBar {...defaultProps} currentStreak={0} />)
-
-    expect(screen.queryByText(/d streak/)).not.toBeInTheDocument()
   })
 
   // "N of M days" has the days gone by on the right, so a day still to
