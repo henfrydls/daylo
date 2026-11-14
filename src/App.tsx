@@ -322,9 +322,9 @@ function App() {
 
   // Today's check-in, if the switch is on and today has not been tried. Only when somebody
   // has Daylo in front of them: when it opens, and when the window comes back or takes the
-  // focus. Never from a timer. The check-in says "Daylo was opened on this date", and a
-  // desktop copy left minimised for a week would otherwise say so every midnight, which
-  // is seven people coming back who never did. That is why it does not follow the day on
+  // focus. Never from a timer alone (the one exception is just below). The check-in says
+  // "Daylo was opened on this date", and a desktop copy left minimised for a week would
+  // otherwise say so every midnight, which is seven people coming back who never did. That is why it does not follow the day on
   // screen, which does change by timer, and why it does not wait for it either: a new day
   // held back by a form being written is still a day Daylo was opened on, and the date
   // sent is the clock's, read by sendCheckinIfDue at that moment. Whichever of these
@@ -347,6 +347,18 @@ function App() {
       window.removeEventListener('focus', onBack)
     }
   }, [hasHydrated, canCheckIn, checkinStart])
+
+  // The one exception to "never from a timer": the new day arriving while somebody is at
+  // the desk with Daylo in front and the focus in it. Nothing went away, so no return
+  // comes to say so, and it is still a day Daylo was opened on. Visible and focused is a
+  // person; a window minimised, or open behind another one, is a timer, and sends nothing.
+  const checkedInFor = useRef(shownDay)
+  useEffect(() => {
+    if (shownDay === checkedInFor.current) return
+    checkedInFor.current = shownDay
+    if (!hasHydrated || !canCheckIn) return
+    if (document.visibilityState === 'visible' && document.hasFocus()) void sendCheckinIfDue()
+  }, [shownDay, hasHydrated, canCheckIn])
 
   // The carousel is the phone's. On a wide screen there is no finger to follow and the
   // sidebar is there instead, so the views keep changing the way they always did.

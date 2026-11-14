@@ -405,6 +405,8 @@ describe('what the new day leaves alone', () => {
       vi.useRealTimers()
       vi.useFakeTimers({ shouldAdvanceTime: true })
       vi.setSystemTime(new Date(2026, 10, 13, 23, 50))
+      // Hidden is enough, whatever the page says about the focus.
+      vi.spyOn(document, 'hasFocus').mockReturnValue(true)
       render(<App />)
       await act(async () => {})
       await act(async () => {})
@@ -426,6 +428,38 @@ describe('what the new day leaves alone', () => {
       })
       await act(async () => {})
       expect(sent()).toEqual(['2026-11-13', '2026-11-14'])
+    })
+
+    // Somebody at the desk through midnight, with Daylo in front and the focus in it. No
+    // return comes, because nothing went away, and the new day is still a day it was
+    // opened on. The window having the focus is what tells a person from a timer.
+    it.each([
+      [
+        'goes at midnight with the window in front and in focus',
+        true,
+        ['2026-11-13', '2026-11-14'],
+      ],
+      [
+        'does not go at midnight with the window in sight but without the focus',
+        false,
+        ['2026-11-13'],
+      ],
+    ])('%s', async (_, focused, days) => {
+      vi.useRealTimers()
+      vi.useFakeTimers({ shouldAdvanceTime: true })
+      vi.setSystemTime(new Date(2026, 10, 13, 23, 50))
+      vi.spyOn(document, 'hasFocus').mockReturnValue(focused)
+      render(<App />)
+      await act(async () => {})
+      await act(async () => {})
+
+      await act(async () => {
+        vi.advanceTimersByTime(13 * 60 * 1000)
+      })
+      await act(async () => {})
+
+      expect(isTodayIn('2026-11-14')).toBe(true)
+      expect(sent()).toEqual(days)
     })
 
     // The day on screen can be held back by words being written. Daylo was still opened
