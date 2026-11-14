@@ -151,6 +151,11 @@ phase() {
   adb install "$apk" >"$OUT/$tag-0-install.txt" 2>&1 || { log "install failed"; return 1; }
   sh_ pm grant "$PKG" android.permission.POST_NOTIFICATIONS
   sh_ appops set "$PKG" SCHEDULE_EXACT_ALARM allow
+  # AppOpsService writes appops.xml up to 30 minutes after a change. Run 43606830927 restarted
+  # a minute later and booted with "No existing app ops /data/system/appops.xml; starting
+  # empty", so the grant was gone and every restored alarm came back inexact. On a phone the
+  # grant made in Settings is on disk long before any restart; here it has to be flushed.
+  sh_ appops write-settings
   sh_ appops get "$PKG" SCHEDULE_EXACT_ALARM >"$OUT/$tag-0-appops.txt"
 
   # First start, only so there is a WebView to talk to.
@@ -244,6 +249,7 @@ phase() {
     return 1
   fi
   network_off "$tag, after the restart" || return 1
+  sh_ appops get "$PKG" SCHEDULE_EXACT_ALARM >"$OUT/$tag-3-appops.txt"
   # BOOT_COMPLETED reaches receivers a few seconds after boot_completed.
   sleep 45
   sh_ dumpsys alarm >"$OUT/$tag-3-alarms-after-restart.txt"
@@ -266,6 +272,7 @@ phase() {
     sh_ dumpsys alarm >"$OUT/$tag-5-alarms-${s}s.txt"
     daylo_block "$OUT/$tag-5-alarms-${s}s.txt" >"$OUT/$tag-5-block-${s}s.txt"
   done
+  sh_ appops get "$PKG" SCHEDULE_EXACT_ALARM >"$OUT/$tag-5-appops.txt"
   sh_ dumpsys alarm | grep -A12 "Removal history" >"$OUT/$tag-5-removal-history.txt" || true
   adb logcat -d >"$OUT/$tag-5-logcat-update.txt" 2>&1
   decisions "$OUT/$tag-5-logcat-update.txt" "after the update (restore)" "$tag"
