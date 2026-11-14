@@ -361,18 +361,21 @@ jobs:
       #
       # A green Gradle run is not taken as proof. A task or project name that drifts runs
       # nothing and still exits 0, so the step reads the JUnit XML that the task writes and
-      # fails unless it finds at least MIN_TESTS tests with no failures. The XML is looked
-      # for where tauri.settings.gradle says the project lives, which is inside the cargo
-      # git checkout, and that folder's results are deleted first so nothing stale counts.
+      # fails unless it finds at least MIN_TESTS tests that ran, with no failures. Skipped
+      # tests do not count as run: JUnit lists an @Ignore'd test in `tests` and again in
+      # `skipped`, so counting `tests` alone let an ignored test keep the step green. The
+      # XML is looked for where tauri.settings.gradle says the project lives, which is
+      # inside the cargo git checkout, and that folder's results are deleted first so
+      # nothing stale counts.
       #
-      # To see it red: henfrydls/plugins-workspace commit
-      # 5a2d5b3139b5af892c122cb962c9218cb9d0c20d (branch daylo/tmp-mutation-202) carries a
-      # mutation for each decision the tests cover. Pin Cargo.toml and Cargo.lock to it on a
-      # throwaway branch and this step fails, naming the tests.
+      # To see it red: henfrydls/plugins-workspace branch daylo/tmp-mutation-202b carries a
+      # mutation for each decision the tests cover, and an @Ignore on one more test so that
+      # the skipped count is seen to fail the threshold. Pin Cargo.toml and Cargo.lock to it
+      # on a throwaway branch and this step fails, naming the tests.
       - name: The notification plugin's unit tests
         working-directory: src-tauri/gen/android
         env:
-          MIN_TESTS: 25
+          MIN_TESTS: 26
         run: |
           set -euo pipefail
           line=$(grep -F "project(':tauri-plugin-notification').projectDir" tauri.settings.gradle || true)
@@ -399,18 +402,22 @@ jobs:
             n=$(grep -m1 -oE '<testsuite [^>]*' "$x" | grep -oE ' tests="[0-9]+"' | grep -oE '[0-9]+')
             f=$(grep -m1 -oE '<testsuite [^>]*' "$x" | grep -oE ' failures="[0-9]+"' | grep -oE '[0-9]+')
             e=$(grep -m1 -oE '<testsuite [^>]*' "$x" | grep -oE ' errors="[0-9]+"' | grep -oE '[0-9]+')
-            echo "$(basename "$x"): tests=$n failures=$f errors=$e"
-            tests=$(( tests + n )); bad=$(( bad + f + e ))
+            s=$(grep -m1 -oE '<testsuite [^>]*' "$x" | grep -oE ' skipped="[0-9]+"' | grep -oE '[0-9]+')
+            echo "$(basename "$x"): tests=$n skipped=$s failures=$f errors=$e"
+            tests=$(( tests + n - s )); bad=$(( bad + f + e ))
           done
-          echo "total: $tests tests, $bad failed"
+          echo "total: $tests tests ran, $bad failed"
+          # Both checks speak before the step fails, so one red run names every reason.
+          status=0
           if [ "$bad" -ne 0 ]; then
             echo "::error::$bad of the plugin's unit tests failed."
-            exit 1
+            status=1
           fi
           if [ "$tests" -lt "$MIN_TESTS" ]; then
-            echo "::error::Only $tests tests ran, expected at least $MIN_TESTS."
-            exit 1
+            echo "::error::Only $tests tests ran (skipped ones not counted), expected at least $MIN_TESTS."
+            status=1
           fi
+          exit "$status"
 
       # The unit tests compare EXACT_ALARMS_DECLARED with the manifest written by hand. What
       # Play reads is the merged one, where any library can add SCHEDULE_EXACT_ALARM or

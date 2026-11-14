@@ -842,8 +842,10 @@ jobs:
   # to the production check-in server. The network is cut before anything is installed and
   # read back after every boot (android-measure-reminder.sh, network_off). And not trusted
   # to have held: the emulator captures every packet the device sends, from the host side,
-  # and the job fails if the check-in host appears in that capture or in logcat, or if the
-  # capture is empty and so cannot say either way.
+  # and the job fails if the check-in host appears in that capture, or in logcat other than
+  # as the app's own "did not go through". An empty capture is not a failure: with the radio
+  # off from the start nothing reaches the network card, and the step only says so; the
+  # logcat record is then what shows each install's one attempt failing.
   #
   # WHAT IT IS NOT: a check. It runs only when asked for, publishes nothing, and both APKs
   # are debug builds signed with the runner's throwaway debug key.
