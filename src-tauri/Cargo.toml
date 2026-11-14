@@ -155,6 +155,13 @@ strip = false
 # on, waits for the phone to be picked up. Asking Android for SCHEDULE_EXACT_ALARM
 # without this buys one punctual reminder rather than punctual reminders.
 #
+# It matters without the permission too: for anybody who has not granted it, and for
+# everybody once 1.5.4 stops asking for it. Without it every alarm is inexact, and the
+# fixed receiver re-arms with setAndAllowWhileIdle on RTC_WAKEUP, where the unfixed one
+# used plain RTC: an inexact reminder that still wakes a dozing phone, instead of one that
+# waits for it to be picked up. That much is read in the plugin's source; it has not been
+# measured on a phone without the permission.
+#
 # Two commits, because the first one was wrong in a way only a phone could show. It read
 # the flag back from the plugin's own notification store, which looked safe since the
 # receiver already loads from it two lines earlier, and that store is always empty: it is

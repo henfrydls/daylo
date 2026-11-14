@@ -24,6 +24,8 @@ const enableReminder = vi.hoisted(() => vi.fn())
 const disableReminder = vi.hoisted(() => vi.fn())
 const exactAlarmsAllowed = vi.hoisted(() => vi.fn())
 const askForExactAlarms = vi.hoisted(() => vi.fn())
+/** Whether this build declares the exact-alarm permission, per test. */
+const exact = vi.hoisted(() => ({ declared: true }))
 
 vi.mock('../../lib/reminders', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../../lib/reminders')>()),
@@ -31,6 +33,9 @@ vi.mock('../../lib/reminders', async (importOriginal) => ({
   disableReminder,
   exactAlarmsAllowed,
   askForExactAlarms,
+  get EXACT_ALARMS_DECLARED() {
+    return exact.declared
+  },
 }))
 
 const check = vi.fn()
@@ -65,6 +70,9 @@ function show({
 beforeEach(() => {
   exactAlarmsAllowed.mockReset().mockResolvedValue(true)
   askForExactAlarms.mockReset().mockResolvedValue(true)
+  // On, as 1.5.3 ships. Set here rather than read from the module so that a test which
+  // needs it off, as 1.5.4 will be, cannot leave it off for the next one.
+  exact.declared = true
   inTheApp.yes = false
   check.mockReset()
   install.mockReset()
@@ -642,5 +650,36 @@ describe('a reminder that arrives when it was set for', () => {
 
     await waitFor(() => expect(exactAlarmsAllowed).toHaveBeenCalled())
     expect(screen.queryByTestId('reminder-exact')).not.toBeInTheDocument()
+  })
+})
+
+describe('a reminder in a build without exact alarms', () => {
+  // Without the permission declared, Android does not list Daylo on its "Alarms &
+  // reminders" screen, so the row would open a screen with nothing on it to switch on.
+  beforeEach(() => {
+    exact.declared = false
+  })
+
+  it('offers no way to the phone screen and does not ask the phone', async () => {
+    exactAlarmsAllowed.mockResolvedValue(false)
+    useCalendarStore.setState({ reminderEnabled: true })
+    show({ hasReminders: true })
+
+    expect(await screen.findByText(/around this time/i)).toBeInTheDocument()
+    expect(screen.queryByTestId('reminder-exact')).not.toBeInTheDocument()
+    // Both spellings: the row says "on-time" and the sentence above it "on time", and a
+    // pattern for one of them let the row through unseen.
+    expect(screen.queryAllByText(/on[- ]time/i)).toHaveLength(0)
+    expect(exactAlarmsAllowed).not.toHaveBeenCalled()
+    expect(askForExactAlarms).not.toHaveBeenCalled()
+  })
+
+  it('does not promise the minute', () => {
+    useCalendarStore.setState({ reminderEnabled: true })
+    show({ hasReminders: true })
+
+    expect(screen.getByTestId('reminder-details')).toHaveTextContent(
+      'It arrives around this time. Android picks the exact moment.'
+    )
   })
 })

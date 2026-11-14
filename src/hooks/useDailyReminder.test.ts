@@ -7,6 +7,8 @@ const enableReminder = vi.hoisted(() => vi.fn())
 const disableReminder = vi.hoisted(() => vi.fn())
 const exactAlarmsAllowed = vi.hoisted(() => vi.fn())
 const askForExactAlarms = vi.hoisted(() => vi.fn())
+/** Whether this build declares the exact-alarm permission, per test. */
+const exact = vi.hoisted(() => ({ declared: true }))
 
 vi.mock('../lib/reminders', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../lib/reminders')>()),
@@ -14,6 +16,9 @@ vi.mock('../lib/reminders', async (importOriginal) => ({
   disableReminder,
   exactAlarmsAllowed,
   askForExactAlarms,
+  get EXACT_ALARMS_DECLARED() {
+    return exact.declared
+  },
 }))
 
 const showToast = vi.fn()
@@ -28,6 +33,9 @@ beforeEach(() => {
   enableReminder.mockReset().mockResolvedValue({ outcome: 'on' })
   exactAlarmsAllowed.mockReset().mockResolvedValue(true)
   askForExactAlarms.mockReset().mockResolvedValue(true)
+  // On, as 1.5.3 ships. Set here rather than read from the module so that a test which
+  // needs it off, as 1.5.4 will be, cannot leave it off for the next one.
+  exact.declared = true
   disableReminder.mockReset().mockResolvedValue(undefined)
   showToast.mockReset()
   useCalendarStore.setState({ reminderEnabled: false, reminderHour: 21, reminderMinute: 0 })
@@ -214,7 +222,7 @@ describe('whether it will arrive on time', () => {
     exactAlarmsAllowed.mockResolvedValue(false)
 
     const { result } = renderHook(() => useDailyReminder())
-    await waitFor(() => expect(result.current.onTime).toBe(false))
+    await waitFor(() => expect(result.current.punctuality).toBe('denied'))
   })
 
   it('says nothing about a reminder nobody has set', async () => {
@@ -232,14 +240,14 @@ describe('whether it will arrive on time', () => {
     useCalendarStore.setState({ reminderEnabled: true })
     exactAlarmsAllowed.mockResolvedValue(false)
     const { result } = renderHook(() => useDailyReminder())
-    await waitFor(() => expect(result.current.onTime).toBe(false))
+    await waitFor(() => expect(result.current.punctuality).toBe('denied'))
 
     exactAlarmsAllowed.mockResolvedValue(true)
     await act(async () => {
       document.dispatchEvent(new Event('visibilitychange'))
     })
 
-    await waitFor(() => expect(result.current.onTime).toBe(true))
+    await waitFor(() => expect(result.current.punctuality).toBe('exact'))
   })
 
   it('asks again after the reminder is turned on', async () => {
@@ -250,7 +258,7 @@ describe('whether it will arrive on time', () => {
       await result.current.turnOn(21, 0)
     })
 
-    await waitFor(() => expect(result.current.onTime).toBe(false))
+    await waitFor(() => expect(result.current.punctuality).toBe('denied'))
   })
 
   // Measured on a real phone on 2026-10-13: after granting the permission, `dumpsys alarm`
@@ -262,7 +270,7 @@ describe('whether it will arrive on time', () => {
     useCalendarStore.setState({ reminderEnabled: true, reminderHour: 21, reminderMinute: 0 })
     exactAlarmsAllowed.mockResolvedValue(false)
     const { result } = renderHook(() => useDailyReminder())
-    await waitFor(() => expect(result.current.onTime).toBe(false))
+    await waitFor(() => expect(result.current.punctuality).toBe('denied'))
     enableReminder.mockClear()
 
     exactAlarmsAllowed.mockResolvedValue(true)
@@ -280,7 +288,7 @@ describe('whether it will arrive on time', () => {
     useCalendarStore.setState({ reminderEnabled: true })
     exactAlarmsAllowed.mockResolvedValue(true)
     const { result } = renderHook(() => useDailyReminder())
-    await waitFor(() => expect(result.current.onTime).toBe(true))
+    await waitFor(() => expect(result.current.punctuality).toBe('exact'))
     enableReminder.mockClear()
 
     await act(async () => {
@@ -299,5 +307,49 @@ describe('whether it will arrive on time', () => {
     })
 
     expect(askForExactAlarms).toHaveBeenCalled()
+  })
+})
+
+// The build that goes to Google Play without the permission, 1.5.4. Android will not list Daylo
+// on its "Alarms & reminders" screen then, so asking whether it is allowed always answers
+// no, and offering the way there is a button that opens a screen Daylo is not on.
+describe('when the build does not declare exact alarms', () => {
+  beforeEach(() => {
+    exact.declared = false
+  })
+
+  it('does not ask the phone, even with the reminder on', async () => {
+    useCalendarStore.setState({ reminderEnabled: true })
+    exactAlarmsAllowed.mockResolvedValue(false)
+    const { result } = renderHook(() => useDailyReminder())
+
+    await act(async () => {
+      document.dispatchEvent(new Event('visibilitychange'))
+    })
+
+    expect(exactAlarmsAllowed).not.toHaveBeenCalled()
+    expect(result.current.punctuality).toBe('inexact')
+  })
+
+  it('does not ask again after the reminder is turned on', async () => {
+    exactAlarmsAllowed.mockResolvedValue(false)
+    const { result } = renderHook(() => useDailyReminder())
+
+    await act(async () => {
+      await result.current.turnOn(21, 0)
+    })
+
+    expect(exactAlarmsAllowed).not.toHaveBeenCalled()
+    expect(result.current.punctuality).toBe('inexact')
+  })
+
+  it('does not open the phone screen it would not be on', async () => {
+    const { result } = renderHook(() => useDailyReminder())
+
+    await act(async () => {
+      await result.current.askForTime()
+    })
+
+    expect(askForExactAlarms).not.toHaveBeenCalled()
   })
 })
