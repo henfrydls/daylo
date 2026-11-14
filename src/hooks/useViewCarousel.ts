@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
+import { BETWEEN_VIEWS } from '../lib/today'
 import {
   AXIS_AT,
   axisOf,
@@ -146,6 +147,8 @@ export function useViewCarousel({ view, onChange, enabled, headerRef }: Options)
     )
     other.style.top = `${top}px`
     other.style.visibility = 'visible'
+    // Until `hide`: a new day waits for this, see lib/today.ts.
+    railRef.current?.setAttribute(BETWEEN_VIEWS, '')
     other.removeAttribute('inert')
     other.removeAttribute('aria-hidden')
     container.style.minHeight = `${top + other.getBoundingClientRect().height}px`
@@ -158,6 +161,7 @@ export function useViewCarousel({ view, onChange, enabled, headerRef }: Options)
       other.setAttribute('inert', '')
       other.setAttribute('aria-hidden', 'true')
     }
+    railRef.current?.removeAttribute(BETWEEN_VIEWS)
     if (containerRef.current) containerRef.current.style.minHeight = ''
   }, [])
 

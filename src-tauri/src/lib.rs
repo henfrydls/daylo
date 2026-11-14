@@ -160,6 +160,10 @@ async fn latest_version(app: tauri::AppHandle) -> Result<String, String> {
 /// False means it still arrives, within an hour or so of the time and later than that out
 /// of a deep doze, which is what an inexact alarm is. The screen uses this to decide
 /// whether to say so and offer the way to change it, not whether to schedule anything.
+///
+/// Registered either way, and only called while EXACT_ALARMS_DECLARED in
+/// src/lib/reminders.ts is on, as it is in 1.5.3: without the permission in the manifest the
+/// answer is always no from Android 12 up, and there is nothing to offer.
 #[cfg(target_os = "android")]
 #[tauri::command]
 fn exact_alarms_allowed() -> bool {
@@ -176,6 +180,87 @@ fn ask_for_exact_alarms() -> bool {
     android::ask_for_exact_alarms()
 }
 
+/// What a second launch does to the copy that is already running: shows its window, out
+/// of the taskbar if it was minimised, and in front. The second launch's arguments and
+/// working directory are not used, because Daylo takes none: no deep link, no file to
+/// open, nothing on its command line.
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
+fn bring_back_the_open_window(app: &tauri::AppHandle) {
+    use tauri::Manager;
+    if let Some(window) = app.get_webview_window("main") {
+        let _ = window.unminimize();
+        let _ = window.show();
+        let _ = window.set_focus();
+    }
+}
+
+/// The name a copy of Daylo owns on the Linux session bus, before the plugin adds
+/// `.SingleInstance`. Derived from the identifier the app was built with, so that the lab
+/// (com.daylo.lab) owns a name of its own: with a fixed one, the lab's AppImage opened next
+/// to the real Daylo would bring the real window forward and close, and could never be
+/// tried on the same desktop.
+///
+/// The released identifier is the one exception. It becomes the Flatpak's app id, because
+/// the Flatpak sandbox lets an app own names under its own id and nothing else without a
+/// permission: io.github.henfrydls.daylo.SingleInstance needs none, com.daylo.app's would.
+/// The deb and the AppImage use the same name, which is what makes two of them one.
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
+fn single_instance_bus_id(identifier: &str) -> &str {
+    if identifier == "com.daylo.app" {
+        "io.github.henfrydls.daylo"
+    } else {
+        identifier
+    }
+}
+
+/// Whether the plugin's names on the Linux session bus are ones zbus accepts, built exactly
+/// as the plugin builds them: `<bus id>.SingleInstance` as the well-known name, and the same
+/// with dots turned into slashes and dashes into underscores as the object path. The plugin
+/// unwraps both, and with `panic = "abort"` an identifier that does not fit, one with an
+/// element starting with a digit for instance, would end every launch.
+#[cfg(target_os = "linux")]
+fn single_instance_names_valid(bus_id: &str) -> bool {
+    let name = format!("{bus_id}.SingleInstance");
+    let mut path = name.replace('.', "/").replace('-', "_");
+    if !path.starts_with('/') {
+        path = format!("/{path}");
+    }
+    zbus::names::WellKnownName::try_from(name.as_str()).is_ok()
+        && zbus::zvariant::ObjectPath::try_from(path.as_str()).is_ok()
+}
+
+/// Whether the plugin can be started without taking the app down with it. Daylo opened
+/// before the plugin for everybody, and it still has to.
+///
+/// On Linux the plugin opens the session bus with `Builder::session().unwrap()`, which is
+/// `zbus::Address::session()` and nothing else: DBUS_SESSION_BUS_ADDRESS when it is set
+/// and valid Unicode, `unix:path=` under XDG_RUNTIME_DIR (or /run/user/<uid>) when it is
+/// not. It fails only when the variable holds something zbus cannot read, `disabled:` or a
+/// transport it does not know, and this asks the same function first. A bus that can be
+/// read but not reached is fine: the plugin treats that as an error and carries on.
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
+fn single_instance_can_start(bus_id: &str) -> bool {
+    #[cfg(target_os = "linux")]
+    {
+        if zbus::Address::session().is_err() {
+            log::warn!(
+                "the session bus address cannot be read; starting without the single instance"
+            );
+            return false;
+        }
+        if !single_instance_names_valid(bus_id) {
+            log::warn!("{bus_id} makes no valid bus name; starting without the single instance");
+            return false;
+        }
+        true
+    }
+    #[cfg(not(target_os = "linux"))]
+    {
+        let _ = bus_id;
+        true
+    }
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     // Before anything else, because everything else assumes a window can exist. Without
@@ -187,7 +272,50 @@ pub fn run() {
         webview2::explain_and_exit();
     }
 
-    let builder = tauri::Builder::default().plugin(tauri_plugin_shell::init());
+    let context = tauri::generate_context!();
+    let builder = tauri::Builder::default();
+
+    // First, before any other plugin, as the plugin asks: the second copy has to stop here,
+    // before anything else of it starts. Somebody who thinks Daylo has not refreshed opens
+    // it again, and two windows each holding their own copy of the days meant one of them
+    // could save over what was ticked in the other. Now the second launch brings back the
+    // window that is already open and goes away. Desktop only: Android and iOS already
+    // give an app one instance. See bring_back_the_open_window for what it is handed.
+    //
+    // Not in a debug build, which is `tauri dev`: it has the released identifier, so it
+    // would find the installed Daylo open, bring it forward and close itself.
+    //
+    // Where it does not hold, all of it measured by nobody yet:
+    // - The snap. Strict confinement does not let it own the bus name without a dbus
+    //   slot, which snapcraft.yaml does not declare, so each launch there still opens a
+    //   window (#250).
+    // - On Windows the name is the identifier, so the Store copy and the installer's copy
+    //   share it: with one of them open, opening the other brings the first forward, and
+    //   that one has its own data. Accepted: having both installed is rare, and the window
+    //   that comes forward is a real Daylo, not a lost one.
+    // - The focus. Windows lets the first copy come to the front because the second hands
+    //   it the right before closing. GNOME on Wayland may refuse a window that raises
+    //   itself without the token of the launch that asked, which the plugin does not pass
+    //   on; then the window is shown but not in front.
+    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+    let builder = if cfg!(debug_assertions) {
+        builder
+    } else {
+        // Linux only; Windows and macOS use the identifier as it is.
+        let bus_id = single_instance_bus_id(&context.config().identifier);
+        if single_instance_can_start(bus_id) {
+            builder.plugin(
+                tauri_plugin_single_instance::Builder::new()
+                    .dbus_id(bus_id)
+                    .callback(|app, _argv, _cwd| bring_back_the_open_window(app))
+                    .build(),
+            )
+        } else {
+            builder
+        }
+    };
+
+    let builder = builder.plugin(tauri_plugin_shell::init());
 
     // The dialog goes everywhere it can open: the desktop and Android. What each platform
     // registers is also what tells the frontend where it is running, so the two sides
@@ -219,8 +347,9 @@ pub fn run() {
 
     // Android writes through the filesystem plugin rather than through write_text_file:
     // the picker returns a content:// URI and std::fs cannot open one. The notification
-    // plugin is here and nowhere else: it is what survives a reboot, because it persists
-    // what it scheduled and re-arms it from a BOOT_COMPLETED receiver of its own.
+    // plugin is here and nowhere else. The daily reminder survives a restart and an update
+    // because the patched copy pinned in Cargo.toml stores what it scheduled and re-arms it
+    // from a receiver of its own, on BOOT_COMPLETED and on MY_PACKAGE_REPLACED.
     #[cfg(target_os = "android")]
     let builder = builder
         .plugin(tauri_plugin_fs::init())
@@ -251,7 +380,7 @@ pub fn run() {
     let builder = builder.invoke_handler(tauri::generate_handler![greet]);
 
     builder
-        .run(tauri::generate_context!())
+        .run(context)
         .expect("error while running tauri application");
 }
 
@@ -281,7 +410,7 @@ mod plugin_config {
     /// Every plugin this app registers, on any platform. The list is here so that a block
     /// for something we do not register cannot sit in the config being ignored until the
     /// day somebody registers it.
-    const REGISTERED: [&str; 7] = [
+    const REGISTERED: [&str; 8] = [
         "shell",
         "dialog",
         "opener",
@@ -289,6 +418,7 @@ mod plugin_config {
         "notification",
         "updater",
         "process",
+        "single-instance",
     ];
 
     fn conf() -> Value {
@@ -355,6 +485,10 @@ mod plugin_config {
             accepts(&tauri_plugin_opener::init::<Wry>(), "opener"),
             accepts(&tauri_plugin_fs::init::<Wry>(), "fs"),
             accepts(&tauri_plugin_notification::init::<Wry>(), "notification"),
+            accepts(
+                &tauri_plugin_single_instance::Builder::<Wry>::new().build(),
+                "single-instance",
+            ),
             // The updater is the only one of these with a block in the config, so it is
             // the only one where "the plugin accepts what we wrote" is a real question
             // rather than a formality.
@@ -390,5 +524,54 @@ mod plugin_config {
             strangers.is_empty(),
             "tauri.conf.json configures plugins this app never registers: {strangers:?}"
         );
+    }
+}
+
+/// The name the single instance owns on the Linux session bus, and whether zbus accepts
+/// it. Both decide whether a second launch brings back the open window or takes the first
+/// launch down, and neither can be seen without two copies of the app. The check on the bus
+/// address is not here: it is one call to zbus that reads the environment, and a test that
+/// changed the environment would race the others running beside it.
+#[cfg(all(test, not(any(target_os = "android", target_os = "ios"))))]
+mod single_instance {
+    use super::single_instance_bus_id;
+
+    #[test]
+    fn the_released_copy_owns_a_name_the_flatpak_may_own_without_a_permission() {
+        assert_eq!(
+            single_instance_bus_id("com.daylo.app"),
+            "io.github.henfrydls.daylo"
+        );
+    }
+
+    #[test]
+    fn the_lab_owns_a_name_of_its_own() {
+        assert_eq!(single_instance_bus_id("com.daylo.lab"), "com.daylo.lab");
+    }
+
+    #[cfg(target_os = "linux")]
+    mod bus_names {
+        use super::super::{single_instance_bus_id, single_instance_names_valid};
+
+        #[test]
+        fn the_released_copy_and_the_lab_make_valid_bus_names() {
+            for identifier in ["com.daylo.app", "com.daylo.lab"] {
+                let bus_id = single_instance_bus_id(identifier);
+                assert!(
+                    single_instance_names_valid(bus_id),
+                    "{identifier} -> {bus_id}"
+                );
+            }
+        }
+
+        #[test]
+        fn an_identifier_with_an_element_starting_with_a_digit_does_not() {
+            assert!(!single_instance_names_valid(single_instance_bus_id(
+                "1daylo.app"
+            )));
+            assert!(!single_instance_names_valid(single_instance_bus_id(
+                "com.2daylo.app"
+            )));
+        }
     }
 }

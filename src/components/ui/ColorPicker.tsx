@@ -1,4 +1,5 @@
-import { memo, useCallback, useEffect, useRef, useState } from 'react'
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { canonicalHex, sameColor } from '../../lib/colors'
 
 export interface ColorOption {
   name: string
@@ -70,9 +71,15 @@ export const ColorPicker = memo(function ColorPicker({
   // Dropped when every color is taken: dimming all of them tells the person nothing and
   // makes the palette look broken, and repeating a color has to stay possible or the
   // seventeenth activity could not be created at all.
-  const everyColorTaken = !!colorsInUse && colors.every((c) => colorsInUse.includes(c.value))
+  //
+  // Compared with sameColor rather than as strings: a backup can carry "#10b981" for the
+  // green the palette writes "#10B981", and it is still the green somebody is using.
+  // Spelled once, not on every question.
+  const takenSet = useMemo(() => new Set((colorsInUse ?? []).map(canonicalHex)), [colorsInUse])
+  const taken = (colorValue: string) => takenSet.has(canonicalHex(colorValue))
+  const everyColorTaken = !!colorsInUse && colors.every((c) => taken(c.value))
   const isInUse = (colorValue: string) =>
-    !!colorsInUse && !everyColorTaken && colorValue !== value && colorsInUse.includes(colorValue)
+    !everyColorTaken && !sameColor(colorValue, value) && taken(colorValue)
 
   const [expanded, setExpanded] = useState(false)
   const [autoCount, setAutoCount] = useState<number>(0)
@@ -116,21 +123,36 @@ export const ColorPicker = memo(function ColorPicker({
     }
   }, [autoCollapse, measureAndSetCount])
 
-  const isSelected = (colorValue: string): boolean => value === colorValue
+  const isSelected = (colorValue: string): boolean => sameColor(value, colorValue)
 
   // Use autoCount when autoCollapse is active, otherwise fall back to collapsedCount prop
   const effectiveCollapsedCount = autoCollapse ? autoCount : collapsedCount
 
-  // Determine if we need to auto-expand because the selected color is hidden
-  const selectedIsHidden =
+  // A selected color past the collapsed row takes the row's last place, so it is seen
+  // without unfolding the rest. The picker used to unfold all sixteen instead, with no way
+  // to fold them back: that is what a phone got whenever the color offered to a new
+  // activity was the eighth or later, as it is once seven are in use.
+  //
+  // Once there, it stays for as long as the picker is on the page, even after another
+  // color in the row is chosen: the place is under somebody's finger, and if it changed at
+  // the first tap a second tap there would choose something else. A later choice from
+  // past the row, made unfolded, takes the place over.
+  const selectedIndex = colors.findIndex((c) => sameColor(c.value, value))
+  const [pinnedIndex, setPinnedIndex] = useState<number | null>(null)
+  if (
     effectiveCollapsedCount > 0 &&
-    !expanded &&
-    colors.findIndex((c) => c.value === value) >= effectiveCollapsedCount
-
-  const shouldShowAll = effectiveCollapsedCount <= 0 || expanded || selectedIsHidden
-  const visibleColors = shouldShowAll ? colors : colors.slice(0, effectiveCollapsedCount)
-  const canToggle =
-    effectiveCollapsedCount > 0 && !selectedIsHidden && colors.length > effectiveCollapsedCount
+    selectedIndex >= effectiveCollapsedCount &&
+    selectedIndex !== pinnedIndex
+  ) {
+    setPinnedIndex(selectedIndex)
+  }
+  const shouldShowAll = effectiveCollapsedCount <= 0 || expanded
+  const visibleColors = shouldShowAll
+    ? colors
+    : pinnedIndex !== null && pinnedIndex >= effectiveCollapsedCount && pinnedIndex < colors.length
+      ? [...colors.slice(0, effectiveCollapsedCount - 1), colors[pinnedIndex]]
+      : colors.slice(0, effectiveCollapsedCount)
+  const canToggle = effectiveCollapsedCount > 0 && colors.length > effectiveCollapsedCount
 
   return (
     <fieldset className={className}>

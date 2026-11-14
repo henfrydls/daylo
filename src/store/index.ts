@@ -1,7 +1,8 @@
 import { create } from 'zustand'
 import { persist, createJSONStorage, type StateStorage } from 'zustand/middleware'
 import type { Activity, ActivityLog } from '../types'
-import { formatDate, generateId } from '../lib/dates'
+import { formatDate, generateId, parseDateString } from '../lib/dates'
+import { firstFreeColor } from '../lib/colors'
 // Import estatico a proposito: Toast.tsx ya importa este modulo de forma estatica,
 // asi que un import() dinamico aqui no partiria el bundle -- solo retrasaria el aviso.
 import { useToastStore } from './toast'
@@ -14,6 +15,21 @@ import { useRescueStore, whatIsOnDisk } from './rescue'
  */
 export const STORAGE_KEY = 'simple-calendar-storage'
 
+/**
+ * What Daylo says when the disk refuses a write. Agreed word for word: it is the one
+ * moment Daylo knows it is about to lose something and can still prevent it, because what
+ * was not written is still in memory and Export still works.
+ */
+export const COULD_NOT_SAVE =
+  'Daylo could not save your last changes. Open Settings and export a backup so nothing is lost.'
+
+/**
+ * How long a closed notice about failed writes stays closed while the writes go on failing,
+ * counted from when the person closed it. Once per tap would bury the screen; never again
+ * would leave somebody losing changes all day because they closed one notice in the morning.
+ */
+const SAY_IT_AGAIN_AFTER_MS = 5 * 60_000
+
 type ViewType = 'year' | 'month'
 type ViewTransitionDirection = 'drill-down' | 'drill-up' | null
 
@@ -24,7 +40,31 @@ const createDeferredStorage = (): StateStorage => {
   let pendingKey: string | null = null
   let scheduledWrite: ReturnType<typeof setTimeout> | number | null = null
   let useIdleCallback = false
-  let failureReported = false
+  // The notice about failed writes, while it is on the screen.
+  let noticeId: string | null = null
+  // When the person closed it, during a run of failures. Null when there is no run: before
+  // the first failure, and again after any write that goes through.
+  let noticeClosedAt: number | null = null
+  let stopWatchingNotice: (() => void) | null = null
+
+  const stopWatching = () => {
+    stopWatchingNotice?.()
+    stopWatchingNotice = null
+  }
+
+  const showNotice = () => {
+    noticeClosedAt = null
+    noticeId = useToastStore.getState().addToast(COULD_NOT_SAVE, 'error', { untilDismissed: true })
+    // Watched so that the five minutes start when it goes, which is when the person closed
+    // it: nothing else takes it down while the writes keep failing.
+    stopWatchingNotice = useToastStore.subscribe((state) => {
+      if (noticeId !== null && !state.toasts.some((t) => t.id === noticeId)) {
+        noticeId = null
+        noticeClosedAt = Date.now()
+        stopWatching()
+      }
+    })
+  }
 
   // Check if requestIdleCallback is available (browser environment)
   if (typeof window !== 'undefined' && typeof window.requestIdleCallback === 'function') {
@@ -46,23 +86,29 @@ const createDeferredStorage = (): StateStorage => {
     if (pendingWrite !== null) {
       try {
         localStorage.setItem(key, pendingWrite)
-        // Solo se descarta el pendiente cuando de verdad se escribio. Si falla se
-        // conserva para que el siguiente flush lo reintente.
+        // The pending value is only dropped once it has really been written. If the write
+        // fails it is kept, so the next flush tries it again.
         pendingWrite = null
         pendingKey = null
+        // The disk works again: a notice still asking for a backup is no longer true, and
+        // if it fails after this, that is news, and is said again.
+        stopWatching()
+        if (noticeId !== null) useToastStore.getState().removeToast(noticeId)
+        noticeId = null
+        noticeClosedAt = null
       } catch (error) {
-        // No se silencia: perder datos sin avisar es lo peor que puede hacer una app
-        // cuyo argumento es que tus datos son tuyos.
-        console.error('[Daylo] No se pudieron guardar los cambios en localStorage:', error)
-        if (!failureReported) {
-          failureReported = true
-          useToastStore
-            .getState()
-            .addToast(
-              'No se pudieron guardar tus cambios. Exporta tus datos por seguridad.',
-              'error'
-            )
-        }
+        // Not swallowed: losing data without a word is the worst thing an app can do when
+        // its whole case is that your data is yours.
+        console.error('[Daylo] Could not save changes to localStorage:', error)
+        // Once per run of failures, not once per tap: every tap is another write. Never a
+        // second copy over one still on the screen. Again if the person closed it and the
+        // writes still fail five minutes after they did. A clock put back since then makes
+        // the time negative, and that counts as long enough: otherwise the notice would
+        // stay quiet for as long as the clock moved.
+        const sinceClosed = noticeClosedAt === null ? null : Date.now() - noticeClosedAt
+        const closedLongEnough =
+          sinceClosed === null || sinceClosed < 0 || sinceClosed >= SAY_IT_AGAIN_AFTER_MS
+        if (noticeId === null && closedLongEnough) showNotice()
       }
     }
     scheduledWrite = null
@@ -102,11 +148,11 @@ const createDeferredStorage = (): StateStorage => {
       // Cancel any existing scheduled write
       cancelScheduledWrite()
 
-      // El diferido coalesce escrituras a localStorage: la durabilidad no depende de
-      // esta ventana, sino del flush de 'pagehide' y visibilitychange de arriba, asi que
-      // conviene que sea holgada. Con una ventana corta cada clic de navegacion
-      // (cambiar de mes, de vista, elegir un dia) acaba en una escritura propia, porque
-      // partialize tambien persiste esos campos.
+      // The deferral coalesces writes to localStorage. Durability does not depend on this
+      // window but on the 'pagehide' and visibilitychange flush above, so it can be
+      // generous. With a short one every navigation tap (another month, the other view, a
+      // day) ends in a write of its own: persist writes on every set(), even one that only
+      // changes fields partialize leaves out.
       //
       // Ojo: esto NO ahorra serializacion. createJSONStorage hace el JSON.stringify de
       // forma sincrona en cada set(), antes de llamar a este adaptador; lo que se
@@ -254,7 +300,11 @@ interface CalendarState {
   updatesEnabled: boolean
 
   // Activity actions
-  addActivity: (name: string, color: string) => void
+  /**
+   * Without a color, the activity gets the first one nobody wears yet, the same one the
+   * forms offer. The rule lives here so that any way of making an activity follows it.
+   */
+  addActivity: (name: string, color?: string) => void
   updateActivity: (id: string, updates: Partial<Pick<Activity, 'name' | 'color'>>) => void
   deleteActivity: (id: string) => void
 
@@ -269,6 +319,11 @@ interface CalendarState {
   setYearMode: (mode: 'all' | 'byActivity') => void
   setSelectedMonth: (month: number) => void
   navigateToMonth: (year: number, month: number) => void
+  /**
+   * The day changed with the app open: Month, on the month that holds it, with no sheet.
+   * Given the day that was applied, `YYYY-MM-DD`, so there is one answer to what it is.
+   */
+  startNewDay: (day: string) => void
 
   // Reminder
   setReminder: (enabled: boolean, hour?: number, minute?: number) => void
@@ -300,26 +355,43 @@ interface CalendarState {
   getLogsForActivity: (activityId: string) => ActivityLog[]
 }
 
+const OPENED_AT = new Date()
+
+/**
+ * Where somebody is, as opposed to what they have. None of these is written to disk, and
+ * merge drops each of them on the way in, because every copy installed before 1.5.3 has
+ * them stored. One list for both halves, so the next place added to the store cannot be
+ * left out of one of them; `src/store/open-on-today.test.ts` checks both against it.
+ */
+export const WHERE_SOMEBODY_IS = [
+  'selectedDate',
+  'selectedMonth',
+  'selectedYear',
+  'currentView',
+] as const satisfies readonly (keyof CalendarState)[]
+
 export const useCalendarStore = create<CalendarState>()(
   persist(
     (set, get) => ({
       activities: [],
       logs: [],
-      selectedYear: new Date().getFullYear(),
+      // One reading of the clock for both, so a store built in the last instant of
+      // December cannot come up with this year's December's month and next year's year.
+      selectedYear: OPENED_AT.getFullYear(),
       selectedDate: null,
       // Month, everywhere. The year view answers "how did the year go"; the month view is
       // where a person ticks today off, which is what they open the app to do. This used
       // to depend on the window being narrower than 640px, so the same person got a
       // different first screen on their phone and on their laptop.
       //
-      // Only a fresh install sees it. currentView is persisted, and anything that touches
-      // the store writes the whole persisted slice, so anyone who has ever used Daylo
-      // already has a view stored and keeps it. That is deliberate: changing it for them
-      // would overrule a choice some of them made on purpose, and there is no way to tell
-      // those apart from the ones who never touched the toggle.
+      // And every launch sees it, not only a fresh install. The view used to be kept, on
+      // the grounds that some people chose the year on purpose; what it did in practice was
+      // bring back to the year anybody who had tapped Year once, or swiped sideways on a
+      // phone without meaning to, where there is no Today bar and no obvious way to tick
+      // today off. The year is one tap away for whoever wants it.
       currentView: 'month' as ViewType,
       yearMode: 'all' as const,
-      selectedMonth: new Date().getMonth(),
+      selectedMonth: OPENED_AT.getMonth(),
       _hasHydrated: false,
       _viewTransitionDirection: null as ViewTransitionDirection,
 
@@ -402,7 +474,7 @@ export const useCalendarStore = create<CalendarState>()(
         const newActivity: Activity = {
           id: generateId(),
           name,
-          color,
+          color: color ?? firstFreeColor(get().activities.map((a) => a.color)),
           createdAt: now,
           updatedAt: now,
         }
@@ -507,6 +579,24 @@ export const useCalendarStore = create<CalendarState>()(
           _viewTransitionDirection: 'drill-down',
         }),
 
+      // Where somebody was yesterday is not where they want to be today, and yesterday's
+      // sheet left open would let them tick yesterday believing it was today. The new day
+      // starts where opening the app starts: Month, on the month that holds today, with no
+      // sheet. An app that stays alive overnight, in the background on Android or open on a
+      // desktop, is not treated differently from one opened this morning. With no drill
+      // animation: nobody drilled anywhere. The session flags are not touched: they pair
+      // with state in App that does not start again with the day.
+      startNewDay: (day) => {
+        const date = parseDateString(day)
+        set({
+          selectedYear: date.getFullYear(),
+          selectedMonth: date.getMonth(),
+          selectedDate: null,
+          currentView: 'month',
+          _viewTransitionDirection: null,
+        })
+      },
+
       getLogsForDate: (date) => {
         return get().logs.filter((l) => l.date === date && l.completed)
       },
@@ -518,21 +608,22 @@ export const useCalendarStore = create<CalendarState>()(
     {
       name: STORAGE_KEY,
       storage: createJSONStorage(() => createDeferredStorage()),
-      // Where somebody was is not kept, and the three missing names are the whole of this
-      // decision: `selectedDate`, `selectedMonth` and `selectedYear`.
+      // Where somebody was is not kept, and the four missing names are the whole of this
+      // decision: `selectedDate`, `selectedMonth`, `selectedYear` and `currentView`.
       //
       // Daylo is for today, and it used to open wherever it was left. Somebody who looked
       // at March in March came back in November and was shown March, with today a swipe
       // away and nothing on the screen saying so; the day sheet came back open too, over a
-      // day that had stopped being the day. The defaults are today's, so leaving these out
-      // is the whole of the fix.
+      // day that had stopped being the day. The view was the same kind of thing: one tap on
+      // Year, or one sideways swipe on a phone, and every launch after that opened on
+      // twelve cards with no Today bar. The defaults are today's month, so leaving these
+      // out is the whole of the fix.
       //
-      // What is kept is what is a preference rather than a place: which of the two views
-      // somebody likes, and how they like the year read.
+      // What is kept is what is a preference rather than a place: how somebody likes the
+      // year read.
       partialize: (state) => ({
         activities: state.activities,
         logs: state.logs,
-        currentView: state.currentView,
         yearMode: state.yearMode,
         reminderEnabled: state.reminderEnabled,
         reminderHour: state.reminderHour,
@@ -566,14 +657,13 @@ export const useCalendarStore = create<CalendarState>()(
         if (persisted == null) return { ...current, _checkinStart: 'new' }
 
         // Where somebody was is dropped on the way in, not only left out on the way out.
-        // Every copy already installed has these three on disk from before this change, and
+        // Every copy already installed has these four on disk from before this change, and
         // partialize only decides what is written: without this, the first launch after
-        // updating would still open on March, and the second one would be the fixed one.
-        // The fix that works on the next launch and not on this one is the fix nobody sees.
+        // updating would still open on March, or on the year, and the second one would be
+        // the fixed one. The fix that works on the next launch and not on this one is the
+        // fix nobody sees.
         const stored = { ...(persisted as Partial<CalendarState>) }
-        delete stored.selectedDate
-        delete stored.selectedMonth
-        delete stored.selectedYear
+        for (const place of WHERE_SOMEBODY_IS) delete stored[place]
         return {
           ...current,
           ...stored,

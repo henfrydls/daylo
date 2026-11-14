@@ -9,6 +9,7 @@ const enableReminder = vi.hoisted(() => vi.fn())
 const refreshReminder = vi.hoisted(() => vi.fn())
 const reconcileReminder = vi.hoisted(() => vi.fn())
 const remindersAvailable = vi.hoisted(() => vi.fn())
+const disableReminder = vi.hoisted(() => vi.fn())
 
 vi.mock('../../lib/reminders', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../../lib/reminders')>()),
@@ -16,6 +17,7 @@ vi.mock('../../lib/reminders', async (importOriginal) => ({
   refreshReminder,
   reconcileReminder,
   remindersAvailable,
+  disableReminder,
 }))
 
 const showToast = vi.fn()
@@ -69,6 +71,7 @@ beforeEach(() => {
   refreshReminder.mockReset().mockResolvedValue(true)
   reconcileReminder.mockReset().mockResolvedValue(undefined)
   remindersAvailable.mockReset().mockResolvedValue(false)
+  disableReminder.mockReset().mockResolvedValue(undefined)
   showToast.mockReset()
   useCalendarStore.setState({
     activities: [],
@@ -308,5 +311,45 @@ describe('opening the app', () => {
     render(<DailyReminder />)
 
     await waitFor(() => expect(useCalendarStore.getState().reminderEnabled).toBe(false))
+  })
+
+  // And the alarm goes with the switch. Left on the queue it would survive a restart, since
+  // the plugin now restores it, and the day the permission came back a reminder would arrive
+  // under a switch that says off.
+  it('takes the alarm down when the permission has gone', async () => {
+    firstHabitOnAndroid()
+    useCalendarStore.setState({ reminderEnabled: true, reminderOffered: true })
+    refreshReminder.mockResolvedValue(false)
+
+    render(<DailyReminder />)
+
+    await waitFor(() => expect(disableReminder).toHaveBeenCalled())
+  })
+
+  // Null is a re-arm that something newer overtook on its way: the switch turned on, or
+  // the last habit gone. That call has decided, and acting on the late answer would cancel
+  // a reminder somebody had just turned on.
+  it('leaves the switch and the alarm alone when the re-arm was overtaken', async () => {
+    firstHabitOnAndroid()
+    useCalendarStore.setState({ reminderEnabled: true, reminderOffered: true })
+    refreshReminder.mockResolvedValue(null)
+
+    render(<DailyReminder />)
+
+    await waitFor(() => expect(refreshReminder).toHaveBeenCalled())
+    await settle()
+    expect(disableReminder).not.toHaveBeenCalled()
+    expect(useCalendarStore.getState().reminderEnabled).toBe(true)
+  })
+
+  it('leaves the alarm alone while the permission is still there', async () => {
+    firstHabitOnAndroid()
+    useCalendarStore.setState({ reminderEnabled: true, reminderOffered: true })
+
+    render(<DailyReminder />)
+
+    await waitFor(() => expect(refreshReminder).toHaveBeenCalled())
+    await settle()
+    expect(disableReminder).not.toHaveBeenCalled()
   })
 })

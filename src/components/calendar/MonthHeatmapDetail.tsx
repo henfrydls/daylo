@@ -1,5 +1,6 @@
 import { useMemo, useCallback, memo } from 'react'
-import { formatDate, checkIsToday } from '../../lib/dates'
+import { formatDate } from '../../lib/dates'
+import { useToday } from '../../lib/today'
 import { calculateHeatmapLevel, getHeatmapColor } from '../../lib/colors'
 import { habitsThatExistedOn } from '../../lib/activityYear'
 import type { Activity } from '../../types'
@@ -38,7 +39,7 @@ interface DayCellData {
   level: 0 | 1 | 2 | 3 | 4
 }
 
-function getMonthGridDays(year: number, month: number): DayCellData[] {
+function getMonthGridDays(year: number, month: number, today: string): DayCellData[] {
   const firstDay = new Date(year, month, 1)
   const lastDay = new Date(year, month + 1, 0)
   const daysInMonth = lastDay.getDate()
@@ -55,7 +56,7 @@ function getMonthGridDays(year: number, month: number): DayCellData[] {
       dateStr: formatDate(date),
       dayNumber: prevMonthLastDay - i,
       isCurrentMonth: false,
-      isToday: checkIsToday(date),
+      isToday: formatDate(date) === today,
       level: 0,
     })
   }
@@ -68,7 +69,7 @@ function getMonthGridDays(year: number, month: number): DayCellData[] {
       dateStr: formatDate(date),
       dayNumber: d,
       isCurrentMonth: true,
-      isToday: checkIsToday(date),
+      isToday: formatDate(date) === today,
       level: 0,
     })
   }
@@ -82,7 +83,7 @@ function getMonthGridDays(year: number, month: number): DayCellData[] {
       dateStr: formatDate(date),
       dayNumber: d,
       isCurrentMonth: false,
-      isToday: checkIsToday(date),
+      isToday: formatDate(date) === today,
       level: 0,
     })
   }
@@ -101,8 +102,10 @@ export const MonthHeatmapDetail = memo(function MonthHeatmapDetail({
   // The habits that existed on each day, not the ones that exist now.
   const existedOn = useMemo(() => habitsThatExistedOn(activities), [activities])
 
+  // The app's day, not the clock's: see useTodayDate.
+  const today = useToday()
   const cells = useMemo(() => {
-    const baseCells = getMonthGridDays(year, month)
+    const baseCells = getMonthGridDays(year, month, today)
 
     // Enrich with heatmap levels
     return baseCells.map((cell) => {
@@ -110,7 +113,7 @@ export const MonthHeatmapDetail = memo(function MonthHeatmapDetail({
       const level = calculateHeatmapLevel(completedCount, existedOn(cell.dateStr, completedCount))
       return { ...cell, level }
     })
-  }, [year, month, existedOn, logsByDate])
+  }, [year, month, existedOn, logsByDate, today])
 
   const handlePrevMonth = useCallback(() => {
     if (month === 0) {

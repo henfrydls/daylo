@@ -15,8 +15,12 @@ import { test, expect, devices } from '@playwright/test'
 test.use({ ...devices['Pixel 7'], isMobile: true, hasTouch: true })
 
 const SHEET = '[data-testid="quicklog-modal"]'
-/** A day in the month grid: they have no test id, but their label is a date. */
-const DAY = 'button[aria-label$="activities completed"]'
+/**
+ * A day in the month grid: they have no test id, but their label is a date. Read by its
+ * ending, which is "activity completed" on a day with one done, and leaving out the phone's
+ * Today bar, whose label ends the same way.
+ */
+const DAY = 'button[aria-label$=" completed"]:not([data-testid="log-today-bar"])'
 
 /**
  * Where the sheet is on the screen, every frame, from inside the page.
@@ -58,12 +62,15 @@ test.beforeEach(async ({ page }) => {
             },
           ],
           logs: [],
-          currentView: 'month',
         },
         version: 0,
       })
     )
   })
+  // Daylo opens on today, so the clock decides which month's days are on screen, and which
+  // of them is the first. Pinned, so the same day is tapped whatever month this runs in.
+  // Only Date is pinned: timers and animations run as they would.
+  await page.clock.setFixedTime(new Date('2026-11-13T12:00:00'))
   await page.goto('/')
   // Month, because the days live there: the year on a phone is twelve cards and no squares.
   await expect(page.locator(DAY).first()).toBeVisible()

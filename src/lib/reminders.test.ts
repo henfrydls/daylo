@@ -91,8 +91,8 @@ describe('turning the reminder on', () => {
     expect(scheduled()).toEqual({
       options: expect.objectContaining({
         id: REMINDER_ID,
-        // An interval matching hour and minute, which Android re-arms on its own and the
-        // plugin restores after a reboot. Not Schedule.at: with repeating it computes the
+        // An interval matching hour and minute, which the plugin re-arms each day and
+        // restores after a restart or an update. Not Schedule.at: with repeating it computes the
         // repeat gap as the time left until the first fire, so a reminder set at 20:00 for
         // 21:00 would repeat hourly.
         schedule: { interval: { hour: 21, minute: 0, second: 0 }, allowWhileIdle: true },
@@ -185,12 +185,12 @@ describe('when the last activity goes', () => {
   /**
    * The case every real phone is in, and the one the old code could not act on.
    *
-   * getPending reads the plugin's own store, and that store is only ever written by the
+   * getPending reads the plugin's own store, and that store was only ever written by the
    * Kotlin `batch` path. Daylo schedules through `notify`, which reaches `show`, and `show`
-   * writes nothing. So `pending()` answers `[]` on a phone with the reminder live and
-   * ringing every night, and the old condition read that as "nothing of ours is scheduled"
-   * and cancelled nothing. Somebody who deleted their last activity went on being asked how
-   * the day went, over an app with nothing left in it.
+   * wrote nothing, before the patched plugin in 1.5.3. So `pending()` answered `[]` on a
+   * phone with the reminder live and ringing every night, and the old condition read that
+   * as "nothing of ours is scheduled" and cancelled nothing. Somebody who deleted their
+   * last activity went on being asked how the day went, over an app with nothing left in it.
    */
   it('takes the reminder down even though the phone lists nothing', async () => {
     pretendAndroid()
@@ -306,6 +306,90 @@ describe('re-arming at launch', () => {
     vi.spyOn(console, 'error').mockImplementation(() => {})
 
     await expect(refreshReminder(21, 0)).resolves.toBe(false)
+  })
+})
+
+/**
+ * A re-arm that set off at launch and arrives after something newer.
+ *
+ * Opening the app re-arms the reminder through a few round trips to the phone, and the
+ * person can act during them. Each test holds the re-arm's permission check open, lets the
+ * newer call in, and only then lets the re-arm go on, which is the order a slow phone puts
+ * them in.
+ */
+describe('a re-arm overtaken on its way', () => {
+  function heldOpen() {
+    let answer!: (granted: boolean) => void
+    isPermissionGranted.mockReturnValueOnce(new Promise<boolean>((r) => (answer = r)))
+    return (granted: boolean) => answer(granted)
+  }
+
+  const notified = () =>
+    invoke.mock.calls.filter(([command]) => command === 'plugin:notification|notify').length
+
+  // The last habit is deleted while the re-arm is on its way. The cancel used to go
+  // through at once and the re-arm landed after it, and the plugin stores what it arms:
+  // the reminder came back after every restart, over an app with nothing in it.
+  it('does not schedule the reminder after the last habit took it down', async () => {
+    pretendAndroid()
+    const answer = heldOpen()
+
+    const refreshed = refreshReminder(21, 0)
+    const reconciled = reconcileReminder(0)
+    answer(true)
+
+    const answered = await refreshed
+    await reconciled
+    expect(notified()).toBe(0)
+    expect(cancel).toHaveBeenCalledWith([REMINDER_ID])
+    expect(answered).toBeNull()
+  })
+
+  // The switch is turned on while the re-arm is on its way, before the permission was
+  // given. The re-arm saw no permission and said off, late, and the screen cancels on
+  // off: the reminder somebody had just turned on was taken down under them.
+  it('does not report off after the switch was turned on', async () => {
+    pretendAndroid()
+    const answer = heldOpen()
+    isPermissionGranted.mockResolvedValue(true)
+
+    const refreshed = refreshReminder(21, 0)
+    const enabled = enableReminder(21, 0)
+    answer(false)
+
+    await expect(refreshed).resolves.toBeNull()
+    await expect(enabled).resolves.toEqual({ outcome: 'on' })
+    expect(notified()).toBe(1)
+  })
+
+  // Nothing newer came in: the re-arm says what it found, as before.
+  it('still reports off when nothing came after it', async () => {
+    pretendAndroid()
+    const answer = heldOpen()
+
+    const refreshed = refreshReminder(21, 0)
+    answer(false)
+
+    await expect(refreshed).resolves.toBe(false)
+  })
+
+  // The calls made with the switch are never skipped, only put in order: turning it on
+  // and straight off leaves it off, whatever the phone answers first.
+  it('keeps the switch calls in the order they were made', async () => {
+    pretendAndroid()
+    const answer = heldOpen()
+
+    const enabled = enableReminder(21, 0)
+    const disabled = disableReminder()
+    answer(true)
+    await enabled
+    await disabled
+
+    const order =
+      invoke.mock.invocationCallOrder[
+        invoke.mock.calls.findIndex(([command]) => command === 'plugin:notification|notify')
+      ]
+    expect(order).toBeLessThan(cancel.mock.invocationCallOrder[0])
   })
 })
 

@@ -11,7 +11,9 @@ import { getYearDays, formatDate } from '../../lib/dates'
 import { calculateHeatmapLevel } from '../../lib/colors'
 import { habitsThatExistedOn, summariseActivities } from '../../lib/activityYear'
 import { useMediaQuery } from '../../hooks/useMediaQuery'
+import { useTodayDate } from '../../lib/today'
 import { useShallow } from 'zustand/react/shallow'
+import { plural } from '../../lib/plural'
 
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
 export const YearView = memo(function YearView() {
@@ -21,6 +23,8 @@ export const YearView = memo(function YearView() {
   const logs = useCalendarStore(useShallow((state) => state.logs))
   const selectedDate = useCalendarStore((state) => state.selectedDate)
   const setSelectedDate = useCalendarStore((state) => state.setSelectedDate)
+  // The app's day, not the clock's: see useTodayDate.
+  const today = useTodayDate()
   const setSelectedYear = useCalendarStore((state) => state.setSelectedYear)
   const navigateToMonth = useCalendarStore((state) => state.navigateToMonth)
   // On the phone a month card walks the same rail the finger would, so the three ways into
@@ -84,11 +88,10 @@ export const YearView = memo(function YearView() {
    * than a zero, because nothing was missed yet and 0% reads as a failure.
    */
   const monthCompletion = useMemo(() => {
-    const now = new Date()
     return Array.from({ length: 12 }, (_, month) => {
       if (
-        selectedYear > now.getFullYear() ||
-        (selectedYear === now.getFullYear() && month > now.getMonth())
+        selectedYear > today.getFullYear() ||
+        (selectedYear === today.getFullYear() && month > today.getMonth())
       ) {
         return { month, percentage: null }
       }
@@ -100,7 +103,7 @@ export const YearView = memo(function YearView() {
       }
       return { month, percentage: Math.round((done / daysInMonth) * 100) }
     })
-  }, [dayDataMap, selectedYear])
+  }, [dayDataMap, selectedYear, today])
 
   /**
    * The phone's strips end on the week we are in, or on the last week of a year already
@@ -108,10 +111,9 @@ export const YearView = memo(function YearView() {
    * today.
    */
   const stripEnd = useMemo(() => {
-    const now = new Date()
     const endOfSelected = new Date(selectedYear, 11, 31)
-    return now < endOfSelected ? now : endOfSelected
-  }, [selectedYear])
+    return today < endOfSelected ? today : endOfSelected
+  }, [selectedYear, today])
 
   const activityRows = useMemo(
     () => summariseActivities(activities, logs, stripEnd),
@@ -127,8 +129,8 @@ export const YearView = memo(function YearView() {
     [setSelectedYear, selectedYear]
   )
   const handleCurrentYear = useCallback(
-    () => setSelectedYear(new Date().getFullYear()),
-    [setSelectedYear]
+    () => setSelectedYear(today.getFullYear()),
+    [setSelectedYear, today]
   )
 
   /**
@@ -382,16 +384,17 @@ export const YearView = memo(function YearView() {
             <div className="mt-6 flex flex-wrap justify-between gap-6 border-t border-gray-100 pt-4 text-sm text-gray-500">
               <div className="flex flex-wrap gap-6">
                 <div>
-                  <span className="font-medium text-gray-700">{activeDays}</span> active days
+                  <span className="font-medium text-gray-700">{activeDays}</span>{' '}
+                  {plural(activeDays, 'active day', 'active days')}
                 </div>
                 <div>
                   <span className="font-medium text-gray-700">{completedLogsCount}</span>{' '}
-                  completions this year
+                  {plural(completedLogsCount, 'completion', 'completions')} this year
                 </div>
               </div>
               <div>
-                <span className="font-medium text-gray-700">{activities.length}</span> activities
-                tracked
+                <span className="font-medium text-gray-700">{activities.length}</span>{' '}
+                {plural(activities.length, 'activity', 'activities')} tracked
               </div>
             </div>
 

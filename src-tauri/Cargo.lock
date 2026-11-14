@@ -20,6 +20,7 @@ dependencies = [
  "tauri-plugin-opener",
  "tauri-plugin-process",
  "tauri-plugin-shell",
+ "tauri-plugin-single-instance",
  "tauri-plugin-updater",
  "tokio",
  "ureq",
@@ -4076,7 +4077,7 @@ dependencies = [
 [[package]]
 name = "tauri-plugin-notification"
 version = "2.3.3"
-source = "git+https://github.com/henfrydls/plugins-workspace?rev=c060e1042e4edb9a70dcb83d73dc57a3e8cb42b3#c060e1042e4edb9a70dcb83d73dc57a3e8cb42b3"
+source = "git+https://github.com/henfrydls/plugins-workspace?rev=b044a952d5fd1cc96755b05658df395dde67d44e#b044a952d5fd1cc96755b05658df395dde67d44e"
 dependencies = [
  "log",
  "notify-rust",
@@ -4142,6 +4143,22 @@ dependencies = [
  "tauri-plugin",
  "thiserror 2.0.18",
  "tokio",
+]
+
+[[package]]
+name = "tauri-plugin-single-instance"
+version = "2.4.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "db817fe9295e19b7d8357e900af31edb93703dd9fb6de524b007b47b6afc63b0"
+dependencies = [
+ "serde",
+ "serde_json",
+ "tauri",
+ "thiserror 2.0.18",
+ "tokio",
+ "tracing",
+ "windows-sys 0.60.2",
+ "zbus",
 ]
 
 [[package]]

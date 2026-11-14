@@ -51,6 +51,15 @@ tauri-plugin-dialog = { version = "~2.7", default-features = false, features = [
 [target.'cfg(not(any(target_os = "android", target_os = "ios")))'.dependencies]
 tauri-plugin-opener = "2"
 
+# One copy of Daylo at a time on the desktop: a second launch brings back the window that
+# is already open instead of opening another one over the same data. See run() in
+# src/lib.rs.
+#
+# Held to 2.4 because 2.5 asks for tauri ^2.12 and this crate is held to 2.10; 2.4.5 asks
+# for ^2.10. There is no npm side to line up: the plugin has no JavaScript package, so
+# `tauri build` has no pair to check for it. Every crate it needs was already in the lock.
+tauri-plugin-single-instance = "~2.4"
+
 # The updater, and the relaunch that finishes it. Desktop only, and not by preference:
 # Tauri's updater does not exist on Android or iOS, where the store is the only route.
 #
@@ -67,7 +76,9 @@ tauri-plugin-process = "~2.3"
 # arrives through ashpd and through tauri-plugin-opener, tokio through rfd), so declaring
 # them adds nothing to the build. They are here to ask the desktop portal directly whether
 # it is running, which is the only way to tell a cancelled dialog from one that never
-# opened. See save_dialog_available in src/lib.rs.
+# opened. See save_dialog_available in src/lib.rs. zbus also checks, before the single
+# instance starts, that the plugin will not panic on the bus address or on its own names;
+# see single_instance_can_start.
 [target.'cfg(target_os = "linux")'.dependencies]
 zbus = "5"
 tokio = { version = "1", features = ["time"] }
@@ -144,24 +155,51 @@ opt-level = 3
 panic = "abort"
 strip = false
 
-# The notification plugin, with one fix that is not upstream yet.
+# The notification plugin, with two fixes that are not upstream yet.
 #
-# A repeating notification is scheduled by two different pieces of code in that plugin,
-# and they had drifted apart. The first firing reads the schedule's allowWhileIdle and
-# arms setExactAndAllowWhileIdle on RTC_WAKEUP; every later one is re-armed by the
+# The first: a repeating notification is scheduled by two different pieces of code in that
+# plugin, and they had drifted apart. The first firing reads the schedule's allowWhileIdle
+# and arms setExactAndAllowWhileIdle on RTC_WAKEUP; every later one is re-armed by the
 # plugin's own receiver with plain RTC, no wakeup and no idle allowance, because the
 # receiver is handed an intent and the intent carries the cron string without the flag.
 # So a daily reminder wakes a dozing phone the day it is set and, from the second night
 # on, waits for the phone to be picked up. Asking Android for SCHEDULE_EXACT_ALARM
 # without this buys one punctual reminder rather than punctual reminders.
 #
-# Two commits, because the first one was wrong in a way only a phone could show. It read
-# the flag back from the plugin's own notification store, which looked safe since the
-# receiver already loads from it two lines earlier, and that store is always empty: it is
-# written by the `batch` command and nothing in the Rust API reaches `batch`. Measured on
-# the Galaxy on 2026-10-13, the re-armed alarm came out exact and still without the idle
-# allowance. The flag now rides on the intent, beside the cron string, which is how the
-# receiver learns everything else it knows.
+# It matters without the permission too: for anybody who has not granted it, and for
+# everybody once 1.5.4 stops asking for it. Without it every alarm is inexact, and the
+# fixed receiver re-arms with setAndAllowWhileIdle on RTC_WAKEUP, where the unfixed one
+# used plain RTC: an inexact reminder that still wakes a dozing phone, instead of one that
+# waits for it to be picked up. That much is read in the plugin's source; it has not been
+# measured on a phone without the permission.
+#
+# The fix took two commits, because the first one was wrong in a way only a phone could
+# show. It read the flag back from the plugin's own notification store, which looked safe
+# since the receiver already loads from it two lines earlier, and that store was always
+# empty. Measured on the Galaxy on 2026-10-13, the re-armed alarm came out exact and still
+# without the idle allowance. The flag now rides on the intent, beside the cron string,
+# which is how the receiver learns everything else it knows.
+#
+# The second (1.5.3): the reminder now survives a restart of the phone and an update of
+# Daylo. The plugin has a receiver that puts its stored notifications back after a
+# restart, and it never had anything to put back: `show`, the only command the Rust API
+# reaches, stored nothing, and the one that did store would have written the string
+# "null". Now `show` stores the request as it arrived from Rust, allowWhileIdle included,
+# the receivers read it with a mapper configured like the plugin's own, and the same
+# receiver also runs on MY_PACKAGE_REPLACED. Re-arming an alarm that is still there
+# replaces it under the same id rather than adding a second, and leaves an unread reminder
+# in the tray where it is. Each stored entry is restored on its own, the reminder is shown
+# before anything else can fail, and an exact alarm is asked for only when the installed
+# manifest still requests the permission, so the update that drops it does not arm one
+# that Android removes a moment later. The plugin's unit tests run in Build Check
+# (Android), in ci.yml.
+#
+# The update case is the reason this ships before 1.5.4 drops SCHEDULE_EXACT_ALARM.
+# Android removes an app's exact alarms when an update stops declaring that permission,
+# and the receiver can only restore what the version before it stored. So whoever goes
+# from 1.5.2 to 1.5.4 directly, or never opens 1.5.3, loses the reminder until they open
+# Daylo, as before. Opening 1.5.3 once is enough: that re-arms the reminder through
+# `show`, and from then on it is stored.
 #
 # Pinned to a commit and not to a branch: a moving branch is a build that changes under
 # us, and this one has to be the same bytes in CI, on a tag, and on the machine that
@@ -171,4 +209,4 @@ strip = false
 #
 # It goes upstream once it has been measured on a phone over two nights.
 [patch.crates-io]
-tauri-plugin-notification = { git = "https://github.com/henfrydls/plugins-workspace", rev = "c060e1042e4edb9a70dcb83d73dc57a3e8cb42b3" }
+tauri-plugin-notification = { git = "https://github.com/henfrydls/plugins-workspace", rev = "b044a952d5fd1cc96755b05658df395dde67d44e" }
