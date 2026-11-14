@@ -300,14 +300,14 @@ interface CalendarState {
   getLogsForActivity: (activityId: string) => ActivityLog[]
 }
 
+const OPENED_AT = new Date()
+
 /**
  * Where somebody is, as opposed to what they have. None of these is written to disk, and
  * merge drops each of them on the way in, because every copy installed before 1.5.3 has
  * them stored. One list for both halves, so the next place added to the store cannot be
  * left out of one of them; `src/store/open-on-today.test.ts` checks both against it.
  */
-const OPENED_AT = new Date()
-
 export const WHERE_SOMEBODY_IS = [
   'selectedDate',
   'selectedMonth',

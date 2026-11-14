@@ -32,9 +32,10 @@ async function openSettings(page: import('@playwright/test').Page) {
  */
 async function openYearView(page: import('@playwright/test').Page) {
   await page.getByRole('button', { name: 'Year', exact: true }).click()
-  await expect(
-    page.locator('h1').filter({ hasText: String(new Date().getFullYear()) })
-  ).toBeVisible()
+  // The page's own year, not this process's: several tests pin the page's clock to 2026,
+  // and from January 2027 the runner's clock would wait for a heading that never comes.
+  const year = await page.evaluate(() => new Date().getFullYear())
+  await expect(page.locator('h1').filter({ hasText: String(year) })).toBeVisible()
   // The heading is there before the view has finished sliding in. Anything that measures
   // a box has to wait for the animation to land, or it measures a moving one.
   await page.waitForFunction(() => document.getAnimations().every((a) => a.playState !== 'running'))
@@ -702,6 +703,9 @@ test.describe('opening Daylo again on a phone', () => {
   test('comes back on this month, with the Today bar, after leaving it on the year', async ({
     page,
   }) => {
+    // A November, so last month is in the same year. Run in January on the real clock,
+    // Previous month went to the December before and the year it opened was not this one.
+    await page.clock.setFixedTime(new Date('2026-11-13T12:00:00'))
     // Seeded only when nothing is there: an init script runs again on the reload, and an
     // unconditional one would put back a state without a view and hide the very write
     // this test is about.

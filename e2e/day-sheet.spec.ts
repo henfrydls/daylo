@@ -63,6 +63,10 @@ test.beforeEach(async ({ page }) => {
       })
     )
   })
+  // Daylo opens on today, so the clock decides which month's days are on screen, and which
+  // of them is the first. Pinned, so the same day is tapped whatever month this runs in.
+  // Only Date is pinned: timers and animations run as they would.
+  await page.clock.setFixedTime(new Date('2026-11-13T12:00:00'))
   await page.goto('/')
   // Month, because the days live there: the year on a phone is twelve cards and no squares.
   await expect(page.locator(DAY).first()).toBeVisible()
