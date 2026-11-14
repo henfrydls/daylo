@@ -28,7 +28,10 @@
 #                 re-armed and then removed by AlarmManagerService.
 #   O6  test:     the restored alarm, after the restart and 60 s after the update, is exact
 #                 (window=0 and an exactAllowReason), as the one armed from the open app
-#                 is. Informative until that is fixed; O6_COUNTS=1 makes it count.
+#                 is. It counts for the verdict. It was inexact in every run until run
+#                 43608923559: the grant made with `appops set` was never written to disk,
+#                 so the emulator booted without it. The 1.5.4 measurement drops the
+#                 permission, expects an inexact alarm there, and runs with O6_COUNTS=0.
 #
 # And one condition that is not an observable of the reminder but decides whether this
 # may run at all: not one check-in reaches production. A fresh install turns the check-in
@@ -340,9 +343,9 @@ if [ "$NETWORK_GUARD" = held ] && [ "$(v test O1)" = yes ] && [ "$(v test O2)" =
    && [ "$(v test O3)" = yes ] && [ "$(v control O2)" = yes ] && [ "$(v control O3)" = no ]; then
   DISTINGUISHES=yes
 fi
-# O6 is informative until the restored alarm is fixed to be exact; then run with
-# O6_COUNTS=1 (or change the default) and it is required for the verdict.
-O6_COUNTS=${O6_COUNTS:-0}
+# O6 is required for the verdict. O6_COUNTS=0 makes it informative, for a build that does
+# not declare SCHEDULE_EXACT_ALARM (1.5.4), whose restored alarm is inexact by design.
+O6_COUNTS=${O6_COUNTS:-1}
 if [ "$O6_COUNTS" = 1 ] && { [ "$(v test O6restart)" != exact ] || [ "$(v test O6update)" != exact ]; }; then
   DISTINGUISHES=no
 fi
