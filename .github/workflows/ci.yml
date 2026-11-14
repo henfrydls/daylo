@@ -372,7 +372,7 @@ jobs:
       - name: The notification plugin's unit tests
         working-directory: src-tauri/gen/android
         env:
-          MIN_TESTS: 22
+          MIN_TESTS: 25
         run: |
           set -euo pipefail
           line=$(grep -F "project(':tauri-plugin-notification').projectDir" tauri.settings.gradle || true)

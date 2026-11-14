@@ -191,4 +191,4 @@ strip = false
 #
 # It goes upstream once it has been measured on a phone over two nights.
 [patch.crates-io]
-tauri-plugin-notification = { git = "https://github.com/henfrydls/plugins-workspace", rev = "5f31787a9e44d91bf3339ec693308cfc7a1d11f2" }
+tauri-plugin-notification = { git = "https://github.com/henfrydls/plugins-workspace", rev = "6831cc7218becfac584ac9dd0696b1107307a169" }

@@ -26,6 +26,9 @@
 #                 presence tells nothing apart, the hash does. Read at 5, 30 and 60 seconds
 #                 after the install, so that the 1.5.4 measurement can see an exact alarm
 #                 re-armed and then removed by AlarmManagerService.
+#   O6  test:     the restored alarm, after the restart and 60 s after the update, is exact
+#                 (window=0 and an exactAllowReason), as the one armed from the open app
+#                 is. Informative until that is fixed; O6_COUNTS=1 makes it count.
 #
 # And one condition that is not an observable of the reminder but decides whether this
 # may run at all: not one check-in reaches production. A fresh install turns the check-in
@@ -98,6 +101,21 @@ daylo_block() { grep -A8 "Alarm{.*$PKG" "$1" || true; }
 # The operation=PendingIntent{hash...} line: the only thing that tells a new registration
 # from a reused one.
 pending_intent() { daylo_block "$1" | grep -m1 -o "PendingIntent{[0-9a-f]*" || true; }
+# Exact: the block says window=0 and carries an exactAllowReason. An inexact one shows a
+# window (+1h0m0s0ms for setAndAllowWhileIdle this far ahead) and no reason.
+is_exact() {
+  local b
+  b=$(daylo_block "$1")
+  grep -q "window=0 " <<<"$b" && grep -q "exactAllowReason=" <<<"$b"
+}
+exactness() {
+  if ! has_alarm "$1"; then echo no-alarm; elif is_exact "$1"; then echo exact; else echo inexact; fi
+}
+# The plugin's own account of each decision (debug builds), one line per alarm armed.
+decisions() {
+  { echo "== $2"; grep -h "exact-alarm decision" "$1" || echo "(no decision line)"; } \
+    >>"$OUT/$3-decisions.txt"
+}
 has_alarm() {
   local b
   b=$(daylo_block "$1")
@@ -213,6 +231,7 @@ phase() {
 
   # O3 / O4: restart and do not open.
   adb logcat -d >"$OUT/$tag-2-logcat.txt" 2>&1
+  decisions "$OUT/$tag-2-logcat.txt" "opened by hand (show)" "$tag"
   adb logcat -c
   log "$tag: restarting"
   adb reboot
@@ -228,9 +247,11 @@ phase() {
   sh_ dumpsys alarm >"$OUT/$tag-3-alarms-after-restart.txt"
   daylo_block "$OUT/$tag-3-alarms-after-restart.txt" >"$OUT/$tag-3-block-after-restart.txt"
   adb logcat -d >"$OUT/$tag-3-logcat-restart.txt" 2>&1
+  decisions "$OUT/$tag-3-logcat-restart.txt" "after the restart (restore)" "$tag"
   sh_ run-as "$PKG" cat shared_prefs/NOTIFICATION_STORE.xml >"$OUT/$tag-3-store.xml" 2>&1
   sh_ ps -A | grep "$PKG" >"$OUT/$tag-3-processes.txt" || true
   if has_alarm "$OUT/$tag-3-alarms-after-restart.txt"; then set_result "$tag" O3 yes; else set_result "$tag" O3 no; fi
+  set_result "$tag" O6restart "$(exactness "$OUT/$tag-3-alarms-after-restart.txt")"
 
   # O5: install the same APK over itself, without opening.
   local before after
@@ -245,6 +266,8 @@ phase() {
   done
   sh_ dumpsys alarm | grep -A12 "Removal history" >"$OUT/$tag-5-removal-history.txt" || true
   adb logcat -d >"$OUT/$tag-5-logcat-update.txt" 2>&1
+  decisions "$OUT/$tag-5-logcat-update.txt" "after the update (restore)" "$tag"
+  set_result "$tag" O6update "$(exactness "$OUT/$tag-5-alarms-60s.txt")"
   after=$(pending_intent "$OUT/$tag-5-alarms-60s.txt")
   {
     echo "before=$before"
@@ -296,6 +319,12 @@ if [ "$NETWORK_GUARD" = held ] && [ "$(v test O1)" = yes ] && [ "$(v test O2)" =
    && [ "$(v test O3)" = yes ] && [ "$(v control O2)" = yes ] && [ "$(v control O3)" = no ]; then
   DISTINGUISHES=yes
 fi
+# O6 is informative until the restored alarm is fixed to be exact; then run with
+# O6_COUNTS=1 (or change the default) and it is required for the verdict.
+O6_COUNTS=${O6_COUNTS:-0}
+if [ "$O6_COUNTS" = 1 ] && { [ "$(v test O6restart)" != exact ] || [ "$(v test O6update)" != exact ]; }; then
+  DISTINGUISHES=no
+fi
 [ "$SEED_LOST" = 1 ] && DISTINGUISHES=no
 {
   echo "Measurement A of #202, $(date -u '+%Y-%m-%d %H:%M UTC')"
@@ -310,6 +339,10 @@ fi
   echo "O4 control: alarm gone after the restart              $(o3 "$(v control O3)" no)  (alarm after restart: $(v control O3))"
   echo "O5 test: re-armed by the update                       $(verdict "$(v test O5)" rearmed)  ($(v test O5))"
   echo "O5 control (informative, expected no-alarm or same):  $(v control O5)"
+  if [ "$O6_COUNTS" = 1 ]; then o6note="counts"; else o6note="informative"; fi
+  echo "O6 test: restored alarm is exact, after the restart   $(verdict "$(v test O6restart)" exact)  ($(v test O6restart); $o6note)"
+  echo "O6 test: restored alarm is exact, 60 s after update   $(verdict "$(v test O6update)" exact)  ($(v test O6update); $o6note)"
+  echo "(The decision lines behind each alarm are in test-decisions.txt and control-decisions.txt.)"
   echo
   echo "Control before the restart, to show it was turned on: O1=$(v control O1) O2=$(v control O2)"
   echo "(The control's O1 is expected to be no: without the change nothing writes the store.)"
