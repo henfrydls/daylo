@@ -224,6 +224,36 @@ async function putOnTheQueue(hour: number, minute: number): Promise<string | nul
 }
 
 /**
+ * The order in which calls change the reminder, and a way to tell a call that it is stale.
+ *
+ * Opening the app re-arms the reminder, and that takes a few round trips to the phone. Two
+ * things can happen during them. Somebody deletes their last habit, the reminder is
+ * cancelled, and then the re-arm that was already on its way arrives and schedules it again:
+ * the plugin stores it, and it rings every evening, across restarts, over an app with
+ * nothing in it. Or somebody turns the switch on, and then the re-arm that started before
+ * the permission was given comes back saying it is off, and the screen cancels what was just
+ * armed. Each call reaching the phone on its own schedule is what let the older one win.
+ *
+ * So every call that arms or cancels waits for the ones before it, and the two that run by
+ * themselves, the re-arm at launch and the cancel when the habits are gone, stand down when
+ * a newer call has come in behind them. The calls somebody makes with the switch always
+ * act, in the order they were made.
+ *
+ * A call that never settles would hold up the ones behind it. Every call here settles on
+ * its own except the permission request, which waits for the person to answer, and while
+ * that question is on the screen there is nothing else to do.
+ */
+let issued = 0
+let tail: Promise<unknown> = Promise.resolve()
+
+function inTurn<T>(work: (overtaken: () => boolean) => Promise<T>): Promise<T> {
+  const turn = ++issued
+  const run = tail.then(() => work(() => turn !== issued))
+  tail = run.catch(() => {})
+  return run
+}
+
+/**
  * Turn the daily reminder on at the given local time.
  *
  * The schedule is an interval matching an hour and a minute, which the plugin re-arms by
@@ -262,21 +292,23 @@ async function putOnTheQueue(hour: number, minute: number): Promise<string | nul
  * person who does not open Daylo for three days stops being reminded on the days they
  * most need it. The wording is neutral for that reason.
  */
-export async function enableReminder(hour: number, minute: number): Promise<ReminderResult> {
-  if (!(await remindersAvailable())) {
-    return { outcome: 'unavailable' }
-  }
+export function enableReminder(hour: number, minute: number): Promise<ReminderResult> {
+  return inTurn(async () => {
+    if (!(await remindersAvailable())) {
+      return { outcome: 'unavailable' }
+    }
 
-  let granted = await isPermissionGranted()
-  if (!granted) {
-    granted = (await requestPermission()) === 'granted'
-  }
-  if (!granted) {
-    return { outcome: 'permission-denied' }
-  }
+    let granted = await isPermissionGranted()
+    if (!granted) {
+      granted = (await requestPermission()) === 'granted'
+    }
+    if (!granted) {
+      return { outcome: 'permission-denied' }
+    }
 
-  const reason = await putOnTheQueue(hour, minute)
-  return reason === null ? { outcome: 'on' } : { outcome: 'failed', reason }
+    const reason = await putOnTheQueue(hour, minute)
+    return reason === null ? { outcome: 'on' } : { outcome: 'failed', reason }
+  })
 }
 
 /**
@@ -309,18 +341,28 @@ export async function enableReminder(hour: number, minute: number): Promise<Remi
  * plain RTC and no idle allowance, which this call undid for the next evening. That is
  * fixed in the plugin now, in the patched copy pinned in src-tauri/Cargo.toml, so this is
  * no longer the only thing standing between a daily reminder and a dozing phone.
+ *
+ * Null when another call to arm or cancel came in while this one was on its way: it then
+ * schedules nothing, and its answer is not acted on, because the newer call decides. See
+ * inTurn.
  */
-export async function refreshReminder(hour: number, minute: number): Promise<boolean> {
-  if (!(await remindersAvailable())) {
-    return false
-  }
-  // Deliberately does not request it. Being asked again on every launch is how an app
-  // teaches people to say no.
-  if (!(await isPermissionGranted())) {
-    return false
-  }
+export function refreshReminder(hour: number, minute: number): Promise<boolean | null> {
+  return inTurn(async (overtaken) => {
+    if (!(await remindersAvailable())) {
+      return overtaken() ? null : false
+    }
+    // Deliberately does not request it. Being asked again on every launch is how an app
+    // teaches people to say no.
+    if (!(await isPermissionGranted())) {
+      return overtaken() ? null : false
+    }
+    if (overtaken()) {
+      return null
+    }
 
-  return (await putOnTheQueue(hour, minute)) === null
+    const armed = (await putOnTheQueue(hour, minute)) === null
+    return overtaken() ? null : armed
+  })
 }
 
 /**
@@ -328,11 +370,13 @@ export async function refreshReminder(hour: number, minute: number): Promise<boo
  *
  * Cancelling also takes it out of the plugin's store, so a restart cannot bring it back.
  */
-export async function disableReminder(): Promise<void> {
-  if (!(await remindersAvailable())) {
-    return
-  }
-  await cancel([REMINDER_ID])
+export function disableReminder(): Promise<void> {
+  return inTurn(async () => {
+    if (!(await remindersAvailable())) {
+      return
+    }
+    await cancel([REMINDER_ID])
+  })
 }
 
 /**
@@ -360,15 +404,21 @@ export async function disableReminder(): Promise<void> {
  * see refreshReminder for what the store is for.
  */
 export async function reconcileReminder(activityCount: number): Promise<void> {
-  if (activityCount > 0 || !(await remindersAvailable())) {
+  if (activityCount > 0) {
     return
   }
-  // Nothing here may throw. It runs from a screen somebody is looking at, in the moment
-  // just after they deleted something, and a failure to cancel is not their problem.
-  try {
-    await cancel([REMINDER_ID])
-  } catch {
-    // Deliberately swallowed, and nothing is reported: there is no screen to report it on
-    // and nothing the person could do about it.
-  }
+  return inTurn(async (overtaken) => {
+    // A habit added back, or the switch touched, while this waited: that call decides.
+    if (!(await remindersAvailable()) || overtaken()) {
+      return
+    }
+    // Nothing here may throw. It runs from a screen somebody is looking at, in the moment
+    // just after they deleted something, and a failure to cancel is not their problem.
+    try {
+      await cancel([REMINDER_ID])
+    } catch {
+      // Deliberately swallowed, and nothing is reported: there is no screen to report it
+      // on and nothing the person could do about it.
+    }
+  })
 }

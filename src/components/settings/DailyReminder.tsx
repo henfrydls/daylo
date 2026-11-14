@@ -57,8 +57,12 @@ export function DailyReminder() {
     // the phone's settings, the switch goes off and so does the alarm still on the queue.
     // The plugin restores that alarm after a restart, so left there it would ring the day
     // the permission came back, under a switch that says off.
+    //
+    // Not when the answer is null: something newer, the switch or the last habit going,
+    // came in while this was on its way and has decided already. A late "off" acted on here
+    // would cancel a reminder somebody had just turned on.
     void refreshReminder(reminderHour, reminderMinute).then((stillOn) => {
-      if (!stillOn) {
+      if (stillOn === false) {
         setReminder(false, reminderHour, reminderMinute)
         void disableReminder().catch(() => {})
       }

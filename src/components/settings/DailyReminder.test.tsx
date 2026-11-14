@@ -326,6 +326,22 @@ describe('opening the app', () => {
     await waitFor(() => expect(disableReminder).toHaveBeenCalled())
   })
 
+  // Null is a re-arm that something newer overtook on its way: the switch turned on, or
+  // the last habit gone. That call has decided, and acting on the late answer would cancel
+  // a reminder somebody had just turned on.
+  it('leaves the switch and the alarm alone when the re-arm was overtaken', async () => {
+    firstHabitOnAndroid()
+    useCalendarStore.setState({ reminderEnabled: true, reminderOffered: true })
+    refreshReminder.mockResolvedValue(null)
+
+    render(<DailyReminder />)
+
+    await waitFor(() => expect(refreshReminder).toHaveBeenCalled())
+    await settle()
+    expect(disableReminder).not.toHaveBeenCalled()
+    expect(useCalendarStore.getState().reminderEnabled).toBe(true)
+  })
+
   it('leaves the alarm alone while the permission is still there', async () => {
     firstHabitOnAndroid()
     useCalendarStore.setState({ reminderEnabled: true, reminderOffered: true })

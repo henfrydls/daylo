@@ -310,6 +310,90 @@ describe('re-arming at launch', () => {
 })
 
 /**
+ * A re-arm that set off at launch and arrives after something newer.
+ *
+ * Opening the app re-arms the reminder through a few round trips to the phone, and the
+ * person can act during them. Each test holds the re-arm's permission check open, lets the
+ * newer call in, and only then lets the re-arm go on, which is the order a slow phone puts
+ * them in.
+ */
+describe('a re-arm overtaken on its way', () => {
+  function heldOpen() {
+    let answer!: (granted: boolean) => void
+    isPermissionGranted.mockReturnValueOnce(new Promise<boolean>((r) => (answer = r)))
+    return (granted: boolean) => answer(granted)
+  }
+
+  const notified = () =>
+    invoke.mock.calls.filter(([command]) => command === 'plugin:notification|notify').length
+
+  // The last habit is deleted while the re-arm is on its way. The cancel used to go
+  // through at once and the re-arm landed after it, and the plugin stores what it arms:
+  // the reminder came back after every restart, over an app with nothing in it.
+  it('does not schedule the reminder after the last habit took it down', async () => {
+    pretendAndroid()
+    const answer = heldOpen()
+
+    const refreshed = refreshReminder(21, 0)
+    const reconciled = reconcileReminder(0)
+    answer(true)
+
+    const answered = await refreshed
+    await reconciled
+    expect(notified()).toBe(0)
+    expect(cancel).toHaveBeenCalledWith([REMINDER_ID])
+    expect(answered).toBeNull()
+  })
+
+  // The switch is turned on while the re-arm is on its way, before the permission was
+  // given. The re-arm saw no permission and said off, late, and the screen cancels on
+  // off: the reminder somebody had just turned on was taken down under them.
+  it('does not report off after the switch was turned on', async () => {
+    pretendAndroid()
+    const answer = heldOpen()
+    isPermissionGranted.mockResolvedValue(true)
+
+    const refreshed = refreshReminder(21, 0)
+    const enabled = enableReminder(21, 0)
+    answer(false)
+
+    await expect(refreshed).resolves.toBeNull()
+    await expect(enabled).resolves.toEqual({ outcome: 'on' })
+    expect(notified()).toBe(1)
+  })
+
+  // Nothing newer came in: the re-arm says what it found, as before.
+  it('still reports off when nothing came after it', async () => {
+    pretendAndroid()
+    const answer = heldOpen()
+
+    const refreshed = refreshReminder(21, 0)
+    answer(false)
+
+    await expect(refreshed).resolves.toBe(false)
+  })
+
+  // The calls made with the switch are never skipped, only put in order: turning it on
+  // and straight off leaves it off, whatever the phone answers first.
+  it('keeps the switch calls in the order they were made', async () => {
+    pretendAndroid()
+    const answer = heldOpen()
+
+    const enabled = enableReminder(21, 0)
+    const disabled = disableReminder()
+    answer(true)
+    await enabled
+    await disabled
+
+    const order =
+      invoke.mock.invocationCallOrder[
+        invoke.mock.calls.findIndex(([command]) => command === 'plugin:notification|notify')
+      ]
+    expect(order).toBeLessThan(cancel.mock.invocationCallOrder[0])
+  })
+})
+
+/**
  * What time to offer somebody who has just made their first activity.
  *
  * It used to be whatever hour this was written with, which is a reminder the person has to
