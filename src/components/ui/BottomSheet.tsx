@@ -20,6 +20,15 @@ const DISMISS_THRESHOLD = 0.3
  */
 const DRAG_AT = 8
 
+/**
+ * What a finger on the list is doing, decided once per gesture.
+ *
+ * `undecided` only while the list is at the top and the finger has not gone anywhere yet;
+ * `scroll` is the list's own, and stays that for the rest of the gesture even if the list
+ * reaches the top under it; `drag` takes the sheet down; `none` is a finger going across.
+ */
+type ListGesture = 'undecided' | 'scroll' | 'drag' | 'none'
+
 export function BottomSheet({
   isOpen,
   onClose,
@@ -27,7 +36,7 @@ export function BottomSheet({
   'aria-label': ariaLabel = 'Bottom sheet',
 }: BottomSheetProps) {
   const sheetRef = useRef<HTMLDivElement>(null)
-  const handleRef = useRef<HTMLDivElement>(null)
+  const listRef = useRef<HTMLDivElement>(null)
   const { shouldRender, isVisible } = useAnimatedPresence(isOpen, ANIMATION_DURATION)
 
   // Two frames under the bottom edge before it comes up, with the frames belonging to the
@@ -37,14 +46,68 @@ export function BottomSheet({
 
   useFocusTrap(sheetRef, isOpen, { onEscape: onClose, autoFocus: false })
 
-  // Drag state
+  // Drag state. The state is what is drawn; the refs are what the next event reads, which
+  // it needs before React has rendered anything, and which the list's own listeners need
+  // without being added again on every move.
   const [dragOffset, setDragOffset] = useState(0)
   const [isDragging, setIsDragging] = useState(false)
   const [sheetHeight, setSheetHeight] = useState(0)
+  const dragging = useRef(false)
+  const offset = useRef(0)
+  const height = useRef(0)
+  const onCloseRef = useRef(onClose)
+  useEffect(() => {
+    onCloseRef.current = onClose
+  }, [onClose])
+
+  const measure = useCallback(() => {
+    const node = sheetRef.current
+    if (!node) return
+    height.current = node.getBoundingClientRect().height
+    setSheetHeight(height.current)
+  }, [])
+
+  // Measured again whenever the sheet changes size, not only when it opens. "Show all"
+  // makes it taller, and with the height it opened at, the 30% that closes it was 30% of
+  // a shorter sheet, and going away it slid down by less than its own height and vanished
+  // the rest of the way.
+  useEffect(() => {
+    if (!isVisible || !sheetRef.current) return
+    measure()
+    const observer = new ResizeObserver(measure)
+    observer.observe(sheetRef.current)
+    return () => observer.disconnect()
+  }, [isVisible, measure])
+
+  const beginDrag = useCallback(() => {
+    // And once more at the start of each drag, which is the moment the number is used.
+    measure()
+    dragging.current = true
+    setIsDragging(true)
+  }, [measure])
+
+  const moveDrag = useCallback((deltaY: number) => {
+    offset.current = Math.max(0, deltaY)
+    setDragOffset(offset.current)
+  }, [])
+
+  const endDrag = useCallback(() => {
+    if (!dragging.current) return
+    dragging.current = false
+    setIsDragging(false)
+    if (height.current > 0 && offset.current > height.current * DISMISS_THRESHOLD) {
+      onCloseRef.current()
+    }
+    offset.current = 0
+    setDragOffset(0)
+  }, [])
+
+  // --- The handle: a drag from here, by finger or by mouse ---------------------------
+
   const dragStartY = useRef(0)
   const dragStartX = useRef(0)
   /**
-   * Whether a finger is actually down on this sheet.
+   * Which pointer is actually down on the handle, or null.
    *
    * Without it a move was enough, and `dragStartY` begins at zero, so the first time a
    * pointer crossed the sheet at all it measured its own height as a drag: five hundred
@@ -53,17 +116,11 @@ export function BottomSheet({
    * went the next time something was let go anywhere, which is how pressing Cancel on
    * "Delete Activity?" closed the panel the question was asked in.
    *
-   * A ref and not state: what is being asked is "is a finger down", which the next event
-   * needs the answer to before React has rendered anything.
+   * The listeners are on the handle and not on the sheet, which is also what keeps a
+   * dialog opened from the list out of here: it renders through a portal, React bubbles
+   * its events up the tree it knows, and that tree goes through the list, not the handle.
    */
-  const pressing = useRef(false)
-
-  // Measure sheet height when visible
-  useEffect(() => {
-    if (isVisible && sheetRef.current) {
-      setSheetHeight(sheetRef.current.getBoundingClientRect().height)
-    }
-  }, [isVisible])
+  const pointer = useRef<number | null>(null)
 
   /**
    * Where the finger went down, and nothing decided yet.
@@ -73,66 +130,126 @@ export function BottomSheet({
    * was down: the backdrop's blur is cut while dragging, with no transition, so it blinked
    * off and back on under each press. Henfry filmed six of those in four seconds on the
    * Activities sheet, including the pencil.
-   */
-  /**
-   * Whether this pointer is on the sheet at all.
    *
-   * A dialog opened from inside the sheet renders through a portal, which puts it outside
-   * the sheet in the page and leaves it inside it in React, and React bubbles events up
-   * the tree it knows. So pressing a button in that dialog arrived here as a press on the
-   * sheet, and the move down to it as a drag.
+   * Captured, so that the release reaches the handle wherever it happens. A mouse let go
+   * above the sheet used to leave it mid-drag, following the pointer with no button down.
    */
-  const onThisSheet = (e: React.PointerEvent) => e.currentTarget.contains(e.target as Node | null)
-
-  /**
-   * A drag to close begins on the handle, and only there.
-   *
-   * With five activities the sheet is taller than a phone, and its content has to move
-   * under a finger. The whole sheet used to be `touch-action: none` so that this drag would
-   * not fight the scroll, which switched the scroll off: upwards nothing moved, downwards
-   * the sheet closed, and with eight there was no reaching the last one. Now the content
-   * scrolls, and a finger going down on it is that scroll coming back up the list.
-   */
-  const onHandle = (e: React.PointerEvent) =>
-    handleRef.current?.contains(e.target as Node | null) ?? false
-
-  const handlePointerDown = useCallback((e: React.PointerEvent) => {
-    if (!onThisSheet(e) || !onHandle(e)) return
-    pressing.current = true
+  const handlePointerDown = useCallback((e: React.PointerEvent<HTMLDivElement>) => {
+    if (pointer.current !== null) return
+    pointer.current = e.pointerId
     dragStartY.current = e.clientY
     dragStartX.current = e.clientX
+    e.currentTarget.setPointerCapture?.(e.pointerId)
   }, [])
 
   const handlePointerMove = useCallback(
     (e: React.PointerEvent) => {
-      if (!pressing.current || !onThisSheet(e)) return
+      if (pointer.current !== e.pointerId) return
       const deltaY = e.clientY - dragStartY.current
-      if (!isDragging) {
+      if (!dragging.current) {
         // Downwards, far enough to mean it, and more down than across. A tap never gets
         // here; a finger crossing the sheet diagonally does not take it with it.
         const deltaX = Math.abs(e.clientX - dragStartX.current)
         if (deltaY < DRAG_AT || deltaY <= deltaX) return
-        setIsDragging(true)
+        beginDrag()
       }
-      setDragOffset(Math.max(0, deltaY))
+      moveDrag(deltaY)
     },
-    [isDragging]
+    [beginDrag, moveDrag]
   )
 
-  const handlePointerUp = useCallback(() => {
-    pressing.current = false
-    if (!isDragging) return
-    setIsDragging(false)
+  const handlePointerUp = useCallback(
+    (e: React.PointerEvent) => {
+      if (pointer.current !== e.pointerId) return
+      pointer.current = null
+      endDrag()
+    },
+    [endDrag]
+  )
 
-    if (sheetHeight > 0 && dragOffset > sheetHeight * DISMISS_THRESHOLD) {
-      onClose()
+  // --- The list: a drag from here only from the top, and only downwards --------------
+
+  /**
+   * With the list at the top, a finger going down on it takes the sheet down.
+   *
+   * The list scrolls (`touch-action: pan-y`), and that hands every vertical gesture to the
+   * browser, including the one that has nothing to scroll: with one to three activities
+   * the sheet fits, and a pull down on it did nothing at all. So the list listens for itself
+   * and keeps that one gesture back from the browser, with `preventDefault` on a listener
+   * that is not passive: at the top, and going down. Anything else is the browser's scroll,
+   * untouched.
+   *
+   * Decided at the start and kept. A gesture that began with the list scrolled is a scroll
+   * even when the list reaches the top under the finger, or the sheet would set off down
+   * the screen in the middle of somebody scrolling back up; the next one can close it. And
+   * a gesture that went up first is a scroll even if it comes back down.
+   */
+  useEffect(() => {
+    const list = listRef.current
+    if (!shouldRender || !list) return
+    let gesture: ListGesture = 'none'
+    let startX = 0
+    let startY = 0
+
+    const onStart = (e: TouchEvent) => {
+      if (e.touches.length !== 1) {
+        if (gesture === 'drag') endDrag()
+        gesture = 'none'
+        return
+      }
+      startX = e.touches[0].clientX
+      startY = e.touches[0].clientY
+      gesture = list.scrollTop <= 0 ? 'undecided' : 'scroll'
     }
-    setDragOffset(0)
-  }, [isDragging, dragOffset, sheetHeight, onClose])
+
+    const onMove = (e: TouchEvent) => {
+      if (gesture === 'scroll' || gesture === 'none') return
+      const deltaY = e.touches[0].clientY - startY
+      if (gesture === 'undecided') {
+        if (deltaY < 0 || list.scrollTop > 0) {
+          gesture = 'scroll'
+          return
+        }
+        if (deltaY === 0) return
+        // Held back from the browser from the first pixel down, not from the eighth:
+        // by then it has already taken the gesture for a scroll and will not give it up.
+        if (e.cancelable) e.preventDefault()
+        const deltaX = Math.abs(e.touches[0].clientX - startX)
+        if (deltaY < DRAG_AT && deltaX < DRAG_AT) return
+        if (deltaY <= deltaX) {
+          gesture = 'none'
+          return
+        }
+        gesture = 'drag'
+        beginDrag()
+      }
+      if (e.cancelable) e.preventDefault()
+      moveDrag(deltaY)
+    }
+
+    const onEnd = () => {
+      if (gesture === 'drag') endDrag()
+      gesture = 'none'
+    }
+
+    list.addEventListener('touchstart', onStart, { passive: true })
+    list.addEventListener('touchmove', onMove, { passive: false })
+    list.addEventListener('touchend', onEnd)
+    list.addEventListener('touchcancel', onEnd)
+    return () => {
+      list.removeEventListener('touchstart', onStart)
+      list.removeEventListener('touchmove', onMove)
+      list.removeEventListener('touchend', onEnd)
+      list.removeEventListener('touchcancel', onEnd)
+    }
+  }, [shouldRender, beginDrag, moveDrag, endDrag])
 
   // Reset drag state when closing
   useEffect(() => {
     if (!isOpen) {
+      dragging.current = false
+      offset.current = 0
+      pointer.current = null
       /* eslint-disable react-hooks/set-state-in-effect */
       setDragOffset(0)
       setIsDragging(false)
@@ -172,7 +289,7 @@ export function BottomSheet({
       {/* Sheet */}
       <div
         ref={sheetRef}
-        className="absolute bottom-0 left-0 right-0 bg-white rounded-t-2xl shadow-xl max-h-[75dvh] overflow-y-auto overscroll-contain touch-pan-y"
+        className="absolute bottom-0 left-0 right-0 bg-white rounded-t-2xl shadow-xl max-h-[75dvh] flex flex-col"
         style={{
           transform: `translateY(${translateY}px)`,
           transition: isDragging
@@ -185,24 +302,32 @@ export function BottomSheet({
         aria-modal="true"
         aria-label={ariaLabel}
         data-testid="bottom-sheet"
-        onPointerDown={handlePointerDown}
-        onPointerMove={handlePointerMove}
-        onPointerUp={handlePointerUp}
-        onPointerCancel={handlePointerUp}
       >
-        {/* Handle bar. The only place a finger is not scrolling, so the drag to close
-            lives here. Taller than it looks: the gap above the content is part of it, which
-            puts the content exactly where it was and gives a thumb more to land on. */}
+        {/* Handle bar. The only place a finger is never scrolling, so a drag from here
+            closes the sheet however far the list has gone. Its grey bar and the gap under
+            it are 28 pixels, under the 44 a thumb needs; the rest is an invisible strip
+            above the sheet's edge, so the list stays exactly where it was and nothing in
+            it is covered. */}
         <div
-          ref={handleRef}
-          className="flex justify-center pt-3 pb-3 sticky top-0 bg-white rounded-t-2xl z-10 cursor-grab active:cursor-grabbing touch-none"
+          className="relative shrink-0 flex justify-center pt-3 pb-3 bg-white rounded-t-2xl cursor-grab active:cursor-grabbing touch-none before:absolute before:inset-x-0 before:-top-4 before:h-4 before:content-['']"
           data-testid="bottom-sheet-handle"
+          onPointerDown={handlePointerDown}
+          onPointerMove={handlePointerMove}
+          onPointerUp={handlePointerUp}
+          onPointerCancel={handlePointerUp}
         >
           <div className="w-10 h-1 bg-gray-300 rounded-full" aria-hidden="true" />
         </div>
 
-        {/* Content */}
-        <div className="px-4 pb-6">{children}</div>
+        {/* Content. It scrolls, and keeps its scroll to itself at either end rather than
+            handing it on to the page behind. */}
+        <div
+          ref={listRef}
+          className="min-h-0 overflow-y-auto overscroll-contain touch-pan-y px-4 pb-6"
+          data-testid="bottom-sheet-list"
+        >
+          {children}
+        </div>
       </div>
     </div>
   )
