@@ -146,6 +146,31 @@ describe('a write the disk refuses', { timeout: 30_000 }, () => {
     expect(said()).toBe(1)
   })
 
+  // The five minutes are a rest from the notice, so they start when the person sends it
+  // away. Counted from when it appeared, a notice read for ten minutes and then closed
+  // would come straight back on the next tap.
+  it('counts the five minutes from when it was closed, not from when it appeared', async () => {
+    const { useCalendarStore, useToastStore, COULD_NOT_SAVE } = await freshStore()
+    const said = () =>
+      useToastStore.getState().toasts.filter((t) => t.message === COULD_NOT_SAVE).length
+
+    refuseWrites()
+    useCalendarStore.getState().addActivity('Run')
+    vi.advanceTimersByTime(10)
+    vi.advanceTimersByTime(10 * 60_000)
+    useToastStore.getState().removeToast(useToastStore.getState().toasts[0].id)
+
+    vi.advanceTimersByTime(2 * 60_000)
+    useCalendarStore.getState().addActivity('Swim')
+    vi.advanceTimersByTime(10)
+    expect(said()).toBe(0)
+
+    vi.advanceTimersByTime(3 * 60_000)
+    useCalendarStore.getState().addActivity('Walk')
+    vi.advanceTimersByTime(10)
+    expect(said()).toBe(1)
+  })
+
   it('does not stack a second copy over one still on the screen', async () => {
     const { useCalendarStore, useToastStore, COULD_NOT_SAVE } = await freshStore()
 

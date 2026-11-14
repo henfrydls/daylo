@@ -23,51 +23,48 @@ export const STORAGE_KEY = 'simple-calendar-storage'
 export const COULD_NOT_SAVE =
   'Daylo could not save your last changes. Open Settings and export a backup so nothing is lost.'
 
-type ViewType = 'year' | 'month'
-type ViewTransitionDirection = 'drill-down' | 'drill-up' | null
-
-interface DeferredStorage extends StateStorage {
-  /**
-   * The exact string this window last read from the disk or wrote to it. Anything else
-   * there was written by another window, and that is how coming back to the front tells
-   * whether there is something to take in.
-   */
-  lastSeen: () => string | null
-  /**
-   * Records a value from another window as seen without taking it in, so that coming back
-   * to the front does not take it in later either. This window's next write puts back what
-   * it holds, which is what it always did.
-   */
-  markSeen: (raw: string) => void
-  /**
-   * Whether this window holds a change of its own that is not on the disk yet: one on its
-   * way, or one the disk refused, which is kept until a write goes through. Either way it
-   * exists only in this window's memory, and nothing from another window is taken in over
-   * it. For a refused one that is the point: the notice asks for an export so that nothing
-   * is lost, and the export reads that memory.
-   */
-  hasPendingWrite: () => boolean
-}
-
 /**
- * How long a closed notice about failed writes stays closed while the writes go on failing.
- * Once per tap would bury the screen; never again would leave somebody losing changes all
- * day because they closed one notice in the morning.
+ * How long a closed notice about failed writes stays closed while the writes go on failing,
+ * counted from when the person closed it. Once per tap would bury the screen; never again
+ * would leave somebody losing changes all day because they closed one notice in the morning.
  */
 const SAY_IT_AGAIN_AFTER_MS = 5 * 60_000
 
+type ViewType = 'year' | 'month'
+type ViewTransitionDirection = 'drill-down' | 'drill-up' | null
+
 // Deferred localStorage adapter for optimistic UI
 // UI updates immediately, persistence happens during idle time
-const createDeferredStorage = (): DeferredStorage => {
+const createDeferredStorage = (): StateStorage => {
   let pendingWrite: string | null = null
   let pendingKey: string | null = null
-  let lastSeen: string | null = null
   let scheduledWrite: ReturnType<typeof setTimeout> | number | null = null
   let useIdleCallback = false
+  // The notice about failed writes, while it is on the screen.
   let noticeId: string | null = null
-  // When the notice was last put up in the current run of failures, and null when there is
-  // no run: before the first failure, and again after any write that goes through.
-  let noticeShownAt: number | null = null
+  // When the person closed it, during a run of failures. Null when there is no run: before
+  // the first failure, and again after any write that goes through.
+  let noticeClosedAt: number | null = null
+  let stopWatchingNotice: (() => void) | null = null
+
+  const stopWatching = () => {
+    stopWatchingNotice?.()
+    stopWatchingNotice = null
+  }
+
+  const showNotice = () => {
+    noticeClosedAt = null
+    noticeId = useToastStore.getState().addToast(COULD_NOT_SAVE, 'error', { untilDismissed: true })
+    // Watched so that the five minutes start when it goes, which is when the person closed
+    // it: nothing else takes it down while the writes keep failing.
+    stopWatchingNotice = useToastStore.subscribe((state) => {
+      if (noticeId !== null && !state.toasts.some((t) => t.id === noticeId)) {
+        noticeId = null
+        noticeClosedAt = Date.now()
+        stopWatching()
+      }
+    })
+  }
 
   // Check if requestIdleCallback is available (browser environment)
   if (typeof window !== 'undefined' && typeof window.requestIdleCallback === 'function') {
@@ -89,32 +86,26 @@ const createDeferredStorage = (): DeferredStorage => {
     if (pendingWrite !== null) {
       try {
         localStorage.setItem(key, pendingWrite)
-        lastSeen = pendingWrite
         // The pending value is only dropped once it has really been written. If the write
         // fails it is kept, so the next flush tries it again.
         pendingWrite = null
         pendingKey = null
-        // The disk works again. If it fails after this, that is news, and is said again, and
-        // a notice still asking for a backup is no longer true.
-        noticeShownAt = null
-        if (noticeId !== null) {
-          useToastStore.getState().removeToast(noticeId)
-          noticeId = null
-        }
+        // The disk works again: a notice still asking for a backup is no longer true, and
+        // if it fails after this, that is news, and is said again.
+        stopWatching()
+        if (noticeId !== null) useToastStore.getState().removeToast(noticeId)
+        noticeId = null
+        noticeClosedAt = null
       } catch (error) {
         // Not swallowed: losing data without a word is the worst thing an app can do when
         // its whole case is that your data is yours.
         console.error('[Daylo] Could not save changes to localStorage:', error)
-        // Once per run of failures, not once per tap: every tap is another write. Again if
-        // the person closed it and the writes still fail five minutes after it was said.
-        // And never a second copy over one still on the screen.
-        const toasts = useToastStore.getState()
-        const onScreen = noticeId !== null && toasts.toasts.some((t) => t.id === noticeId)
-        const sayIt = noticeShownAt === null || Date.now() - noticeShownAt >= SAY_IT_AGAIN_AFTER_MS
-        if (!onScreen && sayIt) {
-          noticeShownAt = Date.now()
-          noticeId = toasts.addToast(COULD_NOT_SAVE, 'error', { untilDismissed: true })
-        }
+        // Once per run of failures, not once per tap: every tap is another write. Never a
+        // second copy over one still on the screen. Again if the person closed it and the
+        // writes still fail five minutes after they did.
+        const closedLongEnough =
+          noticeClosedAt === null || Date.now() - noticeClosedAt >= SAY_IT_AGAIN_AFTER_MS
+        if (noticeId === null && closedLongEnough) showNotice()
       }
     }
     scheduledWrite = null
@@ -145,8 +136,7 @@ const createDeferredStorage = (): DeferredStorage => {
       if (pendingWrite !== null) {
         return pendingWrite
       }
-      lastSeen = localStorage.getItem(name)
-      return lastSeen
+      return localStorage.getItem(name)
     },
     setItem: (name: string, value: string): void => {
       pendingWrite = value
@@ -177,26 +167,8 @@ const createDeferredStorage = (): DeferredStorage => {
       cancelScheduledWrite()
       localStorage.removeItem(name)
     },
-    lastSeen: () => lastSeen,
-    markSeen: (raw: string) => {
-      lastSeen = raw
-    },
-    hasPendingWrite: () => pendingWrite !== null,
   }
 }
-
-/**
- * Created once, here, so that the code listening for other windows after the store exists
- * can ask it what this window last saw.
- */
-const deferredStorage = createDeferredStorage()
-
-/**
- * True only while this window is taking in what another window wrote. merge and the
- * rehydrate callback read it: taking in somebody else's records is not a launch, and must
- * not decide the launch's questions again.
- */
-let adoptingFromAnotherWindow = false
 
 interface CalendarState {
   activities: Activity[]
@@ -394,25 +366,6 @@ export const WHERE_SOMEBODY_IS = [
   'selectedYear',
   'currentView',
 ] as const satisfies readonly (keyof CalendarState)[]
-
-/**
- * Another window's records, over this window's session.
- *
- * Only what is kept on disk comes across. Whatever starts with `_` belongs to this session
- * and is left as it is, `_checkinStart` above all: it was decided at launch, it says which
- * line of the check-in a new copy sees and whether the check-in starts, and a second window
- * writing must not decide it again. Where somebody is stays too: nobody should be moved to
- * another month because they ticked a day somewhere else.
- */
-function takeInRecords(persisted: unknown, current: CalendarState): CalendarState {
-  if (persisted == null || typeof persisted !== 'object') return current
-  const records = { ...(persisted as Record<string, unknown>) }
-  for (const key of Object.keys(records)) {
-    if (key.startsWith('_')) delete records[key]
-  }
-  for (const place of WHERE_SOMEBODY_IS) delete records[place]
-  return { ...current, ...records }
-}
 
 export const useCalendarStore = create<CalendarState>()(
   persist(
@@ -651,7 +604,7 @@ export const useCalendarStore = create<CalendarState>()(
     }),
     {
       name: STORAGE_KEY,
-      storage: createJSONStorage(() => deferredStorage),
+      storage: createJSONStorage(() => createDeferredStorage()),
       // Where somebody was is not kept, and the four missing names are the whole of this
       // decision: `selectedDate`, `selectedMonth`, `selectedYear` and `currentView`.
       //
@@ -698,7 +651,6 @@ export const useCalendarStore = create<CalendarState>()(
       // wrong line. Nothing at all is a new installation; an object without the switch is
       // an update.
       merge: (persisted, current) => {
-        if (adoptingFromAnotherWindow) return takeInRecords(persisted, current)
         if (persisted == null) return { ...current, _checkinStart: 'new' }
 
         // Where somebody was is dropped on the way in, not only left out on the way out.
@@ -735,11 +687,6 @@ export const useCalendarStore = create<CalendarState>()(
        * raises exists to get it off intact.
        */
       onRehydrateStorage: () => (state, error) => {
-        // Taking in another window's records: this window is already open and already
-        // hydrated, and what it holds stays on screen whatever happened. Marking it
-        // hydrated again would also be a write, and two windows that answered each other's
-        // writes with one of their own would never stop.
-        if (adoptingFromAnotherWindow) return
         if (error) {
           useRescueStore
             .getState()
@@ -751,108 +698,3 @@ export const useCalendarStore = create<CalendarState>()(
     }
   )
 )
-
-/**
- * Whether a string from the disk is Daylo's, checked before taking it in. rehydrate() parses
- * it again on its own, through the storage, and that second parse is the price of not
- * reaching into zustand. zustand answers a value it cannot parse with the rescue screen, which is right for a
- * launch with nothing else to show and wrong for a window that holds good data. And a value
- * that parses but whose records are not lists would break every list on the screen on the
- * first record it tried to read.
- */
-function isDaylosData(raw: string): boolean {
-  let parsed: unknown
-  try {
-    parsed = JSON.parse(raw)
-  } catch {
-    return false
-  }
-  if (typeof parsed !== 'object' || parsed === null) return false
-  const state = (parsed as { state?: unknown }).state
-  if (typeof state !== 'object' || state === null) return false
-  const { activities, logs } = state as { activities?: unknown; logs?: unknown }
-  return Array.isArray(activities) && Array.isArray(logs)
-}
-
-/**
- * Takes in what another tab of Daylo wrote, so that this tab's next write carries it.
- *
- * Somebody opens Daylo in a second tab, ticks today there and closes it, goes back to the
- * first and taps anything. The first tab wrote everything it held in memory, which did not
- * hold today, and the tick was gone without a word. Now the first tab reads the disk again
- * when it hears about the write while it is behind, or when it comes back to the front,
- * and its next write carries the tick.
- *
- * Never while this tab is the one in front. The person is looking at it and may have just
- * ticked something the other tab never heard about, because that one had a change of its
- * own on its way; when the other tab then writes its older copy, taking it in would wipe
- * the tick off the screen it was made on. So a tab in front keeps what it shows and its
- * next write puts it back, as before any of this, and it marks the value as seen, so that
- * coming back to the front later does not take it in either. On the desktop a second launch no longer opens a second window at all:
- * it brings back the one already open (see run() in src-tauri/src/lib.rs).
- *
- * This narrows the window for writing over another tab and does not close it. A tab still
- * writes its own copy over the other's when it writes before it has heard: a timer firing
- * in a tab left in the background (the new day at midnight, the check-in), coming back to
- * the front before the other tab's write has reached the disk, or a change of its own still
- * on its way, or in front, when the other tab's write arrives (then this tab wins, as it
- * always did).
- * Comparing the disk with what this tab last saw before every write, and merging record by
- * record, is issue #248.
- *
- * Not on the rescue screen, which exists to get the data off the disk intact, and not over
- * a disk that is empty or does not hold Daylo's data: what this tab holds is good, and an
- * empty or half-written value from elsewhere must not replace it or bring up the rescue.
- *
- * Not after the disk refused this tab's last write, either, until a write goes through.
- * What it carried exists only in this tab's memory, the notice on screen asks for an export
- * so that nothing is lost, and the export reads that memory: taking in the other tab's copy
- * would leave nothing to export.
- *
- * rehydrate() writes nothing (zustand hydrates through its internal set, and the callback
- * above returns early while this runs), which is what stops two tabs answering each other
- * for ever. It is also synchronous, because the storage is: the flag around it is cleared
- * after merge has run, not before.
- */
-function takeInWhatAnotherWindowWrote() {
-  if (deferredStorage.hasPendingWrite()) return
-  if (!useCalendarStore.getState()._hasHydrated) return
-  let raw: string | null
-  try {
-    raw = localStorage.getItem(STORAGE_KEY)
-  } catch {
-    return
-  }
-  if (raw === null || raw === deferredStorage.lastSeen() || !isDaylosData(raw)) return
-  adoptingFromAnotherWindow = true
-  try {
-    void useCalendarStore.persist.rehydrate()
-  } finally {
-    adoptingFromAnotherWindow = false
-  }
-}
-
-// Two ways to hear about another tab. Browsers tell the other tabs with 'storage'. Coming
-// back to the front also compares the disk with what this tab last saw, for a web view that
-// does not deliver that event. Hooked here and not with the flush on hiding, because the
-// store has to exist first.
-//
-// Only a 'storage' event for Daylo's own key counts. One for every key at once (key null)
-// is what localStorage.clear() in another tab sends, and nothing in Daylo clears that way:
-// replacing everything on import writes the new data through the store like any change,
-// and the only removeItem is zustand's own clearStorage, which nothing calls. Somebody
-// clearing the site's data by hand leaves an empty disk, which is not taken in either.
-if (typeof window !== 'undefined') {
-  window.addEventListener('storage', (event) => {
-    if (event.key !== STORAGE_KEY || event.storageArea !== localStorage) return
-    if (document.visibilityState === 'visible' && document.hasFocus()) {
-      if (event.newValue !== null) deferredStorage.markSeen(event.newValue)
-      return
-    }
-    takeInWhatAnotherWindowWrote()
-  })
-  window.addEventListener('focus', takeInWhatAnotherWindowWrote)
-  document.addEventListener('visibilitychange', () => {
-    if (document.visibilityState === 'visible') takeInWhatAnotherWindowWrote()
-  })
-}
