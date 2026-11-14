@@ -2,7 +2,7 @@ import { useMemo, useCallback, memo, useState } from 'react'
 import { useCalendarStore } from '../../store'
 import { useTravel } from '../../lib/travel'
 import { formatDate, formatMonthYear } from '../../lib/dates'
-import { useToday, useTodayDate } from '../../lib/today'
+import { useTodayDate } from '../../lib/today'
 import { useMediaQuery } from '../../hooks/useMediaQuery'
 import type { Activity, ActivityLog } from '../../types'
 import { useShallow } from 'zustand/react/shallow'
@@ -89,8 +89,8 @@ export const MonthView = memo(function MonthView() {
   // The app's day and not the clock's: while a new day waits for somebody to finish, the
   // clock has moved on and the rest of the screen has not, and the bar and the grid would
   // each say a different day was today.
-  const todayStr = useToday()
   const today = useTodayDate()
+  const todayStr = formatDate(today)
 
   const monthDays = useMemo(
     () => getMonthDays(selectedYear, selectedMonth, todayStr),

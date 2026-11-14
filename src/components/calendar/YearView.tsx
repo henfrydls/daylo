@@ -85,11 +85,10 @@ export const YearView = memo(function YearView() {
    * than a zero, because nothing was missed yet and 0% reads as a failure.
    */
   const monthCompletion = useMemo(() => {
-    const now = today
     return Array.from({ length: 12 }, (_, month) => {
       if (
-        selectedYear > now.getFullYear() ||
-        (selectedYear === now.getFullYear() && month > now.getMonth())
+        selectedYear > today.getFullYear() ||
+        (selectedYear === today.getFullYear() && month > today.getMonth())
       ) {
         return { month, percentage: null }
       }
