@@ -19,8 +19,8 @@ interface ActivityFormProps {
  */
 const FORM_ID = 'activity-form'
 
-/** What an open form with no activity was opened for: making a new one. */
-const NEW_ACTIVITY = 'new'
+/** What an open form with no activity was opened for: making a new one. Not an id. */
+const NEW_ACTIVITY = '<new>'
 
 export const ActivityForm = memo(function ActivityForm({
   isOpen,
@@ -28,7 +28,9 @@ export const ActivityForm = memo(function ActivityForm({
   activity,
 }: ActivityFormProps) {
   const [name, setName] = useState('')
-  const [color, setColor] = useState<string>(ACTIVITY_COLORS[0].value)
+  // Only what the person picked. Until they pick, the form shows the activity's own color,
+  // or for a new one the first color nobody wears yet, worked out as it is drawn.
+  const [pickedColor, setPickedColor] = useState<string | null>(null)
   const [logForDate, setLogForDate] = useState(false)
   const [selectedDate, setSelectedDate] = useState(formatDate(new Date()))
 
@@ -42,21 +44,25 @@ export const ActivityForm = memo(function ActivityForm({
     [activities, activity?.id]
   )
 
+  // Painted with the same rule the store uses when it is not handed a color, over the same
+  // activities, so a new activity is saved in the color it was shown in without the form
+  // passing it on: the store is the one place that decides.
+  const color = pickedColor ?? activity?.color ?? firstFreeColor(colorsInUse)
+
   // Fill the form in each time it opens, or opens onto another activity. Done while
   // rendering rather than in an effect, so the first frame of an open form is already
-  // right: from an effect the form was drawn on the first green and then turned to the
-  // free color. Keyed on what it was opened for, never on the list of activities, so one
-  // changing while the form is open does not count as opening it again and wipe a name
-  // half typed. Nothing is reset on the way out, so the form does not empty itself while
-  // the dialog is still leaving.
-  const openedFor = isOpen ? (activity ?? NEW_ACTIVITY) : null
-  const [filledFor, setFilledFor] = useState<Activity | typeof NEW_ACTIVITY | null>(null)
+  // right. Keyed on the activity's id: never on the list of activities, and not on the
+  // activity object either, so neither another activity changing nor this one coming
+  // back as a new object counts as opening the form again and wipes what was typed.
+  // Nothing is reset on the way out, so the form does not empty itself while the dialog
+  // is still leaving.
+  const openedFor = isOpen ? (activity?.id ?? NEW_ACTIVITY) : null
+  const [filledFor, setFilledFor] = useState<string | null>(null)
   if (openedFor !== filledFor) {
     setFilledFor(openedFor)
     if (openedFor !== null) {
-      // A new activity starts on a color nobody wears yet; an edited one keeps its own.
       setName(activity?.name || '')
-      setColor(activity?.color || firstFreeColor(colorsInUse))
+      setPickedColor(null)
       setLogForDate(false)
       setSelectedDate(formatDate(new Date()))
     }
@@ -76,8 +82,9 @@ export const ActivityForm = memo(function ActivityForm({
       if (isEditing && activity) {
         updateActivity(activity.id, { name: name.trim(), color })
       } else {
-        // Create the activity
-        addActivity(name.trim(), color)
+        // The color only if somebody picked one; otherwise the store gives it the free
+        // one, which is what the form has been showing.
+        addActivity(name.trim(), pickedColor ?? undefined)
 
         // If logForDate is enabled, log for the selected date
         if (logForDate) {
@@ -96,6 +103,7 @@ export const ActivityForm = memo(function ActivityForm({
     [
       name,
       color,
+      pickedColor,
       isEditing,
       activity,
       logForDate,
@@ -159,7 +167,7 @@ export const ActivityForm = memo(function ActivityForm({
 
         <ColorPicker
           value={color}
-          onChange={setColor}
+          onChange={setPickedColor}
           colors={ACTIVITY_COLORS}
           colorsInUse={colorsInUse}
           label="Color"

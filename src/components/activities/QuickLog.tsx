@@ -28,6 +28,8 @@ export const QuickLog = memo(function QuickLog() {
   // Every color already worn by an activity: this form only ever creates, so none of
   // them belongs to what is being edited.
   const colorsInUse = useMemo(() => activities.map((a) => a.color), [activities])
+  // Painted with the rule the store uses when it is not handed a color, over the same
+  // activities, so the activity is saved in the color it was shown in.
   const newColor = pickedColor ?? firstFreeColor(colorsInUse)
 
   const handleClose = useCallback(() => {
@@ -46,13 +48,18 @@ export const QuickLog = memo(function QuickLog() {
   const { shouldRender, isVisible } = useAnimatedPresence(isOpen, 250)
 
   // A half-made activity goes with the sheet. Closing it with the form open used to leave
-  // the form open, holding the color it was opened with, and the next day opened straight
-  // onto it. Once the sheet has finished leaving, not as it starts to, so the form does
-  // not fold up while it is still sliding away.
-  if (!shouldRender && (isCreating || newName !== '' || pickedColor !== null)) {
-    setIsCreating(false)
-    setNewName('')
-    setPickedColor(null)
+  // the form open, holding what was typed and picked, and the next day opened straight
+  // onto it. Cleared as the sheet opens again rather than as it closes: closing it there
+  // would fold the form up while the sheet is still sliding away, and waiting for the
+  // sheet to finish leaving let a quick close and reopen bring the form back.
+  const [wasOpen, setWasOpen] = useState(isOpen)
+  if (isOpen !== wasOpen) {
+    setWasOpen(isOpen)
+    if (isOpen) {
+      setIsCreating(false)
+      setNewName('')
+      setPickedColor(null)
+    }
   }
 
   /**
@@ -149,7 +156,9 @@ export const QuickLog = memo(function QuickLog() {
   const handleCreateActivity = useCallback((): void => {
     if (!newName.trim() || !selectedDate) return
 
-    addActivity(newName.trim(), newColor)
+    // The color only if somebody picked one; otherwise the store gives it the free one,
+    // which is what the form has been showing.
+    addActivity(newName.trim(), pickedColor ?? undefined)
 
     // Get the newly created activity (last one in the array)
     const updatedActivities = useCalendarStore.getState().activities
@@ -161,7 +170,7 @@ export const QuickLog = memo(function QuickLog() {
 
     setIsCreating(false)
     setNewName('')
-  }, [newName, newColor, selectedDate, addActivity, toggleLog])
+  }, [newName, pickedColor, selectedDate, addActivity, toggleLog])
 
   const handleKeyDown = useCallback(
     (e: React.KeyboardEvent<HTMLInputElement>): void => {

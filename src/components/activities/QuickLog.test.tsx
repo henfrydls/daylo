@@ -670,6 +670,34 @@ describe('QuickLog', () => {
       expect(screen.getByTestId('quicklog-color-orange')).toHaveAttribute('aria-checked', 'true')
     })
 
+    // The sheet takes a quarter of a second to leave. Clearing the half-made activity only
+    // once it had gone let a quick close and reopen bring back the form, the name and the
+    // color, on another day.
+    it('forgets a half-made activity even when another day opens before the sheet has left', async () => {
+      const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime })
+      setupStoreWithActivities()
+      render(<QuickLog />)
+
+      await user.click(screen.getByTestId('quicklog-new-activity-button'))
+      await user.type(screen.getByTestId('quicklog-new-activity-input'), 'Gym')
+      await user.click(screen.getByTestId('quicklog-color-red'))
+
+      act(() => useCalendarStore.setState({ selectedDate: null }))
+      act(() => {
+        vi.advanceTimersByTime(100)
+      })
+      // Still leaving, and still as it was: the form does not fold up on the way down.
+      expect(screen.getByTestId('quicklog-new-activity-input')).toHaveValue('Gym')
+
+      act(() => useCalendarStore.setState({ selectedDate: '2024-01-16' }))
+
+      expect(screen.queryByTestId('quicklog-new-activity-input')).not.toBeInTheDocument()
+
+      await user.click(screen.getByTestId('quicklog-new-activity-button'))
+      expect(screen.getByTestId('quicklog-new-activity-input')).toHaveValue('')
+      expect(screen.getByTestId('quicklog-color-pink')).toHaveAttribute('aria-checked', 'true')
+    })
+
     it('moves on to the next free color for the activity after that', async () => {
       const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime })
       setupStoreWithActivities()

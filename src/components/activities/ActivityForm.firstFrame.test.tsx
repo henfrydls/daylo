@@ -1,5 +1,6 @@
 import { describe, it, expect, vi } from 'vitest'
 import { render, screen } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
 import type { ReactNode } from 'react'
 import { ActivityForm } from './ActivityForm'
 import { useCalendarStore } from '../../store'
@@ -63,5 +64,18 @@ describe('the first frame of the form', () => {
 
     expect(changed).toEqual([])
     expect(screen.getByLabelText('Blue color')).toHaveAttribute('aria-checked', 'true')
+  })
+
+  // With the real store: what is saved is the color that was painted, though the form
+  // does not hand it over.
+  it('saves the color it showed', async () => {
+    useCalendarStore.setState({ activities: [green] })
+    render(<ActivityForm isOpen={true} onClose={() => {}} />)
+
+    await userEvent.type(screen.getByTestId('activity-name-input'), 'Read')
+    await userEvent.click(screen.getByTestId('activity-form-submit'))
+
+    const saved = useCalendarStore.getState().activities.find((a) => a.name === 'Read')
+    expect(saved?.color).toBe('#3B82F6')
   })
 })
