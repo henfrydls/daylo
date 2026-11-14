@@ -445,6 +445,57 @@ describe('what the new day leaves alone', () => {
       expect(isTodayIn('2026-11-13')).toBe(true)
       expect(sent()).toEqual(['2026-11-13', '2026-11-14'])
     })
+
+    /** The opening send held in the air until `land()` is called. */
+    function holdTheOpeningSend() {
+      let land = () => {}
+      tauriInvoke.mockImplementationOnce(
+        () =>
+          new Promise<void>((resolve) => {
+            land = () => resolve()
+          })
+      )
+      return () => land()
+    }
+
+    // Opened just before midnight on a slow network, and the window taken again just
+    // after it while the first send is still in the air. That return is a new day Daylo
+    // was opened on: it waits for the first send to finish, and then goes.
+    it('sends the new day once the send still in the air lands', async () => {
+      vi.setSystemTime(new Date(2026, 10, 13, 23, 59, 50))
+      const land = holdTheOpeningSend()
+      render(<App />)
+      await act(async () => {})
+      expect(sent()).toEqual(['2026-11-13'])
+
+      vi.setSystemTime(new Date(2026, 10, 14, 0, 0, 20))
+      await act(async () => {
+        window.dispatchEvent(new Event('focus'))
+      })
+      expect(sent()).toEqual(['2026-11-13'])
+
+      await act(async () => land())
+      await act(async () => {})
+
+      expect(sent()).toEqual(['2026-11-13', '2026-11-14'])
+    })
+
+    // The same return on the same day has nothing to add: the send in the air is that
+    // day's, and once a day is the rule whatever came back.
+    it('sends nothing more when the send in the air was for the same day', async () => {
+      const land = holdTheOpeningSend()
+      render(<App />)
+      await act(async () => {})
+      await act(async () => {
+        window.dispatchEvent(new Event('focus'))
+        show('visible')
+      })
+
+      await act(async () => land())
+      await act(async () => {})
+
+      expect(sent()).toEqual(['2026-11-13'])
+    })
   })
 
   it('does not ask for a newer version because the day changed', async () => {
