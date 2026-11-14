@@ -180,6 +180,20 @@ fn ask_for_exact_alarms() -> bool {
     android::ask_for_exact_alarms()
 }
 
+/// What a second launch does to the copy that is already running: shows its window, out
+/// of the taskbar if it was minimised, and in front. The second launch's arguments and
+/// working directory are not used, because Daylo takes none: no deep link, no file to
+/// open, nothing on its command line.
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
+fn bring_back_the_open_window(app: &tauri::AppHandle) {
+    use tauri::Manager;
+    if let Some(window) = app.get_webview_window("main") {
+        let _ = window.unminimize();
+        let _ = window.show();
+        let _ = window.set_focus();
+    }
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     // Before anything else, because everything else assumes a window can exist. Without
@@ -191,7 +205,29 @@ pub fn run() {
         webview2::explain_and_exit();
     }
 
-    let builder = tauri::Builder::default().plugin(tauri_plugin_shell::init());
+    let builder = tauri::Builder::default();
+
+    // First, before any other plugin, as the plugin asks: the second copy has to stop here,
+    // before anything else of it starts. Somebody who thinks Daylo has not refreshed opens
+    // it again, and two windows each holding their own copy of the days meant one of them
+    // could save over what was ticked in the other. Now the second launch brings back the
+    // window that is already open and goes away. Desktop only: Android and iOS already
+    // give an app one instance. See bring_back_the_open_window for what it is handed.
+    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+    let builder = builder.plugin(
+        tauri_plugin_single_instance::Builder::new()
+            // Linux only, where the plugin owns a name on the session bus. The Flatpak's
+            // own id rather than the bundle identifier, because the Flatpak sandbox lets
+            // an app own names under its own id and nothing else without a permission:
+            // io.github.henfrydls.daylo.SingleInstance needs none, com.daylo.app's would.
+            // The snap's common-id is the same id. Windows and macOS ignore this and use
+            // the bundle identifier.
+            .dbus_id("io.github.henfrydls.daylo")
+            .callback(|app, _argv, _cwd| bring_back_the_open_window(app))
+            .build(),
+    );
+
+    let builder = builder.plugin(tauri_plugin_shell::init());
 
     // The dialog goes everywhere it can open: the desktop and Android. What each platform
     // registers is also what tells the frontend where it is running, so the two sides

@@ -51,6 +51,15 @@ tauri-plugin-dialog = { version = "~2.7", default-features = false, features = [
 [target.'cfg(not(any(target_os = "android", target_os = "ios")))'.dependencies]
 tauri-plugin-opener = "2"
 
+# One copy of Daylo at a time on the desktop: a second launch brings back the window that
+# is already open instead of opening another one over the same data. See run() in
+# src/lib.rs.
+#
+# Held to 2.4 because 2.5 asks for tauri ^2.12 and this crate is held to 2.10; 2.4.5 asks
+# for ^2.10. There is no npm side to line up: the plugin has no JavaScript package, so
+# `tauri build` has no pair to check for it. Every crate it needs was already in the lock.
+tauri-plugin-single-instance = "~2.4"
+
 # The updater, and the relaunch that finishes it. Desktop only, and not by preference:
 # Tauri's updater does not exist on Android or iOS, where the store is the only route.
 #
