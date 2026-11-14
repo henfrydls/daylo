@@ -1,6 +1,7 @@
 import {
   useState,
   useEffect,
+  useCallback,
   useLayoutEffect,
   useMemo,
   useRef,
@@ -150,6 +151,33 @@ function App() {
   // at all. See where they are rendered for why it is not simply whether it is open.
   const [exportAsked, setExportAsked] = useState(false)
   const [importAsked, setImportAsked] = useState(false)
+  // The month whose line opened Import, and the line itself, so focus has somewhere to go
+  // back to. Settings passes a click event, not a line, and keeps its own focus.
+  const importOpener = useRef<{ line: HTMLElement; month: Element | null } | null>(null)
+  // From Settings and from the empty month. One function for the life of the app, so
+  // MonthView's memo holds.
+  const openImport = useCallback((opener?: unknown) => {
+    importOpener.current =
+      opener instanceof HTMLElement
+        ? {
+            line: opener,
+            month: opener.closest('[data-testid="month-empty-state"]')?.parentElement ?? null,
+          }
+        : null
+    setImportAsked(true)
+    setIsImportOpen(true)
+  }, [])
+  // When Import closes, focus goes back to the line if it is still there. An import that
+  // filled the calendar took the line away, and with it the focus, which fell to the page:
+  // the month's title was there before and is there after, so it goes there instead. A
+  // click that does not focus a button, as in Safari, needs the first half as much.
+  useEffect(() => {
+    const opener = importOpener.current
+    if (isImportOpen || opener === null) return
+    importOpener.current = null
+    const title = opener.month?.querySelector<HTMLElement>('[data-testid="month-title-button"]')
+    ;(opener.line.isConnected ? opener.line : title)?.focus()
+  }, [isImportOpen])
   const [isBottomSheetOpen, setIsBottomSheetOpen] = useState(false)
   // One surface for everything there is to decide, and one flag for it. Reminders first
   // when that is what was asked for, which is the only thing the menu still chooses.
@@ -597,7 +625,7 @@ function App() {
                   // remounts the views once, between gestures, never under a finger.
                   <div ref={railRef} className="relative">
                     <DayScope day={shownDay}>
-                      {currentView === 'year' ? <YearView /> : <MonthView />}
+                      {currentView === 'year' ? <YearView /> : <MonthView onImport={openImport} />}
                     </DayScope>
                     <div
                       ref={otherRef}
@@ -610,7 +638,11 @@ function App() {
                       inert
                     >
                       <DayScope day={shownDay}>
-                        {currentView === 'year' ? <MonthView /> : <YearView />}
+                        {currentView === 'year' ? (
+                          <MonthView onImport={openImport} />
+                        ) : (
+                          <YearView />
+                        )}
                       </DayScope>
                     </div>
                   </div>
@@ -629,7 +661,7 @@ function App() {
                     {/* Inside the view's own key, so a new day does not play the change of
                         view again. */}
                     <DayScope day={shownDay}>
-                      {currentView === 'year' ? <YearView /> : <MonthView />}
+                      {currentView === 'year' ? <YearView /> : <MonthView onImport={openImport} />}
                     </DayScope>
                   </div>
                 )}
@@ -784,10 +816,7 @@ function App() {
               setExportAsked(true)
               setIsExportOpen(true)
             }}
-            onImport={() => {
-              setImportAsked(true)
-              setIsImportOpen(true)
-            }}
+            onImport={openImport}
             onFeedback={askForFeedback}
             hasReminders={hasReminders}
             canCheckIn={canCheckIn}
