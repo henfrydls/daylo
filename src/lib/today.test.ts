@@ -233,6 +233,28 @@ describe('useToday', () => {
       expect(result.current).toBe('2026-11-13')
     })
 
+    // The landing ends by telling the store which view it reached: a day that came in
+    // halfway would have its Month written over.
+    it('waits while the views are on their way from one to the other', () => {
+      vi.setSystemTime(at(13, 23, 59, 59))
+      const { result } = renderHook(() => useToday())
+      const rail = document.createElement('div')
+      rail.setAttribute('data-between-views', '')
+      document.body.appendChild(rail)
+
+      act(() => {
+        touch()
+        vi.advanceTimersByTime(3_000)
+      })
+      expect(result.current).toBe('2026-11-13')
+
+      act(() => {
+        rail.removeAttribute('data-between-views')
+        vi.advanceTimersByTime(5_000)
+      })
+      expect(result.current).toBe('2026-11-14')
+    })
+
     it('waits while somebody is typing in a field', () => {
       vi.setSystemTime(at(13, 23, 59, 50))
       const { result } = renderHook(() => useToday())

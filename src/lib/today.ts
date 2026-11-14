@@ -35,8 +35,16 @@ const LOOK_AGAIN_EVERY = 5_000
  */
 const READ_THE_CLOCK_EVERY = 30_000
 
-/** Every sheet and dialog in Daylo marks itself with one of these. */
-const SOMETHING_OPEN = '[role="dialog"], [aria-modal="true"]'
+/**
+ * Set on the views while they are on their way from one to the other: from the moment the
+ * one beside comes into sight until the rail has landed. The landing ends by telling the
+ * store which view it reached, and a new day that came in halfway would have its own view
+ * written over by it.
+ */
+export const BETWEEN_VIEWS = 'data-between-views'
+
+/** Every sheet and dialog in Daylo marks itself with one of these; the views in motion too. */
+const SOMETHING_OPEN = `[role="dialog"], [aria-modal="true"], [${BETWEEN_VIEWS}]`
 
 /** Inputs that take typing. A checkbox or a button with the focus is not somebody writing. */
 const NOT_TYPING = new Set([
