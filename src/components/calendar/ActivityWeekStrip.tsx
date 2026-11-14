@@ -1,6 +1,7 @@
 import { memo, useMemo } from 'react'
 import { buildWeekBlocks } from '../../lib/weekBlocks'
 import { formatDate } from '../../lib/dates'
+import { plural } from '../../lib/plural'
 
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
 
@@ -52,7 +53,7 @@ export const ActivityWeekStrip = memo(function ActivityWeekStrip({
           {name}
         </span>
         <span className="text-xs whitespace-nowrap text-gray-500">
-          {days} {days === 1 ? 'day' : 'days'} · {streak} streak
+          {days} {plural(days, 'day', 'days')} · {streak} streak
         </span>
       </div>
 

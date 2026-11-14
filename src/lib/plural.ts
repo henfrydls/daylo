@@ -4,7 +4,8 @@
  * first day, with one activity and one day done.
  *
  * English only, because the app is: the day it speaks another language this is the one
- * place to change. Settings has its own `say` with the same shape.
+ * place to change, which is why every count in the app goes through it rather than its
+ * own ternary.
  */
 export function plural(count: number, one: string, many: string): string {
   return count === 1 ? one : many

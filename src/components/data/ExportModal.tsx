@@ -3,6 +3,7 @@ import { Modal, Button, useToast } from '../ui'
 import { useCalendarStore } from '../../store'
 import { exportToJSON, exportToCSV, generateExportFilename } from '../../lib/dataExport'
 import { saveTextFile, formatSavedMessage } from '../../lib/fileSave'
+import { plural } from '../../lib/plural'
 
 interface ExportModalProps {
   isOpen: boolean
@@ -110,11 +111,11 @@ export function ExportModal({ isOpen, onClose }: ExportModalProps) {
             <ul className="space-y-1">
               <li className="flex items-center gap-2">
                 <span className="w-2 h-2 rounded-full bg-emerald-500" />
-                {activities.length} {activities.length === 1 ? 'activity' : 'activities'}
+                {activities.length} {plural(activities.length, 'activity', 'activities')}
               </li>
               <li className="flex items-center gap-2">
                 <span className="w-2 h-2 rounded-full bg-blue-500" />
-                {logs.length} {logs.length === 1 ? 'log entry' : 'log entries'}
+                {logs.length} {plural(logs.length, 'log entry', 'log entries')}
               </li>
             </ul>
           </div>

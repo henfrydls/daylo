@@ -58,7 +58,7 @@ export const YearByActivity = memo(function YearByActivity({
             />
             <span className="text-sm font-semibold text-gray-800">{activity.name}</span>
             <span className="text-xs text-gray-500">
-              {days} {days === 1 ? 'day' : 'days'} · {streak} day streak
+              {days} {plural(days, 'day', 'days')} · {streak} day streak
             </span>
           </div>
 
