@@ -1,4 +1,4 @@
-import { useState, useEffect, useEffectEvent, useCallback, useMemo, memo } from 'react'
+import { useState, useCallback, useMemo, memo } from 'react'
 import { Button, Checkbox, ColorPicker, Modal } from '../ui'
 import { ACTIVITY_COLORS, firstFreeColor } from '../../lib/colors'
 import { useCalendarStore } from '../../store'
@@ -18,6 +18,9 @@ interface ActivityFormProps {
  * renders fine and does nothing, which is how four tests caught it.
  */
 const FORM_ID = 'activity-form'
+
+/** What an open form with no activity was opened for: making a new one. */
+const NEW_ACTIVITY = 'new'
 
 export const ActivityForm = memo(function ActivityForm({
   isOpen,
@@ -39,23 +42,25 @@ export const ActivityForm = memo(function ActivityForm({
     [activities, activity?.id]
   )
 
-  // A new activity starts on a color nobody wears yet; an edited one keeps its own. Read
-  // as an effect event so that the activities changing while the form is open do not
-  // count as opening it again, which would wipe a name half typed.
-  const startingColor = useEffectEvent(() => activity?.color || firstFreeColor(colorsInUse))
-
-  // Sync form state with activity prop when modal opens or activity changes
-  // This is a valid pattern for controlled form initialization
-  useEffect(() => {
-    if (isOpen) {
-      /* eslint-disable react-hooks/set-state-in-effect */
+  // Fill the form in each time it opens, or opens onto another activity. Done while
+  // rendering rather than in an effect, so the first frame of an open form is already
+  // right: from an effect the form was drawn on the first green and then turned to the
+  // free color. Keyed on what it was opened for, never on the list of activities, so one
+  // changing while the form is open does not count as opening it again and wipe a name
+  // half typed. Nothing is reset on the way out, so the form does not empty itself while
+  // the dialog is still leaving.
+  const openedFor = isOpen ? (activity ?? NEW_ACTIVITY) : null
+  const [filledFor, setFilledFor] = useState<Activity | typeof NEW_ACTIVITY | null>(null)
+  if (openedFor !== filledFor) {
+    setFilledFor(openedFor)
+    if (openedFor !== null) {
+      // A new activity starts on a color nobody wears yet; an edited one keeps its own.
       setName(activity?.name || '')
-      setColor(startingColor())
+      setColor(activity?.color || firstFreeColor(colorsInUse))
       setLogForDate(false)
       setSelectedDate(formatDate(new Date()))
-      /* eslint-enable react-hooks/set-state-in-effect */
     }
-  }, [isOpen, activity])
+  }
 
   const addActivity = useCalendarStore((state) => state.addActivity)
   const updateActivity = useCalendarStore((state) => state.updateActivity)
@@ -84,7 +89,7 @@ export const ActivityForm = memo(function ActivityForm({
         }
       }
 
-      // Don't reset state here — the useEffect on isOpen handles it
+      // Don't reset state here: it is filled in again when the modal reopens
       // Resetting before onClose causes a flash of "New Activity" during exit animation
       onClose()
     },
@@ -103,7 +108,7 @@ export const ActivityForm = memo(function ActivityForm({
   )
 
   const handleClose = useCallback((): void => {
-    // Don't reset state here — the useEffect on isOpen handles it when modal reopens
+    // Don't reset state here: it is filled in again when the modal reopens
     onClose()
   }, [onClose])
 
