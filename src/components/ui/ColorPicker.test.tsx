@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import { describe, it, expect, vi } from 'vitest'
 import { render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
@@ -133,6 +134,24 @@ describe('a collapsed picker whose color is past the visible row', () => {
     const shown = screen.getAllByRole('radio').map((r) => r.getAttribute('aria-label'))
     expect(shown).toEqual(['C0 color', 'C1 color', 'C2 color', 'C3 color', 'C11 color'])
     expect(screen.getByRole('radio', { name: 'C11 color' })).toHaveAttribute('aria-checked', 'true')
+  })
+
+  // The slot the chosen color took is under somebody's finger. If it changed the moment
+  // another color in the row was tapped, a second tap in the same place would choose
+  // something else.
+  it('keeps the last place still while the picker is open, through two taps in a row', async () => {
+    function Controlled() {
+      const [value, setValue] = useState(SIXTEEN[7].value)
+      return <ColorPicker value={value} onChange={setValue} colors={SIXTEEN} collapsedCount={5} />
+    }
+    render(<Controlled />)
+    const row = () => screen.getAllByRole('radio').map((r) => r.getAttribute('aria-label'))
+
+    await userEvent.click(screen.getByRole('radio', { name: 'C1 color' }))
+    expect(row()).toEqual(['C0 color', 'C1 color', 'C2 color', 'C3 color', 'C7 color'])
+
+    await userEvent.click(screen.getAllByRole('radio')[4])
+    expect(screen.getByRole('radio', { name: 'C7 color' })).toHaveAttribute('aria-checked', 'true')
   })
 
   it('leaves the row alone when the chosen color is already in it', () => {

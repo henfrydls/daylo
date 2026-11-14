@@ -32,7 +32,7 @@ export const ACTIVITY_COLORS = [
  * "#1B9", which an import accepts, and read as written the first is not the #10B981 the
  * palette calls green.
  */
-function canonicalHex(color: string): string {
+export function canonicalHex(color: string): string {
   const hex = color.trim().toUpperCase()
   return /^#[0-9A-F]{3}$/.test(hex)
     ? `#${hex[1]}${hex[1]}${hex[2]}${hex[2]}${hex[3]}${hex[3]}`
@@ -55,7 +55,8 @@ export function sameColor(a: string, b: string): boolean {
  * one is offered, as before: repeating a color is allowed, just unhelpful.
  */
 export function firstFreeColor(colorsInUse: readonly string[]): string {
-  const free = ACTIVITY_COLORS.find((c) => !colorsInUse.some((used) => sameColor(used, c.value)))
+  const taken = new Set(colorsInUse.map(canonicalHex))
+  const free = ACTIVITY_COLORS.find((c) => !taken.has(canonicalHex(c.value)))
   return (free ?? ACTIVITY_COLORS[0]).value
 }
 
