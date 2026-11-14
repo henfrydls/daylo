@@ -91,8 +91,8 @@ describe('turning the reminder on', () => {
     expect(scheduled()).toEqual({
       options: expect.objectContaining({
         id: REMINDER_ID,
-        // An interval matching hour and minute, which Android re-arms on its own and the
-        // plugin restores after a reboot. Not Schedule.at: with repeating it computes the
+        // An interval matching hour and minute, which the plugin re-arms each day and
+        // restores after a restart or an update. Not Schedule.at: with repeating it computes the
         // repeat gap as the time left until the first fire, so a reminder set at 20:00 for
         // 21:00 would repeat hourly.
         schedule: { interval: { hour: 21, minute: 0, second: 0 }, allowWhileIdle: true },
@@ -185,11 +185,11 @@ describe('when the last activity goes', () => {
   /**
    * The case every real phone is in, and the one the old code could not act on.
    *
-   * getPending reads the plugin's own store, and that store is only ever written by the
+   * getPending reads the plugin's own store, and that store was only ever written by the
    * Kotlin `batch` path. Daylo schedules through `notify`, which reaches `show`, and `show`
-   * writes nothing. So `pending()` answers `[]` on a phone with the reminder live and
-   * ringing every night, and the old condition read that as "nothing of ours is scheduled"
-   * and cancelled nothing. Somebody who deleted their last activity went on being asked how
+   * wrote nothing, before the patched plugin in 1.5.3. So `pending()` answered `[]` on a
+   * phone with the reminder live and ringing every night, and the old condition read that
+   * as "nothing of ours is scheduled" and cancelled nothing. Somebody who deleted their last activity went on being asked how
    * the day went, over an app with nothing left in it.
    */
   it('takes the reminder down even though the phone lists nothing', async () => {

@@ -192,8 +192,8 @@ async function putOnTheQueue(hour: number, minute: number): Promise<string | nul
 /**
  * Turn the daily reminder on at the given local time.
  *
- * The schedule is an interval matching an hour and a minute, which Android re-arms by
- * itself. It does not survive a reboot: see refreshReminder, which is what brings it back.
+ * The schedule is an interval matching an hour and a minute, which the plugin re-arms by
+ * itself each day, and after a restart or an update of Daylo: see refreshReminder.
  * allowWhileIdle is set because without it the alarm will not wake a dozing phone, and an
  * evening reminder that waits for the phone to be picked up is no reminder at all.
  *
@@ -252,11 +252,18 @@ export async function enableReminder(hour: number, minute: number): Promise<Remi
 /**
  * Arm an already-enabled reminder again, without asking for anything.
  *
- * A reboot takes the reminder away and nothing brings it back on its own. The plugin has a
- * receiver for BOOT_COMPLETED, and it restores whatever is in its own store, and its store
- * is empty: a notification scheduled through `show`, which is the only path the Rust API
- * offers, is never written there. Only `batch` writes, and nothing reaches `batch`. So the
- * one thing that puts the alarm back after a restart is Daylo being opened, which is this.
+ * A restart used to take the reminder away until Daylo was opened again, which is what
+ * this was first for. The plugin has a receiver for BOOT_COMPLETED that restores whatever
+ * is in its own store, and the store was always empty: `show`, the only path the Rust API
+ * offers, wrote nothing. The patched copy pinned in src-tauri/Cargo.toml writes it now, and
+ * the same receiver also runs when Daylo is updated, so a restart or an update puts the
+ * reminder back without the app being opened.
+ *
+ * Only for a reminder stored by a build with that fix, though. One armed by 1.5.2 or
+ * earlier is not in the store until something schedules it again, and this call is that
+ * something: opening Daylo once after updating is what makes the reminder restorable. That
+ * matters most for the update that stops asking for exact alarms, because Android removes
+ * the exact alarm on that update and only the store can bring it back.
  *
  * It also puts the switch back in step with the phone: a permission taken away in the
  * system settings leaves nothing scheduled, and this is how the app finds out. Returns
@@ -280,7 +287,11 @@ export async function refreshReminder(hour: number, minute: number): Promise<boo
   return (await putOnTheQueue(hour, minute)) === null
 }
 
-/** Turn it off. Silent if it was never on. */
+/**
+ * Turn it off. Silent if it was never on.
+ *
+ * Cancelling also takes it out of the plugin's store, so a restart cannot bring it back.
+ */
 export async function disableReminder(): Promise<void> {
   if (!(await remindersAvailable())) {
     return
@@ -296,10 +307,10 @@ export async function disableReminder(): Promise<void> {
  * uninstalled.
  *
  * It used to ask the phone what was scheduled first, and that question was the bug. The
- * plugin answers it from its own store, and that store is only ever written by the Kotlin
- * `batch` path: Daylo schedules through `notify`, which reaches `show`, and `show` writes
+ * plugin answers it from its own store, and that store was only ever written by the Kotlin
+ * `batch` path: Daylo schedules through `notify`, which reaches `show`, and `show` wrote
  * nothing. So on a real phone, with the reminder live and ringing every night, `pending()`
- * answers with an empty list, the old condition read that as "nothing of ours is
+ * answered with an empty list, the old condition read that as "nothing of ours is
  * scheduled", and nothing was cancelled. The one case this function exists for was the one
  * case it could not act in, for the whole of its life.
  *
@@ -308,8 +319,9 @@ export async function disableReminder(): Promise<void> {
  * one that was never scheduled costs nothing. The old comment argued for exactly this and
  * then wrote a condition that did the opposite.
  *
- * The same empty store is why a reboot takes the reminder with it, which is known and
- * deliberate; see refreshReminder.
+ * That store is written by `show` now, in the patched plugin, so `pending()` would no
+ * longer answer empty. Asking it again would still be a question with nothing to decide;
+ * see refreshReminder for what the store is for.
  */
 export async function reconcileReminder(activityCount: number): Promise<void> {
   if (activityCount > 0 || !(await remindersAvailable())) {
