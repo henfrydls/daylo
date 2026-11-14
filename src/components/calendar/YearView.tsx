@@ -13,6 +13,7 @@ import { completedDates, summariseActivities } from '../../lib/activityYear'
 import { currentStreak } from '../../lib/streaks'
 import { useMediaQuery } from '../../hooks/useMediaQuery'
 import { useShallow } from 'zustand/react/shallow'
+import { plural } from '../../lib/plural'
 
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
 export const YearView = memo(function YearView() {
@@ -387,16 +388,17 @@ export const YearView = memo(function YearView() {
             <div className="mt-6 flex flex-wrap justify-between gap-6 border-t border-gray-100 pt-4 text-sm text-gray-500">
               <div className="flex flex-wrap gap-6">
                 <div>
-                  <span className="font-medium text-gray-700">{activeDays}</span> active days
+                  <span className="font-medium text-gray-700">{activeDays}</span>{' '}
+                  {plural(activeDays, 'active day', 'active days')}
                 </div>
                 <div>
                   <span className="font-medium text-gray-700">{completedLogsCount}</span>{' '}
-                  completions this year
+                  {plural(completedLogsCount, 'completion', 'completions')} this year
                 </div>
               </div>
               <div>
-                <span className="font-medium text-gray-700">{activities.length}</span> activities
-                tracked
+                <span className="font-medium text-gray-700">{activities.length}</span>{' '}
+                {plural(activities.length, 'activity', 'activities')} tracked
               </div>
             </div>
 
