@@ -3,6 +3,64 @@
 What changed in each release, for the people who use Daylo. Earlier versions are not
 listed: this file starts at 1.1.2, when the first change worth warning about arrived.
 
+## 1.5.3
+
+**On Android, the button that offers a new version now downloads Daylo itself.** It used
+to open the Daylo website, where the one file for your phone sits among the ones for
+Windows, Mac and Linux, and finding it was your errand. Now the download starts straight
+away, and it is the version the message just named rather than whatever happens to be
+newest that minute.
+
+**Daylo now opens on today.** It used to open wherever you left it, so if you had been
+looking back at March, March is what you saw when you came back, with today a swipe away
+and nothing to tell you. If a day was open when you closed it, that came back too, over a
+day that was no longer the day. The same went for the year: one tap on Year, or one
+sideways swipe on a phone, and Daylo kept opening there, where there is no Today bar and
+no quick way to tick today off. It opens on this month now, and the year is one tap away.
+How you like the year read is still remembered.
+
+**Daylo now notices that a new day has started, even if you never closed it.** Before, if you ticked your habit in the evening and left Daylo open overnight, the next morning it still showed yesterday as today, with your habit already marked as done. Now it moves to today, on the month view, as soon as you come back to it, or at midnight if you are looking at it. If you are writing something when the day changes, you do not lose it: Daylo stays on the old day until you save it or clear it.
+
+**On a phone, the list the green button opens now scrolls with your finger.** With several
+activities it is taller than the screen, and it used to stay put: pushing it up did nothing,
+pulling it down closed it, and whatever was at the bottom, including your statistics, could
+not be reached. Now it moves like any list. Pulling it down once you are back at the top
+closes it, as does the grey bar at the top or a tap above it.
+
+**On a computer, the pointer now turns into a hand over anything you can press.** It stayed
+an arrow over the days, the buttons and the switches, so nothing on the screen looked like
+it could be clicked.
+
+**Each new activity now starts on a color you are not using yet.** Every one used to start
+on the same green, so two or three made without stopping at the colors all came out alike,
+and their dots in the month could not be told apart. Colors brought in from a backup count
+too, however they were written. You can still pick any color you like, including one
+already taken.
+
+**Counts of one now read as one.** The calendar said "1 active days" and "1/1 activities",
+which is exactly what everybody saw on their first day, and restoring a backup asked whether
+to replace "1 activities, 1 logs". They read "1 active day", "1/1 activity" and "1 activity,
+1 log" now, in the year summary, on the Today bar, when restoring a backup and in what a
+screen reader says for each day.
+
+**On Android, the evening reminder now comes back by itself after the phone restarts or
+Daylo updates.** Until now a restart took it away, and it stayed away until you opened
+Daylo again: the switch still said on, but no reminder came. That missed exactly the
+evenings when you had not opened the app, which are the ones the reminder is for. Open
+Daylo once after installing this version, and from then on a restart or an update keeps
+your reminder where you set it.
+
+**An empty Daylo now offers to bring your backup back.** After reinstalling, moving to a new
+phone, or getting Daylo from somewhere else, the app opened looking like the very first
+day, and nothing said a backup could come back: Import was behind the gear, in Settings.
+It was easy to start again by hand instead. Now the empty month says "Used Daylo before?
+Import your backup." right under the calendar, and it goes away as soon as you have an
+activity.
+
+**When Daylo cannot save, it now tells you clearly, and the warning stays until you close it.** Before, if your device refused to save, for example because it was full, a short note appeared in Spanish and vanished after three seconds. Now it tells you to open Settings and export a backup, and it waits for you. It goes away by itself once saving works again, and if you close it while saving keeps failing, it tells you again the next time saving fails, once five minutes have passed.
+
+**Opening Daylo again brings back the window that is already open.** Before, opening Daylo a second time on a computer opened a second window, and one window could save over what you marked in the other, so a day you ticked could quietly come back unticked. Now opening Daylo again brings back the window you already have, even if it was minimised. This doesn't apply yet to the Snap Store version. In a browser, keep Daylo open in a single tab.
+
 ## 1.5.2
 
 **With the anonymous check-in off, Daylo now sends nothing at all until you answer its
