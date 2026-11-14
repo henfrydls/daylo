@@ -1,7 +1,7 @@
 import { create } from 'zustand'
 import { persist, createJSONStorage, type StateStorage } from 'zustand/middleware'
 import type { Activity, ActivityLog } from '../types'
-import { formatDate, generateId } from '../lib/dates'
+import { formatDate, generateId, parseDateString } from '../lib/dates'
 import { firstFreeColor } from '../lib/colors'
 // Import estatico a proposito: Toast.tsx ya importa este modulo de forma estatica,
 // asi que un import() dinamico aqui no partiria el bundle -- solo retrasaria el aviso.
@@ -274,8 +274,11 @@ interface CalendarState {
   setYearMode: (mode: 'all' | 'byActivity') => void
   setSelectedMonth: (month: number) => void
   navigateToMonth: (year: number, month: number) => void
-  /** The day changed with the app open: Month, on the month that holds it, with no sheet. */
-  startNewDay: () => void
+  /**
+   * The day changed with the app open: Month, on the month that holds it, with no sheet.
+   * Given the day that was applied, `YYYY-MM-DD`, so there is one answer to what it is.
+   */
+  startNewDay: (day: string) => void
 
   // Reminder
   setReminder: (enabled: boolean, hour?: number, minute?: number) => void
@@ -538,11 +541,11 @@ export const useCalendarStore = create<CalendarState>()(
       // desktop, is not treated differently from one opened this morning. With no drill
       // animation: nobody drilled anywhere. The session flags are not touched: they pair
       // with state in App that does not start again with the day.
-      startNewDay: () => {
-        const now = new Date()
+      startNewDay: (day) => {
+        const date = parseDateString(day)
         set({
-          selectedYear: now.getFullYear(),
-          selectedMonth: now.getMonth(),
+          selectedYear: date.getFullYear(),
+          selectedMonth: date.getMonth(),
           selectedDate: null,
           currentView: 'month',
           _viewTransitionDirection: null,

@@ -227,7 +227,7 @@ function App() {
   useLayoutEffect(() => {
     if (today === shownDay) return
     // Before the paint, so no frame shows the old month under the new day.
-    useCalendarStore.getState().startNewDay()
+    useCalendarStore.getState().startNewDay(today)
     /* eslint-disable react-hooks/set-state-in-effect */
     setShownDay(today)
     /* eslint-enable react-hooks/set-state-in-effect */
