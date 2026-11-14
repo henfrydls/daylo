@@ -59,6 +59,10 @@ on:
         description: 'Full SHA of the commit the reminder measurement compares against (1.5.3 before #235)'
         type: string
         default: 'a797fcf552de526557f1bbc30f496d8dd9ab6ae1'
+      measure_sheet_gestures:
+        description: 'Measure the Activities sheet gestures in the Android WebView, on an emulator, instead of the installers'
+        type: boolean
+        default: false
 
 # Declared for the whole workflow rather than per job, so a job added later cannot quietly
 # inherit the repository defaults. Nothing here publishes: it reads the code, builds it,
@@ -84,6 +88,7 @@ jobs:
       (github.event_name == 'workflow_dispatch' || github.event.label.name == 'build-installers')
       && !inputs.debug_apk
       && !inputs.measure_reminder
+      && !inputs.measure_sheet_gestures
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
@@ -148,6 +153,7 @@ jobs:
       (github.event_name == 'workflow_dispatch' || github.event.label.name == 'build-installers')
       && !inputs.debug_apk
       && !inputs.measure_reminder
+      && !inputs.measure_sheet_gestures
     strategy:
       fail-fast: false
       matrix:
@@ -264,6 +270,7 @@ jobs:
           || github.event.pull_request.head.repo.full_name == github.repository)
       && !inputs.debug_apk
       && !inputs.measure_reminder
+      && !inputs.measure_sheet_gestures
     runs-on: ubuntu-latest
     timeout-minutes: 60
 
@@ -759,6 +766,7 @@ jobs:
       (github.event_name == 'workflow_dispatch' || github.event.label.name == 'build-installers')
       && !inputs.debug_apk
       && !inputs.measure_reminder
+      && !inputs.measure_sheet_gestures
     runs-on: ubuntu-24.04
     name: Test build (snap)
     timeout-minutes: 30
@@ -849,14 +857,17 @@ jobs:
   #
   # WHAT IT IS NOT: a check. It runs only when asked for, publishes nothing, and both APKs
   # are debug builds signed with the runner's throwaway debug key.
+  #
+  # The gestures measurement below uses the same test APK and does not need a control, so
+  # when it runs alone only the test leg is built.
   build-measure-apks:
-    name: Reminder measurement APK (${{ matrix.which }})
-    if: github.event_name == 'workflow_dispatch' && inputs.measure_reminder
+    name: Measurement APK (${{ matrix.which }})
+    if: github.event_name == 'workflow_dispatch' && (inputs.measure_reminder || inputs.measure_sheet_gestures)
     runs-on: ubuntu-latest
     timeout-minutes: 60
     strategy:
       matrix:
-        which: [test, control]
+        which: ${{ fromJSON(inputs.measure_reminder && '["test", "control"]' || '["test"]') }}
 
     steps:
       - name: Checkout repository
@@ -971,5 +982,67 @@ jobs:
         with:
           name: reminder-measurement
           path: measure-a/
+          retention-days: 7
+          if-no-files-found: warn
+
+  # ── The Activities sheet's gestures in Android's WebView (#232) ─────────────
+  #
+  # WHY IT EXISTS: #232 changed how the Activities sheet closes when it is dragged from
+  # its list, and everything it measured was Chromium with touches sent over CDP. Two
+  # things are only known in Android's own WebView: whether the page is handed the moves
+  # inside Android's touch slop, and whether the list stretches under a sheet being pulled
+  # down. A phone cannot be used without uninstalling Daylo and losing its data; the
+  # emulator is a real Android WebView.
+  #
+  # Run it with:
+  #
+  #   gh workflow run "Test build" --ref <branch> -f measure_sheet_gestures=true
+  #
+  # The touches come from Android (`input motionevent`), the readings from the WebView's
+  # DevTools, and the gestures and what each one has to show are listed at the top of
+  # android-measure-sheet-gestures.sh. summary.txt in the artifact has one line per
+  # gesture.
+  #
+  # THE CHECK-IN: the same guard as measurement A, from the same action and the same
+  # functions: the network off and seen to be off before the install, the emulator's own
+  # packet capture, and logcat.
+  #
+  # WHAT IT IS NOT: a check. It runs only when asked for, publishes nothing, and the APK is
+  # a debug build signed with the runner's throwaway debug key.
+  measure-sheet-gestures:
+    name: Sheet gestures measurement (emulator)
+    needs: build-measure-apks
+    if: github.event_name == 'workflow_dispatch' && inputs.measure_sheet_gestures
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Fetch the test APK
+        uses: actions/download-artifact@v4
+        with:
+          name: measure-apk-test
+          path: apks
+
+      # 22 for the global WebSocket cdp-eval.mjs talks to the WebView with.
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Measure
+        uses: ./.github/actions/android-emulator-measure
+        with:
+          script: bash .github/scripts/android-measure-sheet-gestures.sh apks/daylo-test.apk measure-gestures
+          out: measure-gestures
+
+      - name: Upload what was measured
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: sheet-gestures-measurement
+          path: measure-gestures/
           retention-days: 7
           if-no-files-found: warn
