@@ -423,7 +423,20 @@ describe('starting a new day', () => {
     expect(state.selectedDate).toBeNull()
   })
 
-  it('leaves the view and the session alone', () => {
+  // The same place a fresh start opens on: Month, where today is ticked. An app that stays
+  // alive overnight, in the background on Android or open on a desktop, would otherwise
+  // greet the new day on whatever view it was left on, and a cold start would not.
+  it('goes back to Month, as opening the app does', () => {
+    useCalendarStore.setState({ currentView: 'year', _viewTransitionDirection: 'drill-up' })
+
+    useCalendarStore.getState().startNewDay()
+
+    expect(useCalendarStore.getState().currentView).toBe('month')
+    // Not the drill animation the last change of view left behind.
+    expect(useCalendarStore.getState()._viewTransitionDirection).toBeNull()
+  })
+
+  it('leaves the session alone', () => {
     useCalendarStore.setState({
       currentView: 'year',
       _feedbackAsked: true,
@@ -436,7 +449,6 @@ describe('starting a new day', () => {
     useCalendarStore.getState().startNewDay()
 
     const state = useCalendarStore.getState()
-    expect(state.currentView).toBe('year')
     expect(state._feedbackAsked).toBe(true)
     expect(state._loggedThisSession).toBe(true)
     expect(state._offerThisSession).toBe('reminder')

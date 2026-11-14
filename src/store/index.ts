@@ -274,7 +274,7 @@ interface CalendarState {
   setYearMode: (mode: 'all' | 'byActivity') => void
   setSelectedMonth: (month: number) => void
   navigateToMonth: (year: number, month: number) => void
-  /** The day changed with the app open: to the month that holds it, with no day sheet. */
+  /** The day changed with the app open: Month, on the month that holds it, with no sheet. */
   startNewDay: () => void
 
   // Reminder
@@ -532,12 +532,21 @@ export const useCalendarStore = create<CalendarState>()(
         }),
 
       // Where somebody was yesterday is not where they want to be today, and yesterday's
-      // sheet left open would let them tick yesterday believing it was today. Only those
-      // three: the view is a choice they made, and the session flags pair with state in
-      // App that does not start again with the day.
+      // sheet left open would let them tick yesterday believing it was today. The new day
+      // starts where opening the app starts: Month, on the month that holds today, with no
+      // sheet. An app that stays alive overnight, in the background on Android or open on a
+      // desktop, is not treated differently from one opened this morning. With no drill
+      // animation: nobody drilled anywhere. The session flags are not touched: they pair
+      // with state in App that does not start again with the day.
       startNewDay: () => {
         const now = new Date()
-        set({ selectedYear: now.getFullYear(), selectedMonth: now.getMonth(), selectedDate: null })
+        set({
+          selectedYear: now.getFullYear(),
+          selectedMonth: now.getMonth(),
+          selectedDate: null,
+          currentView: 'month',
+          _viewTransitionDirection: null,
+        })
       },
 
       getLogsForDate: (date) => {

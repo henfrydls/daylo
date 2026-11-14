@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { act, render, screen, waitForElementToBeRemoved, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import App from './App'
-import { useCalendarStore } from './store'
+import { useCalendarStore, STORAGE_KEY } from './store'
 import { formatDate } from './lib/dates'
 
 /**
@@ -198,6 +198,18 @@ describe('the morning after, with the app left open', () => {
 
     // Thirteen days out of fourteen.
     expect(within(panel()).getByText('93%')).toBeInTheDocument()
+  })
+
+  it('goes back to Month, on the month of the new day, from the year view', async () => {
+    useCalendarStore.setState({ currentView: 'year', selectedMonth: 3 })
+    render(<App />)
+    await act(async () => {})
+
+    await theNextMorningComes(2026, 10, 14)
+
+    expect(useCalendarStore.getState().currentView).toBe('month')
+    expect(screen.getByTestId('month-title-button')).toHaveTextContent('November 2026')
+    expect(isTodayIn('2026-11-14')).toBe(true)
   })
 
   it('does nothing when the window comes back on the same day', async () => {
@@ -448,5 +460,54 @@ describe('what the new day leaves alone', () => {
     await theNextMorningComes(2026, 10, 14)
 
     expect(screen.getByTestId('settings')).toBeInTheDocument()
+  })
+})
+
+/**
+ * The other way a day arrives: Daylo closed last night and opened this morning. Saved last
+ * night on the year view with the sheet of last night open, it opens on today, on Month,
+ * with no sheet: the same place the app goes to when the day changes with it open. The real
+ * clock, because the store's first state is made from it when the module loads.
+ */
+describe('opening the app the morning after', () => {
+  it('opens on today, on Month, with no sheet, whatever was left open last night', async () => {
+    vi.useRealTimers()
+    const yesterday = new Date()
+    yesterday.setDate(yesterday.getDate() - 1)
+    const today = formatDate(new Date())
+    useCalendarStore.setState(useCalendarStore.getInitialState(), true)
+    await new Promise((resolve) => setTimeout(resolve, 20))
+    localStorage.clear()
+    localStorage.setItem(
+      STORAGE_KEY,
+      JSON.stringify({
+        state: {
+          activities: [READ],
+          logs: [done(formatDate(yesterday))],
+          selectedDate: formatDate(yesterday),
+          selectedMonth: yesterday.getMonth(),
+          selectedYear: yesterday.getFullYear(),
+          currentView: 'year',
+          checkinEnabled: false,
+          reminderOffered: true,
+          feedbackInviteSeen: true,
+        },
+        version: 0,
+      })
+    )
+
+    await useCalendarStore.persist.rehydrate()
+    render(<App />)
+    await act(async () => {})
+
+    expect(useCalendarStore.getState().currentView).toBe('month')
+    expect(screen.getByTestId('month-title-button')).toHaveTextContent(
+      new Date().toLocaleString('en-US', { month: 'long', year: 'numeric' })
+    )
+    expect(isTodayIn(today)).toBe(true)
+    expect(screen.queryByTestId('quicklog-modal')).not.toBeInTheDocument()
+    expect(screen.getByTestId('log-today-bar')).toHaveAccessibleName(
+      'Log today: 0 of 1 activities completed'
+    )
   })
 })
