@@ -373,9 +373,11 @@ test.describe('Activity Tracker App', () => {
     const stats = page.getByTestId('stats-panel')
     await expect(stats.getByText('Statistics')).toBeVisible()
     await expect(stats.getByText('Active Days')).toBeVisible()
-    await expect(page.getByText('Current Streak')).toBeVisible()
     await expect(page.getByText('Longest Streak')).toBeVisible()
     await expect(page.getByText('This Month')).toBeVisible()
+    // The run that is still going is said in the header and nowhere else. A tile for it
+    // here would be the same number twice on one screen, which is what this panel had.
+    await expect(stats.getByText('Current Streak')).toHaveCount(0)
   })
 
   test('should not show statistics when no activities exist', async ({ page }) => {
