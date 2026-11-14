@@ -1,1 +1,1 @@
-On Android, the update message now downloads the new version straight away instead of sending you to the website.
+Daylo now opens on today and follows the new day, keeps one window on a computer, and on Android the reminder survives a restart and updates download straight away.
