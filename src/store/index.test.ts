@@ -64,6 +64,19 @@ describe('useCalendarStore', () => {
       expect(activities[0].color).toBe('#10B981')
     })
 
+    // The rule for a new activity's color lives here, so any way of making one gets it,
+    // not only the two forms that happened to know about it.
+    it('gives an activity made without a color the first one nobody wears yet', () => {
+      const { addActivity } = useCalendarStore.getState()
+      addActivity('Exercise')
+      addActivity('Read')
+      addActivity('Walk', '#8B5CF6')
+      addActivity('Write')
+
+      const colors = useCalendarStore.getState().activities.map((a) => a.color)
+      expect(colors).toEqual(['#10B981', '#3B82F6', '#8B5CF6', '#EC4899'])
+    })
+
     it('should update activity', () => {
       const { addActivity, updateActivity } = useCalendarStore.getState()
       addActivity('Exercise', '#10B981')

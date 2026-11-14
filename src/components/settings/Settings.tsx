@@ -16,6 +16,7 @@ import { isTauri } from '@tauri-apps/api/core'
 import { openLink } from '../../lib/openLink'
 import { FEEDBACK_MAILTO } from '../../lib/feedbackInvite'
 import type { UpdateStatus } from '../../hooks/useUpdates'
+import { count } from '../../lib/plural'
 
 /** How long the panel takes to arrive and to leave. */
 const TAKES = 250
@@ -199,8 +200,7 @@ export function Settings({
 
   if (!shouldRender) return null
 
-  const say = (plural: number, one: string, many: string) => (plural === 1 ? one : many)
-  const held = `${counts.activities} ${say(counts.activities, 'activity', 'activities')}, ${counts.logs} ${say(counts.logs, 'entry', 'entries')}`
+  const held = `${count(counts.activities, 'activity', 'activities')}, ${count(counts.logs, 'entry', 'entries')}`
 
   return (
     <div className="fixed inset-0 z-50" data-testid="settings">

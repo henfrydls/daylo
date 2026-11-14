@@ -1,5 +1,12 @@
 import { describe, it, expect } from 'vitest'
-import { getHeatmapColor, calculateHeatmapLevel, HEATMAP_COLORS, ACTIVITY_COLORS } from './colors'
+import {
+  getHeatmapColor,
+  calculateHeatmapLevel,
+  HEATMAP_COLORS,
+  ACTIVITY_COLORS,
+  firstFreeColor,
+  sameColor,
+} from './colors'
 
 describe('colors utility functions', () => {
   describe('HEATMAP_COLORS', () => {
@@ -67,6 +74,55 @@ describe('colors utility functions', () => {
     it('should return 4 for 76-100% completion', () => {
       expect(calculateHeatmapLevel(8, 10)).toBe(4) // 80%
       expect(calculateHeatmapLevel(10, 10)).toBe(4) // 100%
+    })
+  })
+
+  // Two or three activities made without touching the picker all came out the same green,
+  // and their dots in the month could not be told apart.
+  // A backup can carry a color written by hand or by another tool: "#10b981" or "#1B9".
+  // Read as written, the first was not the green the palette calls #10B981, so it was
+  // neither dimmed in the picker nor skipped when a new activity was given a color.
+  describe('sameColor', () => {
+    it('ignores the case a color is written in', () => {
+      expect(sameColor('#10b981', '#10B981')).toBe(true)
+    })
+
+    it('reads the short form as the long one', () => {
+      expect(sameColor('#1b9', '#11BB99')).toBe(true)
+      expect(sameColor('#1B9', '#10B981')).toBe(false)
+    })
+
+    it('tells different colors apart', () => {
+      expect(sameColor('#10B981', '#3B82F6')).toBe(false)
+    })
+  })
+
+  describe('firstFreeColor', () => {
+    it('offers the first color when nothing wears one yet', () => {
+      expect(firstFreeColor([])).toBe(ACTIVITY_COLORS[0].value)
+    })
+
+    it('skips the colors other activities already wear', () => {
+      expect(firstFreeColor(['#10B981'])).toBe('#3B82F6')
+      expect(firstFreeColor(['#10B981', '#3B82F6'])).toBe('#8B5CF6')
+    })
+
+    it('counts a color written in lowercase as the palette color it is', () => {
+      expect(firstFreeColor(['#10b981'])).toBe('#3B82F6')
+      expect(firstFreeColor(['#10b981', '#3b82f6'])).toBe('#8B5CF6')
+    })
+
+    it('fills a gap before going further down the palette', () => {
+      expect(firstFreeColor(['#10B981', '#8B5CF6'])).toBe('#3B82F6')
+    })
+
+    it('falls back to the first color when every one is taken', () => {
+      expect(firstFreeColor(ACTIVITY_COLORS.map((c) => c.value))).toBe(ACTIVITY_COLORS[0].value)
+    })
+
+    it('does not count a color from outside the palette against any of its own', () => {
+      expect(firstFreeColor(['#123456'])).toBe(ACTIVITY_COLORS[0].value)
+      expect(firstFreeColor(['#123456', '#10B981'])).toBe('#3B82F6')
     })
   })
 })

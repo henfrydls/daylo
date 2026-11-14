@@ -2,6 +2,7 @@ import { create } from 'zustand'
 import { persist, createJSONStorage, type StateStorage } from 'zustand/middleware'
 import type { Activity, ActivityLog } from '../types'
 import { formatDate, generateId } from '../lib/dates'
+import { firstFreeColor } from '../lib/colors'
 // Import estatico a proposito: Toast.tsx ya importa este modulo de forma estatica,
 // asi que un import() dinamico aqui no partiria el bundle -- solo retrasaria el aviso.
 import { useToastStore } from './toast'
@@ -254,7 +255,11 @@ interface CalendarState {
   updatesEnabled: boolean
 
   // Activity actions
-  addActivity: (name: string, color: string) => void
+  /**
+   * Without a color, the activity gets the first one nobody wears yet, the same one the
+   * forms offer. The rule lives here so that any way of making an activity follows it.
+   */
+  addActivity: (name: string, color?: string) => void
   updateActivity: (id: string, updates: Partial<Pick<Activity, 'name' | 'color'>>) => void
   deleteActivity: (id: string) => void
 
@@ -419,7 +424,7 @@ export const useCalendarStore = create<CalendarState>()(
         const newActivity: Activity = {
           id: generateId(),
           name,
-          color,
+          color: color ?? firstFreeColor(get().activities.map((a) => a.color)),
           createdAt: now,
           updatedAt: now,
         }

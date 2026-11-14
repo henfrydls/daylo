@@ -618,6 +618,100 @@ describe('QuickLog', () => {
       const newActivity = state.activities.find((a) => a.name === 'Blue Activity')
       expect(newActivity?.color).toBe('#3B82F6')
     })
+
+    // Activities made without touching the picker all came out the same green, and their
+    // dots in the month could not be told apart.
+    it('starts a new activity on the first color nobody wears yet', async () => {
+      const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime })
+      setupStoreWithActivities()
+      act(() => {
+        useCalendarStore.setState({
+          activities: useCalendarStore.getState().activities.filter((a) => a.color === '#10B981'),
+        })
+      })
+      render(<QuickLog />)
+
+      await user.click(screen.getByTestId('quicklog-new-activity-button'))
+      expect(screen.getByTestId('quicklog-color-blue')).toHaveAttribute('aria-checked', 'true')
+
+      await user.type(screen.getByTestId('quicklog-new-activity-input'), 'Second')
+      await user.click(screen.getByTestId('quicklog-add-activity'))
+
+      const second = useCalendarStore.getState().activities.find((a) => a.name === 'Second')
+      expect(second?.color).toBe('#3B82F6')
+    })
+
+    // Closing the sheet with the form open used to leave the form open, holding the color
+    // it was opened with. Another day, after an activity made some other way, opened
+    // straight onto the form and onto a color that could be taken by then.
+    it('forgets a half-made activity when the sheet closes, and offers the color free now', async () => {
+      const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime })
+      setupStoreWithActivities()
+      render(<QuickLog />)
+
+      await user.click(screen.getByTestId('quicklog-new-activity-button'))
+      expect(screen.getByTestId('quicklog-color-pink')).toHaveAttribute('aria-checked', 'true')
+
+      // Through setState rather than the action: tests above replace the action and do
+      // not put it back.
+      act(() => useCalendarStore.setState({ selectedDate: null }))
+      act(() => {
+        vi.advanceTimersByTime(400)
+      })
+      act(() => useCalendarStore.getState().addActivity('Elsewhere', '#EC4899'))
+      act(() => useCalendarStore.setState({ selectedDate: '2024-01-16' }))
+      act(() => {
+        vi.advanceTimersByTime(400)
+      })
+
+      expect(screen.queryByTestId('quicklog-new-activity-input')).not.toBeInTheDocument()
+
+      await user.click(screen.getByTestId('quicklog-new-activity-button'))
+      expect(screen.getByTestId('quicklog-color-orange')).toHaveAttribute('aria-checked', 'true')
+    })
+
+    // The sheet takes a quarter of a second to leave. Clearing the half-made activity only
+    // once it had gone let a quick close and reopen bring back the form, the name and the
+    // color, on another day.
+    it('forgets a half-made activity even when another day opens before the sheet has left', async () => {
+      const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime })
+      setupStoreWithActivities()
+      render(<QuickLog />)
+
+      await user.click(screen.getByTestId('quicklog-new-activity-button'))
+      await user.type(screen.getByTestId('quicklog-new-activity-input'), 'Gym')
+      await user.click(screen.getByTestId('quicklog-color-red'))
+
+      act(() => useCalendarStore.setState({ selectedDate: null }))
+      act(() => {
+        vi.advanceTimersByTime(100)
+      })
+      // Still leaving, and still as it was: the form does not fold up on the way down.
+      expect(screen.getByTestId('quicklog-new-activity-input')).toHaveValue('Gym')
+
+      act(() => useCalendarStore.setState({ selectedDate: '2024-01-16' }))
+
+      expect(screen.queryByTestId('quicklog-new-activity-input')).not.toBeInTheDocument()
+
+      await user.click(screen.getByTestId('quicklog-new-activity-button'))
+      expect(screen.getByTestId('quicklog-new-activity-input')).toHaveValue('')
+      expect(screen.getByTestId('quicklog-color-pink')).toHaveAttribute('aria-checked', 'true')
+    })
+
+    it('moves on to the next free color for the activity after that', async () => {
+      const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime })
+      setupStoreWithActivities()
+      render(<QuickLog />)
+
+      // Green, blue and purple are taken; making one more must not leave the next form
+      // on the color just used.
+      await user.click(screen.getByTestId('quicklog-new-activity-button'))
+      await user.type(screen.getByTestId('quicklog-new-activity-input'), 'Fourth')
+      await user.click(screen.getByTestId('quicklog-add-activity'))
+      await user.click(screen.getByTestId('quicklog-new-activity-button'))
+
+      expect(screen.getByTestId('quicklog-color-orange')).toHaveAttribute('aria-checked', 'true')
+    })
   })
 
   describe('Visual States', () => {

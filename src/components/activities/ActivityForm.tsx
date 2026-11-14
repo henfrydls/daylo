@@ -1,6 +1,6 @@
-import { useState, useEffect, useCallback, useMemo, memo } from 'react'
+import { useState, useCallback, useMemo, memo } from 'react'
 import { Button, Checkbox, ColorPicker, Modal } from '../ui'
-import { ACTIVITY_COLORS } from '../../lib/colors'
+import { ACTIVITY_COLORS, firstFreeColor } from '../../lib/colors'
 import { useCalendarStore } from '../../store'
 import { formatDate } from '../../lib/dates'
 import type { Activity } from '../../types'
@@ -19,31 +19,55 @@ interface ActivityFormProps {
  */
 const FORM_ID = 'activity-form'
 
+/** What an open form with no activity was opened for: making a new one. Not an id. */
+const NEW_ACTIVITY = '<new>'
+
 export const ActivityForm = memo(function ActivityForm({
   isOpen,
   onClose,
   activity,
 }: ActivityFormProps) {
   const [name, setName] = useState('')
-  const [color, setColor] = useState<string>(ACTIVITY_COLORS[0].value)
+  // Only what the person picked. Until they pick, the form shows the activity's own color,
+  // or for a new one the first color nobody wears yet, worked out as it is drawn.
+  const [pickedColor, setPickedColor] = useState<string | null>(null)
   const [logForDate, setLogForDate] = useState(false)
   const [selectedDate, setSelectedDate] = useState(formatDate(new Date()))
 
-  // Sync form state with activity prop when modal opens or activity changes
-  // This is a valid pattern for controlled form initialization
-  useEffect(() => {
-    if (isOpen) {
-      /* eslint-disable react-hooks/set-state-in-effect */
-      setName(activity?.name || '')
-      setColor(activity?.color || ACTIVITY_COLORS[0].value)
-      setLogForDate(false)
-      setSelectedDate(formatDate(new Date()))
-      /* eslint-enable react-hooks/set-state-in-effect */
-    }
-  }, [isOpen, activity])
-
   // Use individual selectors to prevent over-subscription
   const activities = useCalendarStore((state) => state.activities)
+
+  // The colors other activities already wear. The one being edited is left out, so its
+  // own color is not reported back to it as taken.
+  const colorsInUse = useMemo(
+    () => activities.filter((a) => a.id !== activity?.id).map((a) => a.color),
+    [activities, activity?.id]
+  )
+
+  // Painted with the same rule the store uses when it is not handed a color, over the same
+  // activities, so a new activity is saved in the color it was shown in without the form
+  // passing it on: the store is the one place that decides.
+  const color = pickedColor ?? activity?.color ?? firstFreeColor(colorsInUse)
+
+  // Fill the form in each time it opens, or opens onto another activity. Done while
+  // rendering rather than in an effect, so the first frame of an open form is already
+  // right. Keyed on the activity's id: never on the list of activities, and not on the
+  // activity object either, so neither another activity changing nor this one coming
+  // back as a new object counts as opening the form again and wipes what was typed.
+  // Nothing is reset on the way out, so the form does not empty itself while the dialog
+  // is still leaving.
+  const openedFor = isOpen ? (activity?.id ?? NEW_ACTIVITY) : null
+  const [filledFor, setFilledFor] = useState<string | null>(null)
+  if (openedFor !== filledFor) {
+    setFilledFor(openedFor)
+    if (openedFor !== null) {
+      setName(activity?.name || '')
+      setPickedColor(null)
+      setLogForDate(false)
+      setSelectedDate(formatDate(new Date()))
+    }
+  }
+
   const addActivity = useCalendarStore((state) => state.addActivity)
   const updateActivity = useCalendarStore((state) => state.updateActivity)
   const toggleLog = useCalendarStore((state) => state.toggleLog)
@@ -58,8 +82,9 @@ export const ActivityForm = memo(function ActivityForm({
       if (isEditing && activity) {
         updateActivity(activity.id, { name: name.trim(), color })
       } else {
-        // Create the activity
-        addActivity(name.trim(), color)
+        // The color only if somebody picked one; otherwise the store gives it the free
+        // one, which is what the form has been showing.
+        addActivity(name.trim(), pickedColor ?? undefined)
 
         // If logForDate is enabled, log for the selected date
         if (logForDate) {
@@ -71,13 +96,14 @@ export const ActivityForm = memo(function ActivityForm({
         }
       }
 
-      // Don't reset state here — the useEffect on isOpen handles it
+      // Don't reset state here: it is filled in again when the modal reopens
       // Resetting before onClose causes a flash of "New Activity" during exit animation
       onClose()
     },
     [
       name,
       color,
+      pickedColor,
       isEditing,
       activity,
       logForDate,
@@ -89,15 +115,8 @@ export const ActivityForm = memo(function ActivityForm({
     ]
   )
 
-  // The colors other activities already wear. The one being edited is left out, so its
-  // own color is not reported back to it as taken.
-  const colorsInUse = useMemo(
-    () => activities.filter((a) => a.id !== activity?.id).map((a) => a.color),
-    [activities, activity?.id]
-  )
-
   const handleClose = useCallback((): void => {
-    // Don't reset state here — the useEffect on isOpen handles it when modal reopens
+    // Don't reset state here: it is filled in again when the modal reopens
     onClose()
   }, [onClose])
 
@@ -148,7 +167,7 @@ export const ActivityForm = memo(function ActivityForm({
 
         <ColorPicker
           value={color}
-          onChange={setColor}
+          onChange={setPickedColor}
           colors={ACTIVITY_COLORS}
           colorsInUse={colorsInUse}
           label="Color"

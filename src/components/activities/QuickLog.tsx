@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect, useCallback, useMemo, memo } from 'react'
 import { useCalendarStore } from '../../store'
 import { formatDisplayDate, parseDateString } from '../../lib/dates'
-import { ACTIVITY_COLORS } from '../../lib/colors'
+import { ACTIVITY_COLORS, firstFreeColor } from '../../lib/colors'
 import { Button, Checkbox, ColorPicker, PlusIcon, XIcon } from '../ui'
 import { useFocusTrap, useAnimatedPresence } from '../../hooks'
 import { useShallow } from 'zustand/react/shallow'
@@ -18,7 +18,9 @@ export const QuickLog = memo(function QuickLog() {
 
   const [isCreating, setIsCreating] = useState(false)
   const [newName, setNewName] = useState('')
-  const [newColor, setNewColor] = useState<string>(ACTIVITY_COLORS[0].value)
+  // Only what the person picked. Until they pick, the form offers the first color free
+  // at that moment, worked out as it is drawn, so it cannot go stale while it waits.
+  const [pickedColor, setPickedColor] = useState<string | null>(null)
   const [bouncingId, setBouncingId] = useState<string | null>(null)
   const nameInputRef = useRef<HTMLInputElement>(null)
   const modalRef = useRef<HTMLDivElement>(null)
@@ -26,6 +28,9 @@ export const QuickLog = memo(function QuickLog() {
   // Every color already worn by an activity: this form only ever creates, so none of
   // them belongs to what is being edited.
   const colorsInUse = useMemo(() => activities.map((a) => a.color), [activities])
+  // Painted with the rule the store uses when it is not handed a color, over the same
+  // activities, so the activity is saved in the color it was shown in.
+  const newColor = pickedColor ?? firstFreeColor(colorsInUse)
 
   const handleClose = useCallback(() => {
     setSelectedDate(null)
@@ -41,6 +46,21 @@ export const QuickLog = memo(function QuickLog() {
 
   const isOpen = !!selectedDate
   const { shouldRender, isVisible } = useAnimatedPresence(isOpen, 250)
+
+  // A half-made activity goes with the sheet. Closing it with the form open used to leave
+  // the form open, holding what was typed and picked, and the next day opened straight
+  // onto it. Cleared as the sheet opens again rather than as it closes: closing it there
+  // would fold the form up while the sheet is still sliding away, and waiting for the
+  // sheet to finish leaving let a quick close and reopen bring the form back.
+  const [wasOpen, setWasOpen] = useState(isOpen)
+  if (isOpen !== wasOpen) {
+    setWasOpen(isOpen)
+    if (isOpen) {
+      setIsCreating(false)
+      setNewName('')
+      setPickedColor(null)
+    }
+  }
 
   /**
    * One frame under the bottom edge before it comes up.
@@ -125,19 +145,20 @@ export const QuickLog = memo(function QuickLog() {
   const handleStartCreating = useCallback((): void => {
     setIsCreating(true)
     setNewName('')
-    setNewColor(ACTIVITY_COLORS[0].value)
+    setPickedColor(null)
   }, [])
 
   const handleCancelCreating = useCallback((): void => {
     setIsCreating(false)
     setNewName('')
-    setNewColor(ACTIVITY_COLORS[0].value)
   }, [])
 
   const handleCreateActivity = useCallback((): void => {
     if (!newName.trim() || !selectedDate) return
 
-    addActivity(newName.trim(), newColor)
+    // The color only if somebody picked one; otherwise the store gives it the free one,
+    // which is what the form has been showing.
+    addActivity(newName.trim(), pickedColor ?? undefined)
 
     // Get the newly created activity (last one in the array)
     const updatedActivities = useCalendarStore.getState().activities
@@ -149,8 +170,7 @@ export const QuickLog = memo(function QuickLog() {
 
     setIsCreating(false)
     setNewName('')
-    setNewColor(ACTIVITY_COLORS[0].value)
-  }, [newName, newColor, selectedDate, addActivity, toggleLog])
+  }, [newName, pickedColor, selectedDate, addActivity, toggleLog])
 
   const handleKeyDown = useCallback(
     (e: React.KeyboardEvent<HTMLInputElement>): void => {
@@ -195,7 +215,7 @@ export const QuickLog = memo(function QuickLog() {
       </div>
       <ColorPicker
         value={newColor}
-        onChange={setNewColor}
+        onChange={setPickedColor}
         colors={ACTIVITY_COLORS}
         colorsInUse={colorsInUse}
         size="sm"

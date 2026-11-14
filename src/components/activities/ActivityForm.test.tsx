@@ -138,12 +138,64 @@ describe('ActivityForm', () => {
       expect(blueColorButton).toHaveAttribute('aria-checked', 'true')
     })
 
+    it('hands over a color somebody picked', async () => {
+      const user = userEvent.setup()
+      render(<ActivityForm isOpen={true} onClose={() => {}} />)
+
+      await user.type(screen.getByTestId('activity-name-input'), 'Swim')
+      await user.click(screen.getByLabelText('Purple color'))
+      await user.click(screen.getByTestId('activity-form-submit'))
+
+      expect(mockAddActivity).toHaveBeenCalledWith('Swim', '#8B5CF6')
+    })
+
     it('should preselect color from activity prop in edit mode', () => {
       render(<ActivityForm isOpen={true} onClose={() => {}} activity={mockActivity} />)
 
       // Blue is the color of mockActivity (#3B82F6)
       const blueColorButton = screen.getByLabelText('Blue color')
       expect(blueColorButton).toHaveAttribute('aria-checked', 'true')
+    })
+
+    describe('with a green activity already made', () => {
+      const green: Activity = { ...mockActivity, id: 'green-id', name: 'Run', color: '#10B981' }
+
+      beforeEach(() => {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        vi.mocked(useCalendarStore).mockImplementation((selector?: (state: any) => any) => {
+          const state = {
+            addActivity: mockAddActivity,
+            updateActivity: mockUpdateActivity,
+            toggleLog: mockToggleLog,
+            activities: [green],
+          }
+          return typeof selector === 'function' ? selector(state) : state
+        })
+      })
+
+      // Activities made without touching the picker all came out the same green, and
+      // their dots in the month could not be told apart.
+      it('starts a new activity on the first color nobody wears yet', async () => {
+        const user = userEvent.setup()
+        render(<ActivityForm isOpen={true} onClose={() => {}} />)
+
+        expect(screen.getByLabelText('Blue color')).toHaveAttribute('aria-checked', 'true')
+
+        await user.type(screen.getByTestId('activity-name-input'), 'Read')
+        await user.click(screen.getByTestId('activity-form-submit'))
+
+        // The color it shows is not handed over: unless somebody picks one, the store
+        // decides, with the same rule the form painted with. The real store's choice is
+        // checked in ActivityForm.firstFrame.test.tsx.
+        expect(mockAddActivity).toHaveBeenCalledWith('Read', undefined)
+      })
+
+      it('keeps the color of an activity being edited, even one another activity shares', () => {
+        const twin: Activity = { ...green, id: 'twin-id', name: 'Walk' }
+        render(<ActivityForm isOpen={true} onClose={() => {}} activity={twin} />)
+
+        expect(screen.getByLabelText('Green color')).toHaveAttribute('aria-checked', 'true')
+      })
     })
   })
 
@@ -159,7 +211,7 @@ describe('ActivityForm', () => {
       const submitButton = screen.getByTestId('activity-form-submit')
       await user.click(submitButton)
 
-      expect(mockAddActivity).toHaveBeenCalledWith('New Exercise', ACTIVITY_COLORS[0].value)
+      expect(mockAddActivity).toHaveBeenCalledWith('New Exercise', undefined)
       expect(onClose).toHaveBeenCalled()
     })
 
@@ -193,7 +245,7 @@ describe('ActivityForm', () => {
       const submitButton = screen.getByTestId('activity-form-submit')
       await user.click(submitButton)
 
-      expect(mockAddActivity).toHaveBeenCalledWith('Trimmed Name', ACTIVITY_COLORS[0].value)
+      expect(mockAddActivity).toHaveBeenCalledWith('Trimmed Name', undefined)
     })
 
     it('should reset form state after successful submission', async () => {
@@ -392,22 +444,47 @@ describe('ActivityForm', () => {
   })
 
   describe('Form State Sync', () => {
-    it('should sync form state when activity prop changes', () => {
+    it('fills in again when it is opened onto another activity', () => {
       const { rerender } = render(
         <ActivityForm isOpen={true} onClose={() => {}} activity={mockActivity} />
       )
 
       expect(screen.getByTestId('activity-name-input')).toHaveValue('Test Activity')
 
-      const updatedActivity: Activity = {
+      const another: Activity = {
         ...mockActivity,
-        name: 'Updated Name',
+        id: 'test-id-2',
+        name: 'Another',
         color: '#EC4899',
       }
+      rerender(<ActivityForm isOpen={true} onClose={() => {}} activity={another} />)
 
-      rerender(<ActivityForm isOpen={true} onClose={() => {}} activity={updatedActivity} />)
+      expect(screen.getByTestId('activity-name-input')).toHaveValue('Another')
+      expect(screen.getByLabelText('Pink color')).toHaveAttribute('aria-checked', 'true')
+    })
 
-      expect(screen.getByTestId('activity-name-input')).toHaveValue('Updated Name')
+    // The same activity handed over as a new object, because something else about it
+    // changed, is not opening the form again: what was typed and picked stays.
+    it('keeps what was typed when the activity being edited comes back as a new object', async () => {
+      const user = userEvent.setup()
+      const { rerender } = render(
+        <ActivityForm isOpen={true} onClose={() => {}} activity={mockActivity} />
+      )
+      const input = screen.getByTestId('activity-name-input')
+      await user.clear(input)
+      await user.type(input, 'Half typed')
+      await user.click(screen.getByLabelText('Purple color'))
+
+      rerender(
+        <ActivityForm
+          isOpen={true}
+          onClose={() => {}}
+          activity={{ ...mockActivity, updatedAt: '2024-02-01T00:00:00.000Z' }}
+        />
+      )
+
+      expect(screen.getByTestId('activity-name-input')).toHaveValue('Half typed')
+      expect(screen.getByLabelText('Purple color')).toHaveAttribute('aria-checked', 'true')
     })
 
     it('should reset to default values when switching from edit to create mode', () => {
