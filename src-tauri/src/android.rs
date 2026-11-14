@@ -267,6 +267,10 @@ pub fn fetch_text(url: &str, limit: i32) -> Result<String, String> {
 /// only thing this decides is whether the screen offers a way to fix something, and
 /// offering a fix for a problem that may not exist is worse than staying quiet. The
 /// reminder is scheduled either way.
+///
+/// Since 1.5.3 the manifest does not declare SCHEDULE_EXACT_ALARM, so from Android 12 up
+/// this answers no on every phone, and the app does not ask it: see EXACT_ALARMS_DECLARED
+/// in src/lib/reminders.ts, which comes back on together with the permission.
 pub fn exact_alarms_allowed() -> bool {
     with_the_activity(|env, activity| {
         if sdk_int(env)? < 31 {

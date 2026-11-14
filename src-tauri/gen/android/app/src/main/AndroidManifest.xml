@@ -13,8 +13,9 @@
              <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" />
          here and turn on EXACT_ALARMS_DECLARED in src/lib/reminders.ts in the same change.
          That switch is what lets the settings screen offer the phone's "Alarms & reminders"
-         screen, which does not list Daylo while this is missing. A test reads this file and
-         fails while the two disagree. -->
+         screen, which does not list Daylo while this is missing. A unit test reads this file,
+         and Build Check (Android) the manifests Gradle merges from it, and both fail while
+         the permission and the switch disagree (scripts/check-exact-alarm.js). -->
 
     <!-- AndroidTV support -->
     <uses-feature android:name="android.software.leanback" android:required="false" />

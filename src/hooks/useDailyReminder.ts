@@ -10,6 +10,18 @@ import {
 } from '../lib/reminders'
 import { useToast } from '../components/ui'
 
+/**
+ * How close to its time the reminder will arrive, which is the one thing the screen needs
+ * to know to decide what to say under it.
+ *
+ * - `inexact`: this build does not ask Android for exact alarms at all, so Android always
+ *   picks the moment and there is nothing to offer. See EXACT_ALARMS_DECLARED.
+ * - `exact`: it asks, and the phone allows it, or the phone could not be asked.
+ * - `denied`: it asks, and the phone says no. It still arrives, later, and the screen says
+ *   so and offers the way to change it.
+ */
+export type Punctuality = 'inexact' | 'exact' | 'denied'
+
 interface DailyReminder {
   enabled: boolean
   hour: number
@@ -20,13 +32,12 @@ interface DailyReminder {
   busy: boolean
   /** What the phone said when it refused, when it said anything. */
   failure: string | null
+  /** How close to its time it will arrive. One answer, so the screen decides nothing. */
+  punctuality: Punctuality
   /**
-   * Whether it will arrive at the time it was set for. False means it still arrives, but
-   * Android is free to move it, so the screen says so and offers the way to change it.
-   * Always true in a build without EXACT_ALARMS_DECLARED, where nothing is asked.
+   * Open the phone's own screen where arriving on time is allowed. Does nothing in a build
+   * without EXACT_ALARMS_DECLARED, where that screen does not list Daylo.
    */
-  onTime: boolean
-  /** Open the phone's own screen where arriving on time is allowed. */
   askForTime: () => Promise<void>
   turnOn: (hour: number, minute: number) => Promise<boolean>
   turnOff: () => Promise<void>
@@ -53,9 +64,9 @@ export function useDailyReminder(): DailyReminder {
   const { showToast } = useToast()
   const [busy, setBusy] = useState(false)
   const [failure, setFailure] = useState<string | null>(null)
-  // True until something says otherwise, so a phone that cannot be asked is a phone the
-  // screen says nothing about.
-  const [onTime, setOnTime] = useState(true)
+  // Exact until something says otherwise, so a phone that cannot be asked is a phone the
+  // screen offers nothing to.
+  const [exactAllowed, setExactAllowed] = useState(true)
   // What the last answer was, kept out of state so that reading it does not depend on
   // the render a callback was created in.
   const wasOnTime = useRef(true)
@@ -89,7 +100,7 @@ export function useDailyReminder(): DailyReminder {
         // each of them would be churn for nothing.
         const justGranted = !wasOnTime.current && allowed
         wasOnTime.current = allowed
-        setOnTime(allowed)
+        setExactAllowed(allowed)
         if (justGranted) {
           // From the store rather than from this closure, which belongs to the render
           // where the effect was set up and would hold the time as it was then.
@@ -174,7 +185,7 @@ export function useDailyReminder(): DailyReminder {
     at: formatReminderTime(hour, minute),
     busy,
     failure,
-    onTime,
+    punctuality: !EXACT_ALARMS_DECLARED ? 'inexact' : exactAllowed ? 'exact' : 'denied',
     askForTime,
     turnOn,
     turnOff,

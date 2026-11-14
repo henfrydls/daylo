@@ -667,7 +667,9 @@ describe('a reminder in a build without exact alarms', () => {
 
     expect(await screen.findByText(/around this time/i)).toBeInTheDocument()
     expect(screen.queryByTestId('reminder-exact')).not.toBeInTheDocument()
-    expect(screen.queryByText(/on time/i)).not.toBeInTheDocument()
+    // Both spellings: the row says "on-time" and the sentence above it "on time", and a
+    // pattern for one of them let the row through unseen.
+    expect(screen.queryAllByText(/on[- ]time/i)).toHaveLength(0)
     expect(exactAlarmsAllowed).not.toHaveBeenCalled()
     expect(askForExactAlarms).not.toHaveBeenCalled()
   })

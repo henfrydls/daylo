@@ -222,7 +222,7 @@ describe('whether it will arrive on time', () => {
     exactAlarmsAllowed.mockResolvedValue(false)
 
     const { result } = renderHook(() => useDailyReminder())
-    await waitFor(() => expect(result.current.onTime).toBe(false))
+    await waitFor(() => expect(result.current.punctuality).toBe('denied'))
   })
 
   it('says nothing about a reminder nobody has set', async () => {
@@ -240,14 +240,14 @@ describe('whether it will arrive on time', () => {
     useCalendarStore.setState({ reminderEnabled: true })
     exactAlarmsAllowed.mockResolvedValue(false)
     const { result } = renderHook(() => useDailyReminder())
-    await waitFor(() => expect(result.current.onTime).toBe(false))
+    await waitFor(() => expect(result.current.punctuality).toBe('denied'))
 
     exactAlarmsAllowed.mockResolvedValue(true)
     await act(async () => {
       document.dispatchEvent(new Event('visibilitychange'))
     })
 
-    await waitFor(() => expect(result.current.onTime).toBe(true))
+    await waitFor(() => expect(result.current.punctuality).toBe('exact'))
   })
 
   it('asks again after the reminder is turned on', async () => {
@@ -258,7 +258,7 @@ describe('whether it will arrive on time', () => {
       await result.current.turnOn(21, 0)
     })
 
-    await waitFor(() => expect(result.current.onTime).toBe(false))
+    await waitFor(() => expect(result.current.punctuality).toBe('denied'))
   })
 
   // Measured on a real phone on 2026-10-13: after granting the permission, `dumpsys alarm`
@@ -270,7 +270,7 @@ describe('whether it will arrive on time', () => {
     useCalendarStore.setState({ reminderEnabled: true, reminderHour: 21, reminderMinute: 0 })
     exactAlarmsAllowed.mockResolvedValue(false)
     const { result } = renderHook(() => useDailyReminder())
-    await waitFor(() => expect(result.current.onTime).toBe(false))
+    await waitFor(() => expect(result.current.punctuality).toBe('denied'))
     enableReminder.mockClear()
 
     exactAlarmsAllowed.mockResolvedValue(true)
@@ -288,7 +288,7 @@ describe('whether it will arrive on time', () => {
     useCalendarStore.setState({ reminderEnabled: true })
     exactAlarmsAllowed.mockResolvedValue(true)
     const { result } = renderHook(() => useDailyReminder())
-    await waitFor(() => expect(result.current.onTime).toBe(true))
+    await waitFor(() => expect(result.current.punctuality).toBe('exact'))
     enableReminder.mockClear()
 
     await act(async () => {
@@ -328,7 +328,7 @@ describe('when the build does not declare exact alarms', () => {
     })
 
     expect(exactAlarmsAllowed).not.toHaveBeenCalled()
-    expect(result.current.onTime).toBe(true)
+    expect(result.current.punctuality).toBe('inexact')
   })
 
   it('does not ask again after the reminder is turned on', async () => {
@@ -340,7 +340,7 @@ describe('when the build does not declare exact alarms', () => {
     })
 
     expect(exactAlarmsAllowed).not.toHaveBeenCalled()
-    expect(result.current.onTime).toBe(true)
+    expect(result.current.punctuality).toBe('inexact')
   })
 
   it('does not open the phone screen it would not be on', async () => {
