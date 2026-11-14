@@ -1,10 +1,12 @@
 import { useMemo, useCallback, memo, useState } from 'react'
 import { useCalendarStore } from '../../store'
 import { useTravel } from '../../lib/travel'
-import { formatDate, formatMonthYear, checkIsToday } from '../../lib/dates'
+import { formatDate, formatMonthYear } from '../../lib/dates'
+import { useTodayDate } from '../../lib/today'
 import { useMediaQuery } from '../../hooks/useMediaQuery'
 import type { Activity, ActivityLog } from '../../types'
 import { useShallow } from 'zustand/react/shallow'
+import { count } from '../../lib/plural'
 
 const DAYS_OF_WEEK = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
 const DAYS_OF_WEEK_SHORT = ['S', 'M', 'T', 'W', 'T', 'F', 'S']
@@ -17,7 +19,7 @@ interface DayInfo {
   logs: ActivityLog[]
 }
 
-function getMonthDays(year: number, month: number): DayInfo[] {
+function getMonthDays(year: number, month: number, today: string): DayInfo[] {
   const firstDay = new Date(year, month, 1)
   const lastDay = new Date(year, month + 1, 0)
   const startDayOfWeek = firstDay.getDay()
@@ -33,7 +35,7 @@ function getMonthDays(year: number, month: number): DayInfo[] {
       date,
       dateStr: formatDate(date),
       isCurrentMonth: false,
-      isToday: checkIsToday(date),
+      isToday: formatDate(date) === today,
       logs: [],
     })
   }
@@ -45,7 +47,7 @@ function getMonthDays(year: number, month: number): DayInfo[] {
       date,
       dateStr: formatDate(date),
       isCurrentMonth: true,
-      isToday: checkIsToday(date),
+      isToday: formatDate(date) === today,
       logs: [],
     })
   }
@@ -58,7 +60,7 @@ function getMonthDays(year: number, month: number): DayInfo[] {
       date,
       dateStr: formatDate(date),
       isCurrentMonth: false,
-      isToday: checkIsToday(date),
+      isToday: formatDate(date) === today,
       logs: [],
     })
   }
@@ -84,9 +86,15 @@ export const MonthView = memo(function MonthView() {
 
   const [slideDirection, setSlideDirection] = useState<'left' | 'right' | null>(null)
 
+  // The app's day and not the clock's: while a new day waits for somebody to finish, the
+  // clock has moved on and the rest of the screen has not, and the bar and the grid would
+  // each say a different day was today.
+  const today = useTodayDate()
+  const todayStr = formatDate(today)
+
   const monthDays = useMemo(
-    () => getMonthDays(selectedYear, selectedMonth),
-    [selectedYear, selectedMonth]
+    () => getMonthDays(selectedYear, selectedMonth, todayStr),
+    [selectedYear, selectedMonth, todayStr]
   )
 
   // Create a map of date -> completed logs
@@ -141,10 +149,9 @@ export const MonthView = memo(function MonthView() {
 
   const handleToday = useCallback((): void => {
     setSlideDirection(null)
-    const today = new Date()
     setSelectedYear(today.getFullYear())
     setSelectedMonth(today.getMonth())
-  }, [setSelectedYear, setSelectedMonth])
+  }, [today, setSelectedYear, setSelectedMonth])
 
   const handleDayClick = useCallback(
     (dateStr: string): void => {
@@ -156,8 +163,6 @@ export const MonthView = memo(function MonthView() {
   const displayDate = new Date(selectedYear, selectedMonth, 1)
 
   // Log Today bar data
-  const today = new Date()
-  const todayStr = formatDate(today)
   const isCurrentMonth = selectedYear === today.getFullYear() && selectedMonth === today.getMonth()
   const todayCompletedCount = logsMap.get(todayStr)?.length ?? 0
 
@@ -225,7 +230,7 @@ export const MonthView = memo(function MonthView() {
           onClick={() => handleDayClick(todayStr)}
           className="w-full flex items-center justify-between p-3 mb-4 bg-emerald-50 border border-emerald-200 rounded-xl min-h-[44px] transition-colors hover:bg-emerald-100 active:bg-emerald-100"
           data-testid="log-today-bar"
-          aria-label={`Log today: ${todayCompletedCount} of ${activities.length} activities completed`}
+          aria-label={`Log today: ${todayCompletedCount} of ${count(activities.length, 'activity', 'activities')} completed`}
         >
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 bg-emerald-500 text-white rounded-lg flex items-center justify-center font-bold text-sm">
@@ -234,7 +239,7 @@ export const MonthView = memo(function MonthView() {
             <div className="text-left">
               <div className="text-sm font-semibold text-gray-900">Today</div>
               <div className="text-xs text-gray-500">
-                {todayCompletedCount}/{activities.length} activities
+                {todayCompletedCount}/{count(activities.length, 'activity', 'activities')}
               </div>
             </div>
           </div>
@@ -296,7 +301,7 @@ export const MonthView = memo(function MonthView() {
                     ${!isLastColumn ? 'border-r border-gray-200' : ''}
                     ${isSelected ? 'bg-emerald-50 ring-2 ring-inset ring-emerald-500' : day.isCurrentMonth ? 'bg-white' : 'bg-gray-50'}
                   `}
-                  aria-label={`${day.dateStr}, ${day.logs.length} activities completed`}
+                  aria-label={`${day.dateStr}, ${count(day.logs.length, 'activity', 'activities')} completed`}
                 >
                   {/* Day Number */}
                   <span

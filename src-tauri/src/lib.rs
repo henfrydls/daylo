@@ -160,6 +160,10 @@ async fn latest_version(app: tauri::AppHandle) -> Result<String, String> {
 /// False means it still arrives, within an hour or so of the time and later than that out
 /// of a deep doze, which is what an inexact alarm is. The screen uses this to decide
 /// whether to say so and offer the way to change it, not whether to schedule anything.
+///
+/// Registered either way, and only called while EXACT_ALARMS_DECLARED in
+/// src/lib/reminders.ts is on, as it is in 1.5.3: without the permission in the manifest the
+/// answer is always no from Android 12 up, and there is nothing to offer.
 #[cfg(target_os = "android")]
 #[tauri::command]
 fn exact_alarms_allowed() -> bool {

@@ -15,8 +15,12 @@ import { test, expect, devices } from '@playwright/test'
 test.use({ ...devices['Pixel 7'], isMobile: true, hasTouch: true })
 
 const SHEET = '[data-testid="quicklog-modal"]'
-/** A day in the month grid: they have no test id, but their label is a date. */
-const DAY = 'button[aria-label$="activities completed"]'
+/**
+ * A day in the month grid: they have no test id, but their label is a date. Read by its
+ * ending, which is "activity completed" on a day with one done, and leaving out the phone's
+ * Today bar, whose label ends the same way.
+ */
+const DAY = 'button[aria-label$=" completed"]:not([data-testid="log-today-bar"])'
 
 /**
  * Where the sheet is on the screen, every frame, from inside the page.
