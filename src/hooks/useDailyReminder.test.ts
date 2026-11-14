@@ -142,6 +142,59 @@ describe('turning it on', () => {
     expect(result.current.failure).toBeNull()
   })
 
+  // A refusal while it was on, a new time picked after the permission was taken away for
+  // instance, leaves the switch off, and the alarm already on the phone has to go with it.
+  // Left there, the plugin would restore it after every restart and it would ring under a
+  // switch that says off.
+  it('takes down the alarm already set when the permission is refused', async () => {
+    useCalendarStore.setState({ reminderEnabled: true })
+    enableReminder.mockResolvedValue({ outcome: 'permission-denied' })
+    const { result } = renderHook(() => useDailyReminder())
+
+    await act(async () => {
+      await result.current.turnOn(8, 30)
+    })
+
+    expect(disableReminder).toHaveBeenCalled()
+    expect(reminder().reminderEnabled).toBe(false)
+  })
+
+  it('takes down the alarm already set when the schedule is refused', async () => {
+    useCalendarStore.setState({ reminderEnabled: true })
+    enableReminder.mockResolvedValue({ outcome: 'failed', reason: 'the phone said no' })
+    const { result } = renderHook(() => useDailyReminder())
+
+    await act(async () => {
+      await result.current.turnOn(8, 30)
+    })
+
+    expect(disableReminder).toHaveBeenCalled()
+    expect(reminder().reminderEnabled).toBe(false)
+  })
+
+  it('still turns the switch off when taking the alarm down fails', async () => {
+    useCalendarStore.setState({ reminderEnabled: true })
+    enableReminder.mockResolvedValue({ outcome: 'failed', reason: 'the phone said no' })
+    disableReminder.mockRejectedValue('cancel failed')
+    const { result } = renderHook(() => useDailyReminder())
+
+    await act(async () => {
+      await result.current.turnOn(8, 30)
+    })
+
+    expect(reminder().reminderEnabled).toBe(false)
+  })
+
+  it('cancels nothing when it is accepted', async () => {
+    const { result } = renderHook(() => useDailyReminder())
+
+    await act(async () => {
+      await result.current.turnOn(8, 30)
+    })
+
+    expect(disableReminder).not.toHaveBeenCalled()
+  })
+
   // The time it refused is still the time that was asked for, so the picker shows what the
   // person chose rather than snapping back to the old one.
   it('keeps the time that was asked for even when it was refused', async () => {

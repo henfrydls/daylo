@@ -3,6 +3,7 @@ import { ConfirmDialog, useToast } from '../ui'
 import { useCalendarStore } from '../../store'
 import { useRemindersAvailable } from '../../hooks'
 import {
+  disableReminder,
   enableReminder,
   formatReminderTime,
   offeredReminderTime,
@@ -52,9 +53,14 @@ export function DailyReminder() {
     const { reminderEnabled, reminderHour, reminderMinute } = useCalendarStore.getState()
     if (!reminderEnabled) return
 
+    // When it could not be armed again, usually because the permission was taken away in
+    // the phone's settings, the switch goes off and so does the alarm still on the queue.
+    // The plugin restores that alarm after a restart, so left there it would ring the day
+    // the permission came back, under a switch that says off.
     void refreshReminder(reminderHour, reminderMinute).then((stillOn) => {
       if (!stillOn) {
         setReminder(false, reminderHour, reminderMinute)
+        void disableReminder().catch(() => {})
       }
     })
   }, [available, activityCount, setReminder])

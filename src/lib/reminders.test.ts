@@ -189,8 +189,8 @@ describe('when the last activity goes', () => {
    * Kotlin `batch` path. Daylo schedules through `notify`, which reaches `show`, and `show`
    * wrote nothing, before the patched plugin in 1.5.3. So `pending()` answered `[]` on a
    * phone with the reminder live and ringing every night, and the old condition read that
-   * as "nothing of ours is scheduled" and cancelled nothing. Somebody who deleted their last activity went on being asked how
-   * the day went, over an app with nothing left in it.
+   * as "nothing of ours is scheduled" and cancelled nothing. Somebody who deleted their
+   * last activity went on being asked how the day went, over an app with nothing left in it.
    */
   it('takes the reminder down even though the phone lists nothing', async () => {
     pretendAndroid()
