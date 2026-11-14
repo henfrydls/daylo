@@ -1,6 +1,6 @@
-import { useState, useEffect, useCallback, useMemo, memo } from 'react'
+import { useState, useEffect, useEffectEvent, useCallback, useMemo, memo } from 'react'
 import { Button, Checkbox, ColorPicker, Modal } from '../ui'
-import { ACTIVITY_COLORS } from '../../lib/colors'
+import { ACTIVITY_COLORS, firstFreeColor } from '../../lib/colors'
 import { useCalendarStore } from '../../store'
 import { formatDate } from '../../lib/dates'
 import type { Activity } from '../../types'
@@ -29,21 +29,34 @@ export const ActivityForm = memo(function ActivityForm({
   const [logForDate, setLogForDate] = useState(false)
   const [selectedDate, setSelectedDate] = useState(formatDate(new Date()))
 
+  // Use individual selectors to prevent over-subscription
+  const activities = useCalendarStore((state) => state.activities)
+
+  // The colors other activities already wear. The one being edited is left out, so its
+  // own color is not reported back to it as taken.
+  const colorsInUse = useMemo(
+    () => activities.filter((a) => a.id !== activity?.id).map((a) => a.color),
+    [activities, activity?.id]
+  )
+
+  // A new activity starts on a color nobody wears yet; an edited one keeps its own. Read
+  // as an effect event so that the activities changing while the form is open do not
+  // count as opening it again, which would wipe a name half typed.
+  const startingColor = useEffectEvent(() => activity?.color || firstFreeColor(colorsInUse))
+
   // Sync form state with activity prop when modal opens or activity changes
   // This is a valid pattern for controlled form initialization
   useEffect(() => {
     if (isOpen) {
       /* eslint-disable react-hooks/set-state-in-effect */
       setName(activity?.name || '')
-      setColor(activity?.color || ACTIVITY_COLORS[0].value)
+      setColor(startingColor())
       setLogForDate(false)
       setSelectedDate(formatDate(new Date()))
       /* eslint-enable react-hooks/set-state-in-effect */
     }
   }, [isOpen, activity])
 
-  // Use individual selectors to prevent over-subscription
-  const activities = useCalendarStore((state) => state.activities)
   const addActivity = useCalendarStore((state) => state.addActivity)
   const updateActivity = useCalendarStore((state) => state.updateActivity)
   const toggleLog = useCalendarStore((state) => state.toggleLog)
@@ -87,13 +100,6 @@ export const ActivityForm = memo(function ActivityForm({
       toggleLog,
       onClose,
     ]
-  )
-
-  // The colors other activities already wear. The one being edited is left out, so its
-  // own color is not reported back to it as taken.
-  const colorsInUse = useMemo(
-    () => activities.filter((a) => a.id !== activity?.id).map((a) => a.color),
-    [activities, activity?.id]
   )
 
   const handleClose = useCallback((): void => {

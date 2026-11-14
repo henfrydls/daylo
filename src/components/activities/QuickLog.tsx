@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect, useCallback, useMemo, memo } from 'react'
 import { useCalendarStore } from '../../store'
 import { formatDisplayDate, parseDateString } from '../../lib/dates'
-import { ACTIVITY_COLORS } from '../../lib/colors'
+import { ACTIVITY_COLORS, firstFreeColor } from '../../lib/colors'
 import { Button, Checkbox, ColorPicker, PlusIcon, XIcon } from '../ui'
 import { useFocusTrap, useAnimatedPresence } from '../../hooks'
 import { useShallow } from 'zustand/react/shallow'
@@ -122,16 +122,17 @@ export const QuickLog = memo(function QuickLog() {
     [selectedDate, toggleLog]
   )
 
+  // The color is chosen here, each time the form opens, and nowhere else: resetting it on
+  // the way out would pick from the activities as they were before the one just made.
   const handleStartCreating = useCallback((): void => {
     setIsCreating(true)
     setNewName('')
-    setNewColor(ACTIVITY_COLORS[0].value)
-  }, [])
+    setNewColor(firstFreeColor(colorsInUse))
+  }, [colorsInUse])
 
   const handleCancelCreating = useCallback((): void => {
     setIsCreating(false)
     setNewName('')
-    setNewColor(ACTIVITY_COLORS[0].value)
   }, [])
 
   const handleCreateActivity = useCallback((): void => {
@@ -149,7 +150,6 @@ export const QuickLog = memo(function QuickLog() {
 
     setIsCreating(false)
     setNewName('')
-    setNewColor(ACTIVITY_COLORS[0].value)
   }, [newName, newColor, selectedDate, addActivity, toggleLog])
 
   const handleKeyDown = useCallback(

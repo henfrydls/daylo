@@ -618,6 +618,43 @@ describe('QuickLog', () => {
       const newActivity = state.activities.find((a) => a.name === 'Blue Activity')
       expect(newActivity?.color).toBe('#3B82F6')
     })
+
+    // Activities made without touching the picker all came out the same green, and their
+    // dots in the month could not be told apart.
+    it('starts a new activity on the first color nobody wears yet', async () => {
+      const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime })
+      setupStoreWithActivities()
+      act(() => {
+        useCalendarStore.setState({
+          activities: useCalendarStore.getState().activities.filter((a) => a.color === '#10B981'),
+        })
+      })
+      render(<QuickLog />)
+
+      await user.click(screen.getByTestId('quicklog-new-activity-button'))
+      expect(screen.getByTestId('quicklog-color-blue')).toHaveAttribute('aria-checked', 'true')
+
+      await user.type(screen.getByTestId('quicklog-new-activity-input'), 'Second')
+      await user.click(screen.getByTestId('quicklog-add-activity'))
+
+      const second = useCalendarStore.getState().activities.find((a) => a.name === 'Second')
+      expect(second?.color).toBe('#3B82F6')
+    })
+
+    it('moves on to the next free color for the activity after that', async () => {
+      const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime })
+      setupStoreWithActivities()
+      render(<QuickLog />)
+
+      // Green, blue and purple are taken; making one more must not leave the next form
+      // on the color just used.
+      await user.click(screen.getByTestId('quicklog-new-activity-button'))
+      await user.type(screen.getByTestId('quicklog-new-activity-input'), 'Fourth')
+      await user.click(screen.getByTestId('quicklog-add-activity'))
+      await user.click(screen.getByTestId('quicklog-new-activity-button'))
+
+      expect(screen.getByTestId('quicklog-color-orange')).toHaveAttribute('aria-checked', 'true')
+    })
   })
 
   describe('Visual States', () => {

@@ -145,6 +145,44 @@ describe('ActivityForm', () => {
       const blueColorButton = screen.getByLabelText('Blue color')
       expect(blueColorButton).toHaveAttribute('aria-checked', 'true')
     })
+
+    describe('with a green activity already made', () => {
+      const green: Activity = { ...mockActivity, id: 'green-id', name: 'Run', color: '#10B981' }
+
+      beforeEach(() => {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        vi.mocked(useCalendarStore).mockImplementation((selector?: (state: any) => any) => {
+          const state = {
+            addActivity: mockAddActivity,
+            updateActivity: mockUpdateActivity,
+            toggleLog: mockToggleLog,
+            activities: [green],
+          }
+          return typeof selector === 'function' ? selector(state) : state
+        })
+      })
+
+      // Activities made without touching the picker all came out the same green, and
+      // their dots in the month could not be told apart.
+      it('starts a new activity on the first color nobody wears yet', async () => {
+        const user = userEvent.setup()
+        render(<ActivityForm isOpen={true} onClose={() => {}} />)
+
+        expect(screen.getByLabelText('Blue color')).toHaveAttribute('aria-checked', 'true')
+
+        await user.type(screen.getByTestId('activity-name-input'), 'Read')
+        await user.click(screen.getByTestId('activity-form-submit'))
+
+        expect(mockAddActivity).toHaveBeenCalledWith('Read', '#3B82F6')
+      })
+
+      it('keeps the color of an activity being edited, even one another activity shares', () => {
+        const twin: Activity = { ...green, id: 'twin-id', name: 'Walk' }
+        render(<ActivityForm isOpen={true} onClose={() => {}} activity={twin} />)
+
+        expect(screen.getByLabelText('Green color')).toHaveAttribute('aria-checked', 'true')
+      })
+    })
   })
 
   describe('Form Submission', () => {

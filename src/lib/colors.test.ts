@@ -1,5 +1,11 @@
 import { describe, it, expect } from 'vitest'
-import { getHeatmapColor, calculateHeatmapLevel, HEATMAP_COLORS, ACTIVITY_COLORS } from './colors'
+import {
+  getHeatmapColor,
+  calculateHeatmapLevel,
+  HEATMAP_COLORS,
+  ACTIVITY_COLORS,
+  firstFreeColor,
+} from './colors'
 
 describe('colors utility functions', () => {
   describe('HEATMAP_COLORS', () => {
@@ -67,6 +73,32 @@ describe('colors utility functions', () => {
     it('should return 4 for 76-100% completion', () => {
       expect(calculateHeatmapLevel(8, 10)).toBe(4) // 80%
       expect(calculateHeatmapLevel(10, 10)).toBe(4) // 100%
+    })
+  })
+
+  // Two or three activities made without touching the picker all came out the same green,
+  // and their dots in the month could not be told apart.
+  describe('firstFreeColor', () => {
+    it('offers the first color when nothing wears one yet', () => {
+      expect(firstFreeColor([])).toBe(ACTIVITY_COLORS[0].value)
+    })
+
+    it('skips the colors other activities already wear', () => {
+      expect(firstFreeColor(['#10B981'])).toBe('#3B82F6')
+      expect(firstFreeColor(['#10B981', '#3B82F6'])).toBe('#8B5CF6')
+    })
+
+    it('fills a gap before going further down the palette', () => {
+      expect(firstFreeColor(['#10B981', '#8B5CF6'])).toBe('#3B82F6')
+    })
+
+    it('falls back to the first color when every one is taken', () => {
+      expect(firstFreeColor(ACTIVITY_COLORS.map((c) => c.value))).toBe(ACTIVITY_COLORS[0].value)
+    })
+
+    it('does not count a color from outside the palette against any of its own', () => {
+      expect(firstFreeColor(['#123456'])).toBe(ACTIVITY_COLORS[0].value)
+      expect(firstFreeColor(['#123456', '#10B981'])).toBe('#3B82F6')
     })
   })
 })

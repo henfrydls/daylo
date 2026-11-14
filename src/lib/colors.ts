@@ -27,6 +27,21 @@ export const ACTIVITY_COLORS = [
   { name: 'Emerald', value: '#059669' },
 ] as const
 
+/**
+ * The color a new activity starts on: the first in the palette that no activity wears
+ * yet. Starting every one on the first color made two or three activities created
+ * without touching the picker all the same green, and their dots in the month could not
+ * be told apart.
+ *
+ * Compared exactly, the way the picker decides which colors to dim, so what is offered
+ * is never one the picker shows as taken. When every color is taken the first one is
+ * offered, as before: repeating a color is allowed, just unhelpful.
+ */
+export function firstFreeColor(colorsInUse: readonly string[]): string {
+  const free = ACTIVITY_COLORS.find((c) => !colorsInUse.includes(c.value))
+  return (free ?? ACTIVITY_COLORS[0]).value
+}
+
 export function getHeatmapColor(level: 0 | 1 | 2 | 3 | 4): string {
   return HEATMAP_COLORS[level]
 }
