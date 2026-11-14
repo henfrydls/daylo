@@ -102,6 +102,60 @@ describe('MonthView', () => {
 
       expect(screen.queryByTestId('month-empty-state')).not.toBeInTheDocument()
     })
+
+    // Somebody who reinstalled, changed phones or changed where they got Daylo from opens
+    // an app that looks like the first day. Without this they rebuild their activities by
+    // hand, and those collide with the backup the day they do find Import.
+    it('offers to import a backup when there are no activities', () => {
+      const onImport = vi.fn()
+      render(<MonthView onImport={onImport} />)
+
+      const line = screen.getByTestId('month-empty-import')
+      expect(line).toHaveTextContent('Used Daylo before? Import your backup.')
+
+      fireEvent.click(screen.getByRole('button', { name: 'Import your backup.' }))
+      expect(onImport).toHaveBeenCalledTimes(1)
+    })
+
+    it('stops offering the backup once there is an activity', () => {
+      useCalendarStore.setState({
+        activities: [
+          {
+            id: '1',
+            name: 'Exercise',
+            color: '#10B981',
+            createdAt: '2024-01-01',
+            updatedAt: '2024-01-01',
+          },
+        ],
+      })
+
+      render(<MonthView onImport={vi.fn()} />)
+
+      expect(screen.queryByTestId('month-empty-import')).not.toBeInTheDocument()
+      expect(screen.queryByRole('button', { name: 'Import your backup.' })).not.toBeInTheDocument()
+    })
+
+    // The sentence above it is what people already know the empty month by, and other
+    // tests match it whole: the offer is a line of its own, not words added to that one.
+    it('leaves the empty-state sentence as it was', () => {
+      render(<MonthView onImport={vi.fn()} />)
+
+      expect(
+        screen.getByText(
+          'No activities yet. Tap any day to create your first activity and start tracking.'
+        )
+      ).toBeInTheDocument()
+    })
+
+    // A link that opens nothing is worse than no link: where nobody passed a way to open
+    // Import, the empty month says only what it always said.
+    it('offers no backup when there is nothing to open Import with', () => {
+      render(<MonthView />)
+
+      expect(screen.getByTestId('month-empty-state')).toBeInTheDocument()
+      expect(screen.queryByTestId('month-empty-import')).not.toBeInTheDocument()
+    })
   })
 
   describe('Log Today bar', () => {
