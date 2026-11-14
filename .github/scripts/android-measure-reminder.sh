@@ -38,6 +38,7 @@
 # the network guard held.
 
 set -uo pipefail
+SEED_LOST=0
 
 TEST_APK=${1:?the test APK is missing}
 CONTROL_APK=${2:?the control APK is missing}
@@ -155,9 +156,18 @@ phase() {
       firstOpenedAt: '$now', feedbackInviteSeen: true, storeReviewOffered: true,
       checkinEnabled: false, checkinNoticeSeen: true, checkinId: null,
       checkinLastAttempt: null, updateNoticeSeenFor: null, updatesEnabled: false } }));
-    return localStorage.getItem('simple-calendar-storage').length
+    const written = localStorage.getItem('simple-calendar-storage').length
+    // The app still holds its own state in memory and writes all of it on its next change.
+    // From here on nothing it does may land over the seed.
+    Storage.prototype.setItem = () => {}
+    return written
   })()" >"$OUT/$tag-0-seed.txt" 2>&1 || { log "could not seed the state"; return 1; }
   adb forward --remove "tcp:$PORT" >/dev/null 2>&1 || true
+
+  # WebView commits localStorage to disk in batches, seconds after the write. The first run
+  # of this job force-stopped one second after seeding and the seed never reached the disk:
+  # the app opened again with no activity and took the reminder down. Wait for the commit.
+  sleep 20
 
   # force-stop so that no write the app has pending lands over what was seeded, then open
   # it again: opening is what calls refreshReminder, which calls show. Opening also takes
@@ -166,6 +176,25 @@ phase() {
   sh_ am force-stop "$PKG"
   sh_ am start -W -n "$ACTIVITY" >/dev/null
   sleep 15
+
+  # Did the seed survive into the app that schedules? Without this, a lost seed reads as
+  # "the change does not work" when nothing was ever turned on.
+  pid=$(sh_ pidof "$PKG")
+  sock=$(sh_ cat /proc/net/unix | grep -o "webview_devtools_remote_$pid" | head -1)
+  if [ -n "$sock" ]; then
+    adb forward "tcp:$PORT" "localabstract:$sock" >/dev/null
+    node "$HERE/cdp-eval.mjs" "$PORT" "(() => {
+      const s = JSON.parse(localStorage.getItem('simple-calendar-storage') || '{}').state || {}
+      return { activities: (s.activities || []).length, reminderEnabled: !!s.reminderEnabled,
+               reminderHour: s.reminderHour }
+    })()" >"$OUT/$tag-0-seed-reopened.txt" 2>&1
+    adb forward --remove "tcp:$PORT" >/dev/null 2>&1 || true
+  fi
+  if ! grep -q '"activities":1' "$OUT/$tag-0-seed-reopened.txt" 2>/dev/null \
+     || ! grep -q '"reminderEnabled":true' "$OUT/$tag-0-seed-reopened.txt" 2>/dev/null; then
+    log "$tag: the seeded state did not survive the restart of the app; nothing was measured"
+    SEED_LOST=1
+  fi
   sh_ input keyevent KEYCODE_HOME
 
   # O1
@@ -236,9 +265,21 @@ phase() {
 phase control "$CONTROL_APK"
 [ "$NETWORK_GUARD" = held ] && phase test "$TEST_APK"
 
-# The check-in host must not appear anywhere the device wrote. logcat from every phase.
-if cat "$OUT"/*logcat*.txt 2>/dev/null | grep -q "$CHECKIN_HOST"; then
-  log "logcat names $CHECKIN_HOST"
+# The check-in host in logcat, from every phase. A fresh install sends its first check-in
+# on the first start, before anything can be seeded, so the app does try once per phase;
+# what matters is that the try failed. The app logs every failure as "check-in did not go
+# through", and with the radio off the reason is a DNS failure: that line is the record
+# that nothing left. Any other line naming the host means the guard did not hold.
+#
+# grep over the files, not `cat | grep -q`: under pipefail, grep -q exits on the first match,
+# cat dies of SIGPIPE, and the pipeline reports failure exactly when the host is found. The
+# first run of this job said "held" over a logcat that named the host.
+grep -h "$CHECKIN_HOST" "$OUT"/*logcat*.txt >"$OUT/checkin-lines.txt" 2>/dev/null || true
+blocked=$(grep -c "did not go through" "$OUT/checkin-lines.txt" || true)
+other=$(grep -vc "did not go through" "$OUT/checkin-lines.txt" || true)
+echo "logcat lines naming $CHECKIN_HOST: ${blocked:-0} failed attempts, ${other:-0} other" >>"$OUT/network.txt"
+if [ "${other:-0}" -gt 0 ]; then
+  log "logcat names $CHECKIN_HOST outside a failed attempt"
   NETWORK_GUARD=broken
 fi
 
@@ -255,10 +296,12 @@ if [ "$NETWORK_GUARD" = held ] && [ "$(v test O1)" = yes ] && [ "$(v test O2)" =
    && [ "$(v test O3)" = yes ] && [ "$(v control O2)" = yes ] && [ "$(v control O3)" = no ]; then
   DISTINGUISHES=yes
 fi
+[ "$SEED_LOST" = 1 ] && DISTINGUISHES=no
 {
   echo "Measurement A of #202, $(date -u '+%Y-%m-%d %H:%M UTC')"
   echo "device: $(head -1 "$OUT/device.txt")"
   echo "reminder at $H:00"
+  [ "$SEED_LOST" = 1 ] && echo "SEED LOST: the seeded state did not survive reopening the app in some phase (see *-0-seed-reopened.txt); nothing below measures the change."
   echo "network guard: $NETWORK_GUARD (see network.txt; the packet capture is checked by the workflow)"
   echo
   echo "O1 test: store holds allowWhileIdle and the hour      $(verdict "$(v test O1)" yes)  ($(v test O1))"
