@@ -175,3 +175,164 @@ test('saying yes still deletes, and still leaves the sheet', async ({ page }) =>
   await expect(page.locator(SHEET)).toBeVisible()
   await expect(page.getByTestId('bottom-sheet').getByTestId('activity-item')).toHaveCount(0)
 })
+
+/**
+ * With five or more activities the Activities sheet is taller than a phone, and it would
+ * not move under a finger: upwards nothing happened, downwards it closed. With eight there
+ * was no way to reach the last one or any of the statistics. The whole sheet was
+ * `touch-action: none`, put there so the drag that closes it would not fight the scroll,
+ * and it switched the scroll off with it.
+ *
+ * Measured with a finger, not with `scrollTo`: setting `scrollTop` from a script works on a
+ * sheet no finger can move, which is exactly the sheet this was. The day sheet is the
+ * control, the same gesture on a sheet that has always scrolled, so a gesture that moves
+ * nothing anywhere cannot pass for a sheet that is stuck.
+ */
+test.describe('a sheet longer than the phone', () => {
+  test.use({ viewport: { width: 360, height: 800 } })
+
+  const NAMES = [
+    'Read 20 minutes',
+    'Walk',
+    'Meditate',
+    'Drink water',
+    'Study English',
+    'No sugar',
+    'Sleep before 11',
+    'Stretch',
+    'Guitar',
+    'Journal',
+    'Vitamins',
+    'Call home',
+  ]
+
+  /** Replaces the one activity the hook above seeds, and loads the page again. */
+  async function seed(page: import('@playwright/test').Page, count: number, view: string) {
+    await page.addInitScript(
+      ([names, currentView]) => {
+        localStorage.setItem(
+          'simple-calendar-storage',
+          JSON.stringify({
+            state: {
+              activities: (names as string[]).map((name, i) => ({
+                id: `a${i}`,
+                name,
+                color: '#10B981',
+                createdAt: '2026-01-01T00:00:00.000Z',
+                updatedAt: '2026-01-01T00:00:00.000Z',
+              })),
+              logs: [],
+              selectedYear: 2026,
+              selectedMonth: 1,
+              selectedDate: null,
+              currentView,
+            },
+            version: 0,
+          })
+        )
+      },
+      [NAMES.slice(0, count), view] as const
+    )
+    await page.goto('/')
+  }
+
+  /** A finger put down, moved in twelve steps a frame apart, and lifted. */
+  async function swipe(page: import('@playwright/test').Page, x: number, from: number, to: number) {
+    const client = await page.context().newCDPSession(page)
+    await client.send('Input.dispatchTouchEvent', {
+      type: 'touchStart',
+      touchPoints: [{ x, y: from }],
+    })
+    for (let i = 1; i <= 12; i++) {
+      await client.send('Input.dispatchTouchEvent', {
+        type: 'touchMove',
+        touchPoints: [{ x, y: from + ((to - from) * i) / 12 }],
+      })
+      await page.waitForTimeout(16)
+    }
+    await client.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] })
+  }
+
+  const scrollTopOf = (page: import('@playwright/test').Page, selector: string) =>
+    page.locator(selector).evaluate((el) => el.scrollTop)
+
+  async function openWithEight(page: import('@playwright/test').Page) {
+    await seed(page, 8, 'year')
+    await page.getByTestId('fab-button').click()
+    await expect(page.locator(SHEET)).toBeVisible()
+    await page.waitForTimeout(500)
+    await page.locator(SHEET).getByTestId('show-more-button').tap()
+    await expect(page.locator(SHEET).getByTestId('activity-item')).toHaveCount(8)
+  }
+
+  const lastActivityInView = (page: import('@playwright/test').Page) =>
+    page
+      .locator(SHEET)
+      .getByTestId('activity-item')
+      .last()
+      .evaluate((el) => el.getBoundingClientRect().bottom <= window.innerHeight)
+
+  test('a finger moves the Activities sheet up to the last activity', async ({ page }) => {
+    await openWithEight(page)
+    expect(await scrollTopOf(page, SHEET)).toBe(0)
+    // The thing a person cannot do today, and the reason for the test.
+    expect(await lastActivityInView(page)).toBe(false)
+
+    await swipe(page, 180, 650, 380)
+
+    await expect.poll(() => scrollTopOf(page, SHEET), { timeout: 2000 }).toBeGreaterThan(0)
+    await expect.poll(() => lastActivityInView(page), { timeout: 2000 }).toBe(true)
+    await expect(page.locator(SHEET)).toBeVisible()
+  })
+
+  // A fault in this same sheet once showed only on the second gesture, so this is two of
+  // them back to back: up, let go, and straight away down again. Down on the content has
+  // to bring the list back rather than take the sheet away.
+  test('a second swipe straight after the first scrolls back instead of closing', async ({
+    page,
+  }) => {
+    await openWithEight(page)
+    const top = await sheetTop(page)
+
+    await swipe(page, 180, 650, 380)
+    await expect.poll(() => scrollTopOf(page, SHEET), { timeout: 2000 }).toBeGreaterThan(100)
+    const afterFirst = await scrollTopOf(page, SHEET)
+
+    await swipe(page, 180, 400, 600)
+    await page.waitForTimeout(500)
+
+    expect(await scrollTopOf(page, SHEET)).toBeLessThan(afterFirst)
+    await expect(page.locator(SHEET)).toBeVisible()
+    expect(await sheetTop(page)).toBe(top)
+  })
+
+  test('the control: the same finger moves the day sheet', async ({ page }) => {
+    await seed(page, 12, 'month')
+    await page.locator('button[aria-label$="activities completed"]').first().click()
+    const daySheet = '[data-testid="quicklog-modal"]'
+    await expect(page.locator(daySheet)).toBeVisible()
+    await page.waitForTimeout(500)
+    expect(await scrollTopOf(page, daySheet)).toBe(0)
+
+    await swipe(page, 180, 650, 380)
+
+    await expect.poll(() => scrollTopOf(page, daySheet), { timeout: 2000 }).toBeGreaterThan(0)
+  })
+
+  test('pulling the handle down still closes it', async ({ page }) => {
+    await openWithEight(page)
+    const top = await sheetTop(page)
+
+    await swipe(page, 180, top + 14, top + 400)
+
+    await expect(page.locator(SHEET)).toBeHidden()
+  })
+
+  test('and a tap above it still closes it', async ({ page }) => {
+    await openWithEight(page)
+
+    await page.touchscreen.tap(180, 60)
+
+    await expect(page.locator(SHEET)).toBeHidden()
+  })
+})
