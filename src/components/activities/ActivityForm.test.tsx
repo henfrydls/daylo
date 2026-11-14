@@ -549,4 +549,26 @@ describe('the day it offers to log, while a new day waits', () => {
     expect(screen.getByTestId('selected-date-input')).toHaveValue('2026-11-13')
     scope.remove()
   })
+
+  // What somebody picked in an open form is theirs. A new day arriving with the form open
+  // is not the form opening again, and must not put the color and the day back.
+  it('keeps the color and the day somebody picked when a new day comes in', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] })
+    vi.setSystemTime(new Date(2026, 10, 13, 21, 0))
+    render(<ActivityForm isOpen onClose={vi.fn()} />)
+    fireEvent.click(screen.getByLabelText('Purple color'))
+    fireEvent.click(screen.getByTestId('log-for-date-checkbox'))
+    fireEvent.change(screen.getByTestId('selected-date-input'), {
+      target: { value: '2026-11-10' },
+    })
+
+    vi.setSystemTime(new Date(2026, 10, 14, 8, 30))
+    act(() => {
+      window.dispatchEvent(new Event('focus'))
+    })
+
+    expect(screen.getByLabelText('Purple color')).toHaveAttribute('aria-checked', 'true')
+    expect(screen.getByTestId('log-for-date-checkbox')).toBeChecked()
+    expect(screen.getByTestId('selected-date-input')).toHaveValue('2026-11-10')
+  })
 })
