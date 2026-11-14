@@ -194,6 +194,55 @@ fn bring_back_the_open_window(app: &tauri::AppHandle) {
     }
 }
 
+/// The name a copy of Daylo owns on the Linux session bus, before the plugin adds
+/// `.SingleInstance`. Derived from the identifier the app was built with, so that the lab
+/// (com.daylo.lab) owns a name of its own: with a fixed one, the lab's AppImage opened next
+/// to the real Daylo would bring the real window forward and close, and could never be
+/// tried on the same desktop.
+///
+/// The released identifier is the one exception. It becomes the Flatpak's app id, because
+/// the Flatpak sandbox lets an app own names under its own id and nothing else without a
+/// permission: io.github.henfrydls.daylo.SingleInstance needs none, com.daylo.app's would.
+/// The deb and the AppImage use the same name, which is what makes two of them one.
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
+fn single_instance_bus_id(identifier: &str) -> &str {
+    if identifier == "com.daylo.app" {
+        "io.github.henfrydls.daylo"
+    } else {
+        identifier
+    }
+}
+
+/// Whether the plugin can be started without taking the app down with it.
+///
+/// On Linux the plugin opens the session bus with `Builder::session().unwrap()`, and with
+/// `panic = "abort"` that unwrap is the end of the launch for anybody whose
+/// DBUS_SESSION_BUS_ADDRESS zbus cannot read: `disabled:`, a transport it does not know,
+/// anything malformed. Daylo opened for them before the plugin, and it still has to. This
+/// asks zbus's own parser the same question first. An unset variable is fine: zbus then
+/// builds `unix:path=` from XDG_RUNTIME_DIR, which always parses. A bus that parses but
+/// cannot be reached is fine too: the plugin treats that as an error and carries on.
+#[cfg(target_os = "linux")]
+fn session_bus_address_readable(address: Option<&str>) -> bool {
+    use std::str::FromStr;
+    match address {
+        None => true,
+        Some(address) => zbus::Address::from_str(address).is_ok(),
+    }
+}
+
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
+fn single_instance_can_start() -> bool {
+    #[cfg(target_os = "linux")]
+    {
+        session_bus_address_readable(std::env::var("DBUS_SESSION_BUS_ADDRESS").ok().as_deref())
+    }
+    #[cfg(not(target_os = "linux"))]
+    {
+        true
+    }
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     // Before anything else, because everything else assumes a window can exist. Without
@@ -205,6 +254,7 @@ pub fn run() {
         webview2::explain_and_exit();
     }
 
+    let context = tauri::generate_context!();
     let builder = tauri::Builder::default();
 
     // First, before any other plugin, as the plugin asks: the second copy has to stop here,
@@ -213,19 +263,37 @@ pub fn run() {
     // could save over what was ticked in the other. Now the second launch brings back the
     // window that is already open and goes away. Desktop only: Android and iOS already
     // give an app one instance. See bring_back_the_open_window for what it is handed.
+    //
+    // Not in a debug build, which is `tauri dev`: it has the released identifier, so it
+    // would find the installed Daylo open, bring it forward and close itself.
+    //
+    // Where it does not hold, all of it measured by nobody yet:
+    // - The snap. Strict confinement does not let it own the bus name without a dbus
+    //   slot, which snapcraft.yaml does not declare, so each launch there still opens a
+    //   window (#250).
+    // - On Windows the name is the identifier, so the Store copy and the installer's copy
+    //   share it: with one of them open, opening the other brings the first forward, and
+    //   that one has its own data. Accepted: having both installed is rare, and the window
+    //   that comes forward is a real Daylo, not a lost one.
+    // - The focus. Windows lets the first copy come to the front because the second hands
+    //   it the right before closing. GNOME on Wayland may refuse a window that raises
+    //   itself without the token of the launch that asked, which the plugin does not pass
+    //   on; then the window is shown but not in front.
     #[cfg(not(any(target_os = "android", target_os = "ios")))]
-    let builder = builder.plugin(
-        tauri_plugin_single_instance::Builder::new()
-            // Linux only, where the plugin owns a name on the session bus. The Flatpak's
-            // own id rather than the bundle identifier, because the Flatpak sandbox lets
-            // an app own names under its own id and nothing else without a permission:
-            // io.github.henfrydls.daylo.SingleInstance needs none, com.daylo.app's would.
-            // The snap's common-id is the same id. Windows and macOS ignore this and use
-            // the bundle identifier.
-            .dbus_id("io.github.henfrydls.daylo")
-            .callback(|app, _argv, _cwd| bring_back_the_open_window(app))
-            .build(),
-    );
+    let builder = if cfg!(debug_assertions) {
+        builder
+    } else if single_instance_can_start() {
+        builder.plugin(
+            tauri_plugin_single_instance::Builder::new()
+                // Linux only; Windows and macOS use the identifier as it is.
+                .dbus_id(single_instance_bus_id(&context.config().identifier))
+                .callback(|app, _argv, _cwd| bring_back_the_open_window(app))
+                .build(),
+        )
+    } else {
+        log::warn!("DBUS_SESSION_BUS_ADDRESS cannot be read; starting without the single instance");
+        builder
+    };
 
     let builder = builder.plugin(tauri_plugin_shell::init());
 
@@ -292,7 +360,7 @@ pub fn run() {
     let builder = builder.invoke_handler(tauri::generate_handler![greet]);
 
     builder
-        .run(tauri::generate_context!())
+        .run(context)
         .expect("error while running tauri application");
 }
 
@@ -322,7 +390,7 @@ mod plugin_config {
     /// Every plugin this app registers, on any platform. The list is here so that a block
     /// for something we do not register cannot sit in the config being ignored until the
     /// day somebody registers it.
-    const REGISTERED: [&str; 7] = [
+    const REGISTERED: [&str; 8] = [
         "shell",
         "dialog",
         "opener",
@@ -330,6 +398,7 @@ mod plugin_config {
         "notification",
         "updater",
         "process",
+        "single-instance",
     ];
 
     fn conf() -> Value {
@@ -396,6 +465,10 @@ mod plugin_config {
             accepts(&tauri_plugin_opener::init::<Wry>(), "opener"),
             accepts(&tauri_plugin_fs::init::<Wry>(), "fs"),
             accepts(&tauri_plugin_notification::init::<Wry>(), "notification"),
+            accepts(
+                &tauri_plugin_single_instance::Builder::<Wry>::new().build(),
+                "single-instance",
+            ),
             // The updater is the only one of these with a block in the config, so it is
             // the only one where "the plugin accepts what we wrote" is a real question
             // rather than a formality.
@@ -431,5 +504,62 @@ mod plugin_config {
             strangers.is_empty(),
             "tauri.conf.json configures plugins this app never registers: {strangers:?}"
         );
+    }
+}
+
+/// The name the single instance owns on the Linux session bus, and whether the plugin can
+/// be started at all. Both decide whether a second launch brings back the open window or
+/// takes the first launch down, and neither can be seen without two copies of the app.
+#[cfg(all(test, not(any(target_os = "android", target_os = "ios"))))]
+mod single_instance {
+    use super::single_instance_bus_id;
+
+    #[test]
+    fn the_released_copy_owns_a_name_the_flatpak_may_own_without_a_permission() {
+        assert_eq!(
+            single_instance_bus_id("com.daylo.app"),
+            "io.github.henfrydls.daylo"
+        );
+    }
+
+    #[test]
+    fn the_lab_owns_a_name_of_its_own() {
+        assert_eq!(single_instance_bus_id("com.daylo.lab"), "com.daylo.lab");
+    }
+
+    #[cfg(target_os = "linux")]
+    mod session_bus {
+        use super::super::session_bus_address_readable;
+
+        #[test]
+        fn starts_with_no_address_set() {
+            assert!(session_bus_address_readable(None));
+        }
+
+        #[test]
+        fn starts_with_the_addresses_a_desktop_hands_out() {
+            for address in [
+                "unix:path=/run/user/1000/bus",
+                "unix:path=/run/user/1000/bus,guid=0123456789abcdef0123456789abcdef",
+                "unix:abstract=/tmp/dbus-AbCdEf",
+                "unix:dir=/tmp",
+                "tcp:host=localhost,port=4000",
+            ] {
+                assert!(session_bus_address_readable(Some(address)), "{address}");
+            }
+        }
+
+        #[test]
+        fn does_not_start_with_an_address_zbus_cannot_read() {
+            for address in [
+                "disabled:",
+                "",
+                "nonsense",
+                "unix:",
+                "carrier-pigeon:path=/x",
+            ] {
+                assert!(!session_bus_address_readable(Some(address)), "{address}");
+            }
+        }
     }
 }

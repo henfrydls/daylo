@@ -78,7 +78,7 @@ apps:
       # it carries on without a word, so each launch opens a window as before. A slot would
       # let the first copy own the name, but whether the second copy is then allowed to
       # call it, and whether the store accepts the slot without a manual review, is not
-      # known either.
+      # known either. Followed in #250.
 
 parts:
   daylo:
