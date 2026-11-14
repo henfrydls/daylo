@@ -69,8 +69,11 @@ function getMonthDays(year: number, month: number, today: string): DayInfo[] {
 }
 
 interface MonthViewProps {
-  /** Opens Import. Without it the empty month offers no backup, because nothing could open one. */
-  onImport?: () => void
+  /**
+   * Opens Import, given the link that asked, so focus can go back to it. Without it the
+   * empty month offers no backup, because nothing could open one.
+   */
+  onImport?: (opener: HTMLElement) => void
 }
 
 export const MonthView = memo(function MonthView({ onImport }: MonthViewProps) {
@@ -360,8 +363,9 @@ export const MonthView = memo(function MonthView({ onImport }: MonthViewProps) {
               their activities by hand instead, and those collided with the backup once
               they found it. Here, where they are already looking, and gone with the first
               activity because by then it is not the first day any more.
-              The padding is the finger's 44px; the negative margin keeps it from making
-              the line any taller than the sentence above it. On a phone the link takes a
+              The padding is the finger's 44px, all of it below the words: padded above as
+              well, it reached over the words before it, and a tap or a text selection
+              there opened Import. The negative margin keeps the line no taller. On a phone the link takes a
               line of its own, centred: at the end of one line it sat under the round
               activities button, which floats over that corner below lg. */}
           {onImport === undefined ? null : (
@@ -369,8 +373,8 @@ export const MonthView = memo(function MonthView({ onImport }: MonthViewProps) {
               Used Daylo before? <br className="sm:hidden" />
               <button
                 type="button"
-                onClick={onImport}
-                className="-my-3 rounded-lg py-3 font-medium text-emerald-700 underline underline-offset-2 hover:text-emerald-800 focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500"
+                onClick={(event) => onImport(event.currentTarget)}
+                className="-mb-6 rounded-lg pb-6 font-medium text-emerald-700 underline underline-offset-2 hover:text-emerald-800 focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500"
               >
                 Import your backup.
               </button>

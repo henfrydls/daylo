@@ -147,6 +147,15 @@ describe('MonthView', () => {
         )
       ).toBeInTheDocument()
     })
+
+    // A link that opens nothing is worse than no link: where nobody passed a way to open
+    // Import, the empty month says only what it always said.
+    it('offers no backup when there is nothing to open Import with', () => {
+      render(<MonthView />)
+
+      expect(screen.getByTestId('month-empty-state')).toBeInTheDocument()
+      expect(screen.queryByTestId('month-empty-import')).not.toBeInTheDocument()
+    })
   })
 
   describe('Log Today bar', () => {

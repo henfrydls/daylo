@@ -15,7 +15,10 @@ import { test, expect, type Page } from '@playwright/test'
  */
 
 const DIALOG = '[role="dialog"][aria-labelledby="modal-title"]'
-const LINE = '[data-testid="month-empty-import"]'
+// The one on screen. On a phone in Year the hidden Month beside it has its own line, which
+// is inert and is checked on its own below.
+const LINE = '[data-testid="month-empty-import"] >> visible=true'
+const NAME = 'Import your backup.'
 
 const backup = {
   name: 'daylo-backup.json',
@@ -49,13 +52,43 @@ const boxOf = (page: Page) =>
   page.locator(LINE).evaluate((node) => {
     const r = node.getBoundingClientRect()
     return {
-      top: Math.round(r.top),
-      bottom: Math.round(r.bottom),
-      height: Math.round(r.height),
+      top: r.top,
+      bottom: r.bottom,
       innerHeight: window.innerHeight,
       scrollY: window.scrollY,
     }
   })
+
+/**
+ * The boxes of the words above and beside the link: the empty-state sentence, and "Used
+ * Daylo before?" itself, measured as text with a Range so the paragraph's own width does
+ * not count. The link's target may be bigger than its words, but not over these: a tap or
+ * a text selection there opened Import.
+ */
+const wordsAround = (page: Page) =>
+  page.locator(LINE).evaluate((line) => {
+    const sentence = line.parentElement!.querySelector('p')!
+    const range = document.createRange()
+    range.selectNodeContents(line.firstChild!)
+    return [sentence.getBoundingClientRect(), ...Array.from(range.getClientRects())].map((r) => ({
+      x: r.left,
+      y: r.top,
+      width: r.width,
+      height: r.height,
+    }))
+  })
+
+type Box = { x: number; y: number; width: number; height: number }
+const overlap = (a: Box, b: Box) =>
+  a.x < b.x + b.width && b.x < a.x + a.width && a.y < b.y + b.height && b.y < a.y + a.height
+
+async function importTheBackup(page: Page) {
+  await page.locator('input[type="file"]').setInputFiles(backup)
+  await expect(page.getByText('Import mode:')).toBeVisible()
+  await page.locator(DIALOG).getByRole('button', { name: 'Import Data' }).click()
+  await page.getByRole('button', { name: 'Import', exact: true }).click()
+  await expect(page.locator(DIALOG)).toBeHidden()
+}
 
 for (const [width, height] of [
   [360, 800],
@@ -73,50 +106,83 @@ for (const [width, height] of [
     await expect(line).toHaveText('Used Daylo before? Import your backup.')
 
     const box = await boxOf(page)
-    console.log(`line box at ${width}x${height}: ${JSON.stringify(box)}`)
     expect(box.scrollY).toBe(0)
     expect(box.top).toBeGreaterThanOrEqual(0)
     expect(box.bottom).toBeLessThanOrEqual(box.innerHeight)
 
-    // A finger's worth of target on a phone, without the line itself looking taller.
-    const button = page.getByRole('button', { name: 'Import your backup.' })
-    const target = await button.boundingBox()
-    expect(target).not.toBeNull()
-    if (width < 640) expect(target!.height).toBeGreaterThanOrEqual(44)
+    // A finger's worth of target, on every width.
+    const button = page.getByRole('button', { name: NAME })
+    const target = (await button.boundingBox())!
+    expect(target.height).toBeGreaterThanOrEqual(44)
+
+    // ...grown below the words and not over the ones above them.
+    for (const words of await wordsAround(page)) expect(overlap(target, words)).toBe(false)
 
     // Below lg the round button that opens the activities floats over the bottom right
     // corner, which is where a centred line ends on a phone. A link half under it is half
     // a link, and Playwright still clicks it because it aims at the middle.
     const fab = page.locator('[data-testid="fab-button"]')
-    if (await fab.isVisible()) {
-      const f = (await fab.boundingBox())!
-      const t = target!
-      const overlaps =
-        t.x < f.x + f.width && f.x < t.x + t.width && t.y < f.y + f.height && f.y < t.y + t.height
-      console.log(`target ${JSON.stringify(t)} fab ${JSON.stringify(f)}`)
-      expect(overlaps).toBe(false)
-    }
+    if (await fab.isVisible()) expect(overlap(target, (await fab.boundingBox())!)).toBe(false)
 
     await button.click()
     await expect(page.locator(DIALOG)).toBeVisible()
     await expect(page.locator(DIALOG)).toContainText('Import Data')
 
-    await page.locator('input[type="file"]').setInputFiles(backup)
-    await expect(page.getByText('Import mode:')).toBeVisible()
-    await page.locator(DIALOG).getByRole('button', { name: 'Import Data' }).click()
-    await page.getByRole('button', { name: 'Import', exact: true }).click()
-
-    await expect(page.locator(DIALOG)).toBeHidden()
-    await expect(line).toHaveCount(0)
+    await importTheBackup(page)
+    await expect(page.locator('[data-testid="month-empty-import"]')).toHaveCount(0)
     await expect(page.locator('[data-testid="month-empty-state"]')).toHaveCount(0)
+    // The button that had focus went with the line. Focus goes to the month's title,
+    // which was there before and is there after, rather than falling to the page.
+    await expect(page.getByTestId('month-title-button')).toBeFocused()
   })
 }
 
-// Measured and reported, not asserted: on the shortest phones the line may fall below the
-// fold, and the brief is to say so rather than move other things to make room.
-test('at 360x640 the line box is measured', async ({ page }) => {
+// On the shortest phones the line falls below the fold, and the brief is to say so rather
+// than move other things to make room. What has to hold is that it is still there to be
+// reached: one scroll away, whole, and clear of the round button.
+test('at 360x640 the line is one scroll away and clear of the round button', async ({ page }) => {
   await openEmpty(page, 360, 640)
-  await expect(page.locator(LINE)).toBeVisible()
+  const button = page.getByRole('button', { name: NAME })
+  await button.scrollIntoViewIfNeeded()
+
   const box = await boxOf(page)
-  console.log(`line box at 360x640: ${JSON.stringify(box)}`)
+  expect(box.top).toBeGreaterThanOrEqual(0)
+  expect(box.bottom).toBeLessThanOrEqual(box.innerHeight)
+  const target = (await button.boundingBox())!
+  expect(overlap(target, (await page.getByTestId('fab-button').boundingBox())!)).toBe(false)
+
+  await button.click()
+  await expect(page.locator(DIALOG)).toBeVisible()
+})
+
+test('closing Import with nothing imported leaves focus on the line', async ({ page }) => {
+  await openEmpty(page, 1200, 800)
+  const button = page.getByRole('button', { name: NAME })
+  await button.click()
+  await expect(page.locator(DIALOG)).toBeVisible()
+  await page.locator(DIALOG).getByRole('button', { name: 'Cancel' }).click()
+  await expect(page.locator(DIALOG)).toBeHidden()
+  await expect(button).toBeFocused()
+})
+
+// In Year on a phone the Month beside it is drawn, hidden, so a drag has something to
+// reveal. It keeps its line so it is as tall as it will be once it arrives, and it is
+// inert: nothing can focus its link and no finger can land on it.
+test('the hidden month beside Year keeps its line out of reach', async ({ page }) => {
+  await openEmpty(page, 360, 800)
+  await page.getByRole('button', { name: 'Year', exact: true }).click()
+  await expect(page.locator('[data-testid="month-empty-import"]')).toHaveCount(1)
+  await expect(page.getByRole('button', { name: NAME })).toHaveCount(0)
+
+  const reach = await page.locator('[data-testid="month-empty-import"] button').evaluate((b) => {
+    ;(b as HTMLElement).focus()
+    const r = b.getBoundingClientRect()
+    const hit = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2)
+    return {
+      inert: b.closest('[inert]') !== null,
+      focused: document.activeElement === b,
+      hit: hit !== null && (hit === b || b.contains(hit)),
+    }
+  })
+  expect(reach).toEqual({ inert: true, focused: false, hit: false })
 })
