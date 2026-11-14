@@ -102,9 +102,12 @@ const createDeferredStorage = (): StateStorage => {
         console.error('[Daylo] Could not save changes to localStorage:', error)
         // Once per run of failures, not once per tap: every tap is another write. Never a
         // second copy over one still on the screen. Again if the person closed it and the
-        // writes still fail five minutes after they did.
+        // writes still fail five minutes after they did. A clock put back since then makes
+        // the time negative, and that counts as long enough: otherwise the notice would
+        // stay quiet for as long as the clock moved.
+        const sinceClosed = noticeClosedAt === null ? null : Date.now() - noticeClosedAt
         const closedLongEnough =
-          noticeClosedAt === null || Date.now() - noticeClosedAt >= SAY_IT_AGAIN_AFTER_MS
+          sinceClosed === null || sinceClosed < 0 || sinceClosed >= SAY_IT_AGAIN_AFTER_MS
         if (noticeId === null && closedLongEnough) showNotice()
       }
     }

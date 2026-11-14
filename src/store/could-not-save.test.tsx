@@ -171,6 +171,25 @@ describe('a write the disk refuses', { timeout: 30_000 }, () => {
     expect(said()).toBe(1)
   })
 
+  it('says it again if the clock went back after it was closed', async () => {
+    const { useCalendarStore, useToastStore, COULD_NOT_SAVE } = await freshStore()
+    const said = () =>
+      useToastStore.getState().toasts.filter((t) => t.message === COULD_NOT_SAVE).length
+
+    refuseWrites()
+    useCalendarStore.getState().addActivity('Run')
+    vi.advanceTimersByTime(10)
+    useToastStore.getState().removeToast(useToastStore.getState().toasts[0].id)
+
+    // The device's clock is put back an hour, as a wrong clock being corrected does.
+    // Without care the time since closing reads as negative and the notice stays quiet
+    // for that hour while the writes keep failing.
+    vi.setSystemTime(Date.now() - 60 * 60_000)
+    useCalendarStore.getState().addActivity('Swim')
+    vi.advanceTimersByTime(10)
+    expect(said()).toBe(1)
+  })
+
   it('does not stack a second copy over one still on the screen', async () => {
     const { useCalendarStore, useToastStore, COULD_NOT_SAVE } = await freshStore()
 
