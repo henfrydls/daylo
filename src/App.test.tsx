@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { act, render, screen, waitForElementToBeRemoved } from '@testing-library/react'
+import { act, fireEvent, render, screen, waitForElementToBeRemoved } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import App from './App'
 import { useCalendarStore } from './store'
@@ -182,6 +182,91 @@ describe('the way into settings', () => {
     await openSettings()
 
     expect(screen.queryByTestId('reminder-switch')).not.toBeInTheDocument()
+  })
+})
+
+// Import used to be three levels down, behind the gear and Settings, on the one day it
+// matters: the first day of a reinstalled app, which looks exactly like a new one.
+describe('the way into import from an empty app', () => {
+  it('opens Import from the line under the empty month', async () => {
+    render(<App />)
+    await act(async () => {})
+
+    await userEvent.click(screen.getByRole('button', { name: 'Import your backup.' }))
+
+    expect(await screen.findByRole('dialog', { name: 'Import Data' })).toBeInTheDocument()
+    expect(screen.queryByTestId('settings')).not.toBeInTheDocument()
+  })
+
+  const backup = () =>
+    new File(
+      [
+        JSON.stringify({
+          activities: [
+            {
+              id: 'b1',
+              name: 'Swim',
+              color: '#3B82F6',
+              createdAt: '2026-01-01T00:00:00.000Z',
+              updatedAt: '2026-01-01T00:00:00.000Z',
+            },
+          ],
+          logs: [],
+        }),
+      ],
+      'daylo-backup.json',
+      { type: 'application/json' }
+    )
+
+  // The button that had focus is gone the moment the calendar fills, and focus fell to
+  // the page: somebody on a keyboard or a screen reader was left nowhere. The month's own
+  // title is there before and after, and says where they are.
+  it('leaves focus on the month after an import fills the calendar', async () => {
+    render(<App />)
+    await act(async () => {})
+
+    await userEvent.click(screen.getByRole('button', { name: 'Import your backup.' }))
+    const dialog = await screen.findByRole('dialog', { name: 'Import Data' })
+    await userEvent.upload(dialog.querySelector('input[type="file"]') as HTMLInputElement, backup())
+    await userEvent.click(await screen.findByRole('button', { name: /Import Data/ }))
+    await userEvent.click(await screen.findByRole('button', { name: 'Import' }))
+
+    await act(async () => {})
+    expect(useCalendarStore.getState().activities).toHaveLength(1)
+    expect(screen.queryByRole('button', { name: 'Import your backup.' })).not.toBeInTheDocument()
+    expect(document.activeElement).toBe(screen.getByTestId('month-title-button'))
+  })
+
+  // fireEvent and not userEvent on purpose: a click that does not focus the button, which
+  // is what Safari and WKWebView do with buttons. Focus then never was on the line, so
+  // nothing brought it back there when Import closed with nothing imported.
+  it('puts focus back on the line when Import closes with nothing imported', async () => {
+    render(<App />)
+    await act(async () => {})
+
+    const line = screen.getByRole('button', { name: 'Import your backup.' })
+    fireEvent.click(line)
+    await screen.findByRole('dialog', { name: 'Import Data' })
+    fireEvent.click(screen.getByRole('button', { name: 'Cancel' }))
+
+    await act(async () => {})
+    expect(document.activeElement).toBe(line)
+  })
+
+  // On a phone the view that is not on screen is drawn beside it, so a drag has something
+  // to reveal, and in Year that neighbour is an empty Month with its own line. It keeps
+  // the line so the neighbour is as tall as it will be once it arrives, and it is inert:
+  // hidden from screen readers and out of reach of the keyboard and the finger.
+  it('keeps the line in the hidden month beside Year out of reach', async () => {
+    useCalendarStore.setState({ currentView: 'year' })
+    render(<App />)
+    await act(async () => {})
+
+    const lines = document.querySelectorAll('[data-testid="month-empty-import"]')
+    expect(lines).toHaveLength(1)
+    expect(lines[0].closest('[inert]')).not.toBeNull()
+    expect(lines[0].closest('[aria-hidden="true"]')).not.toBeNull()
+    expect(screen.queryByRole('button', { name: 'Import your backup.' })).not.toBeInTheDocument()
   })
 })
 
