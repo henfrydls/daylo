@@ -122,7 +122,7 @@ export const ColorPicker = memo(function ColorPicker({
     }
   }, [autoCollapse, measureAndSetCount])
 
-  const isSelected = (colorValue: string): boolean => value === colorValue
+  const isSelected = (colorValue: string): boolean => sameColor(value, colorValue)
 
   // Use autoCount when autoCollapse is active, otherwise fall back to collapsedCount prop
   const effectiveCollapsedCount = autoCollapse ? autoCount : collapsedCount
@@ -131,7 +131,7 @@ export const ColorPicker = memo(function ColorPicker({
   // without unfolding the rest. The picker used to unfold all sixteen instead, with no way
   // to fold them back: that is what a phone got whenever the color offered to a new
   // activity was the eighth or later, as it is once seven are in use.
-  const selectedIndex = colors.findIndex((c) => c.value === value)
+  const selectedIndex = colors.findIndex((c) => sameColor(c.value, value))
   const shouldShowAll = effectiveCollapsedCount <= 0 || expanded
   const visibleColors = shouldShowAll
     ? colors

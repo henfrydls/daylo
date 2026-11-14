@@ -78,6 +78,25 @@ describe('ColorPicker and the colors other activities already wear', () => {
 // On a 360px phone with seven colors in use, the color a new activity starts on is the
 // eighth, past the row the picker shows collapsed. It used to give up on collapsing and
 // show all sixteen with no way to fold them away.
+describe('the chosen color, however its hex is written', () => {
+  it('marks the matching color as chosen', () => {
+    renderPicker({ value: '#10b981' })
+
+    expect(screen.getByRole('radio', { name: 'Green color' })).toHaveAttribute(
+      'aria-checked',
+      'true'
+    )
+  })
+
+  it('marks it from the short form too', () => {
+    renderPicker({ value: '#00a', colors: [{ name: 'Navy', value: '#0000AA' }] })
+    expect(screen.getByRole('radio', { name: 'Navy color' })).toHaveAttribute(
+      'aria-checked',
+      'true'
+    )
+  })
+})
+
 describe('a collapsed picker whose color is past the visible row', () => {
   const SIXTEEN = Array.from({ length: 16 }, (_, i) => ({
     name: `C${i}`,
@@ -106,6 +125,14 @@ describe('a collapsed picker whose color is past the visible row', () => {
 
     await userEvent.click(screen.getByRole('button', { name: 'Show fewer colors' }))
     expect(screen.getAllByRole('radio')).toHaveLength(5)
+  })
+
+  it('puts the chosen color in the row however its hex is written', () => {
+    paint(SIXTEEN[11].value.toLowerCase())
+
+    const shown = screen.getAllByRole('radio').map((r) => r.getAttribute('aria-label'))
+    expect(shown).toEqual(['C0 color', 'C1 color', 'C2 color', 'C3 color', 'C11 color'])
+    expect(screen.getByRole('radio', { name: 'C11 color' })).toHaveAttribute('aria-checked', 'true')
   })
 
   it('leaves the row alone when the chosen color is already in it', () => {
