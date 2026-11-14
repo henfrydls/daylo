@@ -102,11 +102,11 @@ const createDeferredStorage = (): StateStorage => {
       // Cancel any existing scheduled write
       cancelScheduledWrite()
 
-      // El diferido coalesce escrituras a localStorage: la durabilidad no depende de
-      // esta ventana, sino del flush de 'pagehide' y visibilitychange de arriba, asi que
-      // conviene que sea holgada. Con una ventana corta cada clic de navegacion
-      // (cambiar de mes, de vista, elegir un dia) acaba en una escritura propia, porque
-      // partialize tambien persiste esos campos.
+      // The deferral coalesces writes to localStorage. Durability does not depend on this
+      // window but on the 'pagehide' and visibilitychange flush above, so it can be
+      // generous. With a short one every navigation tap (another month, the other view, a
+      // day) ends in a write of its own: persist writes on every set(), even one that only
+      // changes fields partialize leaves out.
       //
       // Ojo: esto NO ahorra serializacion. createJSONStorage hace el JSON.stringify de
       // forma sincrona en cada set(), antes de llamar a este adaptador; lo que se
@@ -300,26 +300,43 @@ interface CalendarState {
   getLogsForActivity: (activityId: string) => ActivityLog[]
 }
 
+const OPENED_AT = new Date()
+
+/**
+ * Where somebody is, as opposed to what they have. None of these is written to disk, and
+ * merge drops each of them on the way in, because every copy installed before 1.5.3 has
+ * them stored. One list for both halves, so the next place added to the store cannot be
+ * left out of one of them; `src/store/open-on-today.test.ts` checks both against it.
+ */
+export const WHERE_SOMEBODY_IS = [
+  'selectedDate',
+  'selectedMonth',
+  'selectedYear',
+  'currentView',
+] as const satisfies readonly (keyof CalendarState)[]
+
 export const useCalendarStore = create<CalendarState>()(
   persist(
     (set, get) => ({
       activities: [],
       logs: [],
-      selectedYear: new Date().getFullYear(),
+      // One reading of the clock for both, so a store built in the last instant of
+      // December cannot come up with this year's December's month and next year's year.
+      selectedYear: OPENED_AT.getFullYear(),
       selectedDate: null,
       // Month, everywhere. The year view answers "how did the year go"; the month view is
       // where a person ticks today off, which is what they open the app to do. This used
       // to depend on the window being narrower than 640px, so the same person got a
       // different first screen on their phone and on their laptop.
       //
-      // Only a fresh install sees it. currentView is persisted, and anything that touches
-      // the store writes the whole persisted slice, so anyone who has ever used Daylo
-      // already has a view stored and keeps it. That is deliberate: changing it for them
-      // would overrule a choice some of them made on purpose, and there is no way to tell
-      // those apart from the ones who never touched the toggle.
+      // And every launch sees it, not only a fresh install. The view used to be kept, on
+      // the grounds that some people chose the year on purpose; what it did in practice was
+      // bring back to the year anybody who had tapped Year once, or swiped sideways on a
+      // phone without meaning to, where there is no Today bar and no obvious way to tick
+      // today off. The year is one tap away for whoever wants it.
       currentView: 'month' as ViewType,
       yearMode: 'all' as const,
-      selectedMonth: new Date().getMonth(),
+      selectedMonth: OPENED_AT.getMonth(),
       _hasHydrated: false,
       _viewTransitionDirection: null as ViewTransitionDirection,
 
@@ -518,14 +535,23 @@ export const useCalendarStore = create<CalendarState>()(
     {
       name: STORAGE_KEY,
       storage: createJSONStorage(() => createDeferredStorage()),
+      // Where somebody was is not kept, and the four missing names are the whole of this
+      // decision: `selectedDate`, `selectedMonth`, `selectedYear` and `currentView`.
+      //
+      // Daylo is for today, and it used to open wherever it was left. Somebody who looked
+      // at March in March came back in November and was shown March, with today a swipe
+      // away and nothing on the screen saying so; the day sheet came back open too, over a
+      // day that had stopped being the day. The view was the same kind of thing: one tap on
+      // Year, or one sideways swipe on a phone, and every launch after that opened on
+      // twelve cards with no Today bar. The defaults are today's month, so leaving these
+      // out is the whole of the fix.
+      //
+      // What is kept is what is a preference rather than a place: how somebody likes the
+      // year read.
       partialize: (state) => ({
         activities: state.activities,
         logs: state.logs,
-        selectedYear: state.selectedYear,
-        selectedDate: state.selectedDate,
-        currentView: state.currentView,
         yearMode: state.yearMode,
-        selectedMonth: state.selectedMonth,
         reminderEnabled: state.reminderEnabled,
         reminderHour: state.reminderHour,
         reminderTimeChosen: state.reminderTimeChosen,
@@ -557,7 +583,14 @@ export const useCalendarStore = create<CalendarState>()(
       merge: (persisted, current) => {
         if (persisted == null) return { ...current, _checkinStart: 'new' }
 
-        const stored = persisted as Partial<CalendarState>
+        // Where somebody was is dropped on the way in, not only left out on the way out.
+        // Every copy already installed has these four on disk from before this change, and
+        // partialize only decides what is written: without this, the first launch after
+        // updating would still open on March, or on the year, and the second one would be
+        // the fixed one. The fix that works on the next launch and not on this one is the
+        // fix nobody sees.
+        const stored = { ...(persisted as Partial<CalendarState>) }
+        for (const place of WHERE_SOMEBODY_IS) delete stored[place]
         return {
           ...current,
           ...stored,

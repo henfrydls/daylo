@@ -32,9 +32,10 @@ async function openSettings(page: import('@playwright/test').Page) {
  */
 async function openYearView(page: import('@playwright/test').Page) {
   await page.getByRole('button', { name: 'Year', exact: true }).click()
-  await expect(
-    page.locator('h1').filter({ hasText: String(new Date().getFullYear()) })
-  ).toBeVisible()
+  // The page's own year, not this process's: several tests pin the page's clock to 2026,
+  // and from January 2027 the runner's clock would wait for a heading that never comes.
+  const year = await page.evaluate(() => new Date().getFullYear())
+  await expect(page.locator('h1').filter({ hasText: String(year) })).toBeVisible()
   // The heading is there before the view has finished sliding in. Anything that measures
   // a box has to wait for the animation to land, or it measures a moving one.
   await page.waitForFunction(() => document.getAnimations().every((a) => a.playState !== 'running'))
@@ -417,8 +418,9 @@ test.describe('Activity Tracker App', () => {
     // Verify heatmap
     await expect(dayCell).toHaveClass(/bg-emerald/)
 
-    // Reload
+    // Reload, which lands on the month, and go back to the year the heatmap is in
     await page.reload()
+    await openYearView(page)
 
     // Heatmap color should persist
     const dayCellAfterReload = page.getByTestId('day-cell').first()
@@ -620,6 +622,10 @@ test.describe('modal actions', () => {
  * because the test is about a width, not about the flow that produces it.
  */
 async function seedFullYear(page: import('@playwright/test').Page) {
+  // Daylo opens on today, so the clock decides which year is on screen. Pinned to 2026,
+  // the year the logs below are in, or from January 2027 this would draw an empty year.
+  // Only Date is pinned: timers and animations run as they would.
+  await page.clock.setFixedTime(new Date('2026-11-13T12:00:00'))
   // addInitScript, not evaluate-then-reload: the store persists through a deferred write,
   // so its own empty state can land on top of a seed written after the app has started.
   // This runs before any app code does, and the app finds the data already there.
@@ -643,16 +649,13 @@ async function seedFullYear(page: import('@playwright/test').Page) {
             },
           ],
           logs,
-          selectedYear: 2026,
-          selectedDate: null,
-          currentView: 'year',
-          selectedMonth: 1,
         },
         version: 0,
       })
     )
   })
   await page.goto('/')
+  await openYearView(page)
   await page.waitForSelector('[data-testid="month-card"]')
 }
 
@@ -687,6 +690,62 @@ test.describe('month cards on a narrow phone', () => {
       }
     })
   }
+})
+
+// ── Opening again ─────────────────────────────────────────
+
+test.describe('opening Daylo again on a phone', () => {
+  test.use({ viewport: { width: 360, height: 800 } })
+
+  // One tap on Year, or one sideways swipe without meaning to, used to be where every
+  // launch after it opened: twelve cards with no Today bar and no obvious way to tick
+  // today off. Last month as well, so the bar is looked for in the month that is today's.
+  test('comes back on this month, with the Today bar, after leaving it on the year', async ({
+    page,
+  }) => {
+    // A November, so last month is in the same year. Run in January on the real clock,
+    // Previous month went to the December before and the year it opened was not this one.
+    await page.clock.setFixedTime(new Date('2026-11-13T12:00:00'))
+    // Seeded only when nothing is there: an init script runs again on the reload, and an
+    // unconditional one would put back a state without a view and hide the very write
+    // this test is about.
+    await page.addInitScript(() => {
+      if (localStorage.getItem('simple-calendar-storage')) return
+      localStorage.setItem(
+        'simple-calendar-storage',
+        JSON.stringify({
+          state: {
+            activities: [
+              {
+                id: 'a1',
+                name: 'Read',
+                color: '#10B981',
+                createdAt: '2026-01-01T00:00:00.000Z',
+                updatedAt: '2026-01-01T00:00:00.000Z',
+              },
+            ],
+            logs: [],
+            reminderOffered: true,
+          },
+          version: 0,
+        })
+      )
+    })
+    await page.goto('/')
+    await expect(page.getByTestId('log-today-bar')).toBeVisible()
+
+    await page.getByRole('button', { name: 'Previous month' }).click()
+    await expect(page.getByTestId('log-today-bar')).toHaveCount(0)
+    await openYearView(page)
+
+    await page.reload()
+
+    await expect(page.getByRole('button', { name: 'Month', exact: true })).toHaveAttribute(
+      'aria-pressed',
+      'true'
+    )
+    await expect(page.getByTestId('log-today-bar')).toBeInViewport()
+  })
 })
 
 // ── Touch ────────────────────────────────────────────────
@@ -798,11 +857,7 @@ async function openTheReminderSheet(
             },
           ],
           logs: [],
-          selectedYear: 2026,
-          selectedDate: null,
-          currentView: 'month',
           yearMode: 'all',
-          selectedMonth: 8,
           reminderEnabled: on,
           reminderHour: 19,
           reminderMinute: 0,
@@ -959,7 +1014,7 @@ async function seedYear(
   }: { activities: number; view: 'year' | 'month'; mode: 'all' | 'byActivity' }
 ) {
   await page.addInitScript(
-    ({ count, view, mode }) => {
+    ({ count, mode }) => {
       const activities = Array.from({ length: count }, (_, i) => ({
         id: `a${i}`,
         name:
@@ -999,11 +1054,7 @@ async function seedYear(
           state: {
             activities,
             logs,
-            selectedYear: 2026,
-            selectedDate: null,
-            currentView: view,
             yearMode: mode,
-            selectedMonth: 8,
             reminderEnabled: false,
             reminderHour: 21,
             reminderMinute: 0,
@@ -1013,10 +1064,17 @@ async function seedYear(
         })
       )
     },
-    { count, view, mode }
+    { count, mode }
   )
+  // Daylo opens on today, so the clock decides which month and year are on screen: the
+  // end of September 2026, the last month the logs above reach. Without it the month view
+  // opened on an empty November, and from 2027 the year on an empty year. Only Date is
+  // pinned: timers and animations run as they would.
+  await page.clock.setFixedTime(new Date('2026-09-30T12:00:00'))
   await page.goto('/')
   await page.waitForSelector('#main-content')
+  // Daylo always opens on the month, so the year is reached the way a person reaches it.
+  if (view === 'year') await openYearView(page)
   await page.waitForFunction(() => document.getAnimations().every((a) => a.playState !== 'running'))
 }
 
@@ -1204,11 +1262,7 @@ async function seedPastTheGate(
             },
           ],
           logs,
-          selectedYear: new Date().getFullYear(),
-          selectedDate: null,
-          currentView: 'month',
           yearMode: 'all',
-          selectedMonth: new Date().getMonth(),
           reminderEnabled: false,
           reminderHour: 21,
           reminderMinute: 0,

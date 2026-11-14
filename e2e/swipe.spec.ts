@@ -82,6 +82,20 @@ async function finger(page: import('@playwright/test').Page) {
   }
 }
 
+/**
+ * Every test here starts from the year, and Daylo always opens on the month, so the year
+ * is reached the way a person reaches it: the toggle, then the slide let finish, or the
+ * first drag would start on a view still moving.
+ */
+async function toTheYear(page: import('@playwright/test').Page) {
+  await page.getByRole('button', { name: 'Year', exact: true }).click()
+  await expect(page.getByRole('button', { name: 'Year', exact: true })).toHaveAttribute(
+    'aria-pressed',
+    'true'
+  )
+  await page.waitForFunction(() => document.getAnimations().every((a) => a.playState !== 'running'))
+}
+
 test.beforeEach(async ({ page }) => {
   // Before any app code runs, so the store finds the data already there rather than
   // hydrating empty and overwriting it.
@@ -108,16 +122,13 @@ test.beforeEach(async ({ page }) => {
               createdAt: '2026-02-02',
             },
           ],
-          selectedYear: 2026,
-          selectedMonth: 1,
-          selectedDate: null,
-          currentView: 'year',
         },
         version: 0,
       })
     )
   })
   await page.goto('/')
+  await toTheYear(page)
   await expect(page.locator(BAR)).toBeVisible()
 })
 
@@ -179,6 +190,7 @@ test('a drag low down on a short view still crosses', async ({ page }) => {
     localStorage.setItem('simple-calendar-storage', JSON.stringify(saved))
   })
   await page.reload()
+  await toTheYear(page)
   const card = page.locator('.lg\\:col-span-3').first()
   const box = (await card.boundingBox())!
   const screen = page.viewportSize()!
@@ -325,6 +337,7 @@ test('the landing leaves at the speed the finger let go at', async ({ page }) =>
   // the same journey is left and the same time to do it in.
   const moving = await landingProfile(page, 0)
   await page.reload()
+  await toTheYear(page)
   await expect(page.locator(BAR)).toBeVisible()
   const still = await landingProfile(page, 300)
 
