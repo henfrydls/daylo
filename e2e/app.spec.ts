@@ -985,6 +985,25 @@ test.describe('the reminder sheet on a phone', () => {
     const viewport = page.viewportSize()!
     expect(viewport.height - (box.y + box.height)).toBeGreaterThanOrEqual(34)
   })
+
+  /**
+   * What the build that is published says under the time, with the switch as it is in the
+   * source rather than as a unit test sets it.
+   *
+   * The fake above answers no to every command it does not name, exact_alarms_allowed
+   * included, which is what a phone without the permission answers. So with the switch on
+   * this screen would show the offer, and with it off, as the build that goes to Play is,
+   * it shows one line and nothing to press.
+   */
+  test('says Android picks the moment, and offers no screen Daylo is not on', async ({ page }) => {
+    await openTheReminderSheet(page, { enabled: true })
+
+    await expect(page.getByTestId('reminder-details')).toContainText(
+      'It arrives around this time. Android picks the exact moment.'
+    )
+    await expect(page.getByTestId('reminder-exact')).toHaveCount(0)
+    await expect(page.getByText(/on[- ]time/i)).toHaveCount(0)
+  })
 })
 
 // ── A window that is not tall ─────────────────────────────
