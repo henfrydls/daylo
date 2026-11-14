@@ -127,16 +127,18 @@ export const ColorPicker = memo(function ColorPicker({
   // Use autoCount when autoCollapse is active, otherwise fall back to collapsedCount prop
   const effectiveCollapsedCount = autoCollapse ? autoCount : collapsedCount
 
-  // Determine if we need to auto-expand because the selected color is hidden
-  const selectedIsHidden =
-    effectiveCollapsedCount > 0 &&
-    !expanded &&
-    colors.findIndex((c) => c.value === value) >= effectiveCollapsedCount
-
-  const shouldShowAll = effectiveCollapsedCount <= 0 || expanded || selectedIsHidden
-  const visibleColors = shouldShowAll ? colors : colors.slice(0, effectiveCollapsedCount)
-  const canToggle =
-    effectiveCollapsedCount > 0 && !selectedIsHidden && colors.length > effectiveCollapsedCount
+  // A selected color past the collapsed row takes the row's last place, so it is seen
+  // without unfolding the rest. The picker used to unfold all sixteen instead, with no way
+  // to fold them back: that is what a phone got whenever the color offered to a new
+  // activity was the eighth or later, as it is once seven are in use.
+  const selectedIndex = colors.findIndex((c) => c.value === value)
+  const shouldShowAll = effectiveCollapsedCount <= 0 || expanded
+  const visibleColors = shouldShowAll
+    ? colors
+    : selectedIndex >= effectiveCollapsedCount
+      ? [...colors.slice(0, effectiveCollapsedCount - 1), colors[selectedIndex]]
+      : colors.slice(0, effectiveCollapsedCount)
+  const canToggle = effectiveCollapsedCount > 0 && colors.length > effectiveCollapsedCount
 
   return (
     <fieldset className={className}>

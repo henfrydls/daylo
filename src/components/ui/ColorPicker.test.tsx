@@ -74,3 +74,49 @@ describe('ColorPicker and the colors other activities already wear', () => {
     expect(screen.getByRole('radio', { name: /sea color, already in use/i })).toBeInTheDocument()
   })
 })
+
+// On a 360px phone with seven colors in use, the color a new activity starts on is the
+// eighth, past the row the picker shows collapsed. It used to give up on collapsing and
+// show all sixteen with no way to fold them away.
+describe('a collapsed picker whose color is past the visible row', () => {
+  const SIXTEEN = Array.from({ length: 16 }, (_, i) => ({
+    name: `C${i}`,
+    value: `#0000${i.toString(16).padStart(2, '0').toUpperCase()}`,
+  }))
+
+  const paint = (value: string) =>
+    render(<ColorPicker value={value} onChange={vi.fn()} colors={SIXTEEN} collapsedCount={5} />)
+
+  it('keeps to one row and puts the chosen color in it', () => {
+    paint(SIXTEEN[7].value)
+
+    const shown = screen.getAllByRole('radio').map((r) => r.getAttribute('aria-label'))
+    expect(shown).toEqual(['C0 color', 'C1 color', 'C2 color', 'C3 color', 'C7 color'])
+    expect(screen.getByRole('radio', { name: 'C7 color' })).toHaveAttribute('aria-checked', 'true')
+    expect(screen.getByRole('button', { name: 'Show more colors' })).toBeInTheDocument()
+  })
+
+  it('still opens to all of them, in their order, and folds back', async () => {
+    paint(SIXTEEN[7].value)
+
+    await userEvent.click(screen.getByRole('button', { name: 'Show more colors' }))
+    expect(screen.getAllByRole('radio').map((r) => r.getAttribute('aria-label'))).toEqual(
+      SIXTEEN.map((c) => `${c.name} color`)
+    )
+
+    await userEvent.click(screen.getByRole('button', { name: 'Show fewer colors' }))
+    expect(screen.getAllByRole('radio')).toHaveLength(5)
+  })
+
+  it('leaves the row alone when the chosen color is already in it', () => {
+    paint(SIXTEEN[2].value)
+
+    expect(screen.getAllByRole('radio').map((r) => r.getAttribute('aria-label'))).toEqual([
+      'C0 color',
+      'C1 color',
+      'C2 color',
+      'C3 color',
+      'C4 color',
+    ])
+  })
+})
