@@ -188,3 +188,45 @@ test('midnight does not take away a habit being written', async ({ page }) => {
   await name.pressSequentially(' the dog')
   await expect(name).toHaveValue('Walk the dog')
 })
+
+// Words written and not saved hold the new day for as long as they are there: not a
+// minute, and not until the window comes back. Coming back from another window, or from
+// the system's colour picker, gives the form its focus back and must not take the words.
+// Saving is what lets the day in, and what was saved lands on the day the form showed.
+test('words left in a form keep the old day until they are saved', async ({ page }) => {
+  await page.clock.install({ time: new Date('2026-11-13T23:59:40') })
+  await page.goto('/')
+  await expect(page.locator(BAR)).toBeVisible()
+
+  await page.getByTestId('fab-button').click()
+  await page.getByTestId('add-activity-button').locator('visible=true').click()
+  const name = page.getByTestId('activity-name-input')
+  await name.pressSequentially('Walk')
+  await page.getByTestId('log-for-date-checkbox').check()
+  await expect(page.getByTestId('selected-date-input')).toHaveValue('2026-11-13')
+
+  // Past midnight, two minutes without a key, and then the window comes back.
+  await page.clock.fastForward('02:00')
+  await page.evaluate(() => window.dispatchEvent(new Event('focus')))
+  await page.clock.fastForward('00:10')
+
+  await expect(name).toHaveValue('Walk')
+  await expect(page.getByTestId('selected-date-input')).toHaveValue('2026-11-13')
+  await expect(circle(page, '2026-11-13')).toHaveClass(/bg-emerald-500/)
+
+  await page.getByTestId('activity-form-submit').click()
+  await expect(page.getByTestId('activity-form-modal')).toHaveCount(0)
+  // The sheet of activities is still open behind it, and was just used: the day waits
+  // its minute for that, and then comes in.
+  await page.clock.fastForward('01:05')
+
+  await expect(circle(page, '2026-11-14')).toHaveClass(/bg-emerald-500/)
+  await expect(cell(page, '2026-11-13')).toHaveAttribute(
+    'aria-label',
+    '2026-11-13, 2 activities completed'
+  )
+  await expect(page.locator(BAR)).toHaveAttribute(
+    'aria-label',
+    'Log today: 0 of 2 activities completed'
+  )
+})
