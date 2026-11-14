@@ -100,6 +100,8 @@ describe('telling a tap from a drag', () => {
     )
   const backdrop = () => screen.getByTestId('bottom-sheet-backdrop')
   const sheet = () => screen.getByTestId('bottom-sheet')
+  // Where a drag to close is taken from. The content is for scrolling; see below.
+  const handle = () => screen.getByTestId('bottom-sheet-handle')
   const settle = () =>
     act(() => {
       vi.advanceTimersByTime(60)
@@ -140,7 +142,7 @@ describe('telling a tap from a drag', () => {
     show()
     settle()
 
-    fireEvent.pointerDown(sheet(), { clientX: 100, clientY: 300 })
+    fireEvent.pointerDown(handle(), { clientX: 100, clientY: 300 })
     fireEvent.pointerMove(sheet(), { clientX: 100, clientY: 340 })
 
     // The sheet follows: it has left its resting place, which only a drag does.
@@ -153,7 +155,7 @@ describe('telling a tap from a drag', () => {
     show()
     settle()
 
-    fireEvent.pointerDown(sheet(), { clientX: 100, clientY: 300 })
+    fireEvent.pointerDown(handle(), { clientX: 100, clientY: 300 })
     fireEvent.pointerMove(sheet(), { clientX: 220, clientY: 320 })
 
     expect(sheet().style.transform).toBe('translateY(0px)')
@@ -163,7 +165,7 @@ describe('telling a tap from a drag', () => {
     show()
     settle()
 
-    fireEvent.pointerDown(sheet(), { clientX: 100, clientY: 300 })
+    fireEvent.pointerDown(handle(), { clientX: 100, clientY: 300 })
     fireEvent.pointerMove(sheet(), { clientX: 100, clientY: 240 })
 
     expect(sheet().style.transform).toBe('translateY(0px)')
@@ -176,7 +178,7 @@ describe('telling a tap from a drag', () => {
     settle()
     const atRest = backdrop().style.backdropFilter
 
-    fireEvent.pointerDown(sheet(), { clientX: 100, clientY: 300 })
+    fireEvent.pointerDown(handle(), { clientX: 100, clientY: 300 })
     fireEvent.pointerMove(sheet(), { clientX: 100, clientY: 340 })
     const moving = backdrop().style.backdropFilter
 
@@ -185,5 +187,18 @@ describe('telling a tap from a drag', () => {
     expect(Number(/blur\(([\d.]+)px\)/.exec(moving)?.[1])).toBeLessThan(
       Number(/blur\(([\d.]+)px\)/.exec(atRest)?.[1])
     )
+  })
+
+  // With five activities the sheet is taller than a phone and its content has to scroll
+  // under a finger. A finger going down on the content is that scroll, coming back up the
+  // list, and taking the sheet away with it is how it used to close instead of scrolling.
+  it('leaves the sheet where it is for a finger going down on the content', () => {
+    show()
+    settle()
+
+    fireEvent.pointerDown(screen.getByText('Edit'), { clientX: 100, clientY: 300 })
+    fireEvent.pointerMove(screen.getByText('Edit'), { clientX: 100, clientY: 340 })
+
+    expect(sheet().style.transform).toBe('translateY(0px)')
   })
 })

@@ -27,6 +27,7 @@ export function BottomSheet({
   'aria-label': ariaLabel = 'Bottom sheet',
 }: BottomSheetProps) {
   const sheetRef = useRef<HTMLDivElement>(null)
+  const handleRef = useRef<HTMLDivElement>(null)
   const { shouldRender, isVisible } = useAnimatedPresence(isOpen, ANIMATION_DURATION)
 
   // Two frames under the bottom edge before it comes up, with the frames belonging to the
@@ -83,8 +84,20 @@ export function BottomSheet({
    */
   const onThisSheet = (e: React.PointerEvent) => e.currentTarget.contains(e.target as Node | null)
 
+  /**
+   * A drag to close begins on the handle, and only there.
+   *
+   * With five activities the sheet is taller than a phone, and its content has to move
+   * under a finger. The whole sheet used to be `touch-action: none` so that this drag would
+   * not fight the scroll, which switched the scroll off: upwards nothing moved, downwards
+   * the sheet closed, and with eight there was no reaching the last one. Now the content
+   * scrolls, and a finger going down on it is that scroll coming back up the list.
+   */
+  const onHandle = (e: React.PointerEvent) =>
+    handleRef.current?.contains(e.target as Node | null) ?? false
+
   const handlePointerDown = useCallback((e: React.PointerEvent) => {
-    if (!onThisSheet(e)) return
+    if (!onThisSheet(e) || !onHandle(e)) return
     pressing.current = true
     dragStartY.current = e.clientY
     dragStartX.current = e.clientX
@@ -159,7 +172,7 @@ export function BottomSheet({
       {/* Sheet */}
       <div
         ref={sheetRef}
-        className="absolute bottom-0 left-0 right-0 bg-white rounded-t-2xl shadow-xl max-h-[75dvh] overflow-y-auto touch-none"
+        className="absolute bottom-0 left-0 right-0 bg-white rounded-t-2xl shadow-xl max-h-[75dvh] overflow-y-auto overscroll-contain touch-pan-y"
         style={{
           transform: `translateY(${translateY}px)`,
           transition: isDragging
@@ -177,13 +190,19 @@ export function BottomSheet({
         onPointerUp={handlePointerUp}
         onPointerCancel={handlePointerUp}
       >
-        {/* Handle bar */}
-        <div className="flex justify-center pt-3 pb-1 sticky top-0 bg-white rounded-t-2xl z-10 cursor-grab active:cursor-grabbing">
+        {/* Handle bar. The only place a finger is not scrolling, so the drag to close
+            lives here. Taller than it looks: the gap above the content is part of it, which
+            puts the content exactly where it was and gives a thumb more to land on. */}
+        <div
+          ref={handleRef}
+          className="flex justify-center pt-3 pb-3 sticky top-0 bg-white rounded-t-2xl z-10 cursor-grab active:cursor-grabbing touch-none"
+          data-testid="bottom-sheet-handle"
+        >
           <div className="w-10 h-1 bg-gray-300 rounded-full" aria-hidden="true" />
         </div>
 
         {/* Content */}
-        <div className="px-4 pb-6 pt-2">{children}</div>
+        <div className="px-4 pb-6">{children}</div>
       </div>
     </div>
   )
