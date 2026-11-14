@@ -76,7 +76,9 @@ tauri-plugin-process = "~2.3"
 # arrives through ashpd and through tauri-plugin-opener, tokio through rfd), so declaring
 # them adds nothing to the build. They are here to ask the desktop portal directly whether
 # it is running, which is the only way to tell a cancelled dialog from one that never
-# opened. See save_dialog_available in src/lib.rs.
+# opened. See save_dialog_available in src/lib.rs. zbus also checks, before the single
+# instance starts, that the plugin will not panic on the bus address or on its own names;
+# see single_instance_can_start.
 [target.'cfg(target_os = "linux")'.dependencies]
 zbus = "5"
 tokio = { version = "1", features = ["time"] }

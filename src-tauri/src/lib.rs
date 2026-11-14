@@ -213,32 +213,50 @@ fn single_instance_bus_id(identifier: &str) -> &str {
     }
 }
 
-/// Whether the plugin can be started without taking the app down with it.
-///
-/// On Linux the plugin opens the session bus with `Builder::session().unwrap()`, and with
-/// `panic = "abort"` that unwrap is the end of the launch for anybody whose
-/// DBUS_SESSION_BUS_ADDRESS zbus cannot read: `disabled:`, a transport it does not know,
-/// anything malformed. Daylo opened for them before the plugin, and it still has to. This
-/// asks zbus's own parser the same question first. An unset variable is fine: zbus then
-/// builds `unix:path=` from XDG_RUNTIME_DIR, which always parses. A bus that parses but
-/// cannot be reached is fine too: the plugin treats that as an error and carries on.
+/// Whether the plugin's names on the Linux session bus are ones zbus accepts, built exactly
+/// as the plugin builds them: `<bus id>.SingleInstance` as the well-known name, and the same
+/// with dots turned into slashes and dashes into underscores as the object path. The plugin
+/// unwraps both, and with `panic = "abort"` an identifier that does not fit, one with an
+/// element starting with a digit for instance, would end every launch.
 #[cfg(target_os = "linux")]
-fn session_bus_address_readable(address: Option<&str>) -> bool {
-    use std::str::FromStr;
-    match address {
-        None => true,
-        Some(address) => zbus::Address::from_str(address).is_ok(),
+fn single_instance_names_valid(bus_id: &str) -> bool {
+    let name = format!("{bus_id}.SingleInstance");
+    let mut path = name.replace('.', "/").replace('-', "_");
+    if !path.starts_with('/') {
+        path = format!("/{path}");
     }
+    zbus::names::WellKnownName::try_from(name.as_str()).is_ok()
+        && zbus::zvariant::ObjectPath::try_from(path.as_str()).is_ok()
 }
 
+/// Whether the plugin can be started without taking the app down with it. Daylo opened
+/// before the plugin for everybody, and it still has to.
+///
+/// On Linux the plugin opens the session bus with `Builder::session().unwrap()`, which is
+/// `zbus::Address::session()` and nothing else: DBUS_SESSION_BUS_ADDRESS when it is set
+/// and valid Unicode, `unix:path=` under XDG_RUNTIME_DIR (or /run/user/<uid>) when it is
+/// not. It fails only when the variable holds something zbus cannot read, `disabled:` or a
+/// transport it does not know, and this asks the same function first. A bus that can be
+/// read but not reached is fine: the plugin treats that as an error and carries on.
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
-fn single_instance_can_start() -> bool {
+fn single_instance_can_start(bus_id: &str) -> bool {
     #[cfg(target_os = "linux")]
     {
-        session_bus_address_readable(std::env::var("DBUS_SESSION_BUS_ADDRESS").ok().as_deref())
+        if zbus::Address::session().is_err() {
+            log::warn!(
+                "the session bus address cannot be read; starting without the single instance"
+            );
+            return false;
+        }
+        if !single_instance_names_valid(bus_id) {
+            log::warn!("{bus_id} makes no valid bus name; starting without the single instance");
+            return false;
+        }
+        true
     }
     #[cfg(not(target_os = "linux"))]
     {
+        let _ = bus_id;
         true
     }
 }
@@ -282,17 +300,19 @@ pub fn run() {
     #[cfg(not(any(target_os = "android", target_os = "ios")))]
     let builder = if cfg!(debug_assertions) {
         builder
-    } else if single_instance_can_start() {
-        builder.plugin(
-            tauri_plugin_single_instance::Builder::new()
-                // Linux only; Windows and macOS use the identifier as it is.
-                .dbus_id(single_instance_bus_id(&context.config().identifier))
-                .callback(|app, _argv, _cwd| bring_back_the_open_window(app))
-                .build(),
-        )
     } else {
-        log::warn!("DBUS_SESSION_BUS_ADDRESS cannot be read; starting without the single instance");
-        builder
+        // Linux only; Windows and macOS use the identifier as it is.
+        let bus_id = single_instance_bus_id(&context.config().identifier);
+        if single_instance_can_start(bus_id) {
+            builder.plugin(
+                tauri_plugin_single_instance::Builder::new()
+                    .dbus_id(bus_id)
+                    .callback(|app, _argv, _cwd| bring_back_the_open_window(app))
+                    .build(),
+            )
+        } else {
+            builder
+        }
     };
 
     let builder = builder.plugin(tauri_plugin_shell::init());
@@ -507,9 +527,11 @@ mod plugin_config {
     }
 }
 
-/// The name the single instance owns on the Linux session bus, and whether the plugin can
-/// be started at all. Both decide whether a second launch brings back the open window or
-/// takes the first launch down, and neither can be seen without two copies of the app.
+/// The name the single instance owns on the Linux session bus, and whether zbus accepts
+/// it. Both decide whether a second launch brings back the open window or takes the first
+/// launch down, and neither can be seen without two copies of the app. The check on the bus
+/// address is not here: it is one call to zbus that reads the environment, and a test that
+/// changed the environment would race the others running beside it.
 #[cfg(all(test, not(any(target_os = "android", target_os = "ios"))))]
 mod single_instance {
     use super::single_instance_bus_id;
@@ -528,38 +550,28 @@ mod single_instance {
     }
 
     #[cfg(target_os = "linux")]
-    mod session_bus {
-        use super::super::session_bus_address_readable;
+    mod bus_names {
+        use super::super::{single_instance_bus_id, single_instance_names_valid};
 
         #[test]
-        fn starts_with_no_address_set() {
-            assert!(session_bus_address_readable(None));
-        }
-
-        #[test]
-        fn starts_with_the_addresses_a_desktop_hands_out() {
-            for address in [
-                "unix:path=/run/user/1000/bus",
-                "unix:path=/run/user/1000/bus,guid=0123456789abcdef0123456789abcdef",
-                "unix:abstract=/tmp/dbus-AbCdEf",
-                "unix:dir=/tmp",
-                "tcp:host=localhost,port=4000",
-            ] {
-                assert!(session_bus_address_readable(Some(address)), "{address}");
+        fn the_released_copy_and_the_lab_make_valid_bus_names() {
+            for identifier in ["com.daylo.app", "com.daylo.lab"] {
+                let bus_id = single_instance_bus_id(identifier);
+                assert!(
+                    single_instance_names_valid(bus_id),
+                    "{identifier} -> {bus_id}"
+                );
             }
         }
 
         #[test]
-        fn does_not_start_with_an_address_zbus_cannot_read() {
-            for address in [
-                "disabled:",
-                "",
-                "nonsense",
-                "unix:",
-                "carrier-pigeon:path=/x",
-            ] {
-                assert!(!session_bus_address_readable(Some(address)), "{address}");
-            }
+        fn an_identifier_with_an_element_starting_with_a_digit_does_not() {
+            assert!(!single_instance_names_valid(single_instance_bus_id(
+                "1daylo.app"
+            )));
+            assert!(!single_instance_names_valid(single_instance_bus_id(
+                "com.2daylo.app"
+            )));
         }
     }
 }
