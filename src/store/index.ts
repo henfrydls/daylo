@@ -34,16 +34,19 @@ interface DeferredStorage extends StateStorage {
    */
   lastSeen: () => string | null
   /**
-   * Whether this window has a change of its own on its way to the disk. Not one the disk
-   * refused: that one is still kept, to try again on hiding, but a disk that refuses every
-   * write would otherwise count as a change on its way for ever.
+   * Records a value from another window as seen without taking it in, so that coming back
+   * to the front does not take it in later either. This window's next write puts back what
+   * it holds, which is what it always did.
+   */
+  markSeen: (raw: string) => void
+  /**
+   * Whether this window holds a change of its own that is not on the disk yet: one on its
+   * way, or one the disk refused, which is kept until a write goes through. Either way it
+   * exists only in this window's memory, and nothing from another window is taken in over
+   * it. For a refused one that is the point: the notice asks for an export so that nothing
+   * is lost, and the export reads that memory.
    */
   hasPendingWrite: () => boolean
-  /**
-   * Forgets a change the disk refused, so it is neither read back as this window's latest
-   * nor tried again on hiding over what another window wrote and this one just took in.
-   */
-  dropRefusedWrite: () => void
 }
 
 /**
@@ -61,10 +64,10 @@ const createDeferredStorage = (): DeferredStorage => {
   let lastSeen: string | null = null
   let scheduledWrite: ReturnType<typeof setTimeout> | number | null = null
   let useIdleCallback = false
-  let failureReported = false
-  let lastWriteRefused = false
   let noticeId: string | null = null
-  let noticeShownAt = 0
+  // When the notice was last put up in the current run of failures, and null when there is
+  // no run: before the first failure, and again after any write that goes through.
+  let noticeShownAt: number | null = null
 
   // Check if requestIdleCallback is available (browser environment)
   if (typeof window !== 'undefined' && typeof window.requestIdleCallback === 'function') {
@@ -93,8 +96,7 @@ const createDeferredStorage = (): DeferredStorage => {
         pendingKey = null
         // The disk works again. If it fails after this, that is news, and is said again, and
         // a notice still asking for a backup is no longer true.
-        failureReported = false
-        lastWriteRefused = false
+        noticeShownAt = null
         if (noticeId !== null) {
           useToastStore.getState().removeToast(noticeId)
           noticeId = null
@@ -103,15 +105,13 @@ const createDeferredStorage = (): DeferredStorage => {
         // Not swallowed: losing data without a word is the worst thing an app can do when
         // its whole case is that your data is yours.
         console.error('[Daylo] Could not save changes to localStorage:', error)
-        lastWriteRefused = true
         // Once per run of failures, not once per tap: every tap is another write. Again if
         // the person closed it and the writes still fail five minutes after it was said.
         // And never a second copy over one still on the screen.
         const toasts = useToastStore.getState()
         const onScreen = noticeId !== null && toasts.toasts.some((t) => t.id === noticeId)
-        const sayItAgain = Date.now() - noticeShownAt >= SAY_IT_AGAIN_AFTER_MS
-        if (!onScreen && (!failureReported || sayItAgain)) {
-          failureReported = true
+        const sayIt = noticeShownAt === null || Date.now() - noticeShownAt >= SAY_IT_AGAIN_AFTER_MS
+        if (!onScreen && sayIt) {
           noticeShownAt = Date.now()
           noticeId = toasts.addToast(COULD_NOT_SAVE, 'error', { untilDismissed: true })
         }
@@ -151,7 +151,6 @@ const createDeferredStorage = (): DeferredStorage => {
     setItem: (name: string, value: string): void => {
       pendingWrite = value
       pendingKey = name
-      lastWriteRefused = false
 
       // Cancel any existing scheduled write
       cancelScheduledWrite()
@@ -175,19 +174,14 @@ const createDeferredStorage = (): DeferredStorage => {
     removeItem: (name: string): void => {
       pendingWrite = null
       pendingKey = null
-      lastWriteRefused = false
       cancelScheduledWrite()
       localStorage.removeItem(name)
     },
     lastSeen: () => lastSeen,
-    hasPendingWrite: () => pendingWrite !== null && !lastWriteRefused,
-    dropRefusedWrite: () => {
-      if (!lastWriteRefused) return
-      pendingWrite = null
-      pendingKey = null
-      lastWriteRefused = false
-      cancelScheduledWrite()
+    markSeen: (raw: string) => {
+      lastSeen = raw
     },
+    hasPendingWrite: () => pendingWrite !== null,
   }
 }
 
@@ -759,8 +753,9 @@ export const useCalendarStore = create<CalendarState>()(
 )
 
 /**
- * Whether a string from the disk is Daylo's, parsed once and checked before taking it in.
- * zustand answers a value it cannot parse with the rescue screen, which is right for a
+ * Whether a string from the disk is Daylo's, checked before taking it in. rehydrate() parses
+ * it again on its own, through the storage, and that second parse is the price of not
+ * reaching into zustand. zustand answers a value it cannot parse with the rescue screen, which is right for a
  * launch with nothing else to show and wrong for a window that holds good data. And a value
  * that parses but whose records are not lists would break every list on the screen on the
  * first record it tried to read.
@@ -785,15 +780,23 @@ function isDaylosData(raw: string): boolean {
  * Somebody opens Daylo in a second tab, ticks today there and closes it, goes back to the
  * first and taps anything. The first tab wrote everything it held in memory, which did not
  * hold today, and the tick was gone without a word. Now the first tab reads the disk again
- * when it hears about the write, or when it comes back to the front, and its next write
- * carries the tick. On the desktop a second launch no longer opens a second window at all:
+ * when it hears about the write while it is behind, or when it comes back to the front,
+ * and its next write carries the tick.
+ *
+ * Never while this tab is the one in front. The person is looking at it and may have just
+ * ticked something the other tab never heard about, because that one had a change of its
+ * own on its way; when the other tab then writes its older copy, taking it in would wipe
+ * the tick off the screen it was made on. So a tab in front keeps what it shows and its
+ * next write puts it back, as before any of this, and it marks the value as seen, so that
+ * coming back to the front later does not take it in either. On the desktop a second launch no longer opens a second window at all:
  * it brings back the one already open (see run() in src-tauri/src/lib.rs).
  *
  * This narrows the window for writing over another tab and does not close it. A tab still
  * writes its own copy over the other's when it writes before it has heard: a timer firing
  * in a tab left in the background (the new day at midnight, the check-in), coming back to
  * the front before the other tab's write has reached the disk, or a change of its own still
- * on its way when the other tab's write arrives (then this tab wins, as it always did).
+ * on its way, or in front, when the other tab's write arrives (then this tab wins, as it
+ * always did).
  * Comparing the disk with what this tab last saw before every write, and merging record by
  * record, is issue #248.
  *
@@ -801,9 +804,10 @@ function isDaylosData(raw: string): boolean {
  * a disk that is empty or does not hold Daylo's data: what this tab holds is good, and an
  * empty or half-written value from elsewhere must not replace it or bring up the rescue.
  *
- * A change of its own that the disk refused is dropped first. It cannot be written anyway,
- * and kept, it would be read back instead of the disk and tried again on hiding over what
- * was taken in.
+ * Not after the disk refused this tab's last write, either, until a write goes through.
+ * What it carried exists only in this tab's memory, the notice on screen asks for an export
+ * so that nothing is lost, and the export reads that memory: taking in the other tab's copy
+ * would leave nothing to export.
  *
  * rehydrate() writes nothing (zustand hydrates through its internal set, and the callback
  * above returns early while this runs), which is what stops two tabs answering each other
@@ -820,7 +824,6 @@ function takeInWhatAnotherWindowWrote() {
     return
   }
   if (raw === null || raw === deferredStorage.lastSeen() || !isDaylosData(raw)) return
-  deferredStorage.dropRefusedWrite()
   adoptingFromAnotherWindow = true
   try {
     void useCalendarStore.persist.rehydrate()
@@ -841,9 +844,12 @@ function takeInWhatAnotherWindowWrote() {
 // clearing the site's data by hand leaves an empty disk, which is not taken in either.
 if (typeof window !== 'undefined') {
   window.addEventListener('storage', (event) => {
-    if (event.key === STORAGE_KEY && event.storageArea === localStorage) {
-      takeInWhatAnotherWindowWrote()
+    if (event.key !== STORAGE_KEY || event.storageArea !== localStorage) return
+    if (document.visibilityState === 'visible' && document.hasFocus()) {
+      if (event.newValue !== null) deferredStorage.markSeen(event.newValue)
+      return
     }
+    takeInWhatAnotherWindowWrote()
   })
   window.addEventListener('focus', takeInWhatAnotherWindowWrote)
   document.addEventListener('visibilitychange', () => {

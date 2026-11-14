@@ -83,13 +83,42 @@ function comeBackFromTheBackground() {
   document.dispatchEvent(new Event('visibilitychange'))
 }
 
+/** This tab is the one somebody is looking at and typing into. */
+function thisTabInFront() {
+  Object.defineProperty(document, 'visibilityState', { value: 'visible', configurable: true })
+  vi.spyOn(document, 'hasFocus').mockReturnValue(true)
+}
+
+/** A disk that refuses every write from now on; the other tab keeps the real one. */
+function refuseThisTabsWrites() {
+  const realSetItem = Storage.prototype.setItem
+  vi.spyOn(console, 'error').mockImplementation(() => {})
+  const setItem = vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => {
+    throw new DOMException('quota exceeded', 'QuotaExceededError')
+  })
+  return {
+    setItem,
+    anotherTabWrites(raw: string) {
+      realSetItem.call(localStorage, STORAGE_KEY, raw)
+      window.dispatchEvent(
+        new StorageEvent('storage', { key: STORAGE_KEY, newValue: raw, storageArea: localStorage })
+      )
+    },
+  }
+}
+
 const logsOnDisk = () =>
   JSON.parse(localStorage.getItem(STORAGE_KEY) ?? '{"state":{"logs":[]}}').state.logs as {
     id: string
   }[]
 
 describe('a second window', () => {
-  beforeEach(launch)
+  beforeEach(async () => {
+    await launch()
+    // Somewhere else unless a test says otherwise: the other tab is the one in front, which
+    // is when somebody ticks in it.
+    vi.spyOn(document, 'hasFocus').mockReturnValue(false)
+  })
 
   afterEach(() => {
     vi.restoreAllMocks()
@@ -258,28 +287,53 @@ describe('a second window', () => {
     expect(setItem).not.toHaveBeenCalled()
   })
 
-  // A disk that refuses every write leaves this window's change waiting for ever. If that
-  // counted as a change still on its way, this window would never take in anything again.
-  it('is not kept out for good by a change of its own that the disk keeps refusing', async () => {
-    const realSetItem = Storage.prototype.setItem
-    vi.spyOn(console, 'error').mockImplementation(() => {})
-    const setItem = vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => {
-      throw new DOMException('quota exceeded', 'QuotaExceededError')
-    })
+  // The order that made taking in a regression. The other tab had a change of its own on
+  // its way when this one ticked, so it never took the tick in, and then it wrote its old
+  // copy. Taking that in would wipe the tick off the screen of the person who just made
+  // it. Before any of this, this tab kept it and wrote it back with its next change.
+  it('keeps what it shows when the other tab writes an older copy while this one is in front', async () => {
+    thisTabInFront()
     useCalendarStore.getState().toggleLog('a1', '2026-11-12')
     await settle()
 
-    const raw = saved(otherWindowState())
-    realSetItem.call(localStorage, STORAGE_KEY, raw)
-    window.dispatchEvent(
-      new StorageEvent('storage', { key: STORAGE_KEY, newValue: raw, storageArea: localStorage })
+    anotherWindowWrites(
+      saved({ activities: [READ], logs: [], checkinEnabled: true, firstOpenedAt: '2026-01-01' })
     )
+    comeBackWithFocus()
+
+    expect(useCalendarStore.getState().logs.map((l) => l.date)).toEqual(['2026-11-12'])
+    useCalendarStore.getState().addActivity('Walk')
+    await settle()
+    expect(logsOnDisk().map((l) => (l as unknown as { date: string }).date)).toEqual(['2026-11-12'])
+  })
+
+  // The notice says to export so that nothing is lost. What the disk refused is only in
+  // memory, and taking in the other tab's copy would put the export's last copy of it
+  // out of reach.
+  it('keeps a change the disk refused instead of taking in the other tab', async () => {
+    const disk = refuseThisTabsWrites()
+    useCalendarStore.getState().toggleLog('a1', '2026-11-12')
+    await settle()
+
+    disk.anotherTabWrites(saved(otherWindowState()))
+    comeBackWithFocus()
+
+    expect(useCalendarStore.getState().logs.map((l) => l.date)).toEqual(['2026-11-12'])
+  })
+
+  // Not for ever, though: once the disk takes a write again, the next one from the other
+  // tab is taken in as usual.
+  it('takes in the other tab again once the disk has taken a write', async () => {
+    const disk = refuseThisTabsWrites()
+    useCalendarStore.getState().toggleLog('a1', '2026-11-12')
+    await settle()
+    disk.setItem.mockRestore()
+    useCalendarStore.getState().addActivity('Walk')
+    await settle()
+
+    disk.anotherTabWrites(saved(otherWindowState()))
 
     expect(useCalendarStore.getState().logs.map((l) => l.id)).toEqual(['l-other'])
-    // And the refused change is not tried again on hiding, over what was just taken in.
-    setItem.mockClear()
-    window.dispatchEvent(new Event('pagehide'))
-    expect(setItem).not.toHaveBeenCalled()
   })
 
   // Documented rather than fixed: with a change of its own still waiting to be written,

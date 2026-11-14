@@ -52,8 +52,13 @@ function todayCell(page: Page) {
   return page.locator(`button[aria-label^="${today},"]`)
 }
 
-async function open(context: BrowserContext): Promise<Page> {
+async function open(context: BrowserContext, { behind = false } = {}): Promise<Page> {
   const page = await context.newPage()
+  // A tab in front never takes in what another tab wrote: the person may have just ticked
+  // something there. Playwright gives every page the focus (measured: document.hasFocus()
+  // is true in both pages, with focus emulation on or off), so a tab meant to be behind,
+  // the way it is while somebody ticks in the other one, is told so.
+  if (behind) await page.addInitScript(() => (document.hasFocus = () => false))
   await page.goto('/')
   await expect(todayCell(page)).toBeVisible()
   return page
@@ -92,7 +97,7 @@ async function waitForTheTickOnDisk(page: Page) {
 
 test('a tick from the second window survives the first one writing', async ({ context }) => {
   await seedOnce(context)
-  const first = await open(context)
+  const first = await open(context, { behind: true })
   const second = await open(context)
 
   await tickToday(second)
