@@ -44,6 +44,28 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
+      # Before anything is public. Every other job waits for this one, so a refusal here
+      # stops the whole tag in seconds with nothing published. The same check runs again on
+      # the merged Android manifests after the Android build, for a permission a library
+      # brings in; by then the release exists, which is why the common case, the switch and
+      # the hand-written manifest disagreeing, is asked here first.
+      #
+      # Node only: the script reads two files and imports nothing outside Node itself.
+      #
+      # To see it red on a lab tag without touching what the later check reads: move the
+      # uses-permission line out of src-tauri/gen/android/app/src/main/AndroidManifest.xml
+      # into a new src-tauri/gen/android/app/src/release/AndroidManifest.xml. The release
+      # build still merges the permission in, so the later check would agree, but this one
+      # reads the main manifest and stops the tag. (It never gets as far as the later one:
+      # every job needs this one.)
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: The Android manifest agrees with EXACT_ALARMS_DECLARED
+        run: node scripts/check-exact-alarm.js src-tauri/gen/android/app/src/main/AndroidManifest.xml
+
       - name: Create it, or find the one an earlier attempt made
         id: make
         env:
@@ -245,10 +267,27 @@ jobs:
       # Both have to be found. A path AGP renamed holds no permission either, and read as
       # "not declared" it would agree with EXACT_ALARMS_DECLARED being off.
       #
-      # Only a tag runs this. To see it red: tag a build where EXACT_ALARMS_DECLARED in
-      # src/lib/reminders.ts says false and the manifest still declares SCHEDULE_EXACT_ALARM
-      # (the unit test fails too, but a tag does not wait for it). The step names both
-      # merged files and the permission, and nothing after it runs.
+      # The hand-written manifest has already been checked in create-release, before the
+      # release existed. What only this step can see is a permission a library adds in the
+      # merge, and Build Check (Android) asks the same of every pull request on its debug
+      # build, so reaching this step red should be rare.
+      #
+      # If it is red, the release is already public: create-release made it, the desktop
+      # jobs upload into it, and updater-manifest waits only for them, so latest.json goes
+      # out without an APK or an AAB, and an Android copy told about this version would be
+      # sent to a file that is not there. Turn the release back into a draft at once, which
+      # takes it out of /releases/latest so every copy goes back to the version before:
+      #   gh release edit <tag> --draft=true
+      # then fix the manifest and tag again, after deleting the draft and its tag with
+      #   gh release delete <tag> --cleanup-tag --yes
+      #
+      # Only a tag runs this. To see it red on its own, the earlier check has to pass: take
+      # the permission out in a manifest only the release build merges, a new
+      # src-tauri/gen/android/app/src/release/AndroidManifest.xml with
+      #   <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM"
+      #       tools:node="remove" />
+      # (and the tools namespace on its <manifest>). The main manifest still declares it,
+      # so create-release agrees, and this step names both merged files as declaring none.
       - name: The release manifests agree with EXACT_ALARMS_DECLARED
         run: |
           set -uo pipefail
