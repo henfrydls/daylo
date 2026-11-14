@@ -15,6 +15,21 @@ import { useRescueStore, whatIsOnDisk } from './rescue'
  */
 export const STORAGE_KEY = 'simple-calendar-storage'
 
+/**
+ * What Daylo says when the disk refuses a write. Agreed word for word: it is the one
+ * moment Daylo knows it is about to lose something and can still prevent it, because what
+ * was not written is still in memory and Export still works.
+ */
+export const COULD_NOT_SAVE =
+  'Daylo could not save your last changes. Open Settings and export a backup so nothing is lost.'
+
+/**
+ * How long a closed notice about failed writes stays closed while the writes go on failing,
+ * counted from when the person closed it. Once per tap would bury the screen; never again
+ * would leave somebody losing changes all day because they closed one notice in the morning.
+ */
+const SAY_IT_AGAIN_AFTER_MS = 5 * 60_000
+
 type ViewType = 'year' | 'month'
 type ViewTransitionDirection = 'drill-down' | 'drill-up' | null
 
@@ -25,7 +40,31 @@ const createDeferredStorage = (): StateStorage => {
   let pendingKey: string | null = null
   let scheduledWrite: ReturnType<typeof setTimeout> | number | null = null
   let useIdleCallback = false
-  let failureReported = false
+  // The notice about failed writes, while it is on the screen.
+  let noticeId: string | null = null
+  // When the person closed it, during a run of failures. Null when there is no run: before
+  // the first failure, and again after any write that goes through.
+  let noticeClosedAt: number | null = null
+  let stopWatchingNotice: (() => void) | null = null
+
+  const stopWatching = () => {
+    stopWatchingNotice?.()
+    stopWatchingNotice = null
+  }
+
+  const showNotice = () => {
+    noticeClosedAt = null
+    noticeId = useToastStore.getState().addToast(COULD_NOT_SAVE, 'error', { untilDismissed: true })
+    // Watched so that the five minutes start when it goes, which is when the person closed
+    // it: nothing else takes it down while the writes keep failing.
+    stopWatchingNotice = useToastStore.subscribe((state) => {
+      if (noticeId !== null && !state.toasts.some((t) => t.id === noticeId)) {
+        noticeId = null
+        noticeClosedAt = Date.now()
+        stopWatching()
+      }
+    })
+  }
 
   // Check if requestIdleCallback is available (browser environment)
   if (typeof window !== 'undefined' && typeof window.requestIdleCallback === 'function') {
@@ -47,23 +86,26 @@ const createDeferredStorage = (): StateStorage => {
     if (pendingWrite !== null) {
       try {
         localStorage.setItem(key, pendingWrite)
-        // Solo se descarta el pendiente cuando de verdad se escribio. Si falla se
-        // conserva para que el siguiente flush lo reintente.
+        // The pending value is only dropped once it has really been written. If the write
+        // fails it is kept, so the next flush tries it again.
         pendingWrite = null
         pendingKey = null
+        // The disk works again: a notice still asking for a backup is no longer true, and
+        // if it fails after this, that is news, and is said again.
+        stopWatching()
+        if (noticeId !== null) useToastStore.getState().removeToast(noticeId)
+        noticeId = null
+        noticeClosedAt = null
       } catch (error) {
-        // No se silencia: perder datos sin avisar es lo peor que puede hacer una app
-        // cuyo argumento es que tus datos son tuyos.
-        console.error('[Daylo] No se pudieron guardar los cambios en localStorage:', error)
-        if (!failureReported) {
-          failureReported = true
-          useToastStore
-            .getState()
-            .addToast(
-              'No se pudieron guardar tus cambios. Exporta tus datos por seguridad.',
-              'error'
-            )
-        }
+        // Not swallowed: losing data without a word is the worst thing an app can do when
+        // its whole case is that your data is yours.
+        console.error('[Daylo] Could not save changes to localStorage:', error)
+        // Once per run of failures, not once per tap: every tap is another write. Never a
+        // second copy over one still on the screen. Again if the person closed it and the
+        // writes still fail five minutes after they did.
+        const closedLongEnough =
+          noticeClosedAt === null || Date.now() - noticeClosedAt >= SAY_IT_AGAIN_AFTER_MS
+        if (noticeId === null && closedLongEnough) showNotice()
       }
     }
     scheduledWrite = null
