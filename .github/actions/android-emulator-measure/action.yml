@@ -1,12 +1,13 @@
 # One emulator for every measurement in test-build.yml (the reminder, measurement A of
-# #202, and the Activities sheet's gestures), so the device they run on and the guard that
-# keeps the check-in off production cannot drift apart between them.
+# #202, the Activities sheet's gestures, and the Google Play build of #245), so the device
+# they run on and the guard that keeps the check-in off production cannot drift apart
+# between them.
 #
 # The caller checks the repository out first, puts the APKs it measures under apks/, and
 # sets up Node 22 for cdp-eval.mjs. Whatever the script writes to `out` stays on the
 # runner for the caller to upload, with the packet capture beside it.
 name: Measure on an Android emulator
-description: Boots the emulator with a packet capture, runs a measurement script on it, and fails if the check-in host left the device.
+description: Boots the emulator with a packet capture, runs a measurement script on it, and fails if the check-in host or GitHub was reached from the device.
 
 inputs:
   script:
@@ -15,6 +16,10 @@ inputs:
   out:
     description: Folder, relative to the workspace, that the script writes to and the capture goes in
     required: true
+  api-level:
+    description: Android API level of the emulator. 34 unless a measurement says why not
+    required: false
+    default: '34'
 
 runs:
   using: composite
@@ -36,7 +41,7 @@ runs:
     - name: Measure
       uses: reactivecircus/android-emulator-runner@v2
       with:
-        api-level: 34
+        api-level: ${{ inputs.api-level }}
         target: google_apis
         arch: x86_64
         profile: pixel_2
@@ -45,18 +50,25 @@ runs:
         disable-animations: true
         script: ${{ inputs.script }}
 
-    # Not one check-in may have left the emulator. Two records say so, and either one
-    # naming the host fails the job: the script's (every logcat line naming the host has
-    # to be the app's own "did not go through", see network.txt), and this capture of the
-    # emulator's network card. The capture is empty when the radio was off from the
-    # start, as it is here: the first run of measurement A got a 24-byte file, a header
-    # and no packets. Empty is therefore not a failure on its own; the logcat record is
-    # what shows the one attempt per install failing.
-    - name: Not one check-in left the emulator
+    # Not one check-in may have left the emulator, and nothing may have gone to GitHub. Two
+    # records say so, and either one naming a host fails the job: the script's (every
+    # logcat line naming the check-in host has to be the app's own "did not go through",
+    # see network.txt), and this capture of the emulator's network card, read by
+    # capture-guard.py for the check-in host and for GitHub, by name and by GitHub's
+    # published addresses. GitHub is here for the Google Play build (#245, #200): it must
+    # never fetch the update manifest, and the manifest is a file on GitHub's releases. No
+    # other measurement reaches GitHub either, so the rule costs them nothing.
+    #
+    # The capture is empty when the radio was off from the start, as it is here: the first
+    # run of measurement A got a 24-byte file, a header and no packets. Empty is therefore
+    # not a failure on its own; the logcat record is what shows the one attempt per install
+    # failing.
+    - name: Not one check-in left the emulator, and nothing reached GitHub
       if: always()
       shell: bash
       env:
         OUT: ${{ inputs.out }}
+        GH_TOKEN: ${{ github.token }}
       run: |
         set -uo pipefail
         pcap="$OUT/emulator.pcap"
@@ -66,17 +78,16 @@ runs:
           exit 0
         fi
         echo "capture: $(stat -c%s "$pcap") bytes"
-        if python3 - "$pcap" <<'PY'
-        import sys
-        data = open(sys.argv[1], "rb").read()
-        labels = b"\x07checkin\x09henfrydls\x03com"
-        whole = b"checkin.henfrydls.com"
-        found = [name for name, needle in (("DNS", labels), ("plain", whole)) if needle in data]
-        print("check-in host in the capture:", ", ".join(found) if found else "nowhere")
-        sys.exit(0 if found else 1)
-        PY
-        then
-          echo "::error::The emulator sent something naming the check-in host. Find the run"
-          echo "::error::in the server's rows and remove it, and close the path that let it out."
+        # The addresses GitHub serves its web and API hosts from. A capture with packets in
+        # it that cannot be checked against them is not taken as clean.
+        ranges="$OUT/github-ranges.txt"
+        if ! gh api meta --jq '(.web + .api + .git)[]' >"$ranges" || [ ! -s "$ranges" ]; then
+          echo "::error::GitHub's address ranges could not be read, so the capture was not checked."
+          exit 1
+        fi
+        if ! python3 "$GITHUB_WORKSPACE/.github/scripts/capture-guard.py" "$pcap" "$ranges"; then
+          echo "::error::The emulator sent something naming the check-in host or GitHub. If it was"
+          echo "::error::the check-in, find the run in the server's rows and remove it. Either way,"
+          echo "::error::close the path that let it out."
           exit 1
         fi
