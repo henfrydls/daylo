@@ -657,27 +657,53 @@ describe('a reminder that arrives when it was set for', () => {
 })
 
 describe('the line about timing, before the phone has answered', () => {
-  // The answer comes back after the first render. Until then the line is the one that
-  // promises nothing and offers nothing, which is true of every build on every phone: a
-  // guess of "exact" once showed "a few minutes late" to a phone that had refused.
-  it('says it arrives around the time until the phone answers, then says what it answered', async () => {
+  // The answer comes back after the first render. Drawn as anything until then, the line
+  // was swapped for another under the person's eyes: "a few minutes late" once, and
+  // "around this time" later, each turning into the warning and a row on a phone that had
+  // refused. Nothing is said until there is something true to say.
+  const timingLines = () => [
+    screen.queryByText('Android may deliver it a few minutes late.'),
+    screen.queryByText(/an hour or more late/),
+    screen.queryByText(/around this time/),
+    screen.queryByTestId('reminder-exact'),
+  ]
+
+  it('says nothing about timing until the phone answers, then says what it answered', async () => {
     let answer: (state: string) => void = () => {}
     exactAlarms.mockReturnValue(new Promise<string>((resolve) => (answer = resolve)))
     useCalendarStore.setState({ reminderEnabled: true })
     show({ hasReminders: true })
 
-    expect(screen.getByTestId('reminder-details')).toHaveTextContent(
-      'It arrives around this time. Android picks the exact moment.'
-    )
-    expect(screen.queryByText('Android may deliver it a few minutes late.')).toBeNull()
-    expect(screen.queryByTestId('reminder-exact')).toBeNull()
+    expect(timingLines()).toEqual([null, null, null, null])
 
     await act(async () => answer('denied'))
 
     expect(screen.getByTestId('reminder-exact')).toBeInTheDocument()
-    expect(screen.getByTestId('reminder-details')).not.toHaveTextContent(
-      'Android picks the exact moment'
-    )
+    expect(screen.queryByText(/around this time/)).toBeNull()
+  })
+
+  // Coming back to the front asks again. The line already read stays while the new answer
+  // is on its way, rather than going blank and coming back.
+  it('keeps the line it had while the phone is asked again', async () => {
+    exactAlarms.mockResolvedValueOnce('denied')
+    useCalendarStore.setState({ reminderEnabled: true })
+    show({ hasReminders: true })
+    await screen.findByTestId('reminder-exact')
+
+    let answer: (state: string) => void = () => {}
+    exactAlarms.mockReturnValueOnce(new Promise<string>((resolve) => (answer = resolve)))
+    await act(async () => {
+      document.dispatchEvent(new Event('visibilitychange'))
+    })
+
+    expect(exactAlarms).toHaveBeenCalledTimes(2)
+    expect(screen.getByTestId('reminder-exact')).toBeInTheDocument()
+    expect(screen.getByText(/an hour or more late/)).toBeInTheDocument()
+
+    await act(async () => answer('exact'))
+
+    expect(screen.queryByTestId('reminder-exact')).toBeNull()
+    expect(screen.getByText('Android may deliver it a few minutes late.')).toBeInTheDocument()
   })
 })
 

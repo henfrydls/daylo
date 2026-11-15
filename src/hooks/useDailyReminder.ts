@@ -13,15 +13,18 @@ import { useToast } from '../components/ui'
 /**
  * How close to its time the reminder will arrive, which is the one thing the screen needs
  * to know to decide what to say under it. The three answers are ExactAlarms, in
- * src/lib/reminders.ts.
+ * src/lib/reminders.ts, and a fourth for not knowing:
  *
- * `inexact` also stands for "not known yet": before the phone has answered, and while the
- * reminder is off and nothing has been asked. It is the line that promises nothing and
- * offers nothing, true of every build on every phone, so nothing said in the meantime has
- * to be taken back. A guess of `exact` once showed "a few minutes late" to a phone that had
- * refused, and swapped it for the warning a moment later.
+ * - `unknown`: the phone has not answered yet, or the reminder is off and nothing has been
+ *   asked. The screen says nothing about timing rather than guess. A guess of `exact` once
+ *   showed "a few minutes late" to a phone that had refused, and a guess of `inexact`
+ *   showed "around this time"; each was swapped for the warning and a button a moment
+ *   later, in front of the person.
+ *
+ * Coming back to the front asks again but keeps the answer it had until the new one comes,
+ * so a line already read does not blank out on every return to the app.
  */
-export type Punctuality = ExactAlarms
+export type Punctuality = ExactAlarms | 'unknown'
 
 interface DailyReminder {
   enabled: boolean
@@ -79,8 +82,8 @@ export function useDailyReminder(): DailyReminder {
   // on offering a fix for something already fixed.
   //
   // The same question in the Google Play build, which does not ask for the permission:
-  // there the answer is always `inexact`, read from the installed package, and nothing is
-  // offered.
+  // there the answer is `inexact` from Android 12 up and `exact` below it, and nothing is
+  // ever offered.
   useEffect(() => {
     if (!enabled) return
     let listening = true
@@ -200,7 +203,7 @@ export function useDailyReminder(): DailyReminder {
     at: formatReminderTime(hour, minute),
     busy,
     failure,
-    punctuality: answer ?? 'inexact',
+    punctuality: answer ?? 'unknown',
     askForTime,
     turnOn,
     turnOff,

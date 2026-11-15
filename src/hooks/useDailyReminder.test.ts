@@ -380,14 +380,15 @@ describe('before the phone has answered', () => {
     return (state: string) => act(async () => answer(state))
   }
 
-  // The words that promise nothing: true of every build on every phone, so nothing has to
-  // be taken back when the answer comes, and nothing to press until it does.
-  it('says it arrives around the time, rather than guessing that it will be on time', async () => {
+  // Nothing is said until there is something true to say. A line drawn now would be
+  // swapped for another a moment later, in front of the person: "around this time" turning
+  // into the warning and a button, on an APK the phone has refused.
+  it('does not know yet, and says so rather than guessing', async () => {
     useCalendarStore.setState({ reminderEnabled: true })
     const answer = pending()
     const { result } = renderHook(() => useDailyReminder())
 
-    expect(result.current.punctuality).toBe('inexact')
+    expect(result.current.punctuality).toBe('unknown')
 
     await answer('denied')
     expect(result.current.punctuality).toBe('denied')
@@ -405,7 +406,7 @@ describe('before the phone has answered', () => {
     expect(askForExactAlarms).not.toHaveBeenCalled()
   })
 
-  it('goes back to around the time when the reminder is turned off and on again', async () => {
+  it('goes back to not knowing when the reminder is turned off and on again', async () => {
     useCalendarStore.setState({ reminderEnabled: true })
     const first = pending()
     const { result } = renderHook(() => useDailyReminder())
@@ -413,14 +414,34 @@ describe('before the phone has answered', () => {
     expect(result.current.punctuality).toBe('exact')
 
     act(() => useCalendarStore.setState({ reminderEnabled: false }))
-    expect(result.current.punctuality).toBe('inexact')
+    expect(result.current.punctuality).toBe('unknown')
 
     const second = pending()
     act(() => useCalendarStore.setState({ reminderEnabled: true }))
-    expect(result.current.punctuality).toBe('inexact')
+    expect(result.current.punctuality).toBe('unknown')
 
     await second('denied')
     expect(result.current.punctuality).toBe('denied')
+  })
+
+  // Coming back to the front asks again, and the line from before stays up while the new
+  // answer is on its way: the person already read it, and blanking it for a moment is a
+  // flicker on every return to the app.
+  it('keeps the last answer while the next one is on its way', async () => {
+    useCalendarStore.setState({ reminderEnabled: true })
+    exactAlarms.mockResolvedValueOnce('denied')
+    const { result } = renderHook(() => useDailyReminder())
+    await waitFor(() => expect(result.current.punctuality).toBe('denied'))
+
+    const next = pending()
+    await act(async () => {
+      document.dispatchEvent(new Event('visibilitychange'))
+    })
+    expect(exactAlarms).toHaveBeenCalledTimes(2)
+    expect(result.current.punctuality).toBe('denied')
+
+    await next('exact')
+    expect(result.current.punctuality).toBe('exact')
   })
 })
 
@@ -437,8 +458,7 @@ describe('when the installed build does not ask for exact alarms', () => {
     useCalendarStore.setState({ reminderEnabled: true })
     const { result } = renderHook(() => useDailyReminder())
 
-    await waitFor(() => expect(exactAlarms).toHaveBeenCalled())
-    expect(result.current.punctuality).toBe('inexact')
+    await waitFor(() => expect(result.current.punctuality).toBe('inexact'))
   })
 
   it('does not open the phone screen it would not be on', async () => {

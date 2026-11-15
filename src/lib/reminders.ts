@@ -114,17 +114,22 @@ export async function remindersAvailable(): Promise<boolean> {
  * How close to its time the reminder can arrive, with the build that is installed, on the
  * phone it is installed on.
  *
- * - `inexact`: the build does not ask Android for SCHEDULE_EXACT_ALARM, so Android always
- *   picks the moment and there is nothing to offer. This is the Google Play build: Play asks
- *   for the permission to be justified, its policy asks for inexact alarms when a feature
- *   does not need the minute, and a habit reminder does not. Android does not list such a
- *   build on its "Alarms & reminders" screen, so the screen must not be offered.
- * - `exact`: the build asks, and the phone allows it. Also the answer below Android 12,
- *   where there is nothing to allow, and when the phone could not be asked whether it is
- *   allowed: the only thing that decides is whether to offer a fix, and offering one for a
- *   problem that may not exist is worse than staying quiet.
- * - `denied`: the build asks, and the phone says no, which is where Android 14 and up start.
- *   It still arrives, later, and the screen says so and offers the way to change it.
+ * - `inexact`: Android 12 or later, and the build does not ask Android for
+ *   SCHEDULE_EXACT_ALARM, so Android picks the moment and there is nothing to offer. This is
+ *   the Google Play build: Play asks for the permission to be justified, its policy asks for
+ *   inexact alarms when a feature does not need the minute, and a habit reminder does not.
+ *   Android does not list such a build on its "Alarms & reminders" screen, so the screen
+ *   must not be offered.
+ * - `exact`: below Android 12, for every build, because there is no permission to have yet
+ *   and the notification plugin arms an exact alarm for all of them (Arming.kt in the fork
+ *   pinned in src-tauri/Cargo.toml: `armsExact(sdk, declares, can) = sdk < S || (declares
+ *   && can)`); this follows the same rule so the words match what the phone does. From
+ *   Android 12, the build asks and the phone allows it, or the phone could not be asked
+ *   whether it is allowed: the only thing that decides is whether to offer a fix, and
+ *   offering one for a problem that may not exist is worse than staying quiet.
+ * - `denied`: Android 12 or later, the build asks, and the phone says no, which is where
+ *   Android 14 and up start. It still arrives, later, and the screen says so and offers the
+ *   way to change it.
  *
  * The APK keeps the permission, because an update that dropped it would make Android remove
  * the exact alarm already pending on every phone that allowed it. So the two builds are the
@@ -140,10 +145,9 @@ export type ExactAlarms = 'inexact' | 'exact' | 'denied'
  *
  * Anything short of a clear answer is `inexact`: no phone to ask, a command that failed, or
  * an answer in a shape this does not know. Those are the words that promise nothing and
- * offer nothing, and they are true of every build on every phone, so a wrong guess in that
- * direction costs a sentence and never a button to a screen Daylo is not on. A failure is
- * also said in the console, because an app that cannot read its own package is a fault to
- * find, not a state to live in.
+ * offer nothing, so a wrong guess in that direction costs a sentence and never a button to
+ * a screen Daylo is not on. A failure is also said in the console, because an app that
+ * cannot read its own package is a fault to find, not a state to live in.
  */
 export async function exactAlarms(): Promise<ExactAlarms> {
   if (!isTauri()) {
@@ -156,14 +160,27 @@ export async function exactAlarms(): Promise<ExactAlarms> {
     console.error('[Daylo] could not tell whether this build asks for exact alarms', error)
     return 'inexact'
   }
-  const { requested, allowed } = (answer ?? {}) as { requested?: unknown; allowed?: unknown }
-  if (typeof requested !== 'boolean' || typeof allowed !== 'boolean') {
+  const { requested, allowed, sdk } = (answer ?? {}) as {
+    requested?: unknown
+    allowed?: unknown
+    sdk?: unknown
+  }
+  if (
+    typeof requested !== 'boolean' ||
+    typeof allowed !== 'boolean' ||
+    typeof sdk !== 'number' ||
+    !Number.isInteger(sdk)
+  ) {
     console.error('[Daylo] the answer about exact alarms made no sense', answer)
     return 'inexact'
   }
+  if (sdk < EXACT_ALARMS_NEED_PERMISSION_FROM) return 'exact'
   if (!requested) return 'inexact'
   return allowed ? 'exact' : 'denied'
 }
+
+/** Android 12, API 31, where an exact alarm became something an app has to be allowed. */
+const EXACT_ALARMS_NEED_PERMISSION_FROM = 31
 
 /**
  * Open the phone's own "Alarms & reminders" screen, and say whether it opened.

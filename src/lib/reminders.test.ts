@@ -455,7 +455,7 @@ describe('the time the offer proposes', () => {
 })
 
 describe('whether it will arrive on time', () => {
-  /** The phone, answering what the installed build asks for and what it allows. */
+  /** The phone, answering what the installed build asks for, what it allows, and its API level. */
   const phoneSays = (answer: unknown) => {
     pretendAndroid()
     invoke.mockImplementation((command: string) =>
@@ -463,29 +463,52 @@ describe('whether it will arrive on time', () => {
     )
   }
 
-  // The Play build: the installed package does not ask for the permission, so Android picks
-  // the moment whatever the phone would allow, and there is nothing to offer.
-  it('is around the time when the installed build does not ask for exact alarms', async () => {
-    phoneSays({ requested: false, allowed: false })
+  // The Play build on Android 12 and up: the installed package does not ask for the
+  // permission, so Android picks the moment and there is nothing to offer.
+  it('is around the time when the build does not ask, on Android 12 and up', async () => {
+    phoneSays({ requested: false, allowed: false, sdk: 34 })
     await expect(exactAlarms()).resolves.toBe('inexact')
   })
 
-  // Read from the package, not from the phone's answer: Android 12 and up say no to a build
-  // that never asked, and a build that never asked has no screen to send anybody to.
+  // Read from the package, not from the phone's answer: a build that never asked has no
+  // screen to send anybody to.
   it('is around the time even if a build that does not ask is somehow allowed', async () => {
-    phoneSays({ requested: false, allowed: true })
+    phoneSays({ requested: false, allowed: true, sdk: 31 })
     await expect(exactAlarms()).resolves.toBe('inexact')
   })
 
   // The APK, on a phone that allows it.
   it('is on time when the build asks and the phone allows it', async () => {
-    phoneSays({ requested: true, allowed: true })
+    phoneSays({ requested: true, allowed: true, sdk: 34 })
     await expect(exactAlarms()).resolves.toBe('exact')
   })
 
   // The APK on Android 14 and up, where the permission comes denied.
   it('is late when the build asks and the phone says no', async () => {
-    phoneSays({ requested: true, allowed: false })
+    phoneSays({ requested: true, allowed: false, sdk: 34 })
+    await expect(exactAlarms()).resolves.toBe('denied')
+  })
+
+  // Below Android 12 there is no permission to have: the plugin arms an exact alarm for
+  // every build (Arming.kt, armsExact: sdk < S || (declares && can)), the Play one included.
+  // Saying "Android picks the exact moment" there would be false.
+  it('is on time below Android 12 even for the build that does not ask', async () => {
+    phoneSays({ requested: false, allowed: true, sdk: 30 })
+    await expect(exactAlarms()).resolves.toBe('exact')
+  })
+
+  // And whatever the phone says about a permission that does not exist there yet.
+  it('is on time below Android 12 whatever the phone says about allowing it', async () => {
+    phoneSays({ requested: true, allowed: false, sdk: 26 })
+    await expect(exactAlarms()).resolves.toBe('exact')
+    phoneSays({ requested: false, allowed: false, sdk: 30 })
+    await expect(exactAlarms()).resolves.toBe('exact')
+  })
+
+  it('takes Android 12 as the first version with the permission', async () => {
+    phoneSays({ requested: false, allowed: true, sdk: 31 })
+    await expect(exactAlarms()).resolves.toBe('inexact')
+    phoneSays({ requested: true, allowed: false, sdk: 31 })
     await expect(exactAlarms()).resolves.toBe('denied')
   })
 
@@ -510,11 +533,20 @@ describe('whether it will arrive on time', () => {
   // says false to everything it does not know, must not be read as a yes.
   it('is around the time, and says so in the console, when the answer makes no sense', async () => {
     const logged = vi.spyOn(console, 'error').mockImplementation(() => {})
-    for (const answer of [false, null, 'exact', { requested: 'yes', allowed: true }, {}]) {
+    const answers = [
+      false,
+      null,
+      'exact',
+      { requested: 'yes', allowed: true, sdk: 34 },
+      {},
+      { requested: false, allowed: true },
+      { requested: false, allowed: true, sdk: '30' },
+    ]
+    for (const answer of answers) {
       phoneSays(answer)
       await expect(exactAlarms()).resolves.toBe('inexact')
     }
-    expect(logged).toHaveBeenCalledTimes(5)
+    expect(logged).toHaveBeenCalledTimes(answers.length)
   })
 })
 

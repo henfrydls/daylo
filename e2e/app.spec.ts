@@ -824,29 +824,41 @@ async function openTheReminderSheet(
   page: import('@playwright/test').Page,
   {
     enabled,
-    exactAlarms = { requested: true, allowed: false },
+    exactAlarms = { requested: true, allowed: false, sdk: 34 },
+    holdExactAlarms = false,
   }: {
     enabled: boolean
     /**
      * What the native side answers about exact alarms: whether the installed package asks
-     * for them, and whether the phone allows it. The default is the APK on a phone that has
-     * not allowed "Alarms & reminders", which is where Android 14 and up start.
+     * for them, whether the phone allows it, and its API level. The default is the APK on a
+     * phone that has not allowed "Alarms & reminders", which is where Android 14 and up
+     * start.
      */
-    exactAlarms?: { requested: boolean; allowed: boolean }
+    exactAlarms?: { requested: boolean; allowed: boolean; sdk: number }
+    /**
+     * Keep that answer back until the test calls `window.__answerExactAlarms()`, to see
+     * what the screen says while the phone has not answered.
+     */
+    holdExactAlarms?: boolean
   }
 ) {
   await page.addInitScript(
-    ({ on, exact }) => {
+    ({ on, exact, hold }) => {
+      let release: () => void = () => {}
+      const answered = hold
+        ? new Promise<void>((resolve) => (release = resolve))
+        : Promise.resolve()
       Object.assign(window, {
         isTauri: true,
+        __answerExactAlarms: () => release(),
         __TAURI_INTERNALS__: {
           invoke: (command: string) =>
-            Promise.resolve(
-              command === 'exact_alarms'
-                ? exact
-                : command === 'reminders_available' ||
+            command === 'exact_alarms'
+              ? answered.then(() => exact)
+              : Promise.resolve(
+                  command === 'reminders_available' ||
                     command === 'plugin:notification|is_permission_granted'
-            ),
+                ),
         },
       })
       // The plugin's isPermissionGranted looks at window.Notification.permission first and
@@ -882,7 +894,7 @@ async function openTheReminderSheet(
         })
       )
     },
-    { on: enabled, exact: exactAlarms }
+    { on: enabled, exact: exactAlarms, hold: holdExactAlarms }
   )
 
   await page.goto('/')
@@ -1025,16 +1037,29 @@ test.describe('the reminder sheet on a phone', () => {
    * The Google Play build does not ask for them. Android does not list it on its "Alarms &
    * reminders" screen, so there is one line and nothing to press, whatever the phone would
    * have said about the permission.
+   *
+   * The answer is held back first, because the line has to come from the answer and not
+   * be there by default: until the phone answers, nothing about timing is said at all.
    */
   test('says it arrives around the time, and offers nothing, in the Play build', async ({
     page,
   }) => {
     await openTheReminderSheet(page, {
       enabled: true,
-      exactAlarms: { requested: false, allowed: false },
+      exactAlarms: { requested: false, allowed: false, sdk: 34 },
+      holdExactAlarms: true,
     })
 
     const details = page.getByTestId('reminder-details')
+    await expect(page.getByTestId('reminder-time')).toBeVisible()
+    await expect(details).not.toContainText('Android picks the exact moment')
+    await expect(details).not.toContainText('late')
+    await expect(page.getByTestId('reminder-exact')).toHaveCount(0)
+
+    await page.evaluate(() =>
+      (window as unknown as { __answerExactAlarms: () => void }).__answerExactAlarms()
+    )
+
     await expect(details).toContainText(
       'It arrives around this time. Android picks the exact moment.'
     )
