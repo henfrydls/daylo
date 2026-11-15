@@ -9,12 +9,13 @@
          alarm clocks and calendars, and a habit tracker is neither. Without this the
          reminder still arrives, just inexactly.
 
-         Meant to go in 1.5.4, the first build for Google Play, and not before: an update
-         that drops this line makes Android remove the exact alarm already pending, so the
-         reminder has to be stored where it can be set again from first. It goes together
-         with EXACT_ALARMS_DECLARED in src/lib/reminders.ts; scripts/check-exact-alarm.js
-         fails in the unit tests, in Build Check (Android) and in release.yml while the two
-         disagree. -->
+         The APK keeps it and the Google Play bundle does not. Play asks for it to be
+         justified, so the Play pass merges src/play/AndroidManifest.xml, which removes it
+         (see build.gradle.kts). The APK cannot drop it: an update without this line makes
+         Android remove the exact alarm already pending on every phone that had allowed it.
+         The app reads at run time whether the installed build asks for it, and
+         scripts/check-exact-alarm.js holds each build to what it should be, in the unit
+         tests, in Build Check (Android) and in release.yml. -->
     <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" />
 
     <!-- AndroidTV support -->

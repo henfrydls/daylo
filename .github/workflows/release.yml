@@ -45,26 +45,32 @@ jobs:
         uses: actions/checkout@v4
 
       # Before anything is public. Every other job waits for this one, so a refusal here
-      # stops the whole tag in seconds with nothing published. The same check runs again on
-      # the merged Android manifests after the Android build, for a permission a library
-      # brings in; by then the release exists, which is why the common case, the switch and
-      # the hand-written manifest disagreeing, is asked here first.
+      # stops the whole tag in seconds with nothing published. The main manifest has to ask
+      # for exact alarms and carry no channel mark, which is the APK; the Play overlay has to
+      # take the permission out and carry the mark, which is the AAB. The same check runs
+      # again on what Gradle merged after each Android pass, and on the two final files, for
+      # a permission a library brings in; by then the release exists, which is why the
+      # common case, a hand-written manifest gone wrong, is asked here first.
       #
-      # Node only: the script reads two files and imports nothing outside Node itself.
+      # Node only: the script reads the files it is given and imports nothing outside Node.
       #
-      # To see it red on a lab tag without touching what the later check reads: move the
-      # uses-permission line out of src-tauri/gen/android/app/src/main/AndroidManifest.xml
-      # into a new src-tauri/gen/android/app/src/release/AndroidManifest.xml. The release
-      # build still merges the permission in, so the later check would agree, but this one
-      # reads the main manifest and stops the tag. (It never gets as far as the later one:
-      # every job needs this one.)
+      # To see it red on a lab tag: misspell the permission in the removal line of
+      # src-tauri/gen/android/app/src/play/AndroidManifest.xml. The overlay would then remove
+      # nothing and the AAB would go to Play with the permission; this step names the file.
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: 20
 
-      - name: The Android manifest agrees with EXACT_ALARMS_DECLARED
-        run: node scripts/check-exact-alarm.js src-tauri/gen/android/app/src/main/AndroidManifest.xml
+      - name: The Android manifests ask for what each build should
+        run: |
+          set -uo pipefail
+          status=0
+          node scripts/check-exact-alarm.js --expect declared --channel none \
+            src-tauri/gen/android/app/src/main/AndroidManifest.xml || status=1
+          node scripts/check-exact-alarm.js --expect absent --channel play \
+            src-tauri/gen/android/app/src/play/AndroidManifest.xml || status=1
+          exit "$status"
 
       - name: Create it, or find the one an earlier attempt made
         id: make
@@ -249,59 +255,61 @@ jobs:
       - name: Install Tauri CLI
         run: npm install --save-dev @tauri-apps/cli
 
-      # Both from one build. The APK is what the landing page links to and what anybody
-      # installs by hand; the AAB is the only format Play accepts, and it is built from the
-      # same sources in the same run so the two cannot be different software.
-      - name: Build Android APK and AAB (arm64 only)
-        run: npx tauri android build --apk --aab --target aarch64
+      # Two passes from one checkout. The APK is what the landing page links to and what
+      # anybody installs by hand, and it keeps SCHEDULE_EXACT_ALARM: an update without it
+      # would make Android remove the exact alarm pending on every phone that allowed it.
+      # The AAB is the only format Play accepts, and it goes without the permission, because
+      # Play asks for it to be justified, and with a mark that tells the app it is the Play
+      # build. Same sources, same run, same versionCode and versionName (both read from
+      # tauri.conf.json through tauri.properties), so the two cannot be different software
+      # beyond those two lines. The second pass is further down, after the APK is signed.
+      - name: Build the Android APK (arm64 only)
+        run: npx tauri android build --apk --target aarch64
         env:
           NDK_HOME: ${{ env.ANDROID_HOME }}/ndk/29.0.14206865
 
       # The same check Build Check (Android) runs on a pull request, on the build that is
-      # actually published: the release variant's merged manifests, the bundle one that goes
-      # into the AAB Play is given and the packaged one that goes into the APK. Here and not
-      # only in the pull request because a pull request builds debug, and because this is
-      # the last moment before anything is signed or uploaded: past it, a declaration Play
-      # asks to be justified is already in the release.
+      # actually published: the packaged manifest Gradle merged for the APK. Here and not only
+      # in the pull request because a pull request builds debug, and right after this pass
+      # because the next one writes over the intermediates.
       #
-      # Both have to be found. A path AGP renamed holds no permission either, and read as
-      # "not declared" it would agree with EXACT_ALARMS_DECLARED being off.
+      # It has to be found. A path AGP renamed holds no permission either, and has to say so
+      # rather than pass.
       #
-      # The hand-written manifest has already been checked in create-release, before the
-      # release existed. What only this step can see is a permission a library adds in the
-      # merge, and Build Check (Android) asks the same of every pull request on its debug
-      # build, so reaching this step red should be rare.
+      # The hand-written manifests have already been checked in create-release, before the
+      # release existed. What only this step can see is a permission or a mark a library
+      # adds or takes away in the merge, so reaching this step red should be rare.
       #
-      # If it is red, the release is already public: create-release made it, the desktop
-      # jobs upload into it, and updater-manifest waits only for them, so latest.json goes
-      # out without an APK or an AAB, and an Android copy told about this version would be
-      # sent to a file that is not there. Turn the release back into a draft at once, which
-      # takes it out of /releases/latest so every copy goes back to the version before:
+      # If this or any check below is red, the release is already public: create-release made
+      # it, the desktop jobs upload into it, and updater-manifest waits only for them, so
+      # latest.json goes out without an APK or an AAB, and an Android copy told about this
+      # version would be sent to a file that is not there. Turn the release back into a draft
+      # at once, which takes it out of /releases/latest so every copy goes back to the
+      # version before:
       #   gh release edit <tag> --draft=true
       # then fix the manifest and tag again, after deleting the draft and its tag with
       #   gh release delete <tag> --cleanup-tag --yes
       #
-      # Only a tag runs this. To see it red on its own, the earlier check has to pass: take
-      # the permission out in a manifest only the release build merges, a new
+      # Only a tag runs this. To see it red on its own, create-release has to pass: take the
+      # permission out in a manifest only the release build merges, a new
       # src-tauri/gen/android/app/src/release/AndroidManifest.xml with
       #   <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM"
       #       tools:node="remove" />
       # (and the tools namespace on its <manifest>). The main manifest still declares it,
-      # so create-release agrees, and this step names both merged files as declaring none.
-      - name: The release manifests agree with EXACT_ALARMS_DECLARED
+      # so create-release agrees, and this step names the merged file as declaring none.
+      - name: The APK's merged manifest asks for exact alarms and carries no mark
         run: |
           set -uo pipefail
           shopt -s nullglob globstar
           dir=src-tauri/gen/android/app/build/intermediates
-          bundle=( "$dir"/bundle_manifest/*Release/**/AndroidManifest.xml )
           packaged=( "$dir"/packaged_manifests/*Release/**/AndroidManifest.xml )
-          if [ ${#bundle[@]} -eq 0 ] || [ ${#packaged[@]} -eq 0 ]; then
-            echo "::error::The release manifests are not where this step looks for them, so"
+          if [ ${#packaged[@]} -eq 0 ]; then
+            echo "::error::The APK's merged manifest is not where this step looks for it, so"
             echo "::error::nothing was checked. Where AGP writes them now:"
             find "$dir" -name AndroidManifest.xml 2>/dev/null || true
             exit 1
           fi
-          node scripts/check-exact-alarm.js "${bundle[@]}" "${packaged[@]}"
+          node scripts/check-exact-alarm.js --expect declared --channel none "${packaged[@]}"
 
       - name: Sign APK
         env:
@@ -389,6 +397,39 @@ jobs:
           fi
           echo "APK_CERT=$APK_CERT" >> "$GITHUB_ENV"
 
+      # The second pass, for Play. ORG_GRADLE_PROJECT_dayloPlay is how Gradle reads a project
+      # property from the environment, so the Tauri CLI does not have to pass anything:
+      # build.gradle.kts sees dayloPlay=true and merges
+      # src-tauri/gen/android/app/src/play/AndroidManifest.xml over the release build, which
+      # takes SCHEDULE_EXACT_ALARM out and puts the Play mark in. Rust was compiled by the
+      # first pass for the same target and profile, and is reused.
+      - name: Build the Android AAB for Play (arm64 only)
+        run: npx tauri android build --aab --target aarch64
+        env:
+          NDK_HOME: ${{ env.ANDROID_HOME }}/ndk/29.0.14206865
+          ORG_GRADLE_PROJECT_dayloPlay: 'true'
+
+      # The bundle manifest Gradle merged for the AAB, right after its own pass: no
+      # exact-alarm permission from anybody, and the Play mark. What happens when it is red
+      # is said above the APK's check.
+      #
+      # To see it red on a lab tag with create-release still passing: delete the dayloPlay
+      # line from this job's AAB step. The overlay is then never merged, and this step names
+      # the bundle manifest as declaring the permission and carrying no mark.
+      - name: The AAB's merged manifest does not ask for exact alarms and carries the mark
+        run: |
+          set -uo pipefail
+          shopt -s nullglob globstar
+          dir=src-tauri/gen/android/app/build/intermediates
+          bundle=( "$dir"/bundle_manifest/*Release/**/AndroidManifest.xml )
+          if [ ${#bundle[@]} -eq 0 ]; then
+            echo "::error::The AAB's merged manifest is not where this step looks for it, so"
+            echo "::error::nothing was checked. Where AGP writes them now:"
+            find "$dir" -name AndroidManifest.xml 2>/dev/null || true
+            exit 1
+          fi
+          node scripts/check-exact-alarm.js --expect absent --channel play "${bundle[@]}"
+
       # The same key as the APK, which is the point of doing it here rather than letting
       # Play sign a fresh upload: it will be both the upload key and, because Henfry will
       # hand it to Play when the app is created, the app signing key.
@@ -449,6 +490,90 @@ jobs:
             echo "::error::update over it later without uninstalling and losing their data."
             exit 1
           fi
+
+      # The two files that leave this job, read as Android and Play will read them, rather
+      # than what Gradle wrote on the way. The checks above read the intermediates; these
+      # read the signed APK and the signed AAB, so a step that rewrote either in between
+      # would still be caught.
+      #
+      # - The APK asks for SCHEDULE_EXACT_ALARM and carries no Play mark: aapt2, from the
+      #   build tools already installed, dumps its permissions and its manifest tree.
+      # - The AAB does not ask for it and carries the mark: bundletool dumps its manifest as
+      #   XML, which the same script as above reads. bundletool is a pinned release whose
+      #   SHA-256 is checked before it runs; the hash is the one GitHub lists for that asset.
+      # - Both have the same versionCode and versionName. Play and the APK are the same
+      #   version of Daylo, and a check-in or a support question that names one has to name
+      #   the other.
+      #
+      # Every check speaks before the step fails, so one red run names every reason.
+      #
+      # To see it red on a lab tag: delete the dayloPlay line from the AAB step above. The
+      # AAB's merged-manifest check goes red first; with that step skipped, this one names
+      # the AAB as declaring the permission and carrying no mark.
+      - name: The APK and the AAB are the two builds they should be
+        env:
+          BUNDLETOOL_VERSION: '1.18.3'
+          BUNDLETOOL_SHA256: 'a099cfa1543f55593bc2ed16a70a7c67fe54b1747bb7301f37fdfd6d91028e29'
+        run: |
+          set -uo pipefail
+          APK=src-tauri/gen/android/app/build/outputs/apk/universal/release/Daylo-android-arm64.apk
+          AAB=Daylo-android.aab
+          BT="${ANDROID_HOME}/build-tools/$(ls ${ANDROID_HOME}/build-tools/ | tail -1)"
+          status=0
+          for f in "$APK" "$AAB"; do
+            if [ ! -s "$f" ]; then
+              echo "::error::$f is not there, so it cannot be checked."
+              exit 1
+            fi
+          done
+
+          jar="$RUNNER_TEMP/bundletool-all-$BUNDLETOOL_VERSION.jar"
+          curl -fsSL --retry 3 -o "$jar" \
+            "https://github.com/google/bundletool/releases/download/$BUNDLETOOL_VERSION/bundletool-all-$BUNDLETOOL_VERSION.jar"
+          if ! echo "$BUNDLETOOL_SHA256  $jar" | sha256sum -c -; then
+            echo "::error::bundletool $BUNDLETOOL_VERSION did not match its pinned SHA-256, so it was not run."
+            exit 1
+          fi
+
+          # Into variables first and matched after: a grep reading a pipe can close it early
+          # and fail the writer with SIGPIPE, which ci.yml found the hard way.
+          apk_permissions=$("$BT/aapt2" dump permissions "$APK") || { echo "::error::aapt2 could not read the APK's permissions."; exit 1; }
+          apk_tree=$("$BT/aapt2" dump xmltree --file AndroidManifest.xml "$APK") || { echo "::error::aapt2 could not read the APK's manifest."; exit 1; }
+          apk_badging=$("$BT/aapt2" dump badging "$APK") || { echo "::error::aapt2 could not read the APK's version."; exit 1; }
+          if [[ "$apk_permissions" != *"'android.permission.SCHEDULE_EXACT_ALARM'"* ]]; then
+            echo "::error::The APK does not ask for SCHEDULE_EXACT_ALARM. An update to it would"
+            echo "::error::take the exact alarm away from everybody who allowed it. It asks for:"
+            echo "$apk_permissions"
+            status=1
+          fi
+          if [[ "$apk_tree" == *'"daylo.channel"'* ]]; then
+            echo "::error::The APK carries the Play mark. It would never offer an update and"
+            echo "::error::would count itself as installed from Play."
+            status=1
+          fi
+
+          aab_manifest="$RUNNER_TEMP/aab-manifest.xml"
+          if ! java -jar "$jar" dump manifest --bundle "$AAB" > "$aab_manifest"; then
+            echo "::error::bundletool could not read the AAB's manifest."
+            exit 1
+          fi
+          node scripts/check-exact-alarm.js --expect absent --channel play "$aab_manifest" || status=1
+
+          apk_code=$(sed -nE "1s/.* versionCode='([^']*)'.*/\1/p" <<< "$apk_badging")
+          apk_name=$(sed -nE "1s/.* versionName='([^']*)'.*/\1/p" <<< "$apk_badging")
+          aab_code=$(java -jar "$jar" dump manifest --bundle "$AAB" --xpath /manifest/@android:versionCode | tr -d '[:space:]')
+          aab_name=$(java -jar "$jar" dump manifest --bundle "$AAB" --xpath /manifest/@android:versionName | tr -d '[:space:]')
+          echo "APK: versionCode=$apk_code versionName=$apk_name"
+          echo "AAB: versionCode=$aab_code versionName=$aab_name"
+          if [ -z "$apk_code" ] || [ -z "$apk_name" ] || [ -z "$aab_code" ] || [ -z "$aab_name" ]; then
+            echo "::error::A version could not be read from one of the two files, so they were not compared."
+            status=1
+          elif [ "$apk_code" != "$aab_code" ] || [ "$apk_name" != "$aab_name" ]; then
+            echo "::error::The APK and the AAB are different versions:"
+            echo "::error::  APK $apk_name ($apk_code), AAB $aab_name ($aab_code)"
+            status=1
+          fi
+          exit "$status"
 
       # An artifact and not a release asset: nobody can install an .aab, it exists only to
       # be handed to Play, and a file on the release page that cannot be opened is a

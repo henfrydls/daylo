@@ -427,16 +427,15 @@ jobs:
           fi
           exit "$status"
 
-      # The unit tests compare EXACT_ALARMS_DECLARED with the manifest written by hand. What
-      # Play reads is the merged one, where any library can add SCHEDULE_EXACT_ALARM or
-      # USE_EXACT_ALARM of its own, and then Play asks for the declaration whatever the
-      # hand-written file says. So
-      # the same check runs here on what Gradle merged: the bundle manifest, which goes into
-      # the AAB, and the packaged one, which goes into the APK.
+      # The unit tests read the manifests written by hand. What Play reads is the merged one,
+      # where any library can add SCHEDULE_EXACT_ALARM or USE_EXACT_ALARM of its own, and
+      # then Play asks for the declaration whatever the hand-written file says. So the same
+      # check runs here on what Gradle merged: the bundle manifest, which goes into the AAB,
+      # and the packaged one, which goes into the APK. This build is debug, which never
+      # merges the Play overlay, so both have to ask for exact alarms and carry no mark.
       #
       # Both have to be found. A path AGP renamed holds no permission either, and read as
-      # "not declared" it would agree with the switch being off, which is the direction this
-      # is for. This build is debug; the release build merges the same libraries.
+      # "absent" it would pass the Play check by accident.
       #
       # To see it fail without the unit test failing first: take the permission out in a
       # manifest the unit test does not read but Gradle merges into this debug build,
@@ -446,8 +445,8 @@ jobs:
       #     <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM"
       #         tools:node="remove" />
       #   </manifest>
-      # With EXACT_ALARMS_DECLARED on, the step names both merged files as declaring none.
-      - name: The merged manifests agree with EXACT_ALARMS_DECLARED
+      # The step names both merged files as declaring none.
+      - name: The merged debug manifests ask for exact alarms
         run: |
           set -uo pipefail
           shopt -s nullglob globstar
@@ -460,7 +459,63 @@ jobs:
             find "$dir" -name AndroidManifest.xml 2>/dev/null || true
             exit 1
           fi
-          node scripts/check-exact-alarm.js "${bundle[@]}" "${packaged[@]}"
+          node scripts/check-exact-alarm.js --expect declared --channel none \
+            "${bundle[@]}" "${packaged[@]}"
+
+      # The Play overlay, on every pull request and not only on a tag. release.yml builds the
+      # AAB with the Gradle property dayloPlay, which makes the release build type merge
+      # src-tauri/gen/android/app/src/play/AndroidManifest.xml: SCHEDULE_EXACT_ALARM out, the
+      # Play mark in. Only a tag runs release.yml, so without this the overlay would be seen
+      # working for the first time on the day of a release.
+      #
+      # processUniversalReleaseMainManifest is the task that merges the release manifest with
+      # the libraries' and the overlay. It does not compile Rust: buildSrc's RustPlugin hangs
+      # the Rust build on the JNI library merge, which this task does not reach. That is
+      # checked rather than assumed, because a Rust release build here would add many minutes
+      # to every pull request: a rustBuild task in the log fails the step. It runs twice,
+      # without the property and with it, and each merged file is copied out before the next
+      # run writes over it.
+      #
+      # To see it red: misspell the permission in the overlay's removal line. The unit test
+      # fails first; with the unit test made to agree, this step names the Play merge.
+      - name: The release manifest merge, with and without the Play overlay
+        working-directory: src-tauri/gen/android
+        run: |
+          set -uo pipefail
+          shopt -s nullglob globstar
+          out=$RUNNER_TEMP/release-manifests
+          mkdir -p "$out"
+          status=0
+          for pass in apk play; do
+            flag=()
+            if [ "$pass" = play ]; then flag=( -PdayloPlay=true ); fi
+            rm -rf app/build/intermediates/merged_manifest
+            log=$(./gradlew :app:processUniversalReleaseMainManifest "${flag[@]}" --console=plain 2>&1)
+            gradle=$?
+            echo "$log"
+            if [ "$gradle" -ne 0 ]; then
+              echo "::error::Gradle exited $gradle merging the $pass release manifest."
+              status=1
+              continue
+            fi
+            if grep -q ':rustBuild' <<< "$log"; then
+              echo "::error::Merging the $pass release manifest ran a Rust build. This step is"
+              echo "::error::meant to be quick; move it after a build that compiles Rust anyway."
+              status=1
+            fi
+            merged=( app/build/intermediates/merged_manifest/universalRelease/**/AndroidManifest.xml )
+            if [ ${#merged[@]} -ne 1 ]; then
+              echo "::error::Expected one merged $pass release manifest and found ${#merged[@]}."
+              find app/build/intermediates -name AndroidManifest.xml 2>/dev/null || true
+              status=1
+              continue
+            fi
+            cp "${merged[0]}" "$out/$pass.xml"
+          done
+          cd "$GITHUB_WORKSPACE"
+          node scripts/check-exact-alarm.js --expect declared --channel none "$out/apk.xml" || status=1
+          node scripts/check-exact-alarm.js --expect absent --channel play "$out/play.xml" || status=1
+          exit "$status"
 
       # Saved here, not by a post step, so that 'if: always()' applies: actions/cache does
       # not save when the job fails, and a red job is exactly when the cycle needs to be
