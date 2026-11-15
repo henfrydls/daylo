@@ -507,7 +507,10 @@ jobs:
       #   version of Daylo, and a check-in or a support question that names one has to name
       #   the other.
       #
-      # Every check speaks before the step fails, so one red run names every reason.
+      # Every check speaks before the step fails, so one red run names every reason. And
+      # what was read is printed on green runs too: the APK's permissions, and the AAB's
+      # uses-permission lines and channel mark, so the log of every release says what each
+      # file asked for, not only that a check was happy with it.
       #
       # To see it red on a lab tag: delete the dayloPlay line from the AAB step above. The
       # AAB's merged-manifest check goes red first; with that step skipped, this one names
@@ -542,10 +545,12 @@ jobs:
           apk_permissions=$("$BT/aapt2" dump permissions "$APK") || { echo "::error::aapt2 could not read the APK's permissions."; exit 1; }
           apk_tree=$("$BT/aapt2" dump xmltree --file AndroidManifest.xml "$APK") || { echo "::error::aapt2 could not read the APK's manifest."; exit 1; }
           apk_badging=$("$BT/aapt2" dump badging "$APK") || { echo "::error::aapt2 could not read the APK's version."; exit 1; }
+          echo "--- the APK's permissions (aapt2 dump permissions) ---"
+          echo "$apk_permissions"
           if [[ "$apk_permissions" != *"'android.permission.SCHEDULE_EXACT_ALARM'"* ]]; then
             echo "::error::The APK does not ask for SCHEDULE_EXACT_ALARM. An update to it would"
-            echo "::error::take the exact alarm away from everybody who allowed it. It asks for:"
-            echo "$apk_permissions"
+            echo "::error::take the exact alarm away from everybody who allowed it. What it asks"
+            echo "::error::for is printed above."
             status=1
           fi
           if [[ "$apk_tree" == *'"daylo.channel"'* ]]; then
@@ -559,6 +564,8 @@ jobs:
             echo "::error::bundletool could not read the AAB's manifest."
             exit 1
           fi
+          echo "--- the AAB's permissions and channel mark (bundletool dump manifest) ---"
+          grep -E 'uses-permission|daylo\.channel' "$aab_manifest" || echo "(no uses-permission line and no channel mark)"
           node scripts/check-exact-alarm.js --expect absent --channel play "$aab_manifest" || status=1
 
           apk_code=$(sed -nE "1s/.* versionCode='([^']*)'.*/\1/p" <<< "$apk_badging")
