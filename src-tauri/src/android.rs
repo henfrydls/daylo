@@ -258,6 +258,9 @@ pub fn fetch_text(url: &str, limit: i32) -> Result<String, String> {
 /// `PackageManager.GET_PERMISSIONS`, which fills in `requestedPermissions`.
 const GET_PERMISSIONS: i32 = 0x0000_1000;
 
+/// `PackageManager.GET_META_DATA`, which fills in `ApplicationInfo.metaData`.
+const GET_META_DATA: i32 = 0x0000_0080;
+
 /// The permission the APK asks for and the Google Play build does not.
 const SCHEDULE_EXACT_ALARM: &str = "android.permission.SCHEDULE_EXACT_ALARM";
 
@@ -374,6 +377,82 @@ pub fn exact_alarms_allowed() -> bool {
             .z()
     })
     .unwrap_or(true)
+}
+
+/// The channel the installed build was made for, as its manifest marks it, or None when it
+/// carries no mark or the package could not be read.
+///
+/// Only the Google Play bundle has one: the overlay that takes SCHEDULE_EXACT_ALARM out
+/// also adds `<meta-data android:name="daylo.channel" android:value="play" />`. It says what
+/// the build is, which the installer cannot: a Play bundle put on a phone with bundletool,
+/// adb or a transfer app has no Play installer recorded, and must still never offer an
+/// update from outside Play. See `packaging::android_source`.
+///
+/// `getApplicationInfo(String, int)` is deprecated from API 33 like `getPackageInfo`, and
+/// for the same reason both forms are here.
+pub fn distribution_channel() -> Option<String> {
+    with_the_activity(|env, activity| {
+        let manager = env
+            .call_method(
+                activity,
+                "getPackageManager",
+                "()Landroid/content/pm/PackageManager;",
+                &[],
+            )?
+            .l()?;
+        let package = env
+            .call_method(activity, "getPackageName", "()Ljava/lang/String;", &[])?
+            .l()?;
+
+        let info = if sdk_int(env)? >= 33 {
+            let flags = env
+                .call_static_method(
+                    "android/content/pm/PackageManager$ApplicationInfoFlags",
+                    "of",
+                    "(J)Landroid/content/pm/PackageManager$ApplicationInfoFlags;",
+                    &[JValue::Long(GET_META_DATA as i64)],
+                )?
+                .l()?;
+            env.call_method(
+                &manager,
+                "getApplicationInfo",
+                "(Ljava/lang/String;Landroid/content/pm/PackageManager$ApplicationInfoFlags;)Landroid/content/pm/ApplicationInfo;",
+                &[JValue::Object(&package), JValue::Object(&flags)],
+            )?
+            .l()?
+        } else {
+            env.call_method(
+                &manager,
+                "getApplicationInfo",
+                "(Ljava/lang/String;I)Landroid/content/pm/ApplicationInfo;",
+                &[JValue::Object(&package), JValue::Int(GET_META_DATA)],
+            )?
+            .l()?
+        };
+
+        // Null when the manifest has no meta-data at all, which is not the case today but
+        // is a manifest Android accepts.
+        let meta = env
+            .get_field(&info, "metaData", "Landroid/os/Bundle;")?
+            .l()?;
+        if meta.is_null() {
+            return Ok(None);
+        }
+        let key = env.new_string("daylo.channel")?;
+        let value = env
+            .call_method(
+                &meta,
+                "getString",
+                "(Ljava/lang/String;)Ljava/lang/String;",
+                &[JValue::Object(&key)],
+            )?
+            .l()?;
+        if value.is_null() {
+            return Ok(None);
+        }
+        Ok(Some(String::from(env.get_string(&JString::from(value))?)))
+    })
+    .flatten()
 }
 
 /// Open the system screen where exact alarms are allowed, and say whether it opened.
