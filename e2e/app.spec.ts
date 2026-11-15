@@ -822,52 +822,68 @@ test.describe('the view toggle on a touch screen @webkit', () => {
  */
 async function openTheReminderSheet(
   page: import('@playwright/test').Page,
-  { enabled }: { enabled: boolean }
+  {
+    enabled,
+    exactAlarms = { requested: true, allowed: false },
+  }: {
+    enabled: boolean
+    /**
+     * What the native side answers about exact alarms: whether the installed package asks
+     * for them, and whether the phone allows it. The default is the APK on a phone that has
+     * not allowed "Alarms & reminders", which is where Android 14 and up start.
+     */
+    exactAlarms?: { requested: boolean; allowed: boolean }
+  }
 ) {
-  await page.addInitScript((on) => {
-    Object.assign(window, {
-      isTauri: true,
-      __TAURI_INTERNALS__: {
-        invoke: (command: string) =>
-          Promise.resolve(
-            command === 'reminders_available' ||
-              command === 'plugin:notification|is_permission_granted'
-          ),
-      },
-    })
-    // The plugin's isPermissionGranted looks at window.Notification.permission first and
-    // only asks the native side when it reads 'default'. A headless browser says 'denied',
-    // which would have the app turn the reminder off on the way in and render the sheet
-    // in the wrong state. A phone that has been granted the permission says granted.
-    Object.defineProperty(window, 'Notification', {
-      configurable: true,
-      value: { permission: 'granted' },
-    })
-    localStorage.setItem(
-      'simple-calendar-storage',
-      JSON.stringify({
-        state: {
-          activities: [
-            {
-              id: 'a1',
-              name: 'Read',
-              color: '#10B981',
-              createdAt: '2026-01-01T00:00:00.000Z',
-              updatedAt: '2026-01-01T00:00:00.000Z',
-            },
-          ],
-          logs: [],
-          yearMode: 'all',
-          reminderEnabled: on,
-          reminderHour: 19,
-          reminderMinute: 0,
-          // Or the one-time offer opens on top of the sheet and takes the taps.
-          reminderOffered: true,
+  await page.addInitScript(
+    ({ on, exact }) => {
+      Object.assign(window, {
+        isTauri: true,
+        __TAURI_INTERNALS__: {
+          invoke: (command: string) =>
+            Promise.resolve(
+              command === 'exact_alarms'
+                ? exact
+                : command === 'reminders_available' ||
+                    command === 'plugin:notification|is_permission_granted'
+            ),
         },
-        version: 0,
       })
-    )
-  }, enabled)
+      // The plugin's isPermissionGranted looks at window.Notification.permission first and
+      // only asks the native side when it reads 'default'. A headless browser says 'denied',
+      // which would have the app turn the reminder off on the way in and render the sheet
+      // in the wrong state. A phone that has been granted the permission says granted.
+      Object.defineProperty(window, 'Notification', {
+        configurable: true,
+        value: { permission: 'granted' },
+      })
+      localStorage.setItem(
+        'simple-calendar-storage',
+        JSON.stringify({
+          state: {
+            activities: [
+              {
+                id: 'a1',
+                name: 'Read',
+                color: '#10B981',
+                createdAt: '2026-01-01T00:00:00.000Z',
+                updatedAt: '2026-01-01T00:00:00.000Z',
+              },
+            ],
+            logs: [],
+            yearMode: 'all',
+            reminderEnabled: on,
+            reminderHour: 19,
+            reminderMinute: 0,
+            // Or the one-time offer opens on top of the sheet and takes the taps.
+            reminderOffered: true,
+          },
+          version: 0,
+        })
+      )
+    },
+    { on: enabled, exact: exactAlarms }
+  )
 
   await page.goto('/')
   await openSettings(page)
@@ -987,15 +1003,11 @@ test.describe('the reminder sheet on a phone', () => {
   })
 
   /**
-   * What the build that is published says under the time, with EXACT_ALARMS_DECLARED as it
-   * is in src/lib/reminders.ts rather than as a unit test sets it.
+   * What each build says under the time, decided by what the installed package asks for,
+   * which the fake above answers in place of the phone.
    *
-   * The fake above answers no to every command it does not name, exact_alarms_allowed
-   * included, which is what a phone that has not granted "Alarms & reminders" answers. 1.5.3
-   * declares the permission, so that person is told the reminder can be late and offered the
-   * phone's screen. When the switch goes off, as 1.5.4 is meant to, this screen shows one
-   * line and nothing to press instead, and this test has to change with it: it is in the
-   * list on EXACT_ALARMS_DECLARED.
+   * The APK asks for exact alarms, and on a phone that has not allowed them the person is
+   * told the reminder can be late and offered the phone's screen.
    */
   test('offers the phone screen to somebody who has not allowed exact alarms', async ({ page }) => {
     await openTheReminderSheet(page, { enabled: true })
@@ -1007,6 +1019,27 @@ test.describe('the reminder sheet on a phone', () => {
     await expect(page.getByTestId('reminder-exact')).toBeVisible()
     await expect(page.getByTestId('reminder-exact')).toContainText('Allow on-time reminders')
     await expect(details).not.toContainText('Android picks the exact moment')
+  })
+
+  /**
+   * The Google Play build does not ask for them. Android does not list it on its "Alarms &
+   * reminders" screen, so there is one line and nothing to press, whatever the phone would
+   * have said about the permission.
+   */
+  test('says it arrives around the time, and offers nothing, in the Play build', async ({
+    page,
+  }) => {
+    await openTheReminderSheet(page, {
+      enabled: true,
+      exactAlarms: { requested: false, allowed: false },
+    })
+
+    const details = page.getByTestId('reminder-details')
+    await expect(details).toContainText(
+      'It arrives around this time. Android picks the exact moment.'
+    )
+    await expect(page.getByTestId('reminder-exact')).toHaveCount(0)
+    await expect(details).not.toContainText('an hour or more late')
   })
 })
 

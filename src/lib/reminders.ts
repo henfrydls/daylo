@@ -111,60 +111,58 @@ export async function remindersAvailable(): Promise<boolean> {
 }
 
 /**
- * Whether this build asks Android for SCHEDULE_EXACT_ALARM, which is what lets a reminder
- * arrive on the minute.
+ * How close to its time the reminder can arrive, with the build that is installed, on the
+ * phone it is installed on.
  *
- * On in 1.5.3, as it has been since 1.5.1, and meant to go off in 1.5.4, the first build
- * of the closed test on Google Play. Declaring the permission means justifying it to Play,
- * and Play's policy asks for inexact alarms when a feature does not need the minute; a
- * habit reminder does not, and USE_EXACT_ALARM, the one granted on sight, is reserved for
- * alarm clocks and calendars. It is not dropped here because an update that drops it makes
- * Android remove the exact alarm already pending (see refreshReminder), and the reminder
- * has to be stored somewhere it can be set again from before that happens.
+ * - `inexact`: the build does not ask Android for SCHEDULE_EXACT_ALARM, so Android always
+ *   picks the moment and there is nothing to offer. This is the Google Play build: Play asks
+ *   for the permission to be justified, its policy asks for inexact alarms when a feature
+ *   does not need the minute, and a habit reminder does not. Android does not list such a
+ *   build on its "Alarms & reminders" screen, so the screen must not be offered.
+ * - `exact`: the build asks, and the phone allows it. Also the answer below Android 12,
+ *   where there is nothing to allow, and when the phone could not be asked whether it is
+ *   allowed: the only thing that decides is whether to offer a fix, and offering one for a
+ *   problem that may not exist is worse than staying quiet.
+ * - `denied`: the build asks, and the phone says no, which is where Android 14 and up start.
+ *   It still arrives, later, and the screen says so and offers the way to change it.
  *
- * With it on, the screen asks the phone whether exact alarms are allowed and, when they
- * are not, offers the way to the phone's "Alarms & reminders" screen. With it off, Android
- * does not list Daylo on that screen and the answer is always no, so the screen neither
- * asks nor offers, and says the reminder arrives around its time. The reminder is
- * scheduled the same way either way.
- *
- * Several things change together with this line, and each of them fails while they
- * disagree:
- * - the uses-permission line in src-tauri/gen/android/app/src/main/AndroidManifest.xml;
- * - scripts/check-exact-alarm.js, which reads this line and runs in the unit tests on that
- *   manifest, in Build Check (Android) on the debug manifests Gradle merged, and in
- *   release.yml on the release ones before anything is uploaded;
- * - the end to end test in e2e/app.spec.ts that checks what the published build shows
- *   under the reminder's time, which expects the offer while this is on.
- * Keep the line as `= true` or `= false`; anything else is refused rather than guessed.
+ * The APK keeps the permission, because an update that dropped it would make Android remove
+ * the exact alarm already pending on every phone that allowed it. So the two builds are the
+ * same code, and the difference is read from the installed package rather than written into
+ * the app: whatever the manifest Gradle merged says, including a permission a library adds,
+ * is what this sees.
  */
-export const EXACT_ALARMS_DECLARED: boolean = true
+export type ExactAlarms = 'inexact' | 'exact' | 'denied'
 
 /**
- * Whether the reminder will arrive at the time it was set for.
+ * Ask the installed build what it requests, and the phone what it allows, and say which of
+ * the three that makes. See ExactAlarms.
  *
- * False does not mean it will not arrive. It means Android is free to move it, by about
- * an hour on a phone in use and further out of a deep doze, which is what an inexact
- * alarm is. The screen uses this to decide whether to say so and offer the way to change
- * it, never whether to schedule anything.
- *
- * True where the question cannot be put at all, which is the same direction the Rust side
- * takes and for the same reason: the only thing this decides is whether to offer a fix,
- * and offering one for a problem that may not exist is worse than saying nothing.
- *
- * Only asked while EXACT_ALARMS_DECLARED is on. In a build that does not declare the
- * permission, Android 12 and up answer no whatever the person did, and the fix this would
- * offer opens a screen that does not list Daylo, so the screen does not ask.
+ * Anything short of a clear answer is `inexact`: no phone to ask, a command that failed, or
+ * an answer in a shape this does not know. Those are the words that promise nothing and
+ * offer nothing, and they are true of every build on every phone, so a wrong guess in that
+ * direction costs a sentence and never a button to a screen Daylo is not on. A failure is
+ * also said in the console, because an app that cannot read its own package is a fault to
+ * find, not a state to live in.
  */
-export async function exactAlarmsAllowed(): Promise<boolean> {
+export async function exactAlarms(): Promise<ExactAlarms> {
   if (!isTauri()) {
-    return true
+    return 'inexact'
   }
+  let answer: unknown
   try {
-    return await invoke<boolean>('exact_alarms_allowed')
-  } catch {
-    return true
+    answer = await invoke('exact_alarms')
+  } catch (error) {
+    console.error('[Daylo] could not tell whether this build asks for exact alarms', error)
+    return 'inexact'
   }
+  const { requested, allowed } = (answer ?? {}) as { requested?: unknown; allowed?: unknown }
+  if (typeof requested !== 'boolean' || typeof allowed !== 'boolean') {
+    console.error('[Daylo] the answer about exact alarms made no sense', answer)
+    return 'inexact'
+  }
+  if (!requested) return 'inexact'
+  return allowed ? 'exact' : 'denied'
 }
 
 /**
@@ -276,10 +274,10 @@ function inTurn<T>(work: (overtaken: () => boolean) => Promise<T>): Promise<T> {
  * means even at its best, and why the wording says "usually close" rather than a number.
  *
  * Asking for the exact-alarm permission was weighed and refused here and reversed in 1.5.1:
- * Henfry saw other apps arrive on the minute. Daylo declares SCHEDULE_EXACT_ALARM and the
- * screen asks `exactAlarmsAllowed` whether it was granted, because from Android 14 it comes
- * denied by default. It is meant to be taken out again in 1.5.4, for Google Play: see
- * EXACT_ALARMS_DECLARED. Without it, every reminder is the inexact one described above.
+ * Henfry saw other apps arrive on the minute. The APK declares SCHEDULE_EXACT_ALARM and the
+ * screen asks `exactAlarms` whether it was granted, because from Android 14 it comes denied
+ * by default. The Google Play build, from 1.5.4, does not declare it: every reminder there
+ * is the inexact one described above, and so is every reminder on an APK without the grant.
  *
  * The plugin used to re-arm the following days in its receiver with plain RTC, without
  * RTC_WAKEUP and without allowWhileIdle. Daylo builds a patched copy where the first
@@ -324,14 +322,16 @@ export function enableReminder(hour: number, minute: number): Promise<ReminderRe
  * Only for a reminder stored by a build with that fix, though. One armed by 1.5.2 or
  * earlier is not in the store until something schedules it again, and this call is that
  * something: opening Daylo once after updating is what makes the reminder restorable. That
- * matters most for the update that stops asking for exact alarms, because Android removes
- * the exact alarm on that update and only the store can bring it back.
+ * matters most for an update that stops asking for exact alarms, because Android removes
+ * the exact alarm on that update and only the store can bring it back. The APK never makes
+ * that update; a phone that moves from the APK to the Google Play build, which does not
+ * ask, does.
  *
- * That is also why 1.5.3 still declares SCHEDULE_EXACT_ALARM. Android's AlarmManagerService,
- * on a package replaced, removes the exact alarms of an app that no longer has the
- * permission, without telling it: read in the Android 13 to 16 source, not yet watched on a
- * phone. 1.5.3 is the version that stores the reminder, so the update that stops declaring
- * the permission finds something to restore; whoever skips it is back to opening Daylo.
+ * That is also why the APK still declares SCHEDULE_EXACT_ALARM, and only the Google Play
+ * build goes without it. Android's AlarmManagerService, on a package replaced, removes the
+ * exact alarms of an app that no longer has the permission, without telling it: read in the
+ * Android 13 to 16 source, not yet watched on a phone. An APK update that dropped it would
+ * leave the store to bring the reminder back, and whoever skipped 1.5.3 has nothing in it.
  *
  * It also puts the switch back in step with the phone: a permission taken away in the
  * system settings leaves nothing scheduled, and this is how the app finds out. Returns

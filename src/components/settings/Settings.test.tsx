@@ -22,20 +22,15 @@ vi.mock('@tauri-apps/api/core', async (importOriginal) => ({
 
 const enableReminder = vi.hoisted(() => vi.fn())
 const disableReminder = vi.hoisted(() => vi.fn())
-const exactAlarmsAllowed = vi.hoisted(() => vi.fn())
+const exactAlarms = vi.hoisted(() => vi.fn())
 const askForExactAlarms = vi.hoisted(() => vi.fn())
-/** Whether this build declares the exact-alarm permission, per test. */
-const exact = vi.hoisted(() => ({ declared: true }))
 
 vi.mock('../../lib/reminders', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../../lib/reminders')>()),
   enableReminder,
   disableReminder,
-  exactAlarmsAllowed,
+  exactAlarms,
   askForExactAlarms,
-  get EXACT_ALARMS_DECLARED() {
-    return exact.declared
-  },
 }))
 
 const check = vi.fn()
@@ -68,11 +63,9 @@ function show({
 }
 
 beforeEach(() => {
-  exactAlarmsAllowed.mockReset().mockResolvedValue(true)
+  // The APK on a phone that allows it. The Play build has tests of its own below.
+  exactAlarms.mockReset().mockResolvedValue('exact')
   askForExactAlarms.mockReset().mockResolvedValue(true)
-  // On, as 1.5.3 ships. Set here rather than read from the module so that a test which
-  // needs it off, as 1.5.4 will be, cannot leave it off for the next one.
-  exact.declared = true
   inTheApp.yes = false
   check.mockReset()
   install.mockReset()
@@ -642,7 +635,7 @@ describe('a reminder that arrives when it was set for', () => {
   // granted on a screen that belongs to the phone. So the row exists exactly when there
   // is something to fix, and pressing it goes there.
   it('offers the phone screen when the reminder would be moved', async () => {
-    exactAlarmsAllowed.mockResolvedValue(false)
+    exactAlarms.mockResolvedValue('denied')
     useCalendarStore.setState({ reminderEnabled: true })
     show({ hasReminders: true })
 
@@ -652,65 +645,68 @@ describe('a reminder that arrives when it was set for', () => {
   })
 
   it('offers nothing when the phone already lets it arrive on time', async () => {
-    exactAlarmsAllowed.mockResolvedValue(true)
+    exactAlarms.mockResolvedValue('exact')
     useCalendarStore.setState({ reminderEnabled: true })
     show({ hasReminders: true })
 
-    await waitFor(() => expect(exactAlarmsAllowed).toHaveBeenCalled())
+    expect(
+      await screen.findByText('Android may deliver it a few minutes late.')
+    ).toBeInTheDocument()
     expect(screen.queryByTestId('reminder-exact')).not.toBeInTheDocument()
   })
 })
 
 describe('the line about timing, before the phone has answered', () => {
-  // The answer comes back after the first render. Drawn as "exact" until then, a phone
-  // that had refused showed "a few minutes late" and then swapped it for the warning and a
-  // row, under the person's eyes. Nothing is said until there is something true to say.
-  const timingLines = () => [
-    screen.queryByText('Android may deliver it a few minutes late.'),
-    screen.queryByText(/an hour or more late/),
-    screen.queryByTestId('reminder-exact'),
-  ]
-
-  it('says nothing about timing until the phone answers, then says what it answered', async () => {
-    let answer: (allowed: boolean) => void = () => {}
-    exactAlarmsAllowed.mockReturnValue(new Promise<boolean>((resolve) => (answer = resolve)))
+  // The answer comes back after the first render. Until then the line is the one that
+  // promises nothing and offers nothing, which is true of every build on every phone: a
+  // guess of "exact" once showed "a few minutes late" to a phone that had refused.
+  it('says it arrives around the time until the phone answers, then says what it answered', async () => {
+    let answer: (state: string) => void = () => {}
+    exactAlarms.mockReturnValue(new Promise<string>((resolve) => (answer = resolve)))
     useCalendarStore.setState({ reminderEnabled: true })
     show({ hasReminders: true })
 
-    expect(timingLines()).toEqual([null, null, null])
+    expect(screen.getByTestId('reminder-details')).toHaveTextContent(
+      'It arrives around this time. Android picks the exact moment.'
+    )
+    expect(screen.queryByText('Android may deliver it a few minutes late.')).toBeNull()
+    expect(screen.queryByTestId('reminder-exact')).toBeNull()
 
-    await act(async () => answer(false))
+    await act(async () => answer('denied'))
 
     expect(screen.getByTestId('reminder-exact')).toBeInTheDocument()
-    expect(screen.queryByText('Android may deliver it a few minutes late.')).toBeNull()
+    expect(screen.getByTestId('reminder-details')).not.toHaveTextContent(
+      'Android picks the exact moment'
+    )
   })
 })
 
 describe('a reminder in a build without exact alarms', () => {
-  // Without the permission declared, Android does not list Daylo on its "Alarms &
-  // reminders" screen, so the row would open a screen with nothing on it to switch on.
+  // The Play build. Without the permission in the installed package, Android does not list
+  // Daylo on its "Alarms & reminders" screen, so the row would open a screen with nothing
+  // on it to switch on.
   beforeEach(() => {
-    exact.declared = false
+    exactAlarms.mockResolvedValue('inexact')
   })
 
-  it('offers no way to the phone screen and does not ask the phone', async () => {
-    exactAlarmsAllowed.mockResolvedValue(false)
+  it('offers no way to the phone screen', async () => {
     useCalendarStore.setState({ reminderEnabled: true })
     show({ hasReminders: true })
 
+    await waitFor(() => expect(exactAlarms).toHaveBeenCalled())
     expect(await screen.findByText(/around this time/i)).toBeInTheDocument()
     expect(screen.queryByTestId('reminder-exact')).not.toBeInTheDocument()
     // Both spellings: the row says "on-time" and the sentence above it "on time", and a
     // pattern for one of them let the row through unseen.
     expect(screen.queryAllByText(/on[- ]time/i)).toHaveLength(0)
-    expect(exactAlarmsAllowed).not.toHaveBeenCalled()
     expect(askForExactAlarms).not.toHaveBeenCalled()
   })
 
-  it('does not promise the minute', () => {
+  it('does not promise the minute', async () => {
     useCalendarStore.setState({ reminderEnabled: true })
     show({ hasReminders: true })
 
+    await waitFor(() => expect(exactAlarms).toHaveBeenCalled())
     expect(screen.getByTestId('reminder-details')).toHaveTextContent(
       'It arrives around this time. Android picks the exact moment.'
     )

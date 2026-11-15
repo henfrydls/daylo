@@ -9,7 +9,7 @@ import {
   refreshReminder,
   remindersAvailable,
   askForExactAlarms,
-  exactAlarmsAllowed,
+  exactAlarms,
 } from './reminders'
 
 const isPermissionGranted = vi.hoisted(() => vi.fn())
@@ -455,27 +455,66 @@ describe('the time the offer proposes', () => {
 })
 
 describe('whether it will arrive on time', () => {
-  it('says yes where there is no phone to ask', async () => {
+  /** The phone, answering what the installed build asks for and what it allows. */
+  const phoneSays = (answer: unknown) => {
+    pretendAndroid()
+    invoke.mockImplementation((command: string) =>
+      command === 'exact_alarms' ? Promise.resolve(answer) : Promise.resolve(true)
+    )
+  }
+
+  // The Play build: the installed package does not ask for the permission, so Android picks
+  // the moment whatever the phone would allow, and there is nothing to offer.
+  it('is around the time when the installed build does not ask for exact alarms', async () => {
+    phoneSays({ requested: false, allowed: false })
+    await expect(exactAlarms()).resolves.toBe('inexact')
+  })
+
+  // Read from the package, not from the phone's answer: Android 12 and up say no to a build
+  // that never asked, and a build that never asked has no screen to send anybody to.
+  it('is around the time even if a build that does not ask is somehow allowed', async () => {
+    phoneSays({ requested: false, allowed: true })
+    await expect(exactAlarms()).resolves.toBe('inexact')
+  })
+
+  // The APK, on a phone that allows it.
+  it('is on time when the build asks and the phone allows it', async () => {
+    phoneSays({ requested: true, allowed: true })
+    await expect(exactAlarms()).resolves.toBe('exact')
+  })
+
+  // The APK on Android 14 and up, where the permission comes denied.
+  it('is late when the build asks and the phone says no', async () => {
+    phoneSays({ requested: true, allowed: false })
+    await expect(exactAlarms()).resolves.toBe('denied')
+  })
+
+  it('is around the time where there is no phone to ask', async () => {
     vi.stubGlobal('isTauri', false)
-    await expect(exactAlarmsAllowed()).resolves.toBe(true)
+    await expect(exactAlarms()).resolves.toBe('inexact')
     expect(invoke).not.toHaveBeenCalled()
   })
 
-  it('says what the phone says', async () => {
-    pretendAndroid()
-    invoke.mockImplementation((command: string) =>
-      command === 'exact_alarms_allowed' ? Promise.resolve(false) : Promise.resolve(true)
-    )
-    await expect(exactAlarmsAllowed()).resolves.toBe(false)
-  })
-
-  // The only thing this decides is whether the screen offers to fix something. An app
-  // that cannot ask has nothing to offer, and a line about a problem that may not exist
-  // is worse than silence. Same direction as the Rust side, deliberately.
-  it('says yes when the question cannot be put', async () => {
+  // Not knowing is said in the words that promise nothing and offer nothing, and said in
+  // the console, because an app that cannot read its own package is something to find.
+  it('is around the time, and says why in the console, when the question fails', async () => {
     vi.stubGlobal('isTauri', true)
     invoke.mockRejectedValue('no such command')
-    await expect(exactAlarmsAllowed()).resolves.toBe(true)
+    const logged = vi.spyOn(console, 'error').mockImplementation(() => {})
+
+    await expect(exactAlarms()).resolves.toBe('inexact')
+    expect(logged).toHaveBeenCalledWith(expect.stringContaining('[Daylo]'), 'no such command')
+  })
+
+  // An answer in some other shape is not an answer. An older native side, or a fake that
+  // says false to everything it does not know, must not be read as a yes.
+  it('is around the time, and says so in the console, when the answer makes no sense', async () => {
+    const logged = vi.spyOn(console, 'error').mockImplementation(() => {})
+    for (const answer of [false, null, 'exact', { requested: 'yes', allowed: true }, {}]) {
+      phoneSays(answer)
+      await expect(exactAlarms()).resolves.toBe('inexact')
+    }
+    expect(logged).toHaveBeenCalledTimes(5)
   })
 })
 

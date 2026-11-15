@@ -10,7 +10,7 @@
 //! the webview's JNI handle would also work and is what Tauri's own examples show, but it
 //! hops to the UI thread and answers through a callback, and nothing here needs either.
 
-use jni::objects::{JObject, JString, JValue};
+use jni::objects::{JObject, JObjectArray, JString, JValue};
 use jni::JavaVM;
 
 /// Borrow a JNI environment and the app's own Activity for the length of one question.
@@ -255,6 +255,88 @@ pub fn fetch_text(url: &str, limit: i32) -> Result<String, String> {
     })
 }
 
+/// `PackageManager.GET_PERMISSIONS`, which fills in `requestedPermissions`.
+const GET_PERMISSIONS: i32 = 0x0000_1000;
+
+/// The permission the APK asks for and the Google Play build does not.
+const SCHEDULE_EXACT_ALARM: &str = "android.permission.SCHEDULE_EXACT_ALARM";
+
+/// Whether the build that is installed asks Android for SCHEDULE_EXACT_ALARM, or None if
+/// the package could not be read.
+///
+/// Read from the installed package and not written into the app, because one tree makes
+/// two builds: the APK asks for it, and the Google Play bundle has it taken out by a
+/// manifest overlay (src-tauri/gen/android/app/src/play/AndroidManifest.xml). This is the
+/// merged manifest the phone actually holds, including anything a library added.
+///
+/// Not `canScheduleExactAlarms`, which says no both for a build that never asked and for one
+/// that asked and was refused, and those two get different words on the screen.
+///
+/// `getPackageInfo(String, int)` is deprecated from API 33, where the flags became a
+/// `PackageInfoFlags`; both are needed because the app's minSdk is 24.
+pub fn requests_exact_alarms() -> Option<bool> {
+    with_the_activity(|env, activity| {
+        let manager = env
+            .call_method(
+                activity,
+                "getPackageManager",
+                "()Landroid/content/pm/PackageManager;",
+                &[],
+            )?
+            .l()?;
+        let package = env
+            .call_method(activity, "getPackageName", "()Ljava/lang/String;", &[])?
+            .l()?;
+
+        let info = if sdk_int(env)? >= 33 {
+            let flags = env
+                .call_static_method(
+                    "android/content/pm/PackageManager$PackageInfoFlags",
+                    "of",
+                    "(J)Landroid/content/pm/PackageManager$PackageInfoFlags;",
+                    &[JValue::Long(GET_PERMISSIONS as i64)],
+                )?
+                .l()?;
+            env.call_method(
+                &manager,
+                "getPackageInfo",
+                "(Ljava/lang/String;Landroid/content/pm/PackageManager$PackageInfoFlags;)Landroid/content/pm/PackageInfo;",
+                &[JValue::Object(&package), JValue::Object(&flags)],
+            )?
+            .l()?
+        } else {
+            env.call_method(
+                &manager,
+                "getPackageInfo",
+                "(Ljava/lang/String;I)Landroid/content/pm/PackageInfo;",
+                &[JValue::Object(&package), JValue::Int(GET_PERMISSIONS)],
+            )?
+            .l()?
+        };
+
+        // Null, not empty, when the package asks for no permissions at all.
+        let requested = env
+            .get_field(&info, "requestedPermissions", "[Ljava/lang/String;")?
+            .l()?;
+        if requested.is_null() {
+            return Ok(false);
+        }
+        let requested = JObjectArray::from(requested);
+        let count = env.get_array_length(&requested)?;
+        for index in 0..count {
+            let name = env.get_object_array_element(&requested, index)?;
+            if name.is_null() {
+                continue;
+            }
+            let name = String::from(env.get_string(&JString::from(name))?);
+            if name == SCHEDULE_EXACT_ALARM {
+                return Ok(true);
+            }
+        }
+        Ok(false)
+    })
+}
+
 /// Whether this phone will let Daylo set an alarm for an exact time.
 ///
 /// Android 12 made exact alarms something an app has to be allowed, and Android 14 made
@@ -268,10 +350,9 @@ pub fn fetch_text(url: &str, limit: i32) -> Result<String, String> {
 /// offering a fix for a problem that may not exist is worse than staying quiet. The
 /// reminder is scheduled either way.
 ///
-/// Only meaningful while the manifest declares SCHEDULE_EXACT_ALARM, as 1.5.3 does. A build
-/// without it, as 1.5.4 is meant to be, gets no from Android 12 up on every phone, and the
-/// app does not ask: see EXACT_ALARMS_DECLARED in src/lib/reminders.ts, which goes off
-/// together with the permission.
+/// Only meaningful for a build that asks for SCHEDULE_EXACT_ALARM, which the APK does and
+/// the Google Play build does not: from Android 12 up, a build that never asked always
+/// hears no. `requests_exact_alarms` is what tells the two apart, and the app reads both.
 pub fn exact_alarms_allowed() -> bool {
     with_the_activity(|env, activity| {
         if sdk_int(env)? < 31 {

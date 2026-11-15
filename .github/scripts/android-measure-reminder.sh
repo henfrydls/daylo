@@ -24,13 +24,13 @@
 #                 log says "will next fire at"; with the control it stays the same. While
 #                 the permission is still declared the alarm survives either way, so its
 #                 presence tells nothing apart, the hash does. Read at 5, 30 and 60 seconds
-#                 after the install, so that the 1.5.4 measurement can see an exact alarm
+#                 after the install, so that the Play build measurement can see an exact alarm
 #                 re-armed and then removed by AlarmManagerService.
 #   O6  test:     the restored alarm, after the restart and 60 s after the update, is exact
 #                 (window=0 and an exactAllowReason), as the one armed from the open app
 #                 is. It counts for the verdict. It was inexact in every run until run
 #                 43608923559: the grant made with `appops set` was never written to disk,
-#                 so the emulator booted without it. The 1.5.4 measurement drops the
+#                 so the emulator booted without it. The Play build measurement drops the
 #                 permission, expects an inexact alarm there, and runs with O6_COUNTS=0.
 #
 # And one condition that is not an observable of the reminder but decides whether this
@@ -266,7 +266,8 @@ if [ "$NETWORK_GUARD" = held ] && [ "$(v test O1)" = yes ] && [ "$(v test O2)" =
   DISTINGUISHES=yes
 fi
 # O6 is required for the verdict. O6_COUNTS=0 makes it informative, for a build that does
-# not declare SCHEDULE_EXACT_ALARM (1.5.4), whose restored alarm is inexact by design.
+# not declare SCHEDULE_EXACT_ALARM (the Play build, from 1.5.4), whose restored alarm is
+# inexact by design.
 O6_COUNTS=${O6_COUNTS:-1}
 if [ "$O6_COUNTS" = 1 ] && { [ "$(v test O6restart)" != exact ] || [ "$(v test O6update)" != exact ]; }; then
   DISTINGUISHES=no

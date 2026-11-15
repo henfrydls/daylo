@@ -5,20 +5,15 @@ import { useCalendarStore } from '../store'
 
 const enableReminder = vi.hoisted(() => vi.fn())
 const disableReminder = vi.hoisted(() => vi.fn())
-const exactAlarmsAllowed = vi.hoisted(() => vi.fn())
+const exactAlarms = vi.hoisted(() => vi.fn())
 const askForExactAlarms = vi.hoisted(() => vi.fn())
-/** Whether this build declares the exact-alarm permission, per test. */
-const exact = vi.hoisted(() => ({ declared: true }))
 
 vi.mock('../lib/reminders', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../lib/reminders')>()),
   enableReminder,
   disableReminder,
-  exactAlarmsAllowed,
+  exactAlarms,
   askForExactAlarms,
-  get EXACT_ALARMS_DECLARED() {
-    return exact.declared
-  },
 }))
 
 const showToast = vi.fn()
@@ -31,11 +26,10 @@ const reminder = () => useCalendarStore.getState()
 
 beforeEach(() => {
   enableReminder.mockReset().mockResolvedValue({ outcome: 'on' })
-  exactAlarmsAllowed.mockReset().mockResolvedValue(true)
+  // The APK on a phone that allows it. The Play build, which does not ask, has tests of
+  // its own below.
+  exactAlarms.mockReset().mockResolvedValue('exact')
   askForExactAlarms.mockReset().mockResolvedValue(true)
-  // On, as 1.5.3 ships. Set here rather than read from the module so that a test which
-  // needs it off, as 1.5.4 will be, cannot leave it off for the next one.
-  exact.declared = true
   disableReminder.mockReset().mockResolvedValue(undefined)
   showToast.mockReset()
   useCalendarStore.setState({ reminderEnabled: false, reminderHour: 21, reminderMinute: 0 })
@@ -272,7 +266,7 @@ describe('what it says', () => {
 describe('whether it will arrive on time', () => {
   it('asks the phone when the reminder is already on', async () => {
     useCalendarStore.setState({ reminderEnabled: true })
-    exactAlarmsAllowed.mockResolvedValue(false)
+    exactAlarms.mockResolvedValue('denied')
 
     const { result } = renderHook(() => useDailyReminder())
     await waitFor(() => expect(result.current.punctuality).toBe('denied'))
@@ -283,7 +277,7 @@ describe('whether it will arrive on time', () => {
 
     renderHook(() => useDailyReminder())
     await waitFor(() => expect(enableReminder).not.toHaveBeenCalled())
-    expect(exactAlarmsAllowed).not.toHaveBeenCalled()
+    expect(exactAlarms).not.toHaveBeenCalled()
   })
 
   // The permission is granted on a screen that belongs to the phone, not to Daylo, so
@@ -291,11 +285,11 @@ describe('whether it will arrive on time', () => {
   // sheet would keep offering a fix for something already fixed.
   it('asks again when the app comes back to the front', async () => {
     useCalendarStore.setState({ reminderEnabled: true })
-    exactAlarmsAllowed.mockResolvedValue(false)
+    exactAlarms.mockResolvedValue('denied')
     const { result } = renderHook(() => useDailyReminder())
     await waitFor(() => expect(result.current.punctuality).toBe('denied'))
 
-    exactAlarmsAllowed.mockResolvedValue(true)
+    exactAlarms.mockResolvedValue('exact')
     await act(async () => {
       document.dispatchEvent(new Event('visibilitychange'))
     })
@@ -304,7 +298,7 @@ describe('whether it will arrive on time', () => {
   })
 
   it('asks again after the reminder is turned on', async () => {
-    exactAlarmsAllowed.mockResolvedValue(false)
+    exactAlarms.mockResolvedValue('denied')
     const { result } = renderHook(() => useDailyReminder())
 
     await act(async () => {
@@ -321,12 +315,12 @@ describe('whether it will arrive on time', () => {
   // one thing granting it was supposed to prevent.
   it('sets the reminder again when the permission has just been granted', async () => {
     useCalendarStore.setState({ reminderEnabled: true, reminderHour: 21, reminderMinute: 0 })
-    exactAlarmsAllowed.mockResolvedValue(false)
+    exactAlarms.mockResolvedValue('denied')
     const { result } = renderHook(() => useDailyReminder())
     await waitFor(() => expect(result.current.punctuality).toBe('denied'))
     enableReminder.mockClear()
 
-    exactAlarmsAllowed.mockResolvedValue(true)
+    exactAlarms.mockResolvedValue('exact')
     await act(async () => {
       document.dispatchEvent(new Event('visibilitychange'))
     })
@@ -339,7 +333,7 @@ describe('whether it will arrive on time', () => {
   // that was just made.
   it('leaves the reminder alone when the first answer is already allowed', async () => {
     useCalendarStore.setState({ reminderEnabled: true })
-    exactAlarmsAllowed.mockResolvedValue(true)
+    exactAlarms.mockResolvedValue('exact')
     const { result } = renderHook(() => useDailyReminder())
 
     await waitFor(() => expect(result.current.punctuality).toBe('exact'))
@@ -352,7 +346,7 @@ describe('whether it will arrive on time', () => {
   // each of them would replace a pending alarm for no reason.
   it('leaves the reminder alone when the answer has not changed', async () => {
     useCalendarStore.setState({ reminderEnabled: true })
-    exactAlarmsAllowed.mockResolvedValue(true)
+    exactAlarms.mockResolvedValue('exact')
     const { result } = renderHook(() => useDailyReminder())
     await waitFor(() => expect(result.current.punctuality).toBe('exact'))
     enableReminder.mockClear()
@@ -360,13 +354,16 @@ describe('whether it will arrive on time', () => {
     await act(async () => {
       document.dispatchEvent(new Event('visibilitychange'))
     })
-    await waitFor(() => expect(exactAlarmsAllowed).toHaveBeenCalledTimes(2))
+    await waitFor(() => expect(exactAlarms).toHaveBeenCalledTimes(2))
 
     expect(enableReminder).not.toHaveBeenCalled()
   })
 
   it('opens the phone screen where it is granted', async () => {
+    useCalendarStore.setState({ reminderEnabled: true })
+    exactAlarms.mockResolvedValue('denied')
     const { result } = renderHook(() => useDailyReminder())
+    await waitFor(() => expect(result.current.punctuality).toBe('denied'))
 
     await act(async () => {
       await result.current.askForTime()
@@ -378,75 +375,27 @@ describe('whether it will arrive on time', () => {
 
 describe('before the phone has answered', () => {
   const pending = () => {
-    let answer: (allowed: boolean) => void = () => {}
-    exactAlarmsAllowed.mockReturnValueOnce(new Promise<boolean>((resolve) => (answer = resolve)))
-    return (allowed: boolean) => act(async () => answer(allowed))
+    let answer: (state: string) => void = () => {}
+    exactAlarms.mockReturnValueOnce(new Promise<string>((resolve) => (answer = resolve)))
+    return (state: string) => act(async () => answer(state))
   }
 
-  it('does not know yet, rather than guessing that it will be on time', async () => {
+  // The words that promise nothing: true of every build on every phone, so nothing has to
+  // be taken back when the answer comes, and nothing to press until it does.
+  it('says it arrives around the time, rather than guessing that it will be on time', async () => {
     useCalendarStore.setState({ reminderEnabled: true })
     const answer = pending()
     const { result } = renderHook(() => useDailyReminder())
 
-    expect(result.current.punctuality).toBe('unknown')
+    expect(result.current.punctuality).toBe('inexact')
 
-    await answer(false)
+    await answer('denied')
     expect(result.current.punctuality).toBe('denied')
   })
 
-  it('goes back to not knowing when the reminder is turned off and on again', async () => {
+  it('does not open the phone screen before it knows the build is on it', async () => {
     useCalendarStore.setState({ reminderEnabled: true })
-    const first = pending()
-    const { result } = renderHook(() => useDailyReminder())
-    await first(true)
-    expect(result.current.punctuality).toBe('exact')
-
-    act(() => useCalendarStore.setState({ reminderEnabled: false }))
-    expect(result.current.punctuality).toBe('unknown')
-
-    const second = pending()
-    act(() => useCalendarStore.setState({ reminderEnabled: true }))
-    expect(result.current.punctuality).toBe('unknown')
-
-    await second(false)
-    expect(result.current.punctuality).toBe('denied')
-  })
-})
-
-// The build that goes to Google Play without the permission, 1.5.4. Android will not list Daylo
-// on its "Alarms & reminders" screen then, so asking whether it is allowed always answers
-// no, and offering the way there is a button that opens a screen Daylo is not on.
-describe('when the build does not declare exact alarms', () => {
-  beforeEach(() => {
-    exact.declared = false
-  })
-
-  it('does not ask the phone, even with the reminder on', async () => {
-    useCalendarStore.setState({ reminderEnabled: true })
-    exactAlarmsAllowed.mockResolvedValue(false)
-    const { result } = renderHook(() => useDailyReminder())
-
-    await act(async () => {
-      document.dispatchEvent(new Event('visibilitychange'))
-    })
-
-    expect(exactAlarmsAllowed).not.toHaveBeenCalled()
-    expect(result.current.punctuality).toBe('inexact')
-  })
-
-  it('does not ask again after the reminder is turned on', async () => {
-    exactAlarmsAllowed.mockResolvedValue(false)
-    const { result } = renderHook(() => useDailyReminder())
-
-    await act(async () => {
-      await result.current.turnOn(21, 0)
-    })
-
-    expect(exactAlarmsAllowed).not.toHaveBeenCalled()
-    expect(result.current.punctuality).toBe('inexact')
-  })
-
-  it('does not open the phone screen it would not be on', async () => {
+    pending()
     const { result } = renderHook(() => useDailyReminder())
 
     await act(async () => {
@@ -454,5 +403,70 @@ describe('when the build does not declare exact alarms', () => {
     })
 
     expect(askForExactAlarms).not.toHaveBeenCalled()
+  })
+
+  it('goes back to around the time when the reminder is turned off and on again', async () => {
+    useCalendarStore.setState({ reminderEnabled: true })
+    const first = pending()
+    const { result } = renderHook(() => useDailyReminder())
+    await first('exact')
+    expect(result.current.punctuality).toBe('exact')
+
+    act(() => useCalendarStore.setState({ reminderEnabled: false }))
+    expect(result.current.punctuality).toBe('inexact')
+
+    const second = pending()
+    act(() => useCalendarStore.setState({ reminderEnabled: true }))
+    expect(result.current.punctuality).toBe('inexact')
+
+    await second('denied')
+    expect(result.current.punctuality).toBe('denied')
+  })
+})
+
+// The Google Play build, which does not ask for the permission. Android will not list Daylo
+// on its "Alarms & reminders" screen then, so offering the way there is a button that opens
+// a screen Daylo is not on. What the build asks for is read from the installed package, so
+// the same code is the APK on one phone and the Play build on another.
+describe('when the installed build does not ask for exact alarms', () => {
+  beforeEach(() => {
+    exactAlarms.mockResolvedValue('inexact')
+  })
+
+  it('says it arrives around the time, with the reminder on', async () => {
+    useCalendarStore.setState({ reminderEnabled: true })
+    const { result } = renderHook(() => useDailyReminder())
+
+    await waitFor(() => expect(exactAlarms).toHaveBeenCalled())
+    expect(result.current.punctuality).toBe('inexact')
+  })
+
+  it('does not open the phone screen it would not be on', async () => {
+    useCalendarStore.setState({ reminderEnabled: true })
+    const { result } = renderHook(() => useDailyReminder())
+    await waitFor(() => expect(exactAlarms).toHaveBeenCalled())
+    // Past the answer, so this is the build that said it does not ask, and not one that
+    // has not answered yet.
+    await act(async () => {})
+
+    await act(async () => {
+      await result.current.askForTime()
+    })
+
+    expect(askForExactAlarms).not.toHaveBeenCalled()
+  })
+
+  // Coming back to the front asks again, and the answer is the same: nothing to set again.
+  it('leaves the reminder alone when the app comes back to the front', async () => {
+    useCalendarStore.setState({ reminderEnabled: true })
+    renderHook(() => useDailyReminder())
+    await waitFor(() => expect(exactAlarms).toHaveBeenCalledTimes(1))
+
+    await act(async () => {
+      document.dispatchEvent(new Event('visibilitychange'))
+    })
+    await waitFor(() => expect(exactAlarms).toHaveBeenCalledTimes(2))
+
+    expect(enableReminder).not.toHaveBeenCalled()
   })
 })

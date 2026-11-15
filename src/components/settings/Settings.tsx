@@ -295,13 +295,11 @@ export function Settings({
                       }`}
                     />
                   </div>
-                  {/* Nothing while the phone has not answered: a guess drawn now would be
-                      swapped for the real answer a moment later, in front of the person. */}
-                  {reminder.punctuality === 'unknown' ? null : reminder.punctuality ===
-                    'inexact' ? (
+                  {reminder.punctuality === 'inexact' ? (
                     // The same words as the offer that turned it on. Not "a few minutes
                     // late": without the permission an inexact alarm has been measured
-                    // over an hour late on a phone left asleep.
+                    // over an hour late on a phone left asleep. Also what is said before
+                    // the phone has answered, because it is true of every build.
                     <p className="pb-3 text-sm text-gray-500">
                       It arrives around this time. Android picks the exact moment.
                     </p>
