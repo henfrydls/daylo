@@ -8,6 +8,10 @@
 </p>
 
 <p align="center">
+  <a href="https://apps.microsoft.com/detail/9NJM37WMMC5Z?mode=direct"><img src="https://get.microsoft.com/images/en-us%20dark.svg" alt="Get it from Microsoft" width="200" /></a>
+</p>
+
+<p align="center">
   <a href="#installation">Install</a> &nbsp;&middot;&nbsp;
   <a href="#features">Features</a> &nbsp;&middot;&nbsp;
   <a href="#screenshots">Screenshots</a> &nbsp;&middot;&nbsp;
