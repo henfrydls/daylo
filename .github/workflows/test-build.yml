@@ -63,6 +63,10 @@ on:
         description: 'Measure the Activities sheet gestures in the Android WebView, on an emulator, instead of the installers'
         type: boolean
         default: false
+      measure_play_build:
+        description: 'Measure the Google Play build installed clean (reminder, screen, no update check), on an emulator, instead of the installers'
+        type: boolean
+        default: false
 
 # Declared for the whole workflow rather than per job, so a job added later cannot quietly
 # inherit the repository defaults. Nothing here publishes: it reads the code, builds it,
@@ -89,6 +93,7 @@ jobs:
       && !inputs.debug_apk
       && !inputs.measure_reminder
       && !inputs.measure_sheet_gestures
+      && !inputs.measure_play_build
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
@@ -154,6 +159,7 @@ jobs:
       && !inputs.debug_apk
       && !inputs.measure_reminder
       && !inputs.measure_sheet_gestures
+      && !inputs.measure_play_build
     strategy:
       fail-fast: false
       matrix:
@@ -271,6 +277,7 @@ jobs:
       && !inputs.debug_apk
       && !inputs.measure_reminder
       && !inputs.measure_sheet_gestures
+      && !inputs.measure_play_build
     runs-on: ubuntu-latest
     timeout-minutes: 60
 
@@ -767,6 +774,7 @@ jobs:
       && !inputs.debug_apk
       && !inputs.measure_reminder
       && !inputs.measure_sheet_gestures
+      && !inputs.measure_play_build
     runs-on: ubuntu-24.04
     name: Test build (snap)
     timeout-minutes: 30
@@ -1044,5 +1052,207 @@ jobs:
         with:
           name: sheet-gestures-measurement
           path: measure-gestures/
+          retention-days: 7
+          if-no-files-found: warn
+
+  # ── The Google Play build, installed clean (measurement B for 1.5.4, #245) ──────
+  #
+  # WHY IT EXISTS: from 1.5.4 the Play bundle goes without SCHEDULE_EXACT_ALARM and carries
+  # a mark that tells the app it is the Play build (#256). Everything about it so far was
+  # read in manifests and unit tests. This installs the bundle on a device, turns the
+  # reminder on, and reads what Android and the app actually do with it: the alarm queue,
+  # the line under the reminder, what a check-in would say, and that the app never looks
+  # for an update (#200).
+  #
+  # Run it with:
+  #
+  #   gh workflow run "Test build" --ref <branch> -f measure_play_build=true
+  #
+  # THE BUILD: release, as release.yml builds the AAB, with ORG_GRADLE_PROJECT_dayloPlay,
+  # for x86_64 because that is what the emulator runs. Release is not a choice: the Play
+  # overlay is merged into the release build type only. It is signed with a key the job
+  # makes and throws away, and installed the way a bundle can be, with bundletool: a
+  # universal APK set built from the signed AAB, then install-apks. bundletool is the
+  # version and the SHA-256 release.yml pins.
+  #
+  # What each line of summary.txt reads, and why the fork's decision is read from its
+  # inputs and its alarm rather than its log line (a release build does not log it), is at
+  # the top of android-measure-play-build.sh.
+  #
+  # API 34 counts. API 30 is a second pass that does not fail the run: below Android 12 every
+  # build arms an exact alarm, the Play one included, and the pass shows that the screen
+  # says so. Its WebView is the image's own Chromium 83, which no phone runs (see
+  # smoke-android), so a failure there is read before it is believed.
+  #
+  # THE CHECK-IN AND GITHUB: measurement A's guard, from the same action: the network off
+  # and seen to be off before the install, logcat, and the emulator's own packet capture,
+  # which is read for GitHub as well as for the check-in host.
+  #
+  # WHAT IT IS NOT: a check. It runs only when asked for, publishes nothing, and the key it
+  # signs with never leaves the job.
+  build-play-aab:
+    name: Play build for measuring (x86_64)
+    if: github.event_name == 'workflow_dispatch' && inputs.measure_play_build
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v3
+        with:
+          packages: 'platforms;android-36 build-tools;35.0.0 platform-tools'
+
+      - name: Install Android NDK
+        run: sdkmanager "ndk;29.0.14206865"
+
+      - name: Install Rust stable with the emulator's Android target
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: x86_64-linux-android
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+
+      # Release and x86_64, the same pair smoke-android builds: the Play property only
+      # changes what Gradle merges, not what Rust compiles, so the cache is the same.
+      - name: Cache Rust dependencies
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: './src-tauri -> target'
+          shared-key: android-x86_64
+
+      - name: Install Node.js dependencies
+        run: npm ci
+
+      - name: Install Tauri CLI
+        run: npm install --save-dev @tauri-apps/cli
+
+      - name: Build the Play AAB
+        run: npx tauri android build --aab --target x86_64
+        env:
+          NDK_HOME: ${{ env.ANDROID_HOME }}/ndk/29.0.14206865
+          ORG_GRADLE_PROJECT_dayloPlay: 'true'
+
+      # Signed as release.yml signs the real one, with jarsigner, but with a key made here.
+      # Then read back as Play reads it, before any emulator time is spent on it: a bundle
+      # that still asked for exact alarms, or had no Play mark, would measure the APK under
+      # another name. The universal APK set is signed with the same key.
+      - name: Sign it, check it is the Play build, and make the APK set
+        env:
+          BUNDLETOOL_VERSION: '1.18.3'
+          BUNDLETOOL_SHA256: 'a099cfa1543f55593bc2ed16a70a7c67fe54b1747bb7301f37fdfd6d91028e29'
+        run: |
+          set -euo pipefail
+          shopt -s nullglob globstar
+          aabs=( src-tauri/gen/android/app/build/outputs/bundle/**/*.aab )
+          if [ ${#aabs[@]} -ne 1 ]; then
+            echo "::error::Expected exactly one AAB, found ${#aabs[@]}."
+            printf '::error::  %s\n' "${aabs[@]}"
+            exit 1
+          fi
+
+          mkdir -p play
+          jar="play/bundletool-all-$BUNDLETOOL_VERSION.jar"
+          curl -fsSL --retry 3 -o "$jar" \
+            "https://github.com/google/bundletool/releases/download/$BUNDLETOOL_VERSION/bundletool-all-$BUNDLETOOL_VERSION.jar"
+          if ! echo "$BUNDLETOOL_SHA256  $jar" | sha256sum -c -; then
+            echo "::error::bundletool $BUNDLETOOL_VERSION did not match its pinned SHA-256, so it was not run."
+            exit 1
+          fi
+
+          keystore="$RUNNER_TEMP/measure.jks"
+          keytool -genkeypair -keystore "$keystore" -alias measure \
+            -storepass measuremeasure -keypass measuremeasure \
+            -keyalg RSA -keysize 2048 -validity 1 \
+            -dname "CN=Daylo Play measurement, O=nobody, C=ZZ"
+          jarsigner -keystore "$keystore" -storepass measuremeasure -keypass measuremeasure \
+            -signedjar play/daylo-play.aab "${aabs[0]}" measure
+
+          manifest="$RUNNER_TEMP/aab-manifest.xml"
+          java -jar "$jar" dump manifest --bundle play/daylo-play.aab > "$manifest"
+          grep -E '<manifest|uses-permission|daylo.channel' "$manifest" || true
+          # Under its own application id, which the measurement installs and reads by.
+          PLAY_ID=$(sed -n 's/^dayloPlayApplicationId=//p' src-tauri/gen/android/gradle.properties)
+          node scripts/check-exact-alarm.js --expect absent --channel play --package "$PLAY_ID" "$manifest"
+          echo "$PLAY_ID" > play/daylo-play-package.txt
+
+          java -jar "$jar" build-apks --mode=universal \
+            --bundle=play/daylo-play.aab --output=play/daylo-play.apks \
+            --ks="$keystore" --ks-pass=pass:measuremeasure \
+            --ks-key-alias=measure --key-pass=pass:measuremeasure
+          rm -f "$keystore" play/daylo-play.aab
+          echo "built from $(git rev-parse HEAD), release, ORG_GRADLE_PROJECT_dayloPlay=true" | tee play/daylo-play.txt
+
+      - name: Upload it
+        uses: actions/upload-artifact@v4
+        with:
+          name: measure-play-apks
+          path: play/
+          retention-days: 3
+          if-no-files-found: error
+
+  measure-play-build:
+    name: Play build measurement (emulator, API ${{ matrix.api }})
+    needs: build-play-aab
+    if: github.event_name == 'workflow_dispatch' && inputs.measure_play_build
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    # API 30 is informative, see above.
+    continue-on-error: ${{ matrix.api != 34 }}
+    strategy:
+      fail-fast: false
+      matrix:
+        api: [34, 30]
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      # Into apks/ because the action copies apks/*.txt beside what was measured.
+      - name: Fetch the APK set and bundletool
+        uses: actions/download-artifact@v4
+        with:
+          name: measure-play-apks
+          path: apks
+
+      # 22 for the global WebSocket the DevTools scripts talk to the WebView with.
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      # For bundletool, which installs the set. Named rather than left to whatever Java the
+      # runner image happens to carry.
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+
+      - name: Measure
+        uses: ./.github/actions/android-emulator-measure
+        with:
+          api-level: ${{ matrix.api }}
+          script: bash .github/scripts/android-measure-play-build.sh apks/daylo-play.apks apks/bundletool-all-1.18.3.jar measure-play "$(cat apks/daylo-play-package.txt)"
+          out: measure-play
+
+      - name: Upload what was measured
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: play-build-measurement-api${{ matrix.api }}
+          path: measure-play/
           retention-days: 7
           if-no-files-found: warn
