@@ -3,6 +3,10 @@
 What changed in each release, for the people who use Daylo. Earlier versions are not
 listed: this file starts at 1.1.2, when the first change worth warning about arrived.
 
+## 1.5.4
+
+**Daylo from Google Play reminds you around the time you chose.** On recent phones Android picks the exact moment, as it does for most apps, and the settings screen says so instead of offering a phone setting that would not list Daylo. Daylo from the website keeps working as before, including on-time reminders for anyone who allowed them. The Google Play version also never offers updates from anywhere else. Google Play keeps it up to date.
+
 ## 1.5.3
 
 **On Android, the button that offers a new version now downloads Daylo itself.** It used
