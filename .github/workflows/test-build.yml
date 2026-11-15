@@ -1182,8 +1182,11 @@ jobs:
 
           manifest="$RUNNER_TEMP/aab-manifest.xml"
           java -jar "$jar" dump manifest --bundle play/daylo-play.aab > "$manifest"
-          grep -E 'uses-permission|daylo.channel' "$manifest" || true
-          node scripts/check-exact-alarm.js --expect absent --channel play "$manifest"
+          grep -E '<manifest|uses-permission|daylo.channel' "$manifest" || true
+          # Under its own application id, which the measurement installs and reads by.
+          PLAY_ID=$(sed -n 's/^dayloPlayApplicationId=//p' src-tauri/gen/android/gradle.properties)
+          node scripts/check-exact-alarm.js --expect absent --channel play --package "$PLAY_ID" "$manifest"
+          echo "$PLAY_ID" > play/daylo-play-package.txt
 
           java -jar "$jar" build-apks --mode=universal \
             --bundle=play/daylo-play.aab --output=play/daylo-play.apks \
@@ -1242,7 +1245,7 @@ jobs:
         uses: ./.github/actions/android-emulator-measure
         with:
           api-level: ${{ matrix.api }}
-          script: bash .github/scripts/android-measure-play-build.sh apks/daylo-play.apks apks/bundletool-all-1.18.3.jar measure-play
+          script: bash .github/scripts/android-measure-play-build.sh apks/daylo-play.apks apks/bundletool-all-1.18.3.jar measure-play "$(cat apks/daylo-play-package.txt)"
           out: measure-play
 
       - name: Upload what was measured

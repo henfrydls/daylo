@@ -6,13 +6,26 @@
 # reads NETWORK_GUARD at the end: "held" unless network_off or checkin_logcat_guard saw
 # the network up or the check-in host named outside a failed attempt.
 
-PKG=com.daylo.app
+# The APK's application id unless the caller set another before sourcing: the Play build is
+# com.dlslabs.daylo (src-tauri/gen/android/gradle.properties).
+PKG=${PKG:-com.daylo.app}
+# Relative to PKG, which is right only while the application id and the Kotlin namespace are
+# the same. The Play build's are not, and it sets ACTIVITY with launcher_activity once it is
+# installed.
 ACTIVITY="$PKG/.MainActivity"
 # The only host the app sends anything to, src-tauri/src/checkin.rs, const URL.
 CHECKIN_HOST=checkin.henfrydls.com
 
 log() { echo "[$(date +%T)] $*" | tee -a "$OUT/log.txt"; }
 sh_() { adb shell "$@" | tr -d '\r'; }
+
+# The activity the launcher would open for PKG, as package/class with the class in full,
+# asked of the installed package rather than built from names. Empty when PKG is not
+# installed or has no launcher activity.
+launcher_activity() {
+  sh_ cmd package resolve-activity --brief -a android.intent.action.MAIN \
+    -c android.intent.category.LAUNCHER "$PKG" | tail -1 | grep -E "^$PKG/" || true
+}
 
 # The WebView's DevTools socket for the app's current process, waiting up to 60 s for it.
 # A fixed 10 s was not enough in run 43608923559: the control's first start had no socket

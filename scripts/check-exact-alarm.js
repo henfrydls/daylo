@@ -16,7 +16,15 @@ import { readFileSync } from 'fs'
  *
  * So the question is not "which is right" but "is this file what it was expected to be":
  *
- *   node scripts/check-exact-alarm.js --expect declared|absent|removes [--channel play|none] FILE...
+ *   node scripts/check-exact-alarm.js --expect declared|absent|removes [--channel play|none]
+ *     [--package NAME] FILE...
+ *
+ * `--package` holds the file to the application id it should carry. The two builds have
+ * different ones: com.daylo.app was taken on Play by somebody else, so the bundle is
+ * com.dlslabs.daylo (src-tauri/gen/android/gradle.properties) and the APK stays
+ * com.daylo.app, which every installed copy updates over. Either one under the other's name
+ * fails without a word: Play refuses the upload, or every APK update installs as a second
+ * app beside the first.
  *
  * Run by the unit tests on the hand-written manifests, by Build Check (Android) on the
  * manifests Gradle merged, and by release.yml before and after the two release passes,
@@ -134,6 +142,18 @@ export function channelIn(xml) {
   return mark?.value ?? null
 }
 
+/**
+ * The package a manifest says it is, from the `package` attribute of its `<manifest>`, or
+ * null when it has none. Gradle's merger writes the applicationId there, and bundletool and
+ * aapt2 read it back from there.
+ */
+export function packageIn(xml) {
+  const root = withoutXmlComments(xml).match(/<manifest[\s>/][^>]*>/)
+  if (!root) return null
+  const found = root[0].match(/\spackage\s*=\s*(?:"([^"]*)"|'([^']*)')/)
+  return found ? (found[1] ?? found[2]) : null
+}
+
 /** The one permission the Play overlay takes away. */
 const REMOVED_BY_OVERLAY = 'android.permission.SCHEDULE_EXACT_ALARM'
 
@@ -156,10 +176,10 @@ const CHANNELS = ['play', 'none']
  * taken out, like everything else here, so a manifest that exists only inside a comment is
  * not one.
  *
- * `channel` is optional: left out, the mark is not looked at. Every problem is said, so one
- * red run names both when both are wrong.
+ * `channel` and `pkg` are optional: left out, the mark or the package is not looked at.
+ * Every problem is said, so one red run names all of them when more than one is wrong.
  */
-export function verdictOn({ xml, expect, channel, path }) {
+export function verdictOn({ xml, expect, channel, pkg, path }) {
   if (!/<manifest[\s>/]/.test(withoutXmlComments(xml))) {
     return `${path} does not look like an Android manifest, so it cannot say anything`
   }
@@ -194,11 +214,20 @@ export function verdictOn({ xml, expect, channel, path }) {
   if (channel === 'none' && mark !== null) {
     problems.push(`${path} is marked as the ${mark} channel and no mark was expected`)
   }
+  if (pkg !== undefined) {
+    const found = packageIn(xml)
+    if (found === null) problems.push(`${path} carries no package name and ${pkg} was expected`)
+    else if (found !== pkg) problems.push(`${path} is the package ${found} and ${pkg} was expected`)
+  }
   return problems.length === 0 ? null : problems.join('; ')
 }
 
+/** What a package name looks like: two or more Java identifiers joined by dots. */
+const PACKAGE_NAME = /^[A-Za-z][\w]*(\.[A-Za-z][\w]*)+$/
+
 /**
- * What the command line asks for: `--expect` once, `--channel` at most once, and the files.
+ * What the command line asks for: `--expect` once, `--channel` and `--package` at most once,
+ * and the files.
  * Throws with the reason when it cannot be read, rather than falling back to a default: a
  * guessed expectation passes the one case the check exists for.
  */
@@ -218,6 +247,14 @@ export function readArguments(args) {
       }
       if (key in options) throw new Error(`${flag} was given twice`)
       options[key] = value
+      at += 1
+    } else if (flag === '--package') {
+      const value = args[at + 1]
+      if (!PACKAGE_NAME.test(value ?? '')) {
+        throw new Error(`--package takes a package name, and was given ${value || 'nothing'}`)
+      }
+      if ('package' in options) throw new Error(`${flag} was given twice`)
+      options.package = value
       at += 1
     } else {
       paths.push(flag)
@@ -244,7 +281,7 @@ export function run({ args, readFile, log, error }) {
     error(`::error::${cause.message}`)
     return 1
   }
-  const { expect, channel, paths } = options
+  const { expect, channel, package: pkg, paths } = options
   if (paths.length === 0) {
     error('::error::No manifest was given to check, so nothing was checked.')
     return 1
@@ -259,12 +296,14 @@ export function run({ args, readFile, log, error }) {
       failed = true
       continue
     }
-    const problem = verdictOn({ xml, expect, channel, path })
+    const problem = verdictOn({ xml, expect, channel, pkg, path })
     if (problem) {
       error(`::error file=${path}::${problem}`)
       failed = true
     } else {
-      const mark = channel === undefined ? '' : `, channel mark ${channel}`
+      const mark =
+        (channel === undefined ? '' : `, channel mark ${channel}`) +
+        (pkg === undefined ? '' : `, package ${pkg}`)
       const what = expect === 'removes' ? `removes ${REMOVED_BY_OVERLAY}` : `exact alarms ${expect}`
       log(`${path}: as expected (${what}${mark})`)
     }
