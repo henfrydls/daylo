@@ -1,1 +1,0 @@
-**Daylo from Google Play installs as an app of its own.** It is the same Daylo, but it does not update the copy you got from the website, and that copy does not update it. Daylo from the website keeps updating as before. To move your days from one to the other, use Export, then Import.
