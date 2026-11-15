@@ -121,9 +121,14 @@ pub fn install_format() -> Option<&'static str> {
 /// today, and one Linux package from another, because they are installed by different
 /// people for different reasons.
 ///
-/// Takes both answers rather than asking for them, so every word can be pinned by a test.
-/// `installer` is only ever Some on a phone, and only the Android arm reads it.
-pub fn installed_from(format: Option<&str>, installer: Option<&str>) -> &'static str {
+/// Takes every answer rather than asking for them, so every word can be pinned by a test.
+/// `installer` and `channel` are only ever Some on a phone, and only the Android arm reads
+/// them.
+pub fn installed_from(
+    format: Option<&str>,
+    installer: Option<&str>,
+    channel: Option<&str>,
+) -> &'static str {
     match format {
         // Managed by somebody else, like the Microsoft Store and Google Play, and counted
         // separately because it is a different door and a different kind of person.
@@ -138,7 +143,7 @@ pub fn installed_from(format: Option<&str>, installer: Option<&str>) -> &'static
         // platform where an unstamped binary is not a development build: it is the only
         // thing we ship for it. Until 1.5 that settled it and the word was always "apk";
         // now there are two doors and the phone is asked which one this copy came through.
-        None if cfg!(target_os = "android") => android_source(installer),
+        None if cfg!(target_os = "android") => android_source(installer, channel),
         // Everything else: a binary nobody packaged, and a format this version has never
         // heard of. Both are "we do not know", and saying so is better than a guess that
         // would be counted as if it were a fact.
@@ -149,7 +154,11 @@ pub fn installed_from(format: Option<&str>, installer: Option<&str>) -> &'static
 /// Google Play's own installer package, and the only name that means Play.
 const PLAY_STORE: &str = "com.android.vending";
 
-/// Which Android door a copy came through, from the package that installed it.
+/// The channel mark the Google Play build carries in its manifest, and the only one there is.
+const PLAY_CHANNEL: &str = "play";
+
+/// Which Android door a copy came through, from the build's own mark and from the package
+/// that installed it.
 ///
 /// Android records who installed an app, and from 1.5 that is worth asking: Daylo is on
 /// Play and is also a file on the site, and the two are installed by different people for
@@ -157,9 +166,20 @@ const PLAY_STORE: &str = "com.android.vending";
 /// with the name of whatever app put the file there, or with nothing at all, and all of
 /// those mean the same thing: a copy somebody installed themselves.
 ///
-/// Takes the answer rather than asking for it, like `installed_from`, so every word is
+/// The mark comes first. From 1.5.4 the Play bundle is its own build, without
+/// SCHEDULE_EXACT_ALARM and with `daylo.channel` set to `play` in its manifest, and that
+/// build is Play whoever put it on the phone: bundletool, adb and transfer apps leave no
+/// Play installer behind, and read by the installer alone they would be "apk", which is the
+/// word that offers an update from GitHub. Play does not allow an app to offer that, so the
+/// mark wins over every installer. Without a mark, which is every APK, the installer decides
+/// as it always has.
+///
+/// Takes the answers rather than asking for them, like `installed_from`, so every word is
 /// pinned by a test that runs on any machine rather than only on a phone.
-pub fn android_source(installer: Option<&str>) -> &'static str {
+pub fn android_source(installer: Option<&str>, channel: Option<&str>) -> &'static str {
+    if channel == Some(PLAY_CHANNEL) {
+        return "play";
+    }
     match installer {
         Some(PLAY_STORE) => "play",
         _ => "apk",
@@ -172,11 +192,15 @@ pub fn android_source(installer: Option<&str>) -> &'static str {
 /// attempt gated this module to desktop, and the Android build found it in a minute: the
 /// code for that platform had been compiled out of it.
 ///
-/// One cfg, and it is in `android_installer` below rather than here: asking a phone who
-/// installed it is a question with no meaning off a phone, so the two bodies answer it and
-/// the mapping stays one branch for every platform.
+/// The cfgs are in `android_installer` and `android_channel` below rather than here: asking
+/// a phone who installed it, or how its build is marked, are questions with no meaning off a
+/// phone, so two bodies answer each and the mapping stays one branch for every platform.
 pub fn checkin_source() -> &'static str {
-    installed_from(install_format(), android_installer().as_deref())
+    installed_from(
+        install_format(),
+        android_installer().as_deref(),
+        android_channel().as_deref(),
+    )
 }
 
 /// Who installed this copy, asked of Android. See `crate::android`.
@@ -192,6 +216,18 @@ fn android_installer() -> Option<String> {
     None
 }
 
+/// The channel the installed build is marked with, asked of Android. See `crate::android`.
+#[cfg(target_os = "android")]
+fn android_channel() -> Option<String> {
+    crate::android::distribution_channel()
+}
+
+/// Nothing to ask: only an Android build carries a channel mark.
+#[cfg(not(target_os = "android"))]
+fn android_channel() -> Option<String> {
+    None
+}
+
 #[cfg(test)]
 mod tests {
     use super::{android_source, inside_a_snap, installed_as, installed_from, BundleType};
@@ -200,14 +236,14 @@ mod tests {
     /// only as good as the day somebody adds a format and forgets this line.
     #[test]
     fn every_way_in_has_a_word() {
-        assert_eq!(installed_from(Some("snap"), None), "snap");
-        assert_eq!(installed_from(Some("store"), None), "store");
-        assert_eq!(installed_from(Some("nsis"), None), "installer");
-        assert_eq!(installed_from(Some("msi"), None), "installer");
-        assert_eq!(installed_from(Some("appimage"), None), "appimage");
-        assert_eq!(installed_from(Some("deb"), None), "deb");
-        assert_eq!(installed_from(Some("rpm"), None), "rpm");
-        assert_eq!(installed_from(Some("macos"), None), "macos");
+        assert_eq!(installed_from(Some("snap"), None, None), "snap");
+        assert_eq!(installed_from(Some("store"), None, None), "store");
+        assert_eq!(installed_from(Some("nsis"), None, None), "installer");
+        assert_eq!(installed_from(Some("msi"), None, None), "installer");
+        assert_eq!(installed_from(Some("appimage"), None, None), "appimage");
+        assert_eq!(installed_from(Some("deb"), None, None), "deb");
+        assert_eq!(installed_from(Some("rpm"), None, None), "rpm");
+        assert_eq!(installed_from(Some("macos"), None, None), "macos");
     }
 
     /// The two Windows installers answer the same thing, which is the whole reason this
@@ -215,12 +251,12 @@ mod tests {
     #[test]
     fn windows_installers_are_one_door() {
         assert_eq!(
-            installed_from(Some("nsis"), None),
-            installed_from(Some("msi"), None)
+            installed_from(Some("nsis"), None, None),
+            installed_from(Some("msi"), None, None)
         );
         assert_ne!(
-            installed_from(Some("nsis"), None),
-            installed_from(Some("store"), None)
+            installed_from(Some("nsis"), None, None),
+            installed_from(Some("store"), None, None)
         );
     }
 
@@ -254,29 +290,82 @@ mod tests {
     /// people came in by, not which app held it open.
     #[test]
     fn play_is_the_only_android_door_with_a_name() {
-        assert_eq!(android_source(Some("com.android.vending")), "play");
-        assert_eq!(android_source(None), "apk");
-        assert_eq!(android_source(Some("com.android.chrome")), "apk");
+        assert_eq!(android_source(Some("com.android.vending"), None), "play");
+        assert_eq!(android_source(None, None), "apk");
+        assert_eq!(android_source(Some("com.android.chrome"), None), "apk");
         assert_eq!(
-            android_source(Some("com.google.android.packageinstaller")),
+            android_source(Some("com.google.android.packageinstaller"), None),
             "apk"
         );
-        assert_eq!(android_source(Some("org.fdroid.fdroid")), "apk");
+        assert_eq!(android_source(Some("org.fdroid.fdroid"), None), "apk");
     }
 
     /// The word is Play's package name and not a prefix of it. A phone that answers with
     /// something merely similar is answering something else.
     #[test]
     fn only_that_exact_package_is_play() {
-        assert_eq!(android_source(Some("com.android.vending.fake")), "apk");
-        assert_eq!(android_source(Some("vending")), "apk");
-        assert_eq!(android_source(Some("")), "apk");
+        assert_eq!(
+            android_source(Some("com.android.vending.fake"), None),
+            "apk"
+        );
+        assert_eq!(android_source(Some("vending"), None), "apk");
+        assert_eq!(android_source(Some(""), None), "apk");
+    }
+
+    /// The Google Play build says so itself, and that settles it whoever installed it.
+    ///
+    /// A Play bundle can reach a phone without Play: bundletool, adb, a transfer app, maybe
+    /// Play's own review devices. None of those leaves Play's installer name, and read by
+    /// the installer alone each one was "apk", which is the word that offers an update from
+    /// GitHub. Play does not allow that, so the mark in the build's own manifest wins.
+    #[test]
+    fn the_play_build_is_play_whoever_installed_it() {
+        assert_eq!(android_source(None, Some("play")), "play");
+        assert_eq!(
+            android_source(Some("com.android.chrome"), Some("play")),
+            "play"
+        );
+        assert_eq!(
+            android_source(Some("com.google.android.packageinstaller"), Some("play")),
+            "play"
+        );
+        assert_eq!(
+            android_source(Some("com.android.vending"), Some("play")),
+            "play"
+        );
+    }
+
+    /// Without the mark, which is every APK, nothing changes: the installer decides. A mark
+    /// this version does not know is not a reason to change that either.
+    #[test]
+    fn without_the_play_mark_the_installer_decides() {
+        assert_eq!(android_source(Some("com.android.vending"), None), "play");
+        assert_eq!(android_source(None, None), "apk");
+        assert_eq!(android_source(None, Some("beta")), "apk");
+        assert_eq!(android_source(None, Some("")), "apk");
+        assert_eq!(android_source(None, Some("Play")), "apk");
+    }
+
+    /// The mark only means something on a phone, like the installer: on the desktop an
+    /// unstamped binary stays "unknown", and a packaged copy keeps its format.
+    #[test]
+    fn the_play_mark_is_read_where_it_means_something() {
+        if cfg!(target_os = "android") {
+            assert_eq!(installed_from(None, None, Some("play")), "play");
+            assert_eq!(
+                installed_from(None, Some("com.android.chrome"), Some("play")),
+                "play"
+            );
+        } else {
+            assert_eq!(installed_from(None, None, Some("play")), "unknown");
+        }
+        assert_eq!(installed_from(Some("deb"), None, Some("play")), "deb");
     }
 
     /// A word this version does not know is not silently folded into one it does.
     #[test]
     fn an_unknown_format_says_unknown() {
-        assert_eq!(installed_from(Some("flatpak"), None), "unknown");
+        assert_eq!(installed_from(Some("flatpak"), None, None), "unknown");
     }
 
     /// Nothing packaged it. On Android that is every copy; everywhere else it is a build
@@ -288,7 +377,7 @@ mod tests {
         } else {
             "unknown"
         };
-        assert_eq!(installed_from(None, None), expected);
+        assert_eq!(installed_from(None, None, None), expected);
     }
 
     /// The table is where the installer is read, and only where it can mean anything.
@@ -300,12 +389,21 @@ mod tests {
     #[test]
     fn the_installer_is_read_where_it_means_something() {
         if cfg!(target_os = "android") {
-            assert_eq!(installed_from(None, Some("com.android.vending")), "play");
-            assert_eq!(installed_from(None, Some("com.android.chrome")), "apk");
-            assert_eq!(installed_from(None, None), "apk");
+            assert_eq!(
+                installed_from(None, Some("com.android.vending"), None),
+                "play"
+            );
+            assert_eq!(
+                installed_from(None, Some("com.android.chrome"), None),
+                "apk"
+            );
+            assert_eq!(installed_from(None, None, None), "apk");
         } else {
-            assert_eq!(installed_from(None, Some("com.android.vending")), "unknown");
-            assert_eq!(installed_from(None, None), "unknown");
+            assert_eq!(
+                installed_from(None, Some("com.android.vending"), None),
+                "unknown"
+            );
+            assert_eq!(installed_from(None, None, None), "unknown");
         }
     }
 
@@ -315,11 +413,11 @@ mod tests {
     #[test]
     fn the_installer_cannot_overrule_a_format() {
         assert_eq!(
-            installed_from(Some("deb"), Some("com.android.vending")),
+            installed_from(Some("deb"), Some("com.android.vending"), None),
             "deb"
         );
         assert_eq!(
-            installed_from(Some("store"), Some("com.android.vending")),
+            installed_from(Some("store"), Some("com.android.vending"), None),
             "store"
         );
     }

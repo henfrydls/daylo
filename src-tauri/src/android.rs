@@ -10,8 +10,9 @@
 //! the webview's JNI handle would also work and is what Tauri's own examples show, but it
 //! hops to the UI thread and answers through a callback, and nothing here needs either.
 
-use jni::objects::{JObject, JString, JValue};
-use jni::JavaVM;
+use jni::objects::{JObject, JObjectArray, JString, JValue};
+use jni::{JNIEnv, JavaVM};
+use std::sync::OnceLock;
 
 /// Borrow a JNI environment and the app's own Activity for the length of one question.
 ///
@@ -41,7 +42,12 @@ fn with_the_activity<T>(
     // SAFETY: as above. The lifetime is the call below and nothing escapes it.
     let activity = unsafe { JObject::from_raw(context.context().cast()) };
 
-    let answer = ask(&mut env, &activity);
+    // Every local reference the question makes lives in a frame of its own and goes when
+    // the frame does. A thread that was already attached, which the main thread is, does
+    // not free them when a command returns, and some of these questions run on every
+    // return to the front: without the frame they piled up until Android aborted the app
+    // with "local reference table overflow". The capacity is a starting size, not a limit.
+    let answer = env.with_local_frame(LOCAL_FRAME, |env| ask(env, &activity));
 
     // A Java exception left pending makes the next JNI call anywhere in the process
     // undefined, and the next JNI call is not ours: it is whatever the webview does on the
@@ -54,10 +60,42 @@ fn with_the_activity<T>(
     answer.ok()
 }
 
-/// Android's API level, which decides which of the two questions below can be asked.
+/// How many local references a question is expected to need, for the frame it runs in.
+const LOCAL_FRAME: i32 = 32;
+
+/// Android's API level, which decides which of the questions below can be asked.
 fn sdk_int(env: &mut jni::JNIEnv) -> jni::errors::Result<i32> {
     let version = env.find_class("android/os/Build$VERSION")?;
     env.get_static_field(version, "SDK_INT", "I")?.i()
+}
+
+/// Android's API level, asked on its own. The reminder screen needs it because below
+/// Android 12 every build arms exact alarms, permission or not.
+pub fn sdk_level() -> Option<i32> {
+    with_the_activity(|env, _activity| sdk_int(env))
+}
+
+/// The app's PackageManager, which every question about the installed package starts from.
+fn package_manager<'local>(
+    env: &mut JNIEnv<'local>,
+    activity: &JObject,
+) -> jni::errors::Result<JObject<'local>> {
+    env.call_method(
+        activity,
+        "getPackageManager",
+        "()Landroid/content/pm/PackageManager;",
+        &[],
+    )?
+    .l()
+}
+
+/// The app's own package name, as a Java string, for the questions that name it.
+fn package_name<'local>(
+    env: &mut JNIEnv<'local>,
+    activity: &JObject,
+) -> jni::errors::Result<JObject<'local>> {
+    env.call_method(activity, "getPackageName", "()Ljava/lang/String;", &[])?
+        .l()
 }
 
 /// The package that installed this copy, as the phone recorded it, or None.
@@ -71,17 +109,8 @@ fn sdk_int(env: &mut jni::JNIEnv) -> jni::errors::Result<i32> {
 /// not gone, and on the phones that have only it, it is the answer.
 pub fn installer_package_name() -> Option<String> {
     with_the_activity(|env, activity| {
-        let manager = env
-            .call_method(
-                activity,
-                "getPackageManager",
-                "()Landroid/content/pm/PackageManager;",
-                &[],
-            )?
-            .l()?;
-        let package = env
-            .call_method(activity, "getPackageName", "()Ljava/lang/String;", &[])?
-            .l()?;
+        let manager = package_manager(env, activity)?;
+        let package = package_name(env, activity)?;
 
         let installer = if sdk_int(env)? >= 30 {
             let info = env
@@ -255,6 +284,100 @@ pub fn fetch_text(url: &str, limit: i32) -> Result<String, String> {
     })
 }
 
+/// `PackageManager.GET_PERMISSIONS`, which fills in `requestedPermissions`.
+const GET_PERMISSIONS: i32 = 0x0000_1000;
+
+/// `PackageManager.GET_META_DATA`, which fills in `ApplicationInfo.metaData`.
+const GET_META_DATA: i32 = 0x0000_0080;
+
+/// The permission the APK asks for and the Google Play build does not.
+const SCHEDULE_EXACT_ALARM: &str = "android.permission.SCHEDULE_EXACT_ALARM";
+
+/// Whether the build that is installed asks Android for SCHEDULE_EXACT_ALARM, or None if
+/// the package could not be read.
+///
+/// Read from the installed package and not written into the app, because one tree makes
+/// two builds: the APK asks for it, and the Google Play bundle has it taken out by a
+/// manifest overlay (src-tauri/gen/android/app/src/play/AndroidManifest.xml). This is the
+/// merged manifest the phone actually holds, including anything a library added.
+///
+/// Not `canScheduleExactAlarms`, which says no both for a build that never asked and for one
+/// that asked and was refused, and those two get different words on the screen.
+///
+/// `getPackageInfo(String, int)` is deprecated from API 33, where the flags became a
+/// `PackageInfoFlags`; both are needed because the app's minSdk is 24.
+pub fn requests_exact_alarms() -> Option<bool> {
+    // What a package asks for cannot change while its process lives: a new manifest is an
+    // update, and an update restarts the process. So it is read once. Only an answer is
+    // kept; a failed read is tried again the next time.
+    static REQUESTED: OnceLock<bool> = OnceLock::new();
+    if let Some(requested) = REQUESTED.get() {
+        return Some(*requested);
+    }
+    let requested = read_requests_exact_alarms()?;
+    let _ = REQUESTED.set(requested);
+    Some(requested)
+}
+
+fn read_requests_exact_alarms() -> Option<bool> {
+    with_the_activity(|env, activity| {
+        let manager = package_manager(env, activity)?;
+        let package = package_name(env, activity)?;
+
+        let info = if sdk_int(env)? >= 33 {
+            let flags = env
+                .call_static_method(
+                    "android/content/pm/PackageManager$PackageInfoFlags",
+                    "of",
+                    "(J)Landroid/content/pm/PackageManager$PackageInfoFlags;",
+                    &[JValue::Long(GET_PERMISSIONS as i64)],
+                )?
+                .l()?;
+            env.call_method(
+                &manager,
+                "getPackageInfo",
+                "(Ljava/lang/String;Landroid/content/pm/PackageManager$PackageInfoFlags;)Landroid/content/pm/PackageInfo;",
+                &[JValue::Object(&package), JValue::Object(&flags)],
+            )?
+            .l()?
+        } else {
+            env.call_method(
+                &manager,
+                "getPackageInfo",
+                "(Ljava/lang/String;I)Landroid/content/pm/PackageInfo;",
+                &[JValue::Object(&package), JValue::Int(GET_PERMISSIONS)],
+            )?
+            .l()?
+        };
+
+        // Null, not empty, when the package asks for no permissions at all.
+        let requested = env
+            .get_field(&info, "requestedPermissions", "[Ljava/lang/String;")?
+            .l()?;
+        if requested.is_null() {
+            return Ok(false);
+        }
+        let requested = JObjectArray::from(requested);
+        let count = env.get_array_length(&requested)?;
+        // The frame around this question frees what it makes, and the references are still
+        // deleted one by one here, because this is the one loop whose length the manifest
+        // decides rather than this code.
+        for index in 0..count {
+            let name = env.get_object_array_element(&requested, index)?;
+            if name.is_null() {
+                continue;
+            }
+            let name = JString::from(name);
+            let text = String::from(env.get_string(&name)?);
+            env.delete_local_ref(name)?;
+            if text == SCHEDULE_EXACT_ALARM {
+                return Ok(true);
+            }
+        }
+        Ok(false)
+    })
+}
+
 /// Whether this phone will let Daylo set an alarm for an exact time.
 ///
 /// Android 12 made exact alarms something an app has to be allowed, and Android 14 made
@@ -268,10 +391,9 @@ pub fn fetch_text(url: &str, limit: i32) -> Result<String, String> {
 /// offering a fix for a problem that may not exist is worse than staying quiet. The
 /// reminder is scheduled either way.
 ///
-/// Only meaningful while the manifest declares SCHEDULE_EXACT_ALARM, as 1.5.3 does. A build
-/// without it, as 1.5.4 is meant to be, gets no from Android 12 up on every phone, and the
-/// app does not ask: see EXACT_ALARMS_DECLARED in src/lib/reminders.ts, which goes off
-/// together with the permission.
+/// Only meaningful for a build that asks for SCHEDULE_EXACT_ALARM, which the APK does and
+/// the Google Play build does not: from Android 12 up, a build that never asked always
+/// hears no. `requests_exact_alarms` is what tells the two apart, and the app reads both.
 pub fn exact_alarms_allowed() -> bool {
     with_the_activity(|env, activity| {
         if sdk_int(env)? < 31 {
@@ -295,6 +417,73 @@ pub fn exact_alarms_allowed() -> bool {
     .unwrap_or(true)
 }
 
+/// The channel the installed build was made for, as its manifest marks it, or None when it
+/// carries no mark or the package could not be read.
+///
+/// Only the Google Play bundle has one: the overlay that takes SCHEDULE_EXACT_ALARM out
+/// also adds `<meta-data android:name="daylo.channel" android:value="play" />`. It says what
+/// the build is, which the installer cannot: a Play bundle put on a phone with bundletool,
+/// adb or a transfer app has no Play installer recorded, and must still never offer an
+/// update from outside Play. See `packaging::android_source`.
+///
+/// `getApplicationInfo(String, int)` is deprecated from API 33 like `getPackageInfo`, and
+/// for the same reason both forms are here.
+pub fn distribution_channel() -> Option<String> {
+    with_the_activity(|env, activity| {
+        let manager = package_manager(env, activity)?;
+        let package = package_name(env, activity)?;
+
+        let info = if sdk_int(env)? >= 33 {
+            let flags = env
+                .call_static_method(
+                    "android/content/pm/PackageManager$ApplicationInfoFlags",
+                    "of",
+                    "(J)Landroid/content/pm/PackageManager$ApplicationInfoFlags;",
+                    &[JValue::Long(GET_META_DATA as i64)],
+                )?
+                .l()?;
+            env.call_method(
+                &manager,
+                "getApplicationInfo",
+                "(Ljava/lang/String;Landroid/content/pm/PackageManager$ApplicationInfoFlags;)Landroid/content/pm/ApplicationInfo;",
+                &[JValue::Object(&package), JValue::Object(&flags)],
+            )?
+            .l()?
+        } else {
+            env.call_method(
+                &manager,
+                "getApplicationInfo",
+                "(Ljava/lang/String;I)Landroid/content/pm/ApplicationInfo;",
+                &[JValue::Object(&package), JValue::Int(GET_META_DATA)],
+            )?
+            .l()?
+        };
+
+        // Null when the manifest has no meta-data at all, which is not the case today but
+        // is a manifest Android accepts.
+        let meta = env
+            .get_field(&info, "metaData", "Landroid/os/Bundle;")?
+            .l()?;
+        if meta.is_null() {
+            return Ok(None);
+        }
+        let key = env.new_string("daylo.channel")?;
+        let value = env
+            .call_method(
+                &meta,
+                "getString",
+                "(Ljava/lang/String;)Ljava/lang/String;",
+                &[JValue::Object(&key)],
+            )?
+            .l()?;
+        if value.is_null() {
+            return Ok(None);
+        }
+        Ok(Some(String::from(env.get_string(&JString::from(value))?)))
+    })
+    .flatten()
+}
+
 /// Open the system screen where exact alarms are allowed, and say whether it opened.
 ///
 /// It is the phone's own screen, titled "Alarms & reminders", and nothing here grants
@@ -313,9 +502,7 @@ pub fn ask_for_exact_alarms() -> bool {
             &[JValue::Object(&action)],
         )?;
 
-        let package = env
-            .call_method(activity, "getPackageName", "()Ljava/lang/String;", &[])?
-            .l()?;
+        let package = package_name(env, activity)?;
         let package = String::from(env.get_string(&JString::from(package))?);
         let target = env.new_string(format!("package:{package}"))?;
         let uri = env

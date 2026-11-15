@@ -2,10 +2,19 @@ import { describe, it, expect } from 'vitest'
 import { readFileSync } from 'fs'
 import { dirname, join } from 'path'
 import { fileURLToPath } from 'url'
-import { declaresExactAlarms, run, switchIn, verdictOn } from './check-exact-alarm.js'
+import {
+  channelIn,
+  declaresExactAlarms,
+  removedPermissionsIn,
+  run,
+  verdictOn,
+} from './check-exact-alarm.js'
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..')
 const read = (path) => readFileSync(join(root, path), 'utf8')
+
+const MAIN = 'src-tauri/gen/android/app/src/main/AndroidManifest.xml'
+const PLAY = 'src-tauri/gen/android/app/src/play/AndroidManifest.xml'
 
 /**
  * A manifest as Gradle's merger writes it, taken from a real build of 1.0.1 (the bundle
@@ -31,13 +40,10 @@ const inAManifest = (line) =>
   `<manifest xmlns:android="http://schemas.android.com/apk/res/android"\n    xmlns:tools="http://schemas.android.com/tools">\n    ${line}\n</manifest>`
 
 describe('the exact-alarm permission', () => {
-  // The switch decides what the settings screen offers, the manifest what Android lets the
-  // app do. This is the two of them, as they are in the repository right now.
-  it('is declared in the Android manifest exactly when the app says it is', () => {
-    const manifest = read('src-tauri/gen/android/app/src/main/AndroidManifest.xml')
-    const switchOn = switchIn(read('src/lib/reminders.ts'))
-
-    expect(declaresExactAlarms(manifest)).toBe(switchOn)
+  // The APK is built from the main manifest and keeps the permission, so that no update of
+  // it takes away an exact alarm somebody allowed.
+  it('is declared in the main Android manifest', () => {
+    expect(declaresExactAlarms(read(MAIN))).toBe(true)
   })
 
   it('is not counted when it is only named in a comment', () => {
@@ -150,49 +156,97 @@ describe('the namespace prefixes', () => {
   })
 })
 
-describe('the switch, read from the source', () => {
-  it('reads the value reminders.ts has', () => {
-    expect(switchIn('export const EXACT_ALARMS_DECLARED: boolean = false\n')).toBe(false)
-    expect(switchIn('export const EXACT_ALARMS_DECLARED: boolean = true\n')).toBe(true)
+describe('the Play overlay', () => {
+  // The one line that makes the Play bundle different. A typo in the name would make the
+  // removal match nothing, the merge would keep the permission, and the overlay would look
+  // as if it did its job.
+  it('removes exactly the exact-alarm permission, and nothing else', () => {
+    expect(removedPermissionsIn(read(PLAY))).toEqual(['android.permission.SCHEDULE_EXACT_ALARM'])
   })
 
-  // A line commented out above the real one used to win, because the first match was
-  // taken from the raw source.
-  it('reads past a commented-out line to the real one', () => {
+  it('does not ask for exact alarms itself', () => {
+    expect(declaresExactAlarms(read(PLAY))).toBe(false)
+  })
+
+  // How the installed app knows it came from the Play build, whoever installed it.
+  it('marks the build as the Play one', () => {
+    expect(channelIn(read(PLAY))).toBe('play')
+  })
+
+  // And the APK carries no mark, so it goes on behaving as it does today.
+  it('leaves the main manifest without a mark', () => {
+    expect(channelIn(read(MAIN))).toBeNull()
+  })
+})
+
+describe('the permissions a manifest removes', () => {
+  it('reads a removal under whatever prefix the tools namespace has', () => {
     expect(
-      switchIn(
-        '// export const EXACT_ALARMS_DECLARED: boolean = true\nexport const EXACT_ALARMS_DECLARED: boolean = false\n'
+      removedPermissionsIn(
+        '<manifest xmlns:a="http://schemas.android.com/apk/res/android" xmlns:t="http://schemas.android.com/tools">\n    <uses-permission a:name="android.permission.SCHEDULE_EXACT_ALARM" t:node="remove" />\n</manifest>'
       )
-    ).toBe(false)
+    ).toEqual(['android.permission.SCHEDULE_EXACT_ALARM'])
+  })
+
+  it('does not count a removal that is only inside a comment', () => {
     expect(
-      switchIn(
-        '  /** export const EXACT_ALARMS_DECLARED: boolean = false */\n  export const EXACT_ALARMS_DECLARED: boolean = true\n'
+      removedPermissionsIn(
+        inAManifest(
+          '<!-- <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" tools:node="remove" /> -->'
+        )
       )
-    ).toBe(true)
+    ).toEqual([])
   })
 
-  // Only lines that begin with the declaration count, so a copy of it at the start of a
-  // line inside a block comment counts as a second switch. Refused rather than parsed: the
-  // reader does not understand comments, and says so instead of guessing which one is real.
-  it('refuses a second declaration even inside a block comment', () => {
-    expect(() =>
-      switchIn(
-        '/*\nexport const EXACT_ALARMS_DECLARED: boolean = false\n*/\nexport const EXACT_ALARMS_DECLARED: boolean = true\n'
+  it('does not count a request as a removal', () => {
+    expect(
+      removedPermissionsIn(
+        inAManifest('<uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" />')
       )
-    ).toThrow()
+    ).toEqual([])
+  })
+})
+
+describe('the channel mark', () => {
+  const marked = (line) => inAManifest(`<application>\n        ${line}\n    </application>`)
+
+  it('reads the value the mark carries', () => {
+    expect(
+      channelIn(marked('<meta-data android:name="daylo.channel" android:value="play" />'))
+    ).toBe('play')
   })
 
-  it('refuses two switches rather than picking one', () => {
-    expect(() =>
-      switchIn(
-        'export const EXACT_ALARMS_DECLARED: boolean = true\nexport const EXACT_ALARMS_DECLARED: boolean = false\n'
-      )
-    ).toThrow()
+  it('reads it with the value written before the name, and in single quotes', () => {
+    expect(
+      channelIn(marked("<meta-data android:value='play' android:name='daylo.channel' />"))
+    ).toBe('play')
   })
 
-  it('refuses a switch it cannot read rather than calling it off', () => {
-    expect(() => switchIn('export const EXACT_ALARMS_DECLARED = isPlayBuild()\n')).toThrow()
-    expect(() => switchIn('')).toThrow()
+  it('does not count a mark that is only inside a comment', () => {
+    expect(
+      channelIn(marked('<!-- <meta-data android:name="daylo.channel" android:value="play" /> -->'))
+    ).toBeNull()
+  })
+
+  it('does not take some other meta-data for it', () => {
+    expect(
+      channelIn(marked('<meta-data android:name="daylo.channels" android:value="play" />'))
+    ).toBeNull()
+  })
+
+  it('does not count a mark that is there to be removed', () => {
+    expect(
+      channelIn(
+        marked(
+          '<meta-data android:name="daylo.channel" android:value="play" tools:node="remove" />'
+        )
+      )
+    ).toBeNull()
+  })
+
+  // The merged manifest of a real build, which has meta-data of its own from the libraries.
+  it('finds no mark in a merged manifest that has none', () => {
+    expect(channelIn(MERGED)).toBeNull()
   })
 })
 
@@ -202,39 +256,142 @@ describe('the check on the merged manifests', () => {
     expect(MERGED_WITH_IT).toContain('android.permission.SCHEDULE_EXACT_ALARM')
   })
 
-  it('passes a merged manifest without the permission while the switch is off', () => {
-    expect(verdictOn({ xml: MERGED, switchOn: false, path: 'bundle' })).toBeNull()
+  // The Play bundle.
+  it('passes a merged manifest without the permission when none was expected', () => {
+    expect(verdictOn({ xml: MERGED, expect: 'absent', path: 'bundle' })).toBeNull()
   })
 
-  it('stops a merged manifest that carries the permission while the switch is off', () => {
-    expect(verdictOn({ xml: MERGED_WITH_IT, switchOn: false, path: 'bundle' })).toMatch(
+  it('stops a merged manifest that carries the permission when none was expected', () => {
+    expect(verdictOn({ xml: MERGED_WITH_IT, expect: 'absent', path: 'bundle' })).toMatch(
       /declares .*SCHEDULE_EXACT_ALARM/
     )
   })
 
-  // The state 1.5.3 ships in.
-  it('passes a merged manifest with the permission while the switch is on', () => {
-    expect(verdictOn({ xml: MERGED_WITH_IT, switchOn: true, path: 'bundle' })).toBeNull()
+  // The APK.
+  it('passes a merged manifest with the permission when it was expected', () => {
+    expect(verdictOn({ xml: MERGED_WITH_IT, expect: 'declared', path: 'apk' })).toBeNull()
   })
 
-  it('stops a merged manifest that lacks the permission while the switch is on', () => {
-    expect(verdictOn({ xml: MERGED, switchOn: true, path: 'bundle' })).toMatch(/does not declare/)
+  it('stops a merged manifest that lacks the permission when it was expected', () => {
+    expect(verdictOn({ xml: MERGED, expect: 'declared', path: 'apk' })).toMatch(/does not declare/)
   })
 
-  // Nothing to read is not the same answer as nothing declared, in either position of the
-  // switch: an empty file agrees with "off" by accident.
-  it('stops on something that is not a manifest, whatever the switch says', () => {
-    for (const switchOn of [false, true]) {
-      expect(verdictOn({ xml: '', switchOn, path: 'empty' })).toMatch(/cannot say/)
-      expect(verdictOn({ xml: '<html></html>', switchOn, path: 'page' })).toMatch(/cannot say/)
+  // Nothing to read is not the same answer as nothing declared, whichever was expected: an
+  // empty file agrees with "absent" by accident.
+  it('stops on something that is not a manifest, whatever was expected', () => {
+    for (const expected of ['declared', 'absent']) {
+      expect(verdictOn({ xml: '', expect: expected, path: 'empty' })).toMatch(/cannot say/)
+      expect(verdictOn({ xml: '<html></html>', expect: expected, path: 'page' })).toMatch(
+        /cannot say/
+      )
     }
+  })
+})
+
+describe('the check on the channel mark', () => {
+  const PLAY_MERGED = MERGED.replace(
+    /(<application[^>]*>)/,
+    '$1\n        <meta-data android:name="daylo.channel" android:value="play" />'
+  )
+
+  it('has the mark in the copy made to carry it', () => {
+    expect(channelIn(PLAY_MERGED)).toBe('play')
+  })
+
+  it('passes the Play mark when it was expected', () => {
+    expect(verdictOn({ xml: PLAY_MERGED, expect: 'absent', channel: 'play', path: 'b' })).toBeNull()
+  })
+
+  it('stops a bundle without the mark when the mark was expected', () => {
+    expect(verdictOn({ xml: MERGED, expect: 'absent', channel: 'play', path: 'b' })).toMatch(
+      /carries no channel mark and play was expected/
+    )
+  })
+
+  // The APK has to stay without it, or it would go silent about updates and count as Play.
+  it('stops a mark where none was expected', () => {
+    expect(verdictOn({ xml: PLAY_MERGED, expect: 'absent', channel: 'none', path: 'a' })).toMatch(
+      /is marked as the play channel and no mark was expected/
+    )
+  })
+
+  it('says both when both are wrong', () => {
+    const problem = verdictOn({ xml: MERGED_WITH_IT, expect: 'absent', channel: 'play', path: 'b' })
+    expect(problem).toMatch(/declares/)
+    expect(problem).toMatch(/channel mark/)
+  })
+})
+
+describe('the check on an overlay that removes the permission', () => {
+  const overlay = (name) =>
+    inAManifest(`<uses-permission android:name="${name}" tools:node="remove" />`)
+
+  // The Play overlay as it is in the repository, through the same mode release.yml uses.
+  it('passes the Play overlay', () => {
+    expect(verdictOn({ xml: read(PLAY), expect: 'removes', channel: 'play', path: 'o' })).toBeNull()
+  })
+
+  it('passes a removal of exactly that permission', () => {
+    expect(
+      verdictOn({
+        xml: overlay('android.permission.SCHEDULE_EXACT_ALARM'),
+        expect: 'removes',
+        path: 'o',
+      })
+    ).toBeNull()
+  })
+
+  // The case "absent" cannot see: a misspelled removal requests nothing and removes nothing,
+  // so the merge keeps the permission while the overlay looks harmless.
+  it('stops a removal with the name misspelled', () => {
+    expect(
+      verdictOn({
+        xml: overlay('android.permission.SCHEDULE_EXACT_ALARMS'),
+        expect: 'removes',
+        path: 'o',
+      })
+    ).toMatch(/does not remove android\.permission\.SCHEDULE_EXACT_ALARM/)
+  })
+
+  it('stops an overlay that removes nothing', () => {
+    expect(
+      verdictOn({ xml: inAManifest('<application />'), expect: 'removes', path: 'o' })
+    ).toMatch(/does not remove/)
+  })
+
+  it('stops an overlay that removes something else too', () => {
+    const xml = inAManifest(
+      '<uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" tools:node="remove" />\n    <uses-permission android:name="android.permission.INTERNET" tools:node="remove" />'
+    )
+    expect(verdictOn({ xml, expect: 'removes', path: 'o' })).toMatch(
+      /also removes android\.permission\.INTERNET/
+    )
+  })
+
+  it('stops an overlay that asks for the permission it should remove', () => {
+    const xml = inAManifest(
+      '<uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" tools:node="remove" />\n    <uses-permission android:name="android.permission.USE_EXACT_ALARM" />'
+    )
+    expect(verdictOn({ xml, expect: 'removes', path: 'o' })).toMatch(/declares/)
+  })
+
+  it('ends red from the command line when the name is misspelled', () => {
+    const errors = []
+    const code = run({
+      args: ['--expect', 'removes', '--channel', 'play', 'o'],
+      readFile: () => read(PLAY).replace('SCHEDULE_EXACT_ALARM"', 'SCHEDULE_EXACT_ALARMS"'),
+      log: () => {},
+      error: (line) => errors.push(line),
+    })
+    expect(code).toBe(1)
+    expect(errors).toEqual([expect.stringMatching(/does not remove/)])
   })
 })
 
 describe('what counts as a manifest', () => {
   // Decided on the file with its comments taken out, the same way the permission is.
   it('does not take a manifest that is only inside a comment for one', () => {
-    expect(verdictOn({ xml: '<!-- <manifest> -->', switchOn: false, path: 'x' })).toMatch(
+    expect(verdictOn({ xml: '<!-- <manifest> -->', expect: 'absent', path: 'x' })).toMatch(
       /cannot say/
     )
   })
@@ -242,31 +399,30 @@ describe('what counts as a manifest', () => {
   it('does not take a permission inside a comment for a declared one', () => {
     const xml =
       '<manifest><!-- <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" /> --></manifest>'
-    expect(verdictOn({ xml, switchOn: true, path: 'x' })).toMatch(/does not declare/)
-    expect(verdictOn({ xml, switchOn: false, path: 'x' })).toBeNull()
+    expect(verdictOn({ xml, expect: 'declared', path: 'x' })).toMatch(/does not declare/)
+    expect(verdictOn({ xml, expect: 'absent', path: 'x' })).toBeNull()
   })
 
   it('reads a manifest with no permissions at all as one that declares none', () => {
     const xml = inAManifest('<application />')
-    expect(verdictOn({ xml, switchOn: false, path: 'x' })).toBeNull()
-    expect(verdictOn({ xml, switchOn: true, path: 'x' })).toMatch(/does not declare/)
+    expect(verdictOn({ xml, expect: 'absent', path: 'x' })).toBeNull()
+    expect(verdictOn({ xml, expect: 'declared', path: 'x' })).toMatch(/does not declare/)
   })
 
   it('reads a manifest whose only request is for Android 6 and up', () => {
     const xml = inAManifest(
       '<uses-permission-sdk-23 android:name="android.permission.SCHEDULE_EXACT_ALARM" />'
     )
-    expect(verdictOn({ xml, switchOn: true, path: 'x' })).toBeNull()
+    expect(verdictOn({ xml, expect: 'declared', path: 'x' })).toBeNull()
   })
 })
 
 describe('running the check', () => {
-  const SWITCH_ON = 'export const EXACT_ALARMS_DECLARED: boolean = true\n'
-  const runWith = (files, paths) => {
+  const runWith = (files, args) => {
     const errors = []
     const lines = []
     const code = run({
-      paths,
+      args,
       readFile: (path) => {
         if (!(path in files)) throw new Error(`ENOENT: ${path}`)
         return files[path]
@@ -280,37 +436,79 @@ describe('running the check', () => {
   // A path that cannot be read used to throw out of the loop: no ::error for the runner to
   // show, and none of the files after it looked at.
   it('says which file it could not read, goes on to the rest, and ends red', () => {
-    const { code, errors, lines } = runWith(
-      { 'src/lib/reminders.ts': SWITCH_ON, good: MERGED_WITH_IT },
-      ['missing', 'good']
-    )
+    const { code, errors, lines } = runWith({ good: MERGED_WITH_IT }, [
+      '--expect',
+      'declared',
+      'missing',
+      'good',
+    ])
 
     expect(code).toBe(1)
     expect(errors).toEqual([expect.stringMatching(/^::error file=missing::/)])
     expect(lines).toEqual([expect.stringContaining('good')])
   })
 
-  it('ends red, with a reason, when the switch cannot be read', () => {
-    const { code, errors } = runWith({ good: MERGED_WITH_IT }, ['good'])
-
-    expect(code).toBe(1)
-    expect(errors).toEqual([expect.stringMatching(/^::error file=src\/lib\/reminders\.ts::/)])
-  })
-
-  it('ends green when every manifest agrees', () => {
-    const { code, errors } = runWith(
-      { 'src/lib/reminders.ts': SWITCH_ON, a: MERGED_WITH_IT, b: MERGED_WITH_IT },
-      ['a', 'b']
-    )
+  it('ends green when every manifest is as expected', () => {
+    const { code, errors } = runWith({ a: MERGED_WITH_IT, b: MERGED_WITH_IT }, [
+      '--expect',
+      'declared',
+      'a',
+      'b',
+    ])
 
     expect(errors).toEqual([])
     expect(code).toBe(0)
   })
 
+  it('ends red, naming the file, when one is not as expected', () => {
+    const { code, errors } = runWith({ a: MERGED_WITH_IT, b: MERGED }, [
+      '--expect',
+      'declared',
+      'a',
+      'b',
+    ])
+
+    expect(code).toBe(1)
+    expect(errors).toEqual([expect.stringMatching(/^::error file=b::.*does not declare/)])
+  })
+
+  it('reads the channel it is told to expect', () => {
+    const { code, errors } = runWith({ a: MERGED_WITH_IT }, [
+      '--expect',
+      'declared',
+      '--channel',
+      'play',
+      'a',
+    ])
+
+    expect(code).toBe(1)
+    expect(errors).toEqual([expect.stringMatching(/channel mark/)])
+  })
+
   it('ends red when it was given nothing to check', () => {
-    const { code, errors } = runWith({ 'src/lib/reminders.ts': SWITCH_ON }, [])
+    const { code, errors } = runWith({}, ['--expect', 'absent'])
 
     expect(code).toBe(1)
     expect(errors).toHaveLength(1)
+  })
+
+  // Without an expectation there is nothing to compare with, and guessing one is how a
+  // check passes the one case it is there for.
+  it('ends red when it was not told what to expect', () => {
+    const { code, errors } = runWith({ a: MERGED_WITH_IT }, ['a'])
+
+    expect(code).toBe(1)
+    expect(errors).toEqual([expect.stringMatching(/--expect/)])
+  })
+
+  it('ends red on an expectation it does not know', () => {
+    for (const args of [
+      ['--expect', 'yes', 'a'],
+      ['--expect', 'declared', '--channel', 'apk', 'a'],
+    ]) {
+      const { code, errors } = runWith({ a: MERGED_WITH_IT }, args)
+      expect(code).toBe(1)
+      expect(errors).toHaveLength(1)
+    }
   })
 })

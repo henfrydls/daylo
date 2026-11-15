@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- What the Google Play bundle changes from the APK, and nothing else.
+
+     build.gradle.kts makes this the manifest of the release build type when the Gradle
+     property dayloPlay is true, which release.yml sets for the pass that builds the AAB and
+     not for the one that builds the APK. A build type's manifest is merged over main and
+     over every library, so the removal below takes the permission out whoever declared it.
+
+     The permission goes because Play asks for it to be justified and a habit reminder does
+     not need the minute. The APK keeps it: an update that dropped it would make Android
+     remove the exact alarm already pending on every phone that had allowed it.
+
+     The channel mark is how the installed app knows it is the Play build, whoever installed
+     it: src-tauri/src/android.rs reads it, and with it the check-in says play and the app
+     never offers an update from outside Play. scripts/check-exact-alarm.js and release.yml
+     check both lines. -->
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
+    <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" tools:node="remove" />
+
+    <application>
+        <meta-data android:name="daylo.channel" android:value="play" />
+    </application>
+</manifest>

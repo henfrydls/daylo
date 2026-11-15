@@ -51,6 +51,16 @@ android {
     buildFeatures {
         buildConfig = true
     }
+
+    // The Google Play bundle, and only it, merges src/play/AndroidManifest.xml over the
+    // rest: it takes SCHEDULE_EXACT_ALARM out and marks the build as the Play one. release.yml
+    // sets the property for the pass that builds the AAB and not for the one that builds the
+    // APK. The release build type is used because its manifest is merged over main and over
+    // every library, so the removal wins whoever declared the permission, and because a
+    // product flavor would rename the variants the Tauri CLI calls by name.
+    if (providers.gradleProperty("dayloPlay").orNull == "true") {
+        sourceSets.getByName("release").manifest.srcFile("src/play/AndroidManifest.xml")
+    }
 }
 
 rust {
