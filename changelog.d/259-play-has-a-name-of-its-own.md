@@ -1,0 +1,1 @@
+**Daylo on Google Play is installed as an app of its own.** Another app already used Daylo's usual name on Google Play, so the Google Play version has a different one. Daylo from the website keeps its name and its updates, as before. To move your days from one to the other, use Export and Import.
