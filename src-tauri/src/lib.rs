@@ -156,34 +156,42 @@ async fn latest_version(app: tauri::AppHandle) -> Result<String, String> {
 }
 
 /// What the reminder screen needs to say how close to its time the reminder arrives: whether
-/// the installed build asks Android for SCHEDULE_EXACT_ALARM, and whether the phone allows it.
+/// the installed build asks Android for SCHEDULE_EXACT_ALARM, whether the phone allows it,
+/// and the phone's API level.
 ///
-/// The two facts and not the verdict, so the three answers they make (`inexact`, `exact`,
-/// `denied`, see src/lib/reminders.ts) are decided on the side that tests run on.
+/// The facts and not the verdict, so the three answers they make (`inexact`, `exact`,
+/// `denied`, see src/lib/reminders.ts) are decided on the side that tests run on. The API
+/// level is there because below Android 12 every build arms an exact alarm, the Play one
+/// included, which is the rule the notification plugin follows (Arming.kt, `armsExact`).
 #[cfg(target_os = "android")]
 #[derive(serde::Serialize)]
 struct ExactAlarms {
     requested: bool,
     allowed: bool,
+    sdk: i32,
 }
 
-/// Whether the reminder can arrive at the time it was set for, as the two facts above.
+/// Whether the reminder can arrive at the time it was set for, as the facts above.
 ///
 /// The APK asks for the permission and the Google Play build does not, from one tree, so
 /// the first fact is read from the installed package rather than written into the app. When
-/// the package cannot be read this is an error, not a guess: the screen then says the words
-/// that promise nothing and offer nothing, and the console says why.
+/// the package or the API level cannot be read this is an error, not a guess: the screen then
+/// says the words that promise nothing and offer nothing, and the console says why.
 ///
-/// `allowed` keeps the direction `android::exact_alarms_allowed` has always had, yes when the
-/// phone cannot be asked, and means nothing for a build that does not ask.
+/// `allowed` keeps the direction `android::exact_alarms_allowed` has always had: yes below
+/// Android 12, where there is nothing to allow, and yes when the phone cannot be asked. It
+/// means nothing for a build that does not ask.
 #[cfg(target_os = "android")]
 #[tauri::command]
 fn exact_alarms() -> Result<ExactAlarms, String> {
     let requested = android::requests_exact_alarms()
         .ok_or_else(|| "the installed package could not be read".to_string())?;
+    let sdk =
+        android::sdk_level().ok_or_else(|| "the Android version could not be read".to_string())?;
     Ok(ExactAlarms {
         requested,
         allowed: android::exact_alarms_allowed(),
+        sdk,
     })
 }
 
