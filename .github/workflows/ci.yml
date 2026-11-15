@@ -477,14 +477,14 @@ jobs:
       # without the property and with it, and each merged file is copied out before the next
       # run writes over it.
       #
-      # The two merges are also held to their application ids: com.daylo.app for the APK,
-      # from tauri.conf.json, and the one in gradle.properties for Play, because Play already
-      # has a com.daylo.app from somebody else.
+      # The two merges are also held to their application ids: the identifier in
+      # tauri.conf.json for the APK, and dayloPlayApplicationId in gradle.properties for Play,
+      # because Play already has an app with the APK's id from somebody else.
       #
       # To see it red: misspell the permission in the overlay's removal line. The unit test
       # fails first; with the unit test made to agree, this step names the Play merge. Or
       # delete the applicationId line from the dayloPlay block in build.gradle.kts: this step
-      # names the Play merge as com.daylo.app.
+      # names the Play merge as carrying the APK's id.
       - name: The release manifest merge, with and without the Play overlay
         working-directory: src-tauri/gen/android
         run: |
