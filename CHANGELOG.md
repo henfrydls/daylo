@@ -3,6 +3,10 @@
 What changed in each release, for the people who use Daylo. Earlier versions are not
 listed: this file starts at 1.1.2, when the first change worth warning about arrived.
 
+## 1.5.5
+
+**Daylo from Google Play installs as an app of its own.** It is the same Daylo, but it does not update the copy you got from the website, and that copy does not update it. Daylo from the website keeps updating as before. To move your days from one to the other, use Export, then Import.
+
 ## 1.5.4
 
 **Daylo from Google Play reminds you around the time you chose.** On recent phones Android picks the exact moment, as it does for most apps, and the settings screen says so instead of offering a phone setting that would not list Daylo. Daylo from the website keeps working as before, including on-time reminders for anyone who allowed them. The Google Play version also never offers updates from anywhere else. Google Play keeps it up to date.
