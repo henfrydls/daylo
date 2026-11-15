@@ -5,6 +5,8 @@ import { fileURLToPath } from 'url'
 import {
   channelIn,
   declaresExactAlarms,
+  packageIn,
+  readArguments,
   removedPermissionsIn,
   run,
   verdictOn,
@@ -414,6 +416,86 @@ describe('what counts as a manifest', () => {
       '<uses-permission-sdk-23 android:name="android.permission.SCHEDULE_EXACT_ALARM" />'
     )
     expect(verdictOn({ xml, expect: 'declared', path: 'x' })).toBeNull()
+  })
+})
+
+describe('the package name', () => {
+  // The merged manifest of 1.0.1 carries the package the merger wrote: the applicationId.
+  it('reads the package the merger wrote on <manifest>', () => {
+    expect(packageIn(MERGED)).toBe('com.daylo.app')
+  })
+
+  it('reads it in single quotes and after other attributes', () => {
+    const xml = `<manifest xmlns:android="${'http://schemas.android.com/apk/res/android'}" android:versionCode='1' package='com.dlslabs.daylo'/>`
+    expect(packageIn(xml)).toBe('com.dlslabs.daylo')
+  })
+
+  it('does not take a package attribute of some other element for it', () => {
+    const xml =
+      '<manifest><application><meta-data package="com.daylo.app"/></application></manifest>'
+    expect(packageIn(xml)).toBeNull()
+  })
+
+  it('does not take a <manifest> inside a comment for the real one', () => {
+    const xml = '<!-- <manifest package="com.daylo.app"> --><manifest package="com.dlslabs.daylo"/>'
+    expect(packageIn(xml)).toBe('com.dlslabs.daylo')
+  })
+})
+
+describe('the check on the package name', () => {
+  const AS_PLAY = MERGED.replace('package="com.daylo.app"', 'package="com.dlslabs.daylo"')
+
+  it('passes the package that was expected', () => {
+    expect(
+      verdictOn({ xml: MERGED, expect: 'absent', pkg: 'com.daylo.app', path: 'apk' })
+    ).toBeNull()
+    expect(
+      verdictOn({ xml: AS_PLAY, expect: 'absent', pkg: 'com.dlslabs.daylo', path: 'aab' })
+    ).toBeNull()
+  })
+
+  // The Play build under the APK's name: Play refuses it, because com.daylo.app is taken.
+  it('stops the Play bundle when it still carries the APK name', () => {
+    expect(
+      verdictOn({ xml: MERGED, expect: 'absent', pkg: 'com.dlslabs.daylo', path: 'aab' })
+    ).toBe('aab is the package com.daylo.app and com.dlslabs.daylo was expected')
+  })
+
+  // The APK under the Play name: every copy installed from GitHub or the website would stop
+  // updating, because Android takes it for another app.
+  it('stops the APK when it carries the Play name', () => {
+    expect(verdictOn({ xml: AS_PLAY, expect: 'absent', pkg: 'com.daylo.app', path: 'apk' })).toBe(
+      'apk is the package com.dlslabs.daylo and com.daylo.app was expected'
+    )
+  })
+
+  it('stops a manifest with no package name when one was expected', () => {
+    const xml = '<manifest xmlns:android="http://schemas.android.com/apk/res/android"/>'
+    expect(verdictOn({ xml, expect: 'absent', pkg: 'com.daylo.app', path: 'x' })).toBe(
+      'x carries no package name and com.daylo.app was expected'
+    )
+  })
+
+  it('does not look at the package when none was asked for', () => {
+    expect(verdictOn({ xml: AS_PLAY, expect: 'absent', path: 'x' })).toBeNull()
+  })
+
+  it('takes --package from the command line, once, and never empty', () => {
+    expect(readArguments(['--expect', 'absent', '--package', 'com.dlslabs.daylo', 'f'])).toEqual({
+      expect: 'absent',
+      package: 'com.dlslabs.daylo',
+      paths: ['f'],
+    })
+    // An empty value is what a workflow passes when the line it read the name from is gone.
+    expect(() => readArguments(['--expect', 'absent', '--package', '', 'f'])).toThrow(
+      /--package takes a package name/
+    )
+    expect(() => readArguments(['--expect', 'absent', '--package', '--channel', 'f'])).toThrow(
+      /--package takes a package name/
+    )
+    expect(() =>
+      readArguments(['--expect', 'absent', '--package', 'a.b', '--package', 'a.b', 'f'])
+    ).toThrow(/given twice/)
   })
 })
 
