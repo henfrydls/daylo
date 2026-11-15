@@ -322,6 +322,72 @@ describe('the check on the channel mark', () => {
   })
 })
 
+describe('the check on an overlay that removes the permission', () => {
+  const overlay = (name) =>
+    inAManifest(`<uses-permission android:name="${name}" tools:node="remove" />`)
+
+  // The Play overlay as it is in the repository, through the same mode release.yml uses.
+  it('passes the Play overlay', () => {
+    expect(verdictOn({ xml: read(PLAY), expect: 'removes', channel: 'play', path: 'o' })).toBeNull()
+  })
+
+  it('passes a removal of exactly that permission', () => {
+    expect(
+      verdictOn({
+        xml: overlay('android.permission.SCHEDULE_EXACT_ALARM'),
+        expect: 'removes',
+        path: 'o',
+      })
+    ).toBeNull()
+  })
+
+  // The case "absent" cannot see: a misspelled removal requests nothing and removes nothing,
+  // so the merge keeps the permission while the overlay looks harmless.
+  it('stops a removal with the name misspelled', () => {
+    expect(
+      verdictOn({
+        xml: overlay('android.permission.SCHEDULE_EXACT_ALARMS'),
+        expect: 'removes',
+        path: 'o',
+      })
+    ).toMatch(/does not remove android\.permission\.SCHEDULE_EXACT_ALARM/)
+  })
+
+  it('stops an overlay that removes nothing', () => {
+    expect(
+      verdictOn({ xml: inAManifest('<application />'), expect: 'removes', path: 'o' })
+    ).toMatch(/does not remove/)
+  })
+
+  it('stops an overlay that removes something else too', () => {
+    const xml = inAManifest(
+      '<uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" tools:node="remove" />\n    <uses-permission android:name="android.permission.INTERNET" tools:node="remove" />'
+    )
+    expect(verdictOn({ xml, expect: 'removes', path: 'o' })).toMatch(
+      /also removes android\.permission\.INTERNET/
+    )
+  })
+
+  it('stops an overlay that asks for the permission it should remove', () => {
+    const xml = inAManifest(
+      '<uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" tools:node="remove" />\n    <uses-permission android:name="android.permission.USE_EXACT_ALARM" />'
+    )
+    expect(verdictOn({ xml, expect: 'removes', path: 'o' })).toMatch(/declares/)
+  })
+
+  it('ends red from the command line when the name is misspelled', () => {
+    const errors = []
+    const code = run({
+      args: ['--expect', 'removes', '--channel', 'play', 'o'],
+      readFile: () => read(PLAY).replace('SCHEDULE_EXACT_ALARM"', 'SCHEDULE_EXACT_ALARMS"'),
+      log: () => {},
+      error: (line) => errors.push(line),
+    })
+    expect(code).toBe(1)
+    expect(errors).toEqual([expect.stringMatching(/does not remove/)])
+  })
+})
+
 describe('what counts as a manifest', () => {
   // Decided on the file with its comments taken out, the same way the permission is.
   it('does not take a manifest that is only inside a comment for one', () => {

@@ -16,7 +16,7 @@ import { readFileSync } from 'fs'
  *
  * So the question is not "which is right" but "is this file what it was expected to be":
  *
- *   node scripts/check-exact-alarm.js --expect declared|absent [--channel play|none] FILE...
+ *   node scripts/check-exact-alarm.js --expect declared|absent|removes [--channel play|none] FILE...
  *
  * Run by the unit tests on the hand-written manifests, by Build Check (Android) on the
  * manifests Gradle merged, and by release.yml before and after the two release passes,
@@ -134,7 +134,17 @@ export function channelIn(xml) {
   return mark?.value ?? null
 }
 
-const EXPECTATIONS = ['declared', 'absent']
+/** The one permission the Play overlay takes away. */
+const REMOVED_BY_OVERLAY = 'android.permission.SCHEDULE_EXACT_ALARM'
+
+/**
+ * `declared` and `absent` are for a manifest a build is made from or Gradle merged.
+ * `removes` is for the Play overlay itself, which asks for nothing and has to take away
+ * exactly SCHEDULE_EXACT_ALARM. "absent" alone would pass an overlay whose removal has the
+ * name misspelled: it requests nothing and removes nothing, and the merge keeps the
+ * permission.
+ */
+const EXPECTATIONS = ['declared', 'absent', 'removes']
 const CHANNELS = ['play', 'none']
 
 /**
@@ -155,13 +165,23 @@ export function verdictOn({ xml, expect, channel, path }) {
   }
   const problems = []
   const found = exactAlarmPermissionsIn(xml)
-  if (expect === 'absent' && found.length > 0) {
+  if ((expect === 'absent' || expect === 'removes') && found.length > 0) {
     problems.push(
       `${path} declares ${found.join(' and ')} and no exact-alarm permission was expected`
     )
   }
   if (expect === 'declared' && found.length === 0) {
     problems.push(`${path} does not declare an exact-alarm permission and one was expected`)
+  }
+  if (expect === 'removes') {
+    const removed = removedPermissionsIn(xml)
+    if (!removed.includes(REMOVED_BY_OVERLAY)) {
+      problems.push(`${path} does not remove ${REMOVED_BY_OVERLAY}`)
+    }
+    const others = removed.filter((name) => name !== REMOVED_BY_OVERLAY)
+    if (others.length > 0) {
+      problems.push(`${path} also removes ${others.join(' and ')}, and should remove nothing else`)
+    }
   }
   const mark = channelIn(xml)
   if (channel === 'play' && mark !== 'play') {
@@ -204,7 +224,7 @@ export function readArguments(args) {
     }
   }
   if (!options.expect) {
-    throw new Error('Say what is expected with --expect declared or --expect absent')
+    throw new Error('Say what is expected with --expect declared, absent or removes')
   }
   return { ...options, paths }
 }
@@ -245,7 +265,8 @@ export function run({ args, readFile, log, error }) {
       failed = true
     } else {
       const mark = channel === undefined ? '' : `, channel mark ${channel}`
-      log(`${path}: as expected (exact alarms ${expect}${mark})`)
+      const what = expect === 'removes' ? `removes ${REMOVED_BY_OVERLAY}` : `exact alarms ${expect}`
+      log(`${path}: as expected (${what}${mark})`)
     }
   }
   return failed ? 1 : 0

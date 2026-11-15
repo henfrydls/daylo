@@ -47,7 +47,9 @@ jobs:
       # Before anything is public. Every other job waits for this one, so a refusal here
       # stops the whole tag in seconds with nothing published. The main manifest has to ask
       # for exact alarms and carry no channel mark, which is the APK; the Play overlay has to
-      # take the permission out and carry the mark, which is the AAB. The same check runs
+      # remove exactly SCHEDULE_EXACT_ALARM, by that name, and carry the mark, which is the
+      # AAB. `--expect removes` and not `absent`: a removal with the name misspelled asks
+      # for nothing, so "absent" would pass it while the merge kept the permission. The same check runs
       # again on what Gradle merged after each Android pass, and on the two final files, for
       # a permission a library brings in; by then the release exists, which is why the
       # common case, a hand-written manifest gone wrong, is asked here first.
@@ -68,7 +70,7 @@ jobs:
           status=0
           node scripts/check-exact-alarm.js --expect declared --channel none \
             src-tauri/gen/android/app/src/main/AndroidManifest.xml || status=1
-          node scripts/check-exact-alarm.js --expect absent --channel play \
+          node scripts/check-exact-alarm.js --expect removes --channel play \
             src-tauri/gen/android/app/src/play/AndroidManifest.xml || status=1
           exit "$status"
 
