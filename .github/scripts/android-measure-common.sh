@@ -1,5 +1,6 @@
 # Shared by the emulator measurements: android-measure-reminder.sh (measurement A of
-# #202) and android-measure-sheet-gestures.sh. Sourced, not run.
+# #202), android-measure-sheet-gestures.sh and android-measure-play-build.sh (#245).
+# Sourced, not run.
 #
 # The caller sets OUT (the folder everything measured goes to) before sourcing this, and
 # reads NETWORK_GUARD at the end: "held" unless network_off or checkin_logcat_guard saw
