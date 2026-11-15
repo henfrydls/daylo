@@ -459,7 +459,8 @@ jobs:
             find "$dir" -name AndroidManifest.xml 2>/dev/null || true
             exit 1
           fi
-          node scripts/check-exact-alarm.js --expect declared --channel none \
+          APP_ID=$(node -p "require('./src-tauri/tauri.conf.json').identifier")
+          node scripts/check-exact-alarm.js --expect declared --channel none --package "$APP_ID" \
             "${bundle[@]}" "${packaged[@]}"
 
       # The Play overlay, on every pull request and not only on a tag. release.yml builds the
@@ -476,8 +477,14 @@ jobs:
       # without the property and with it, and each merged file is copied out before the next
       # run writes over it.
       #
+      # The two merges are also held to their application ids: com.daylo.app for the APK,
+      # from tauri.conf.json, and the one in gradle.properties for Play, because Play already
+      # has a com.daylo.app from somebody else.
+      #
       # To see it red: misspell the permission in the overlay's removal line. The unit test
-      # fails first; with the unit test made to agree, this step names the Play merge.
+      # fails first; with the unit test made to agree, this step names the Play merge. Or
+      # delete the applicationId line from the dayloPlay block in build.gradle.kts: this step
+      # names the Play merge as com.daylo.app.
       - name: The release manifest merge, with and without the Play overlay
         working-directory: src-tauri/gen/android
         run: |
@@ -513,8 +520,16 @@ jobs:
             cp "${merged[0]}" "$out/$pass.xml"
           done
           cd "$GITHUB_WORKSPACE"
-          node scripts/check-exact-alarm.js --expect declared --channel none "$out/apk.xml" || status=1
-          node scripts/check-exact-alarm.js --expect absent --channel play "$out/play.xml" || status=1
+          APP_ID=$(node -p "require('./src-tauri/tauri.conf.json').identifier")
+          PLAY_ID=$(sed -n 's/^dayloPlayApplicationId=//p' src-tauri/gen/android/gradle.properties)
+          node scripts/check-exact-alarm.js --expect declared --channel none --package "$APP_ID" \
+            "$out/apk.xml" || status=1
+          node scripts/check-exact-alarm.js --expect absent --channel play --package "$PLAY_ID" \
+            "$out/play.xml" || status=1
+          if [ -n "$PLAY_ID" ] && [ "$PLAY_ID" = "$APP_ID" ]; then
+            echo "::error::gradle.properties gives the Play build the APK's own id, $APP_ID."
+            status=1
+          fi
           exit "$status"
 
       # Saved here, not by a post step, so that 'if: always()' applies: actions/cache does

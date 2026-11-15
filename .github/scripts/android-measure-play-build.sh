@@ -3,11 +3,13 @@
 # turned on. Does it arm the reminder without exact alarms, say so in the app, and keep
 # away from GitHub?
 #
-# Usage: android-measure-play-build.sh <apks> <bundletool-jar> <out-dir>
+# Usage: android-measure-play-build.sh <apks> <bundletool-jar> <out-dir> <package>
 #
 #   apks            the universal APK set bundletool built from the Play AAB (release,
 #                   ORG_GRADLE_PROJECT_dayloPlay=true), signed with the job's own key
 #   bundletool-jar  the pinned bundletool the build job checked, which installs it
+#   package         the Play build's application id, which the build job read from the
+#                   AAB's own manifest: com.dlslabs.daylo, not the APK's com.daylo.app
 #
 # It is a RELEASE build, because the Play overlay is merged into the release build type
 # only (src-tauri/gen/android/app/build.gradle.kts). Three things follow:
@@ -60,6 +62,7 @@ set -uo pipefail
 APKS=${1:?the APK set is missing}
 BUNDLETOOL=${2:?bundletool is missing}
 OUT=${3:?the output directory is missing}
+PKG=${4:?the package name is missing}
 PORT=9335
 HERE=$(cd "$(dirname "$0")" && pwd)
 mkdir -p "$OUT"
@@ -99,6 +102,11 @@ measure() {
     return 1
   fi
   sh_ pm list packages "$PKG" | grep -qx "package:$PKG" || { log "installed, but $PKG is not there"; return 1; }
+  # The application id and the Kotlin namespace differ in this build, so the activity is
+  # asked of the package: $PKG/.MainActivity would name a class that does not exist.
+  ACTIVITY=$(launcher_activity)
+  [ -n "$ACTIVITY" ] || { log "$PKG is installed and has no launcher activity"; return 1; }
+  log "package $PKG, launcher activity $ACTIVITY"
 
   sh_ dumpsys package "$PKG" >"$OUT/package.txt"
   # Granted before the first start, so nothing asks on screen. Below 33 there is no such
@@ -355,6 +363,7 @@ done
 {
   echo "Measurement B of #245, the Google Play build installed clean, $(date -u '+%Y-%m-%d %H:%M UTC')"
   echo "device: $(head -1 "$OUT/device.txt")"
+  echo "package: $PKG, launcher activity ${ACTIVITY}"
   echo "reminder at $HH:00"
   [ "$SEED_LOST" = 1 ] && echo "SEED LOST: the seeded state did not survive reopening the app (seed-reopened.txt); nothing below measures the build."
   echo "network guard: $NETWORK_GUARD (see network.txt; the packet capture is checked by the workflow for the check-in host and GitHub)"
