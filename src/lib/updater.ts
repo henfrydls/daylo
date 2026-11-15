@@ -208,6 +208,12 @@ export async function checkForUpdate(
   format: InstallFormat | null = null
 ): Promise<UpdateCheck> {
   if (!isTauri()) return { kind: 'none' }
+  // A copy a store keeps current is not asked about at all, whoever asks. The screen does
+  // not offer a check for one, so this is the second wall and not the first, and it matters
+  // most for the Google Play build: Play does not allow an app to offer updates from
+  // outside Play, and a request to GitHub for the manifest is the start of one. Quiet and
+  // not "none", because "none" is drawn as up to date, which is the store's to say.
+  if (whatWeMayDo(format) === 'silent') return { kind: 'quiet' }
   if (format === 'apk') return checkTheManifest(asked)
 
   try {

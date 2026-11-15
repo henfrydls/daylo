@@ -1,5 +1,6 @@
 // Evaluate an expression in Daylo's WebView, which a debug build exposes over the Chrome
-// DevTools protocol. Usage: node cdp-eval.mjs <port> '<expression>'
+// DevTools protocol (on the emulator's userdebug image a release build is expected to as
+// well, see android-measure-play-build.sh). Usage: node cdp-eval.mjs <port> '<expression>'
 // Needs Node 22 or later for the global WebSocket. Prints the value returned, as JSON.
 const [port, expression] = process.argv.slice(2)
 if (!port || !expression) {

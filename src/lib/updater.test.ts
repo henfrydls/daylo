@@ -251,6 +251,32 @@ describe('the two ways into Android', () => {
     expect(whatWeMayDo('apk')).toBe('point')
     expect(whatWeMayDo('apk')).not.toBe('install')
   })
+
+  // The Play build must never offer an update from outside Play, so it must not even ask
+  // GitHub whether there is one. Even if something asked for a check, for a copy from Play
+  // nothing goes out: not the manifest, not the desktop updater, and no answer comes back
+  // that a card could be drawn from.
+  it('does not look for a newer version for a copy from Play, even when asked', async () => {
+    invoke.mockResolvedValue('9.9.9')
+    check.mockResolvedValue({ version: '9.9.9' })
+
+    for (const asked of [false, true]) {
+      const result = await checkForUpdate(asked, 'play')
+      expect(result.kind).not.toBe('available')
+      expect(result.kind).not.toBe('failed')
+    }
+    expect(invoke).not.toHaveBeenCalled()
+    expect(check).not.toHaveBeenCalled()
+  })
+
+  // The same for every copy a store keeps current.
+  it('does not look for a newer version for any copy a store keeps current', async () => {
+    for (const format of ['store', 'snap'] as const) {
+      await checkForUpdate(true, format)
+    }
+    expect(invoke).not.toHaveBeenCalled()
+    expect(check).not.toHaveBeenCalled()
+  })
 })
 
 describe('which version is newer', () => {

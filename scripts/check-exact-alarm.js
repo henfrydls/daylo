@@ -1,21 +1,35 @@
 import { readFileSync } from 'fs'
-import { dirname, join } from 'path'
-import { fileURLToPath } from 'url'
 
 /**
- * Whether the Android build asks for SCHEDULE_EXACT_ALARM exactly when the app says it does.
+ * Whether an Android manifest asks for exact alarms, and carries the Play mark, as expected.
  *
- * Two things have to agree. EXACT_ALARMS_DECLARED in src/lib/reminders.ts decides whether
- * the settings screen offers the phone's "Alarms & reminders" screen; the manifest decides
- * whether Android lists Daylo there at all, and whether Google Play asks for the permission
- * to be justified. Apart, they fail quietly: a switch on without the permission offers a
- * screen Daylo is not on, and the permission declared with the switch off ships a
- * declaration Play has to be argued with over a build that never uses it.
+ * Two builds come out of one tree. The APK keeps SCHEDULE_EXACT_ALARM, so that no update of
+ * it takes away an exact alarm somebody allowed. The Google Play bundle goes without it,
+ * because Play asks for it to be justified and a habit reminder does not need the minute,
+ * and it carries a channel mark so the installed app knows it is the Play build. Both come
+ * from src-tauri/gen/android/app/src/play/AndroidManifest.xml, which only the Play pass
+ * merges.
  *
- * Run by the unit tests against the manifest written by hand, by Build Check (Android)
- * against the debug manifests Gradle merged, and by release.yml against the release ones
- * before anything is uploaded, because a library can declare the permission too and the
- * hand-written file would never show it.
+ * Wrong either way, they fail quietly. A Play bundle with the permission is a declaration
+ * Play has to be argued with; an APK without it takes the exact alarm away on update; a
+ * bundle without the mark offers updates from outside Play; an APK with it never offers one.
+ *
+ * So the question is not "which is right" but "is this file what it was expected to be":
+ *
+ *   node scripts/check-exact-alarm.js --expect declared|absent|removes [--channel play|none]
+ *     [--package NAME] FILE...
+ *
+ * `--package` holds the file to the application id it should carry. The two builds have
+ * different ones: com.daylo.app was taken on Play by somebody else, so the bundle is
+ * com.dlslabs.daylo (src-tauri/gen/android/gradle.properties) and the APK stays
+ * com.daylo.app, which every installed copy updates over. Either one under the other's name
+ * fails without a word: Play refuses the upload, or every APK update installs as a second
+ * app beside the first.
+ *
+ * Run by the unit tests on the hand-written manifests, by Build Check (Android) on the
+ * manifests Gradle merged, and by release.yml before and after the two release passes,
+ * because a library can declare the permission too and the hand-written file would never
+ * show it.
  */
 
 /**
@@ -31,36 +45,6 @@ const PERMISSIONS = [
 
 const ANDROID_NS = 'http://schemas.android.com/apk/res/android'
 const TOOLS_NS = 'http://schemas.android.com/tools'
-
-/**
- * The value of EXACT_ALARMS_DECLARED, read from the source of reminders.ts.
- *
- * Only lines that begin, after their indentation, with `export const EXACT_ALARMS_DECLARED`
- * are looked at, so a commented-out copy above the real one does not count: it begins with
- * the comment. There has to be exactly one such line, and it has to say `= true` or
- * `= false`. Anything else throws rather than guessing: a switch this cannot read is a
- * switch it cannot compare, and calling that "off" would pass the one case this exists to
- * catch. That includes a copy at the start of a line inside a block comment, which this
- * does not try to understand and refuses instead.
- */
-export function switchIn(source) {
-  const declarations = source
-    .split(/\r?\n/)
-    .filter((line) => /^\s*export const EXACT_ALARMS_DECLARED\b/.test(line))
-  if (declarations.length !== 1) {
-    throw new Error(
-      `EXACT_ALARMS_DECLARED is declared ${declarations.length} times in reminders.ts, and has to be declared once`
-    )
-  }
-  const value =
-    /^\s*export const EXACT_ALARMS_DECLARED(?::\s*boolean)?\s*=\s*(true|false)\s*;?\s*$/.exec(
-      declarations[0]
-    )
-  if (!value) {
-    throw new Error('EXACT_ALARMS_DECLARED is not written as `= true` or `= false` in reminders.ts')
-  }
-  return value[1] === 'true'
-}
 
 const withoutXmlComments = (xml) => xml.replace(/<!--[\s\S]*?-->/g, '')
 
@@ -80,34 +64,47 @@ function prefixFor(xml, namespace, usual) {
 }
 
 /**
- * The exact-alarm permissions a manifest asks Android for.
+ * Every element of one kind in a manifest, as its attributes under the usual names.
  *
- * Comments are taken out first, because the comment beside that line is where the
- * permission gets explained, and it names the permission whether or not it is declared.
- *
- * Then every request is read, in every form Android has: `uses-permission`, and
- * `uses-permission-sdk-23` with its older spelling `uses-permission-sdk-m`, which ask for
- * the same thing on Android 6 and up and which Play counts all the same. XML lets an attribute be quoted either way, and the prefixes
- * are whatever the manifest binds the Android and tools namespaces to. And a line marked
- * `tools:node="remove"` names the permission to take it away: it is how an app removes one
- * a library brought in, so it is the opposite of a request.
+ * Comments are taken out first, because the comment beside a line is where it gets
+ * explained, and it names the permission or the mark whether or not they are there. XML
+ * lets an attribute be quoted either way, and the prefixes are whatever the manifest binds
+ * the Android and tools namespaces to, so each attribute comes back as `name`, `value` or
+ * `node` whatever prefix it was written with. `removed` says the element is marked
+ * `tools:node="remove"`: that is how a manifest takes away what a lower one brought in, so
+ * it names the thing to ask for the opposite.
  */
-export function exactAlarmPermissionsIn(xml) {
+function elementsIn(xml, pattern) {
   const text = withoutXmlComments(xml)
   const android = prefixFor(text, ANDROID_NS, 'android')
   const tools = prefixFor(text, TOOLS_NS, 'tools')
   if (android === null) return []
-  const requests = text.match(/<uses-permission(?:-sdk-23|-sdk-m)?\s[^>]*>/g) ?? []
-  const found = new Set()
-  for (const tag of requests) {
+  return (text.match(pattern) ?? []).map((tag) => {
     const attributes = {}
     for (const [, name, double, single] of tag.matchAll(
       /([\w:.-]+)\s*=\s*(?:"([^"]*)"|'([^']*)')/g
     )) {
       attributes[name] = double ?? single
     }
-    const name = attributes[`${android}:name`]
-    const removed = tools !== null && attributes[`${tools}:node`] === 'remove'
+    return {
+      name: attributes[`${android}:name`],
+      value: attributes[`${android}:value`],
+      removed: tools !== null && attributes[`${tools}:node`] === 'remove',
+    }
+  })
+}
+
+/**
+ * Every permission line, in every form Android has: `uses-permission`, and
+ * `uses-permission-sdk-23` with its older spelling `uses-permission-sdk-m`, which ask for the
+ * same thing on Android 6 and up and which Play counts all the same.
+ */
+const permissionLinesIn = (xml) => elementsIn(xml, /<uses-permission(?:-sdk-23|-sdk-m)?\s[^>]*>/g)
+
+/** The exact-alarm permissions a manifest asks Android for. A removal is not a request. */
+export function exactAlarmPermissionsIn(xml) {
+  const found = new Set()
+  for (const { name, removed } of permissionLinesIn(xml)) {
     if (PERMISSIONS.includes(name) && !removed) found.add(name)
   }
   return [...found]
@@ -119,27 +116,155 @@ export function declaresExactAlarms(xml) {
 }
 
 /**
- * The manifest given, read as a manifest, or an error saying why it cannot be.
+ * Every permission a manifest takes away from the ones merged under it, whatever it is.
+ *
+ * All of them and not only the exact-alarm ones, so that the Play overlay can be held to
+ * removing that one permission and nothing more.
+ */
+export function removedPermissionsIn(xml) {
+  return [
+    ...new Set(
+      permissionLinesIn(xml)
+        .filter(({ removed }) => removed)
+        .map(({ name }) => name)
+    ),
+  ]
+}
+
+/** The meta-data that says which channel a build was made for. Only the Play pass has it. */
+const CHANNEL_KEY = 'daylo.channel'
+
+/** The channel a manifest is marked with, or null when it carries no mark. */
+export function channelIn(xml) {
+  const mark = elementsIn(xml, /<meta-data\s[^>]*>/g).find(
+    ({ name, removed }) => name === CHANNEL_KEY && !removed
+  )
+  return mark?.value ?? null
+}
+
+/**
+ * The package a manifest says it is, from the `package` attribute of its `<manifest>`, or
+ * null when it has none. Gradle's merger writes the applicationId there, and bundletool and
+ * aapt2 read it back from there.
+ */
+export function packageIn(xml) {
+  const root = withoutXmlComments(xml).match(/<manifest[\s>/][^>]*>/)
+  if (!root) return null
+  const found = root[0].match(/\spackage\s*=\s*(?:"([^"]*)"|'([^']*)')/)
+  return found ? (found[1] ?? found[2]) : null
+}
+
+/** The one permission the Play overlay takes away. */
+const REMOVED_BY_OVERLAY = 'android.permission.SCHEDULE_EXACT_ALARM'
+
+/**
+ * `declared` and `absent` are for a manifest a build is made from or Gradle merged.
+ * `removes` is for the Play overlay itself, which asks for nothing and has to take away
+ * exactly SCHEDULE_EXACT_ALARM. "absent" alone would pass an overlay whose removal has the
+ * name misspelled: it requests nothing and removes nothing, and the merge keeps the
+ * permission.
+ */
+const EXPECTATIONS = ['declared', 'absent', 'removes']
+const CHANNELS = ['play', 'none']
+
+/**
+ * The manifest given, held to what was expected of it, or what is wrong with it.
  *
  * "No permission found" and "nothing to look in" have to stay two answers. A path Gradle
  * stopped writing to, or a file that is not a manifest, contains no permission either, and
- * read as "not declared" it would agree with a switch that is off, which is the direction
- * that matters for Play. Decided with the comments taken out, like everything else here, so
- * a manifest that exists only inside a comment is not one.
+ * read as "absent" it would pass the Play bundle by accident. Decided with the comments
+ * taken out, like everything else here, so a manifest that exists only inside a comment is
+ * not one.
+ *
+ * `channel` and `pkg` are optional: left out, the mark or the package is not looked at.
+ * Every problem is said, so one red run names all of them when more than one is wrong.
  */
-export function verdictOn({ xml, switchOn, path }) {
+export function verdictOn({ xml, expect, channel, pkg, path }) {
   if (!/<manifest[\s>/]/.test(withoutXmlComments(xml))) {
     return `${path} does not look like an Android manifest, so it cannot say anything`
   }
+  const problems = []
   const found = exactAlarmPermissionsIn(xml)
-  const declared = found.length > 0
-  if (declared === switchOn) return null
-  return declared
-    ? `${path} declares ${found.join(' and ')} and EXACT_ALARMS_DECLARED is false`
-    : `${path} does not declare an exact-alarm permission and EXACT_ALARMS_DECLARED is true`
+  if ((expect === 'absent' || expect === 'removes') && found.length > 0) {
+    problems.push(
+      `${path} declares ${found.join(' and ')} and no exact-alarm permission was expected`
+    )
+  }
+  if (expect === 'declared' && found.length === 0) {
+    problems.push(`${path} does not declare an exact-alarm permission and one was expected`)
+  }
+  if (expect === 'removes') {
+    const removed = removedPermissionsIn(xml)
+    if (!removed.includes(REMOVED_BY_OVERLAY)) {
+      problems.push(`${path} does not remove ${REMOVED_BY_OVERLAY}`)
+    }
+    const others = removed.filter((name) => name !== REMOVED_BY_OVERLAY)
+    if (others.length > 0) {
+      problems.push(`${path} also removes ${others.join(' and ')}, and should remove nothing else`)
+    }
+  }
+  const mark = channelIn(xml)
+  if (channel === 'play' && mark !== 'play') {
+    problems.push(
+      mark === null
+        ? `${path} carries no channel mark and play was expected`
+        : `${path} is marked as the ${mark} channel and play was expected`
+    )
+  }
+  if (channel === 'none' && mark !== null) {
+    problems.push(`${path} is marked as the ${mark} channel and no mark was expected`)
+  }
+  if (pkg !== undefined) {
+    const found = packageIn(xml)
+    if (found === null) problems.push(`${path} carries no package name and ${pkg} was expected`)
+    else if (found !== pkg) problems.push(`${path} is the package ${found} and ${pkg} was expected`)
+  }
+  return problems.length === 0 ? null : problems.join('; ')
 }
 
-const SWITCH_FILE = 'src/lib/reminders.ts'
+/** What a package name looks like: two or more Java identifiers joined by dots. */
+const PACKAGE_NAME = /^[A-Za-z][\w]*(\.[A-Za-z][\w]*)+$/
+
+/**
+ * What the command line asks for: `--expect` once, `--channel` and `--package` at most once,
+ * and the files.
+ * Throws with the reason when it cannot be read, rather than falling back to a default: a
+ * guessed expectation passes the one case the check exists for.
+ */
+export function readArguments(args) {
+  const options = {}
+  const paths = []
+  for (let at = 0; at < args.length; at += 1) {
+    const flag = args[at]
+    if (flag === '--expect' || flag === '--channel') {
+      const key = flag.slice(2)
+      const value = args[at + 1]
+      const allowed = key === 'expect' ? EXPECTATIONS : CHANNELS
+      if (!allowed.includes(value)) {
+        throw new Error(
+          `${flag} takes ${allowed.join(' or ')}, and was given ${value ?? 'nothing'}`
+        )
+      }
+      if (key in options) throw new Error(`${flag} was given twice`)
+      options[key] = value
+      at += 1
+    } else if (flag === '--package') {
+      const value = args[at + 1]
+      if (!PACKAGE_NAME.test(value ?? '')) {
+        throw new Error(`--package takes a package name, and was given ${value || 'nothing'}`)
+      }
+      if ('package' in options) throw new Error(`${flag} was given twice`)
+      options.package = value
+      at += 1
+    } else {
+      paths.push(flag)
+    }
+  }
+  if (!options.expect) {
+    throw new Error('Say what is expected with --expect declared, absent or removes')
+  }
+  return { ...options, paths }
+}
 
 /**
  * The check over a list of manifests, returning the exit code.
@@ -148,16 +273,17 @@ const SWITCH_FILE = 'src/lib/reminders.ts'
  * the runner's own `::error file=...::` form, so one unreadable path cannot hide what the
  * others say, and cannot end the run without saying why.
  */
-export function run({ paths, readFile, log, error }) {
-  if (paths.length === 0) {
-    error('::error::No manifest was given to check, so nothing was checked.')
+export function run({ args, readFile, log, error }) {
+  let options
+  try {
+    options = readArguments(args)
+  } catch (cause) {
+    error(`::error::${cause.message}`)
     return 1
   }
-  let switchOn
-  try {
-    switchOn = switchIn(readFile(SWITCH_FILE))
-  } catch (cause) {
-    error(`::error file=${SWITCH_FILE}::${cause.message}`)
+  const { expect, channel, package: pkg, paths } = options
+  if (paths.length === 0) {
+    error('::error::No manifest was given to check, so nothing was checked.')
     return 1
   }
   let failed = false
@@ -170,25 +296,26 @@ export function run({ paths, readFile, log, error }) {
       failed = true
       continue
     }
-    const problem = verdictOn({ xml, switchOn, path })
+    const problem = verdictOn({ xml, expect, channel, pkg, path })
     if (problem) {
       error(`::error file=${path}::${problem}`)
       failed = true
     } else {
-      log(`${path}: agrees (exact alarms ${switchOn ? 'declared' : 'not declared'})`)
+      const mark =
+        (channel === undefined ? '' : `, channel mark ${channel}`) +
+        (pkg === undefined ? '' : `, package ${pkg}`)
+      const what = expect === 'removes' ? `removes ${REMOVED_BY_OVERLAY}` : `exact alarms ${expect}`
+      log(`${path}: as expected (${what}${mark})`)
     }
   }
   return failed ? 1 : 0
 }
 
 if (process.argv[1] && process.argv[1].endsWith('check-exact-alarm.js')) {
-  const root = join(dirname(fileURLToPath(import.meta.url)), '..')
   process.exit(
     run({
-      paths: process.argv.slice(2),
-      // The switch is found from the repository root; the manifests as given.
-      readFile: (path) =>
-        readFileSync(path === SWITCH_FILE ? join(root, SWITCH_FILE) : path, 'utf8'),
+      args: process.argv.slice(2),
+      readFile: (path) => readFileSync(path, 'utf8'),
       log: (line) => console.log(line),
       error: (line) => console.error(line),
     })

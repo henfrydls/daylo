@@ -9,7 +9,7 @@ import {
   refreshReminder,
   remindersAvailable,
   askForExactAlarms,
-  exactAlarmsAllowed,
+  exactAlarms,
 } from './reminders'
 
 const isPermissionGranted = vi.hoisted(() => vi.fn())
@@ -455,27 +455,98 @@ describe('the time the offer proposes', () => {
 })
 
 describe('whether it will arrive on time', () => {
-  it('says yes where there is no phone to ask', async () => {
+  /** The phone, answering what the installed build asks for, what it allows, and its API level. */
+  const phoneSays = (answer: unknown) => {
+    pretendAndroid()
+    invoke.mockImplementation((command: string) =>
+      command === 'exact_alarms' ? Promise.resolve(answer) : Promise.resolve(true)
+    )
+  }
+
+  // The Play build on Android 12 and up: the installed package does not ask for the
+  // permission, so Android picks the moment and there is nothing to offer.
+  it('is around the time when the build does not ask, on Android 12 and up', async () => {
+    phoneSays({ requested: false, allowed: false, sdk: 34 })
+    await expect(exactAlarms()).resolves.toBe('inexact')
+  })
+
+  // Read from the package, not from the phone's answer: a build that never asked has no
+  // screen to send anybody to.
+  it('is around the time even if a build that does not ask is somehow allowed', async () => {
+    phoneSays({ requested: false, allowed: true, sdk: 31 })
+    await expect(exactAlarms()).resolves.toBe('inexact')
+  })
+
+  // The APK, on a phone that allows it.
+  it('is on time when the build asks and the phone allows it', async () => {
+    phoneSays({ requested: true, allowed: true, sdk: 34 })
+    await expect(exactAlarms()).resolves.toBe('exact')
+  })
+
+  // The APK on Android 14 and up, where the permission comes denied.
+  it('is late when the build asks and the phone says no', async () => {
+    phoneSays({ requested: true, allowed: false, sdk: 34 })
+    await expect(exactAlarms()).resolves.toBe('denied')
+  })
+
+  // Below Android 12 there is no permission to have: the plugin arms an exact alarm for
+  // every build (Arming.kt, armsExact: sdk < S || (declares && can)), the Play one included.
+  // Saying "Android picks the exact moment" there would be false.
+  it('is on time below Android 12 even for the build that does not ask', async () => {
+    phoneSays({ requested: false, allowed: true, sdk: 30 })
+    await expect(exactAlarms()).resolves.toBe('exact')
+  })
+
+  // And whatever the phone says about a permission that does not exist there yet.
+  it('is on time below Android 12 whatever the phone says about allowing it', async () => {
+    phoneSays({ requested: true, allowed: false, sdk: 26 })
+    await expect(exactAlarms()).resolves.toBe('exact')
+    phoneSays({ requested: false, allowed: false, sdk: 30 })
+    await expect(exactAlarms()).resolves.toBe('exact')
+  })
+
+  it('takes Android 12 as the first version with the permission', async () => {
+    phoneSays({ requested: false, allowed: true, sdk: 31 })
+    await expect(exactAlarms()).resolves.toBe('inexact')
+    phoneSays({ requested: true, allowed: false, sdk: 31 })
+    await expect(exactAlarms()).resolves.toBe('denied')
+  })
+
+  it('is around the time where there is no phone to ask', async () => {
     vi.stubGlobal('isTauri', false)
-    await expect(exactAlarmsAllowed()).resolves.toBe(true)
+    await expect(exactAlarms()).resolves.toBe('inexact')
     expect(invoke).not.toHaveBeenCalled()
   })
 
-  it('says what the phone says', async () => {
-    pretendAndroid()
-    invoke.mockImplementation((command: string) =>
-      command === 'exact_alarms_allowed' ? Promise.resolve(false) : Promise.resolve(true)
-    )
-    await expect(exactAlarmsAllowed()).resolves.toBe(false)
-  })
-
-  // The only thing this decides is whether the screen offers to fix something. An app
-  // that cannot ask has nothing to offer, and a line about a problem that may not exist
-  // is worse than silence. Same direction as the Rust side, deliberately.
-  it('says yes when the question cannot be put', async () => {
+  // Not knowing is said in the words that promise nothing and offer nothing, and said in
+  // the console, because an app that cannot read its own package is something to find.
+  it('is around the time, and says why in the console, when the question fails', async () => {
     vi.stubGlobal('isTauri', true)
     invoke.mockRejectedValue('no such command')
-    await expect(exactAlarmsAllowed()).resolves.toBe(true)
+    const logged = vi.spyOn(console, 'error').mockImplementation(() => {})
+
+    await expect(exactAlarms()).resolves.toBe('inexact')
+    expect(logged).toHaveBeenCalledWith(expect.stringContaining('[Daylo]'), 'no such command')
+  })
+
+  // An answer in some other shape is not an answer. An older native side, or a fake that
+  // says false to everything it does not know, must not be read as a yes.
+  it('is around the time, and says so in the console, when the answer makes no sense', async () => {
+    const logged = vi.spyOn(console, 'error').mockImplementation(() => {})
+    const answers = [
+      false,
+      null,
+      'exact',
+      { requested: 'yes', allowed: true, sdk: 34 },
+      {},
+      { requested: false, allowed: true },
+      { requested: false, allowed: true, sdk: '30' },
+    ]
+    for (const answer of answers) {
+      phoneSays(answer)
+      await expect(exactAlarms()).resolves.toBe('inexact')
+    }
+    expect(logged).toHaveBeenCalledTimes(answers.length)
   })
 })
 

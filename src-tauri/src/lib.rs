@@ -155,19 +155,44 @@ async fn latest_version(app: tauri::AppHandle) -> Result<String, String> {
     updates::version_in(&manifest)
 }
 
-/// Whether the reminder will arrive at the time it was set for.
+/// What the reminder screen needs to say how close to its time the reminder arrives: whether
+/// the installed build asks Android for SCHEDULE_EXACT_ALARM, whether the phone allows it,
+/// and the phone's API level.
 ///
-/// False means it still arrives, within an hour or so of the time and later than that out
-/// of a deep doze, which is what an inexact alarm is. The screen uses this to decide
-/// whether to say so and offer the way to change it, not whether to schedule anything.
+/// The facts and not the verdict, so the three answers they make (`inexact`, `exact`,
+/// `denied`, see src/lib/reminders.ts) are decided on the side that tests run on. The API
+/// level is there because below Android 12 every build arms an exact alarm, the Play one
+/// included, which is the rule the notification plugin follows (Arming.kt, `armsExact`).
+#[cfg(target_os = "android")]
+#[derive(serde::Serialize)]
+struct ExactAlarms {
+    requested: bool,
+    allowed: bool,
+    sdk: i32,
+}
+
+/// Whether the reminder can arrive at the time it was set for, as the facts above.
 ///
-/// Registered either way, and only called while EXACT_ALARMS_DECLARED in
-/// src/lib/reminders.ts is on, as it is in 1.5.3: without the permission in the manifest the
-/// answer is always no from Android 12 up, and there is nothing to offer.
+/// The APK asks for the permission and the Google Play build does not, from one tree, so
+/// the first fact is read from the installed package rather than written into the app. When
+/// the package or the API level cannot be read this is an error, not a guess: the screen then
+/// says the words that promise nothing and offer nothing, and the console says why.
+///
+/// `allowed` keeps the direction `android::exact_alarms_allowed` has always had: yes below
+/// Android 12, where there is nothing to allow, and yes when the phone cannot be asked. It
+/// means nothing for a build that does not ask.
 #[cfg(target_os = "android")]
 #[tauri::command]
-fn exact_alarms_allowed() -> bool {
-    android::exact_alarms_allowed()
+fn exact_alarms() -> Result<ExactAlarms, String> {
+    let requested = android::requests_exact_alarms()
+        .ok_or_else(|| "the installed package could not be read".to_string())?;
+    let sdk =
+        android::sdk_level().ok_or_else(|| "the Android version could not be read".to_string())?;
+    Ok(ExactAlarms {
+        requested,
+        allowed: android::exact_alarms_allowed(),
+        sdk,
+    })
 }
 
 /// Open the phone's "Alarms & reminders" screen for this app.
@@ -367,7 +392,7 @@ pub fn run() {
             reminders_available,
             latest_version,
             install_source,
-            exact_alarms_allowed,
+            exact_alarms,
             ask_for_exact_alarms,
             checkin::checkin_fields,
             checkin::send_checkin,

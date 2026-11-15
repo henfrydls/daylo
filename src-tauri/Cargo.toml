@@ -1,6 +1,6 @@
 [package]
 name = "activity-tracker"
-version = "1.5.3"
+version = "1.5.5"
 description = "Activity Tracker with GitHub-style contribution calendar"
 authors = ["you"]
 edition = "2021"
@@ -167,7 +167,8 @@ strip = false
 # without this buys one punctual reminder rather than punctual reminders.
 #
 # It matters without the permission too: for anybody who has not granted it, and for
-# everybody once 1.5.4 stops asking for it. Without it every alarm is inexact, and the
+# everybody on the Google Play build, which from 1.5.4 does not ask for it (the APK still
+# does). Without it every alarm is inexact, and the
 # fixed receiver re-arms with setAndAllowWhileIdle on RTC_WAKEUP, where the unfixed one
 # used plain RTC: an inexact reminder that still wakes a dozing phone, instead of one that
 # waits for it to be picked up. That much is read in the plugin's source; it has not been
@@ -194,12 +195,13 @@ strip = false
 # that Android removes a moment later. The plugin's unit tests run in Build Check
 # (Android), in ci.yml.
 #
-# The update case is the reason this ships before 1.5.4 drops SCHEDULE_EXACT_ALARM.
-# Android removes an app's exact alarms when an update stops declaring that permission,
-# and the receiver can only restore what the version before it stored. So whoever goes
-# from 1.5.2 to 1.5.4 directly, or never opens 1.5.3, loses the reminder until they open
-# Daylo, as before. Opening 1.5.3 once is enough: that re-arms the reminder through
-# `show`, and from then on it is stored.
+# The update case is the reason this shipped before any build dropped
+# SCHEDULE_EXACT_ALARM. Android removes an app's exact alarms when an update stops
+# declaring that permission, and the receiver can only restore what the version before it
+# stored. The APK never drops it; from 1.5.4 the Google Play build does, so a phone that
+# moves from an APK it never opened at 1.5.3 to the Play build loses the reminder until
+# Daylo is opened, as before. Opening 1.5.3 or later once is enough: that re-arms the
+# reminder through `show`, and from then on it is stored.
 #
 # Pinned to a commit and not to a branch: a moving branch is a build that changes under
 # us, and this one has to be the same bytes in CI, on a tag, and on the machine that

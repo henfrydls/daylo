@@ -57,7 +57,7 @@ vi.mock('./lib/reminders', async (importOriginal) => ({
   reconcileReminder,
   enableReminder: vi.fn().mockResolvedValue({ outcome: 'on' }),
   disableReminder: vi.fn().mockResolvedValue(undefined),
-  exactAlarmsAllowed: vi.fn().mockResolvedValue(true),
+  exactAlarms: vi.fn().mockResolvedValue('exact'),
 }))
 
 vi.mock('./lib/updater', async (importOriginal) => ({
