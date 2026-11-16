@@ -1,6 +1,18 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { render, screen, act } from '@testing-library/react'
-import { StreakChip } from './StreakChip'
+import { render, screen, act, fireEvent } from '@testing-library/react'
+import { StreakChip as Chip } from './StreakChip'
+
+const nothing = () => {}
+
+/** The chip as the tests below need it, pressing it doing nothing unless asked to. */
+function StreakChip(props: {
+  streak: number
+  todayDone: boolean
+  onOpen?: () => void
+  expanded?: boolean
+}) {
+  return <Chip onOpen={nothing} expanded={false} {...props} />
+}
 
 /** jsdom has no matchMedia, and the chip asks it whether anybody wants movement. */
 function wants(movement: boolean) {
@@ -32,15 +44,17 @@ describe('the streak chip', () => {
 
     expect(screen.getByTestId('streak-chip')).toHaveTextContent('4 days')
     expect(screen.getByTestId('streak-chip')).toHaveAccessibleName(
-      '4 days in a row, today not logged yet'
+      '4 days in a row, today not logged yet. Show your streak'
     )
   })
 
   it('says one day in the singular, because a chip that says 1 days is a chip nobody wrote', () => {
     render(<StreakChip streak={1} todayDone />)
 
-    expect(screen.getByTestId('streak-chip')).toHaveTextContent('1 day')
-    expect(screen.getByTestId('streak-chip')).toHaveAccessibleName('1 day in a row, today included')
+    expect(screen.getByTestId('streak-chip')).toHaveTextContent(/^1 day$/)
+    expect(screen.getByTestId('streak-chip')).toHaveAccessibleName(
+      '1 day in a row, today included. Show your streak'
+    )
   })
 
   // Nothing to say and nothing said. A chip reading "0 days" tells somebody who has just
@@ -81,18 +95,67 @@ describe('the streak chip', () => {
     rerender(<StreakChip streak={6} todayDone />)
 
     expect(screen.getByTestId('streak-chip')).toHaveAccessibleName(
-      '6 days in a row, today included'
+      '6 days in a row, today included. Show your streak'
     )
   })
 
-  it('reads as state and not as a button: no border, a soft green and a pill', () => {
+  // Henfry's pick, D: the soft green it always had, no border, a pill. The drawing is 36px
+  // and the button around it the 48px he asked for, so it is easy to press and the header
+  // does not move.
+  it('is the soft green pill with no border, pressable over 48px', () => {
     render(<StreakChip streak={9} todayDone />)
-    const chip = screen.getByTestId('streak-chip')
+    const button = screen.getByRole('button')
+    const pill = screen.getByTestId('streak-pill')
 
-    expect(chip.className).toContain('bg-emerald-50')
-    expect(chip.className).toContain('rounded-full')
-    expect(chip.className).not.toContain('border')
-    expect(chip.className).toContain('min-h-12')
+    expect(button.className).toContain('min-h-12')
+    expect(pill.className).toContain('bg-emerald-50')
+    expect(pill.className).toContain('rounded-full')
+    expect(pill.className).toContain('h-9')
+    expect(pill.className).not.toMatch(/(^|\s)border(\s|-)/)
+  })
+
+  it('is a button that opens the streak, and says so', () => {
+    const onOpen = vi.fn()
+    render(<StreakChip streak={4} todayDone={false} onOpen={onOpen} />)
+    const button = screen.getByRole('button', { name: /4 days in a row/ })
+
+    expect(button).toHaveAttribute('aria-haspopup', 'dialog')
+    expect(button).toHaveAttribute('aria-expanded', 'false')
+    fireEvent.click(button)
+    expect(onOpen).toHaveBeenCalledTimes(1)
+  })
+
+  it('says when what it opens is open', () => {
+    render(<StreakChip streak={4} todayDone={false} expanded />)
+
+    expect(screen.getByRole('button')).toHaveAttribute('aria-expanded', 'true')
+  })
+
+  // The ring is for the keyboard only, so a tap does not leave one behind, and it is
+  // emerald-700: the emerald-500 the rest of the app uses is 2.47:1 on white, and a focus
+  // indicator needs 3.
+  it('shows a focus ring for the keyboard only, in emerald-700', () => {
+    render(<StreakChip streak={4} todayDone={false} />)
+    const pill = screen.getByTestId('streak-pill')
+
+    expect(pill.className).toContain('group-focus-visible:ring-emerald-700')
+    expect(pill.className).not.toMatch(/(^|\s)ring-/)
+    expect(screen.getByRole('button').className).toContain('focus:outline-none')
+  })
+
+  // Hollow while today is missing and filled once it is in: a difference of shape, not
+  // only of colour.
+  it('draws the flame hollow while today is missing and filled once it is in', () => {
+    const { rerender } = render(<StreakChip streak={4} todayDone={false} />)
+    expect(screen.getByTestId('streak-flame')).toHaveAttribute('data-lit', 'false')
+    expect(screen.getByTestId('streak-flame').querySelector('path')).toHaveAttribute('fill', 'none')
+
+    rerender(<StreakChip streak={4} todayDone />)
+    expect(screen.getByTestId('streak-flame')).toHaveAttribute('data-lit', 'true')
+    expect(screen.getByTestId('streak-flame').querySelector('path')).toHaveAttribute(
+      'fill',
+      'currentColor'
+    )
   })
 
   // A digit at a time is a nice touch over a step or two and a hostage situation over a

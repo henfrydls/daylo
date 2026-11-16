@@ -1,5 +1,12 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { act, fireEvent, render, screen, waitForElementToBeRemoved } from '@testing-library/react'
+import {
+  act,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+  waitForElementToBeRemoved,
+} from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import App from './App'
 import { useCalendarStore } from './store'
@@ -919,12 +926,10 @@ describe('the streak in the header', () => {
     const chips = screen.getAllByTestId('streak-chip')
 
     expect(chips).toHaveLength(2)
-    expect(
-      chips.filter((chip) => chip.parentElement?.className.includes('sm:hidden'))
-    ).toHaveLength(1)
-    expect(chips.filter((chip) => chip.parentElement?.className.includes('sm:flex'))).toHaveLength(
-      1
-    )
+    // The chip sits in its own box (the sheet hangs from it), inside the header group.
+    const group = (chip: HTMLElement) => chip.parentElement?.parentElement?.className ?? ''
+    expect(chips.filter((chip) => group(chip).includes('sm:hidden'))).toHaveLength(1)
+    expect(chips.filter((chip) => group(chip).includes('sm:flex'))).toHaveLength(1)
   })
 
   it('says the run, and that today is still open', async () => {
@@ -933,7 +938,7 @@ describe('the streak in the header', () => {
     await act(async () => {})
 
     expect(screen.getAllByTestId('streak-chip')[0]).toHaveAccessibleName(
-      '4 days in a row, today not logged yet'
+      '4 days in a row, today not logged yet. Show your streak'
     )
   })
 
@@ -948,7 +953,7 @@ describe('the streak in the header', () => {
     await act(async () => {})
 
     expect(screen.getAllByTestId('streak-chip')[0]).toHaveAccessibleName(
-      '4 days in a row, today not logged yet'
+      '4 days in a row, today not logged yet. Show your streak'
     )
   })
 
@@ -983,7 +988,7 @@ describe('the streak in the header', () => {
       await act(async () => {})
 
       expect(screen.getAllByTestId('streak-chip')[0]).toHaveAccessibleName(
-        '4 days in a row, today included'
+        '4 days in a row, today included. Show your streak'
       )
     } finally {
       vi.useRealTimers()
@@ -995,5 +1000,86 @@ describe('the streak in the header', () => {
     await act(async () => {})
 
     expect(screen.queryAllByTestId('streak-chip')).toHaveLength(0)
+  })
+
+  // Each group opens its own surface: the phone's a sheet from the bottom edge, the wide
+  // screen's a panel hanging from the chip.
+  it('opens the sheet from the phone chip and the panel from the desktop one', async () => {
+    fourDaysRunning()
+    render(<App />)
+    await act(async () => {})
+    const [phone, desktop] = screen.getAllByTestId('streak-chip')
+
+    await userEvent.click(phone)
+    expect(screen.getByTestId('streak-sheet')).toHaveTextContent('Your streak')
+    expect(screen.getByTestId('streak-tile-best')).toHaveTextContent('4 days')
+    expect(screen.getByTestId('streak-tile-best')).toHaveTextContent('Your best ever')
+    expect(screen.queryByTestId('streak-panel')).not.toBeInTheDocument()
+    await userEvent.keyboard('{Escape}')
+    await waitFor(() => expect(screen.queryByTestId('streak-sheet')).not.toBeInTheDocument())
+
+    await userEvent.click(desktop)
+    expect(screen.getByTestId('streak-panel')).toHaveTextContent('Today is not logged yet.')
+    expect(screen.queryByTestId('streak-sheet')).not.toBeInTheDocument()
+  })
+
+  // The reminder's offer reads useOpenDialogs, and the sheet counts itself there.
+  it('keeps the reminder offer back while the sheet is open', async () => {
+    fourDaysRunning()
+    remindersAvailable.mockResolvedValue(true)
+    useCalendarStore.setState({
+      reminderOffered: false,
+      reminderTickDays: 2,
+      reminderLastTickDay: '2026-10-09',
+      reminderOfferDismissals: 0,
+      reminderOfferDismissedOn: null,
+      _tickedThisSession: false,
+      _reminderOfferClosed: false,
+      _offerThisSession: null,
+      checkinNoticeSeen: true,
+      selectedDate: null,
+    })
+    render(<App />)
+    await act(async () => {})
+    await userEvent.click(screen.getAllByTestId('streak-chip')[0])
+
+    await act(async () => {
+      useCalendarStore.setState({ _tickedThisSession: true })
+    })
+    await act(() => new Promise((resolve) => setTimeout(resolve, 500)))
+    expect(screen.queryByText('Remind me each evening?')).not.toBeInTheDocument()
+
+    await userEvent.keyboard('{Escape}')
+    expect(await screen.findByText('Remind me each evening?')).toBeInTheDocument()
+  })
+
+  // App holds the feedback question back while the sheet is up, as it does for the day
+  // sheet, and it opens once the sheet is closed.
+  it('keeps the feedback question back while the panel is open', async () => {
+    fourDaysRunning()
+    checkinFields.mockResolvedValue({ version: '1.3.0', os: 'windows', source: 'msi' })
+    // Nothing else that would put the question: only the ask below.
+    useCalendarStore.setState({
+      checkinNoticeSeen: true,
+      selectedDate: null,
+      feedbackInviteSeen: true,
+      _feedbackAsked: false,
+    })
+    render(<App />)
+    await act(async () => {})
+    expect(screen.queryByTestId('feedback-rating')).not.toBeInTheDocument()
+    await userEvent.click(screen.getAllByTestId('streak-chip')[1])
+    expect(screen.getByTestId('streak-panel')).toBeInTheDocument()
+
+    await act(async () => {
+      useCalendarStore.setState({ _feedbackAsked: true })
+    })
+    // The question is a lazy chunk, so a single tick proves nothing: give it the time it
+    // takes to arrive once it is allowed.
+    await act(() => new Promise((resolve) => setTimeout(resolve, 500)))
+    expect(screen.queryByTestId('feedback-rating')).not.toBeInTheDocument()
+
+    await userEvent.keyboard('{Escape}')
+    expect(await screen.findByTestId('feedback-rating')).toBeInTheDocument()
   })
 })

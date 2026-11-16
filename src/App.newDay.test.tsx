@@ -177,13 +177,13 @@ describe('the morning after, with the app left open', () => {
     render(<App />)
     await act(async () => {})
     for (const chip of screen.getAllByTestId('streak-chip')) {
-      expect(chip).toHaveAccessibleName('1 day in a row, today included')
+      expect(chip).toHaveAccessibleName('1 day in a row, today included. Show your streak')
     }
 
     await theNextMorningComes(2026, 10, 14)
 
     for (const chip of screen.getAllByTestId('streak-chip')) {
-      expect(chip).toHaveAccessibleName('1 day in a row, today not logged yet')
+      expect(chip).toHaveAccessibleName('1 day in a row, today not logged yet. Show your streak')
     }
   })
 

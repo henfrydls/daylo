@@ -43,7 +43,7 @@ import {
 import { TravelContext, useTravel } from './lib/travel'
 import { UpdateDot } from './components/updates/UpdateDot'
 import { UpdateNotice } from './components/updates/UpdateNotice'
-import { StreakChip } from './components/streak/StreakChip'
+import { HeaderStreak } from './components/streak/HeaderStreak'
 import { sendComment, sendRating, sendShown } from './lib/feedback'
 import { FEEDBACK_MAILTO, openMailto, shouldInviteFeedback } from './lib/feedbackInvite'
 import { openLink } from './lib/openLink'
@@ -65,7 +65,7 @@ import { openLink } from './lib/openLink'
 const STORE_REVIEW = 'ms-windows-store://review/?ProductId=9NJM37WMMC5Z'
 import { parseDateString } from './lib/dates'
 import { completedDates } from './lib/activityYear'
-import { currentStreak } from './lib/streaks'
+import { currentStreak, longestStreak } from './lib/streaks'
 import { useToday } from './lib/today'
 import { sendCheckinIfDue, startCheckinOnNewInstall } from './lib/checkin'
 
@@ -192,6 +192,10 @@ function App() {
   // dialog does.
   const [askedFromMenu, setAskedFromMenu] = useState(false)
   const [questionClosed, setQuestionClosed] = useState(false)
+  // Whether the streak sheet (or its panel, on a wide screen) is up. The feedback question
+  // waits for it the way it waits for the day sheet. The reminder's offer does not need
+  // this: the sheet counts itself in useOpenDialogs, which is what the offer reads.
+  const [streakSheetOpen, setStreakSheetOpen] = useState(false)
   const appVersion = useAppVersion()
   // Android only: nowhere else can a notification arrive with the app closed, so nowhere
   // else is there a setting to show.
@@ -275,11 +279,16 @@ function App() {
   // against the day on screen and not the clock: the chip sits in App, outside the key
   // that rebuilds the views, so with `new Date()` and only `logs` to watch it would go on
   // saying yesterday was ticked the morning after.
-  const { streakToday, todayIsLogged } = useMemo(() => {
+  // The best and the days themselves are for the sheet the chip opens, read the same way.
+  const streakFacts = useMemo(() => {
     const done = completedDates(logs)
+    const now = parseDateString(shownDay)
     return {
-      streakToday: currentStreak(done, parseDateString(shownDay)),
-      todayIsLogged: done.has(shownDay),
+      streak: currentStreak(done, now),
+      best: longestStreak(done, now),
+      todayDone: done.has(shownDay),
+      done,
+      now,
     }
   }, [logs, shownDay])
 
@@ -356,10 +365,13 @@ function App() {
   // reached with the sheet up, because the sheet covers the header, so nothing is lost.
   // If that ever changes, "Send feedback" would do nothing and say nothing, and this is
   // the line to come back to.
+  // The streak sheet is held to the same rule and for the same reason: the question would
+  // open over it. It defers too, until the sheet is closed.
   const questionIsOpen =
     canCheckIn &&
     !questionClosed &&
     selectedDate === null &&
+    !streakSheetOpen &&
     (askedFromMenu || shouldInvite || feedbackAsked)
 
   // Whether it is in the page, which is not the same as whether it is being asked: it goes
@@ -585,7 +597,11 @@ function App() {
                         same order at every width. The gap is what keeps a pill and a gear
                         from reading as one control. */}
                     <div className="flex items-center gap-2 sm:hidden">
-                      <StreakChip streak={streakToday} todayDone={todayIsLogged} />
+                      <HeaderStreak
+                        {...streakFacts}
+                        surface="sheet"
+                        onOpenChange={setStreakSheetOpen}
+                      />
                       {/* Menu button visible on mobile next to title */}
                       {headerControl('p-2.5')}
                     </div>
@@ -597,7 +613,11 @@ function App() {
                         gone in this version. A chip only on the phone would have left the
                         streak nowhere for almost everybody. */}
                     <div className="hidden items-center gap-2 sm:flex">
-                      <StreakChip streak={streakToday} todayDone={todayIsLogged} />
+                      <HeaderStreak
+                        {...streakFacts}
+                        surface="panel"
+                        onOpenChange={setStreakSheetOpen}
+                      />
                       {/* Menu button hidden on mobile, visible on larger screens */}
                       {headerControl('p-2')}
                     </div>
