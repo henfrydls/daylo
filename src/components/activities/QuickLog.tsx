@@ -1,6 +1,8 @@
 import { useState, useRef, useEffect, useCallback, useMemo, memo } from 'react'
 import { useCalendarStore } from '../../store'
 import { formatDisplayDate, parseDateString } from '../../lib/dates'
+import { useToday } from '../../lib/today'
+import { format } from 'date-fns'
 import { ACTIVITY_COLORS, firstFreeColor } from '../../lib/colors'
 import { Button, Checkbox, ColorPicker, PlusIcon, XIcon } from '../ui'
 import { useFocusTrap, useAnimatedPresence } from '../../hooks'
@@ -16,8 +18,24 @@ export const QuickLog = memo(function QuickLog() {
   const logs = useCalendarStore(useShallow((state) => state.logs))
   const toggleLog = useCalendarStore((state) => state.toggleLog)
   const addActivity = useCalendarStore((state) => state.addActivity)
+  // The app's day, which is what "Today" in the title and in the first day's line mean.
+  const todayStr = useToday()
 
-  const [isCreating, setIsCreating] = useState(false)
+  /**
+   * Today's sheet with no activities opens on the form. The door on the first day leads
+   * here, and the only thing to do on this sheet is to name the first activity; the
+   * empty state's button in between was one more press for nothing. Only as it opens:
+   * Cancel goes back to the empty state and stays there. Any other day opens as it did.
+   */
+  const opensOnTheForm = (date: string | null) => activities.length === 0 && date === todayStr
+
+  const [isCreating, setIsCreating] = useState(() => opensOnTheForm(selectedDate))
+  /**
+   * Whether the first activity was born in this opening of today's sheet, which is all the
+   * line under the title remembers, and only for as long as the sheet is open. Nothing is
+   * saved. Never on another day's sheet: "Today is in" would not be true there.
+   */
+  const [firstBornHere, setFirstBornHere] = useState(false)
   const [newName, setNewName] = useState('')
   // Only what the person picked. Until they pick, the form offers the first color free
   // at that moment, worked out as it is drawn, so it cannot go stale while it waits.
@@ -39,14 +57,20 @@ export const QuickLog = memo(function QuickLog() {
 
   useFocusTrap(modalRef, !!selectedDate, { onEscape: handleClose })
 
-  useEffect(() => {
-    if (isCreating && nameInputRef.current) {
-      nameInputRef.current.focus()
-    }
-  }, [isCreating])
-
   const isOpen = !!selectedDate
   const { shouldRender, isVisible } = useAnimatedPresence(isOpen, 250)
+
+  // When the sheet opens straight on the form, the field is not on the page yet as
+  // `isCreating` turns true: the sheet is put there a render later. So this waits for the
+  // sheet as well. And once more after the focus trap's own first focus, which goes to the
+  // first thing it finds (the cross) a moment after a sheet that was still on the page
+  // opens again.
+  useEffect(() => {
+    if (!isCreating || !shouldRender) return
+    nameInputRef.current?.focus()
+    const again = setTimeout(() => nameInputRef.current?.focus(), 0)
+    return () => clearTimeout(again)
+  }, [isCreating, shouldRender])
 
   // A half-made activity goes with the sheet. Closing it with the form open used to leave
   // the form open, holding what was typed and picked, and the next day opened straight
@@ -61,7 +85,8 @@ export const QuickLog = memo(function QuickLog() {
     setWasOpen(isOpen)
     if (isOpen) {
       setOpening((n) => n + 1)
-      setIsCreating(false)
+      setIsCreating(opensOnTheForm(selectedDate))
+      setFirstBornHere(false)
       setNewName('')
       setPickedColor(null)
     }
@@ -161,6 +186,8 @@ export const QuickLog = memo(function QuickLog() {
   const handleCreateActivity = useCallback((): void => {
     if (!newName.trim() || !selectedDate) return
 
+    const isFirst = useCalendarStore.getState().activities.length === 0
+
     // The color only if somebody picked one; otherwise the store gives it the free one,
     // which is what the form has been showing.
     addActivity(newName.trim(), pickedColor ?? undefined)
@@ -169,13 +196,16 @@ export const QuickLog = memo(function QuickLog() {
     const updatedActivities = useCalendarStore.getState().activities
     const newActivity = updatedActivities[updatedActivities.length - 1]
 
+    // Logged on the sheet's own day, whichever day that is: the person opened that day to
+    // say they did it.
     if (newActivity) {
       toggleLog(newActivity.id, selectedDate)
     }
+    if (isFirst && selectedDate === todayStr) setFirstBornHere(true)
 
     setIsCreating(false)
     setNewName('')
-  }, [newName, pickedColor, selectedDate, addActivity, toggleLog])
+  }, [newName, pickedColor, selectedDate, todayStr, addActivity, toggleLog])
 
   const handleKeyDown = useCallback(
     (e: React.KeyboardEvent<HTMLInputElement>): void => {
@@ -209,12 +239,14 @@ export const QuickLog = memo(function QuickLog() {
           value={newName}
           onChange={(e) => setNewName(e.target.value)}
           onKeyDown={handleKeyDown}
-          placeholder="Activity name"
+          placeholder="e.g., Exercise, Read, Meditate"
           aria-label="New activity name"
           // See ActivityForm: the limit belongs where the name is made, not where a backup
           // of it comes home.
           maxLength={LONGEST_NAME}
-          className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent min-h-[44px] sm:min-h-0"
+          // The browser's placeholder grey is half the text colour, 3.41:1 on white, and the
+          // examples are words to read now. gray-500 is 4.83:1.
+          className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm placeholder:text-gray-500 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent min-h-[44px] sm:min-h-0"
           data-testid="quicklog-new-activity-input"
         />
       </div>
@@ -338,7 +370,7 @@ export const QuickLog = memo(function QuickLog() {
         </div>
         <div className="flex items-center justify-between mb-4">
           <h2 id="quicklog-title" className="text-base sm:text-lg font-semibold text-gray-900">
-            {formatDisplayDate(date)}
+            {day === todayStr ? `Today · ${format(date, 'MMM d')}` : formatDisplayDate(date)}
           </h2>
           <button
             onClick={() => setSelectedDate(null)}
@@ -351,6 +383,20 @@ export const QuickLog = memo(function QuickLog() {
 
         {/* Only on yesterday's sheet, and only on a morning when yesterday is still open. */}
         <YesterdayLine key={`${opening}-${day}`} day={day} />
+
+        {/* The first day's reward, said once: in the opening of today's sheet where the
+            first activity was born. Closing the sheet takes it for good. The same box as
+            yesterday's line, so the list does not move: -mt-2 brings it to the title, mb-4
+            parts it from the row. gray-600 on white is 7.56:1. */}
+        {firstBornHere && !isCreating ? (
+          <p
+            className="-mt-2 mb-4 text-sm text-gray-600 sm:text-balance"
+            aria-live="polite"
+            data-testid="first-day-line"
+          >
+            Today is in. Log it again tomorrow.
+          </p>
+        ) : null}
 
         <div
           key={isCreating ? 'creating' : 'list'}

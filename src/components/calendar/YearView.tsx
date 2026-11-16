@@ -14,9 +14,15 @@ import { useMediaQuery } from '../../hooks/useMediaQuery'
 import { useTodayDate } from '../../lib/today'
 import { useShallow } from 'zustand/react/shallow'
 import { plural } from '../../lib/plural'
+import { FirstDayDoor } from './FirstDayDoor'
 
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
-export const YearView = memo(function YearView() {
+interface YearViewProps {
+  /** Opens Import from the line under the first day's door. See MonthView. */
+  onImport?: (opener: HTMLElement) => void
+}
+
+export const YearView = memo(function YearView({ onImport }: YearViewProps) {
   // Use individual selectors to prevent over-subscription
   const selectedYear = useCalendarStore((state) => state.selectedYear)
   const activities = useCalendarStore(useShallow((state) => state.activities))
@@ -138,6 +144,19 @@ export const YearView = memo(function YearView() {
     else navigateToMonth(pick.year, pick.month)
   }, [today, travel, navigateToMonth])
 
+  // With no activities the year has the same door as the month: to today, in Month, with
+  // its sheet open on the form.
+  const door =
+    activities.length === 0 ? (
+      <FirstDayDoor
+        onOpenToday={() => {
+          handleToday()
+          setSelectedDate(formatDate(today))
+        }}
+        onImport={onImport}
+      />
+    ) : null
+
   /**
    * Both layouts show the same control, so it is written once. Rendering it twice with
    * two copies of the markup is how a phone and a desktop end up disagreeing about what
@@ -231,6 +250,8 @@ export const YearView = memo(function YearView() {
             Today
           </button>
         </div>
+
+        {door}
 
         {/* Year Progress Bar */}
         <div className="mb-5">
@@ -368,6 +389,8 @@ export const YearView = memo(function YearView() {
           {yearMode === 'all' ? <HeatmapLegend /> : null}
         </div>
       </div>
+
+      {door}
 
       {/* One continuous heatmap: a column per week, Sunday at the top */}
       <div className="w-full">

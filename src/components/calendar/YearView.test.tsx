@@ -110,6 +110,77 @@ describe('YearView', () => {
     })
   })
 
+  describe('the first day', () => {
+    const phone = () =>
+      Object.defineProperty(window, 'matchMedia', {
+        writable: true,
+        configurable: true,
+        value: vi.fn().mockImplementation((query: string) => ({
+          matches: false,
+          media: query,
+          onchange: null,
+          addListener: vi.fn(),
+          removeListener: vi.fn(),
+          addEventListener: vi.fn(),
+          removeEventListener: vi.fn(),
+          dispatchEvent: vi.fn(),
+        })),
+      })
+
+    // The same door as Month: somebody who opened Year first is on their first day too.
+    it.each([
+      ['desktop', () => {}],
+      ['phone', phone],
+    ])('shows the door and the backup with no activities, on %s', (_, size) => {
+      size()
+      render(<YearView onImport={vi.fn()} />)
+
+      expect(screen.getByTestId('first-day-door')).toHaveTextContent('Add your first activity')
+      expect(screen.getByTestId('month-empty-import').textContent).toBe(
+        'Used Daylo before? Import your backup'
+      )
+    })
+
+    it('takes the door to today, in Month, and opens it', () => {
+      useCalendarStore.setState({ selectedYear: 2023, currentView: 'year' })
+      render(<YearView onImport={vi.fn()} />)
+
+      fireEvent.click(screen.getByTestId('first-day-door'))
+
+      const state = useCalendarStore.getState()
+      expect(state.selectedDate).toBe('2024-06-15')
+      expect(state.currentView).toBe('month')
+      expect(state.selectedYear).toBe(2024)
+      expect(state.selectedMonth).toBe(5)
+    })
+
+    it('opens Import from the line', () => {
+      const onImport = vi.fn()
+      render(<YearView onImport={onImport} />)
+
+      fireEvent.click(screen.getByRole('button', { name: 'Import your backup' }))
+      expect(onImport).toHaveBeenCalledTimes(1)
+    })
+
+    it('has no door once there is an activity', () => {
+      useCalendarStore.setState({
+        activities: [
+          {
+            id: '1',
+            name: 'Exercise',
+            color: '#22c55e',
+            createdAt: '2024-01-01',
+            updatedAt: '2024-01-01',
+          },
+        ],
+      })
+      render(<YearView onImport={vi.fn()} />)
+
+      expect(screen.queryByTestId('first-day-door')).not.toBeInTheDocument()
+      expect(screen.queryByTestId('month-empty-import')).not.toBeInTheDocument()
+    })
+  })
+
   describe('Navigation', () => {
     it('should navigate to previous year when clicking previous button', () => {
       useCalendarStore.setState({ selectedYear: 2024 })
