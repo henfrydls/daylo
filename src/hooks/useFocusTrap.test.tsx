@@ -1,5 +1,5 @@
 import { describe, it, expect, afterEach, vi } from 'vitest'
-import { act, render } from '@testing-library/react'
+import { act, fireEvent, render } from '@testing-library/react'
 import { useRef } from 'react'
 import { useFocusTrap } from './useFocusTrap'
 
@@ -202,28 +202,28 @@ describe('giving the focus back', () => {
  * fallback of its own the focus fell to <body> behind a panel that was still open, where
  * Tab walked out of it. It goes into the trap underneath instead.
  */
-describe('a trap over a trap', () => {
-  function Outer({ inner, row }: { inner: boolean; row: boolean }) {
-    const outer = useRef<HTMLDivElement>(null)
-    useFocusTrap(outer, true, { autoFocus: false })
-    return (
-      <div ref={outer} data-testid="outer">
-        <button data-testid="add">+ Add</button>
-        {row ? <button data-testid="bin">Delete</button> : null}
-        <Inner open={inner} />
-      </div>
-    )
-  }
-  function Inner({ open }: { open: boolean }) {
-    const ref = useRef<HTMLDivElement>(null)
-    useFocusTrap(ref, open, { autoFocus: false })
-    return open ? (
-      <div ref={ref}>
-        <button data-testid="confirm">Delete</button>
-      </div>
-    ) : null
-  }
+function Outer({ inner, row }: { inner: boolean; row: boolean }) {
+  const outer = useRef<HTMLDivElement>(null)
+  useFocusTrap(outer, true, { autoFocus: false })
+  return (
+    <div ref={outer} data-testid="outer">
+      <button data-testid="add">+ Add</button>
+      {row ? <button data-testid="bin">Delete</button> : null}
+      <Inner open={inner} />
+    </div>
+  )
+}
+function Inner({ open }: { open: boolean }) {
+  const ref = useRef<HTMLDivElement>(null)
+  useFocusTrap(ref, open, { autoFocus: false })
+  return open ? (
+    <div ref={ref}>
+      <button data-testid="confirm">Delete</button>
+    </div>
+  ) : null
+}
 
+describe('a trap over a trap', () => {
   it('sends the focus into the trap underneath when the opener has gone', () => {
     const { rerender } = render(<Outer inner={false} row />)
     byId('bin').focus()
@@ -234,5 +234,34 @@ describe('a trap over a trap', () => {
 
     expect(byId('outer').contains(document.activeElement)).toBe(true)
     expect(document.activeElement).toBe(byId('add'))
+  })
+})
+
+describe('keeping Tab inside', () => {
+  // The activities panel is put on the page a render after it opens, like the day sheet,
+  // and the Tab half of the trap looked for its container only then: it found none and
+  // never listened. Tab walked out of the panel to the page behind it.
+  it('wraps Tab in a container that arrived after it switched on', () => {
+    const { rerender } = render(<Page open={false} mounted={false} />)
+    rerender(<Page open mounted={false} />)
+    rerender(<Page open mounted />)
+    act(() => byId('inside').focus())
+
+    const went = fireEvent.keyDown(byId('inside'), { key: 'Tab' })
+
+    expect(went).toBe(false)
+    expect(document.activeElement).toBe(byId('inside'))
+  })
+
+  // Only the one in front wraps. The one underneath would otherwise answer the same key
+  // and pull the focus out of the confirmation into the panel.
+  it('leaves Tab to the trap in front', () => {
+    const { rerender } = render(<Outer inner={false} row />)
+    rerender(<Outer inner row />)
+    act(() => byId('confirm').focus())
+
+    fireEvent.keyDown(byId('confirm'), { key: 'Tab' })
+
+    expect(document.activeElement).toBe(byId('confirm'))
   })
 })

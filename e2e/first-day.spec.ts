@@ -167,6 +167,31 @@ test.describe('the focus after the first day changes the page', () => {
     })
   }
 
+  // From Year the door takes itself away on the way to Month, so the sheet opens with the
+  // focus on nobody. Closing it must not leave the focus there.
+  for (const close of ['Escape', 'Done'] as const) {
+    test(`at 360 from the door in Year, closing the sheet gives the focus to the Today bar (${close})`, async ({
+      page,
+    }) => {
+      await page.setViewportSize({ width: 360, height: 800 })
+      await page.goto('/')
+      await page.getByRole('button', { name: 'Year', exact: true }).click()
+      await settle(page)
+      await page.locator(DOOR).click()
+      const name = page.getByTestId('quicklog-new-activity-input')
+      await expect(name).toBeFocused()
+      await name.fill('Read')
+      await page.keyboard.press('Enter')
+      await expect(page.getByTestId('first-day-line')).toBeVisible()
+
+      if (close === 'Escape') await page.keyboard.press('Escape')
+      else await page.getByTestId('quicklog-done-button').click()
+      await expect(page.locator(SHEET)).toHaveCount(0)
+
+      expect(await active(page)).toBe('log-today-bar')
+    })
+  }
+
   test('closing the panel after deleting the last activity gives the focus to the door', async ({
     page,
   }) => {
@@ -205,6 +230,16 @@ test.describe('the focus after the first day changes the page', () => {
       .click()
     await expect(page.getByTestId('delete-activity-confirm')).toHaveCount(0)
     await expect(page.getByTestId('fab-button')).toHaveCount(0)
+
+    // The confirm closed over the panel: the focus goes back into the panel, not to the
+    // page behind it, and Tab keeps going round inside it.
+    const inPanel = () =>
+      page.evaluate(() => document.activeElement?.closest('[data-testid="bottom-sheet"]') !== null)
+    expect(await inPanel()).toBe(true)
+    for (let i = 0; i < 6; i++) {
+      await page.keyboard.press('Tab')
+      expect(await inPanel()).toBe(true)
+    }
 
     await page.keyboard.press('Escape')
     await expect(sheet).toHaveCount(0)

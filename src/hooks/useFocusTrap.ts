@@ -173,14 +173,19 @@ export function useFocusTrap(
     }
   }, [isActive])
 
-  // Focus trap - handle Tab and Shift+Tab
+  // Focus trap - handle Tab and Shift+Tab. On the document and with the container read at
+  // the key, not when the trap switched on: the activities panel and the day sheet are put
+  // on the page a render after they open, so there was no container to listen on then,
+  // and Tab walked out of them. Only the trap in front answers, or the one underneath would
+  // take the same key and pull the focus out of the one in front.
   useEffect(() => {
-    if (!isActive || !containerRef.current) return
-
-    const container = containerRef.current
+    if (!isActive) return
 
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key !== 'Tab') return
+      if (openTraps[openTraps.length - 1] !== containerRef) return
+      const container = containerRef.current
+      if (container === null) return
 
       const focusableElements = container.querySelectorAll<HTMLElement>(FOCUSABLE_SELECTOR)
       if (focusableElements.length === 0) return
@@ -203,10 +208,10 @@ export function useFocusTrap(
       }
     }
 
-    container.addEventListener('keydown', handleKeyDown)
+    document.addEventListener('keydown', handleKeyDown)
 
     return () => {
-      container.removeEventListener('keydown', handleKeyDown)
+      document.removeEventListener('keydown', handleKeyDown)
     }
   }, [isActive, containerRef])
 }
