@@ -445,8 +445,7 @@ describe('whether the offer is owed', () => {
     closedThisSession: false,
   }
 
-  // As in 1.5.5: the first habit is enough, on the day it is made. From 1.6 it waited for
-  // a second day of use, which was taken back.
+  // The first habit is enough, on the day it is made.
   it('is owed as soon as there is a habit, on the first day of use', () => {
     expect(reminderOfferOwed(owed)).toBe(true)
   })

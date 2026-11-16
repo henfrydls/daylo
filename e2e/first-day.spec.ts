@@ -283,51 +283,56 @@ test.describe('the focus after the first day changes the page', () => {
 })
 
 /**
- * The reminder offer on the first day, on the Android app (as in 1.5.5): it comes as soon
- * as the first activity exists, and not over the sheet that activity was made in. It waits
- * for "Today is in" to be closed with Done, then asks.
+ * The reminder offer on the first day, on the Android app: it comes as soon as the first
+ * activity exists, and not over the sheet that activity was made in. It waits for "Today is
+ * in" to be closed with Done, then asks.
  *
  * The browser is told it is the Android build the same way the reminder sheet's tests in
  * app.spec.ts do it: isTauri() reads one global and invoke() goes to another. Every native
  * call answers here, in the page, so nothing leaves it, the check-in included.
+ *
+ * The locale is fixed because the offer writes the time the way the phone's clock does: a
+ * 24-hour locale says 21:00, and the check below reads the 12-hour form.
  */
-test('on Android the reminder is offered after the first day is in, not over it', async ({
-  page,
-}) => {
-  await page.addInitScript(() => {
-    Object.assign(window, {
-      isTauri: true,
-      __TAURI_INTERNALS__: {
-        invoke: (command: string) =>
-          command === 'exact_alarms'
-            ? Promise.resolve({ requested: false, allowed: false, sdk: 34 })
-            : Promise.resolve(
-                command === 'reminders_available' ||
-                  command === 'plugin:notification|is_permission_granted'
-              ),
-      },
+test.describe('the reminder offer on the first day', () => {
+  test.use({ locale: 'en-US' })
+
+  test('on Android it is offered after the first day is in, not over it', async ({ page }) => {
+    await page.addInitScript(() => {
+      Object.assign(window, {
+        isTauri: true,
+        __TAURI_INTERNALS__: {
+          invoke: (command: string) =>
+            command === 'exact_alarms'
+              ? Promise.resolve({ requested: false, allowed: false, sdk: 34 })
+              : Promise.resolve(
+                  command === 'reminders_available' ||
+                    command === 'plugin:notification|is_permission_granted'
+                ),
+        },
+      })
+      Object.defineProperty(window, 'Notification', {
+        configurable: true,
+        value: { permission: 'granted' },
+      })
     })
-    Object.defineProperty(window, 'Notification', {
-      configurable: true,
-      value: { permission: 'granted' },
-    })
+    await page.clock.install({ time: new Date('2026-11-13T10:00:00') })
+    await page.goto('/')
+    const offer = page.getByTestId('reminder-offer')
+
+    await page.locator(DOOR).click()
+    await page.getByTestId('quicklog-new-activity-input').fill('Read')
+    await page.getByTestId('quicklog-add-activity').click()
+    await expect(page.getByTestId('first-day-line')).toHaveText(LINE)
+    // The activity is ticked and the sheet is still up: the question waits behind it.
+    await settle(page)
+    await expect(offer).toHaveCount(0)
+
+    await page.getByTestId('quicklog-done-button').click()
+    await expect(page.locator(SHEET)).toHaveCount(0)
+    await expect(offer).toBeVisible()
+    await expect(offer).toContainText('Remind me each evening?')
+    // Nine in the evening, as the offer proposes since 1.6.
+    await expect(offer).toContainText(/\b9:00\sPM\b/)
   })
-  await page.clock.install({ time: new Date('2026-11-13T10:00:00') })
-  await page.goto('/')
-  const offer = page.getByTestId('reminder-offer')
-
-  await page.locator(DOOR).click()
-  await page.getByTestId('quicklog-new-activity-input').fill('Read')
-  await page.getByTestId('quicklog-add-activity').click()
-  await expect(page.getByTestId('first-day-line')).toHaveText(LINE)
-  // The activity is ticked and the sheet is still up: the question waits behind it.
-  await settle(page)
-  await expect(offer).toHaveCount(0)
-
-  await page.getByTestId('quicklog-done-button').click()
-  await expect(page.locator(SHEET)).toHaveCount(0)
-  await expect(offer).toBeVisible()
-  await expect(offer).toContainText('Remind me each evening?')
-  // Nine in the evening, as the offer proposes since 1.6.
-  await expect(offer).toContainText(/9:00/)
 })

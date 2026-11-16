@@ -238,16 +238,13 @@ const createDeferredStorage = (): StateStorage => {
 }
 
 /**
- * What a tick tells the reminder offer: that this session has one, and the last day of use
- * with a tick, which is the phone's own day, not the date of the log, which can be any day
- * somebody fills in.
+ * What a tick tells the reminder offer: this session has one, and today, by the phone and
+ * not by the log's date, is the last day with one.
  */
-function aTickToday(): Partial<CalendarState> {
-  return {
-    _tickedThisSession: true,
-    reminderLastTickDay: formatDate(new Date()),
-  }
-}
+const aTickToday = (): Partial<CalendarState> => ({
+  _tickedThisSession: true,
+  reminderLastTickDay: formatDate(new Date()),
+})
 
 interface CalendarState {
   activities: Activity[]
@@ -281,9 +278,8 @@ interface CalendarState {
    * until this is a later day.
    *
    * There used to be a count of such days beside it, `reminderTickDays`, for an offer that
-   * waited for the second one. The offer no longer waits, and the count went. A copy that
-   * stored it keeps the key until its next write, which is harmless: nothing reads it, and
-   * partialize leaves it out, so that write drops it. No released version stored it.
+   * waited for the second one. The offer no longer waits, and the count went. No released
+   * version stored it; a copy that did loses it on the way in, in merge.
    */
   reminderLastTickDay: string | null
   /**
@@ -850,6 +846,9 @@ export const useCalendarStore = create<CalendarState>()(
         // fix nobody sees.
         const stored = { ...(persisted as Partial<CalendarState>) }
         for (const place of WHERE_SOMEBODY_IS) delete stored[place]
+        // The reminder offer's old count of days (see reminderLastTickDay). Nothing reads
+        // it, and dropped here it is not written back either.
+        delete (stored as Record<string, unknown>).reminderTickDays
         return {
           ...current,
           ...stored,

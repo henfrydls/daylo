@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
-import { useCalendarStore } from './index'
+import { useCalendarStore, STORAGE_KEY } from './index'
 
 describe('useCalendarStore', () => {
   beforeEach(() => {
@@ -820,6 +820,28 @@ describe('the last day of use the reminder offer reads', () => {
     expect(persisted).toHaveProperty('reminderOfferDismissedOn')
     expect(persisted).not.toHaveProperty('_tickedThisSession')
     expect(persisted).not.toHaveProperty('_reminderOfferClosed')
+  })
+
+  // A copy that stored the old count does not carry it into the state: merge drops it on
+  // the way in, and what is written next is without it.
+  it('drops the old count of days on the way in', async () => {
+    useCalendarStore.setState(useCalendarStore.getInitialState(), true)
+    await new Promise((resolve) => setTimeout(resolve, 20))
+    localStorage.clear()
+    localStorage.setItem(
+      STORAGE_KEY,
+      JSON.stringify({
+        state: { activities: [], logs: [], reminderTickDays: 2, reminderLastTickDay: '2026-11-14' },
+        version: 0,
+      })
+    )
+
+    await useCalendarStore.persist.rehydrate()
+
+    const state = useCalendarStore.getState()
+    expect(state).not.toHaveProperty('reminderTickDays')
+    expect(state.reminderLastTickDay).toBe('2026-11-14')
+    localStorage.clear()
   })
 })
 

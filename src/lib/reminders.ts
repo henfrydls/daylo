@@ -98,9 +98,8 @@ export interface ReminderOfferFacts {
  * rule, read by DailyReminder to open it and by App to hold the invitation to write back
  * behind it, so the two cannot disagree.
  *
- * - A habit. As in 1.5.5, the first one is enough: the offer comes on the day it is made,
- *   once the sheet it was made in has closed (DailyReminder waits for that). From 1.6
- *   until 2026-11-16 it waited for a second day of use with a tick, which was taken back.
+ * - A habit. The first one is enough: the offer comes on the day it is made, once the
+ *   sheet it was made in has closed (DailyReminder waits for that).
  * - Not answered: "Not now" and "Turn on" answer it, and so does a third close without
  *   an answer.
  * - Not closed in this session, answered or not.

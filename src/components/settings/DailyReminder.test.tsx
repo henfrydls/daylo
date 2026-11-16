@@ -64,13 +64,12 @@ const aLog = (activityId: string, date: string): ActivityLog => ({
 
 /**
  * The moment the offer is for: the Android app, a habit, and in this session something was
- * just ticked and nothing else is open. The logs are on two days so that a test about a
- * later day has one behind it; the first day alone is enough (see the test that says so).
+ * just ticked and nothing else is open.
  */
 function tickedOnAndroid() {
   firstHabitOnAndroid()
   useCalendarStore.setState({
-    logs: [aLog('a', '2026-10-08'), aLog('a', '2026-10-09')],
+    logs: [aLog('a', '2026-10-09')],
     reminderLastTickDay: '2026-10-09',
     reminderOfferDismissals: 0,
     reminderOfferDismissedOn: null,
