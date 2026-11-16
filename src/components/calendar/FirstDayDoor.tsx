@@ -1,4 +1,6 @@
+import { useContext } from 'react'
 import { useTodayDate } from '../../lib/today'
+import { BesideContext } from '../../lib/beside'
 
 /**
  * Today's number on the Today bar, said the way the grid says it: dashed while today has
@@ -39,15 +41,18 @@ interface FirstDayDoorProps {
  */
 export function FirstDayDoor({ onOpenToday, onImport }: FirstDayDoorProps) {
   const today = useTodayDate()
+  // The copy drawn in the hidden view beside this one keeps its shape and drops its ids,
+  // so each of them is on the page once: the one that works.
+  const beside = useContext(BesideContext)
+  const id = (name: string) => (beside ? undefined : name)
   return (
-    // `month-empty-state` is what App looks for to give focus back after Import: from the
-    // line up to this block, and from here to its parent, where the month's title is.
-    <div className="mb-4" data-testid="month-empty-state">
+    // `month-empty-state`: the name the empty month has always had in the tests.
+    <div className="mb-4" data-testid={id('month-empty-state')}>
       <button
         type="button"
         onClick={onOpenToday}
         className="w-full flex items-center justify-between p-3 bg-emerald-50 border border-emerald-200 rounded-xl min-h-[44px] cursor-pointer transition-colors hover:bg-emerald-100 active:bg-emerald-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-emerald-700"
-        data-testid="first-day-door"
+        data-testid={id('first-day-door')}
         aria-label="Today: add your first activity"
       >
         <div className="flex items-center gap-3">
@@ -72,7 +77,10 @@ export function FirstDayDoor({ onOpenToday, onImport }: FirstDayDoorProps) {
           that already part it from the door (12) and from the calendar (16), so it reaches
           over neither. No full stop: a link is not a sentence. */}
       {onImport === undefined ? null : (
-        <p className="mt-3 text-center text-sm text-gray-500" data-testid="month-empty-import">
+        <p
+          className="mt-3 text-center text-sm text-gray-500"
+          data-testid={id('month-empty-import')}
+        >
           Used Daylo before?{' '}
           <button
             type="button"

@@ -150,8 +150,27 @@ export const YearView = memo(function YearView({ onImport }: YearViewProps) {
     activities.length === 0 ? (
       <FirstDayDoor
         onOpenToday={() => {
+          const day = formatDate(today)
+          if (travel === null) {
+            handleToday()
+            setSelectedDate(day)
+            return
+          }
+          // On the phone the rail is still sliding to Month when handleToday returns, and a
+          // sheet coming up over it looked like two things fighting. So the sheet waits for
+          // the arrival: the first change of view, if it is to Month. A journey that never
+          // lands stops the wait, so no later visit to Month opens a sheet out of nowhere.
+          const stop = () => {
+            unsubscribe()
+            window.clearTimeout(giveUp)
+          }
+          const unsubscribe = useCalendarStore.subscribe((state, before) => {
+            if (state.currentView === before.currentView) return
+            stop()
+            if (state.currentView === 'month') state.setSelectedDate(day)
+          })
+          const giveUp = window.setTimeout(stop, 1500)
           handleToday()
-          setSelectedDate(formatDate(today))
         }}
         onImport={onImport}
       />

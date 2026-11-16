@@ -42,6 +42,7 @@ import {
 } from './hooks'
 import { TravelContext, useTravel } from './lib/travel'
 import { onScreen } from './lib/onScreen'
+import { BesideContext } from './lib/beside'
 import { UpdateDot } from './components/updates/UpdateDot'
 import { UpdateNotice } from './components/updates/UpdateNotice'
 import { HeaderStreak } from './components/streak/HeaderStreak'
@@ -693,13 +694,15 @@ function App() {
                       aria-hidden="true"
                       inert
                     >
-                      <DayScope day={shownDay}>
-                        {currentView === 'year' ? (
-                          <MonthView onImport={openImport} />
-                        ) : (
-                          <YearView onImport={openImport} />
-                        )}
-                      </DayScope>
+                      <BesideContext.Provider value={true}>
+                        <DayScope day={shownDay}>
+                          {currentView === 'year' ? (
+                            <MonthView onImport={openImport} />
+                          ) : (
+                            <YearView onImport={openImport} />
+                          )}
+                        </DayScope>
+                      </BesideContext.Provider>
                     </div>
                   </div>
                 ) : (

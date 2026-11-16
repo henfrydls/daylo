@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { render, screen, fireEvent, within, act } from '@testing-library/react'
 import { YearView } from './YearView'
 import { useCalendarStore } from '../../store'
+import { TravelContext } from '../../lib/travel'
 import type { Activity, ActivityLog } from '../../types'
 
 // Get initial state for reset
@@ -152,6 +153,50 @@ describe('YearView', () => {
       expect(state.currentView).toBe('month')
       expect(state.selectedYear).toBe(2024)
       expect(state.selectedMonth).toBe(5)
+    })
+
+    // On the phone the door walks the rail to Month, and the sheet opening in the same tick
+    // came up over a rail still sliding. It waits for Month to arrive.
+    it('on the phone, opens today only once the journey to Month has arrived', () => {
+      const toMonth = vi.fn()
+      useCalendarStore.setState({ currentView: 'year', selectedDate: null })
+      render(
+        <TravelContext.Provider value={{ toYear: vi.fn(), toMonth }}>
+          <YearView onImport={vi.fn()} />
+        </TravelContext.Provider>
+      )
+
+      fireEvent.click(screen.getByTestId('first-day-door'))
+
+      expect(toMonth).toHaveBeenCalledWith({ year: 2024, month: 5 })
+      expect(useCalendarStore.getState().selectedDate).toBeNull()
+
+      act(() => useCalendarStore.setState({ currentView: 'month' }))
+      expect(useCalendarStore.getState().selectedDate).toBe('2024-06-15')
+
+      // Once: coming back to Month later does not open it again.
+      act(() => useCalendarStore.setState({ selectedDate: null, currentView: 'year' }))
+      act(() => useCalendarStore.setState({ currentView: 'month' }))
+      expect(useCalendarStore.getState().selectedDate).toBeNull()
+    })
+
+    // A journey that never lands (a drag took it back) leaves nothing waiting to open the
+    // sheet on some later, unrelated arrival in Month.
+    it('on the phone, stops waiting when the journey does not arrive', () => {
+      useCalendarStore.setState({ currentView: 'year', selectedDate: null })
+      render(
+        <TravelContext.Provider value={{ toYear: vi.fn(), toMonth: vi.fn() }}>
+          <YearView onImport={vi.fn()} />
+        </TravelContext.Provider>
+      )
+
+      fireEvent.click(screen.getByTestId('first-day-door'))
+      act(() => {
+        vi.advanceTimersByTime(2000)
+      })
+      act(() => useCalendarStore.setState({ currentView: 'month' }))
+
+      expect(useCalendarStore.getState().selectedDate).toBeNull()
     })
 
     it('opens Import from the line', () => {

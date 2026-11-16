@@ -265,23 +265,42 @@ describe('the way into import from an empty app', () => {
   // to reveal, and in Year that neighbour is an empty Month with its own line. It keeps
   // the line so the neighbour is as tall as it will be once it arrives, and it is inert:
   // hidden from screen readers and out of reach of the keyboard and the finger.
-  // Year has its own door and line now, so there are two lines on the page: the one on
-  // screen, which works, and the hidden neighbour's, which nothing can reach.
+  // Year has its own door and line now. The Month drawn hidden beside it keeps the same
+  // markup, so it is as tall as it will be once it arrives, but without the test ids: one
+  // of each on the page, the one that works. The hidden one is inert and out of reach.
   it('keeps the line in the hidden month beside Year out of reach', async () => {
     useCalendarStore.setState({ currentView: 'year' })
     render(<App />)
     await act(async () => {})
 
-    const lines = [...document.querySelectorAll('[data-testid="month-empty-import"]')]
-    expect(lines).toHaveLength(2)
-    const hidden = lines.filter((line) => line.closest('[inert]') !== null)
-    expect(hidden).toHaveLength(1)
-    expect(hidden[0].closest('[aria-hidden="true"]')).not.toBeNull()
+    for (const id of ['month-empty-import', 'first-day-door', 'month-empty-state']) {
+      const found = document.querySelectorAll(`[data-testid="${id}"]`)
+      expect(found, id).toHaveLength(1)
+      expect(found[0].closest('[inert]'), id).toBeNull()
+    }
+    const hidden = document.querySelector('[inert]')!
+    expect(hidden.textContent).toContain('Used Daylo before? Import your backup')
+    expect(hidden.closest('[aria-hidden="true"]')).not.toBeNull()
     expect(screen.getAllByRole('button', { name: 'Import your backup' })).toHaveLength(1)
+  })
+
+  it('leaves focus on the year after an import from the door in Year', async () => {
+    useCalendarStore.setState({ currentView: 'year' })
+    render(<App />)
+    await act(async () => {})
+
+    await userEvent.click(screen.getByRole('button', { name: 'Import your backup' }))
+    const dialog = await screen.findByRole('dialog', { name: 'Import Data' })
+    await userEvent.upload(dialog.querySelector('input[type="file"]') as HTMLInputElement, backup())
+    await userEvent.click(await screen.findByRole('button', { name: /Import Data/ }))
+    await userEvent.click(await screen.findByRole('button', { name: 'Import' }))
+
+    await act(async () => {})
+    expect(useCalendarStore.getState().activities).toHaveLength(1)
+    expect(document.activeElement).toHaveAttribute('data-testid', 'year-title')
   })
 })
 
-// The first day: the door, the floating button, and the run from its first day.
 describe('the first day', () => {
   // The day sheet opened here would otherwise stay open into the next test, where it holds
   // back everything that waits for it.

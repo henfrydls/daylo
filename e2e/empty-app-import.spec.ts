@@ -162,16 +162,18 @@ test('closing Import with nothing imported leaves focus on the line', async ({ p
 })
 
 // In Year on a phone the Month beside it is drawn, hidden, so a drag has something to
-// reveal. It keeps its line so it is as tall as it will be once it arrives, and it is
-// inert: nothing can focus its link and no finger can land on it. Year has its own door
-// and line, which are the ones that work.
+// reveal. It keeps its line so it is as tall as it will be once it arrives, without the
+// test ids (each is on the page once, the one that works), and it is inert: nothing can
+// focus its link and no finger can land on it. Year has its own door and line.
 test('the hidden month beside Year keeps its line out of reach', async ({ page }) => {
   await openEmpty(page, 360, 800)
   await page.getByRole('button', { name: 'Year', exact: true }).click()
-  await expect(page.locator('[data-testid="month-empty-import"]')).toHaveCount(2)
+  await expect(page.locator('[data-testid="month-empty-import"]')).toHaveCount(1)
+  await expect(page.locator('[data-testid="first-day-door"]')).toHaveCount(1)
+  await expect(page.locator('[inert] [data-testid]').filter({ hasText: NAME })).toHaveCount(0)
   await expect(page.getByRole('button', { name: NAME })).toHaveCount(1)
 
-  const hidden = page.locator('[inert] [data-testid="month-empty-import"] button')
+  const hidden = page.locator('[inert] button', { hasText: NAME })
   await expect(hidden).toHaveCount(1)
   const reach = await hidden.evaluate((b) => {
     ;(b as HTMLElement).focus()
