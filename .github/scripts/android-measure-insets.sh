@@ -102,6 +102,9 @@ js "(() => {
     firstOpenedAt: '$now', feedbackInviteSeen: true, storeReviewOffered: true,
     checkinEnabled: false, checkinNoticeSeen: true, checkinId: null,
     checkinLastAttempt: null, updateNoticeSeenFor: null, updatesEnabled: false } }))
+  // The app flushes its own pending write when the page goes away, which would put the
+  // empty state back over this before the reload reads it (it did, once in four runs).
+  Storage.prototype.setItem = () => {}
   setTimeout(() => location.reload(), 200)
   return names.length
 })()" >"$OUT/seed.txt" 2>&1 || { log "could not seed the state"; exit 1; }
@@ -194,8 +197,12 @@ fi
 js "document.querySelector('button[aria-label^=\"Log today\"]').click(), true" >/dev/null 2>&1
 if waitfor '[data-testid="quicklog-done-button"]'; then
   sleep 1.5
+  # Scrolled to the very end of the sheet, the way a thumb leaves it, and not with
+  # scrollIntoView: that lines Done up with the bottom edge and leaves out the space the
+  # sheet keeps under it, which is exactly what is being measured.
   b=$(js "(() => { const d = document.querySelector('[data-testid=\"quicklog-done-button\"]')
-                    d.scrollIntoView({ block: 'end' })
+                    const sheet = document.querySelector('[data-testid=\"quicklog-modal\"]')
+                    sheet.scrollTop = sheet.scrollHeight
                     return new Promise((ok) => setTimeout(() => ok(d.getBoundingClientRect().bottom), 400)) })()" 2>/dev/null)
   shot 03-day-sheet
   judge S3 "the day sheet's Done" "$b"
