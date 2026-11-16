@@ -468,6 +468,16 @@ describe('starting a new day', () => {
     expect(state._checkinNoticeShown).toBe(true)
     expect(state._hasHydrated).toBe(true)
   })
+
+  // Except the reminder offer's close: on Android the process lives for days, and an
+  // offer closed yesterday may be asked again after a tick today.
+  it('lets a reminder offer closed on an earlier day be asked again', () => {
+    useCalendarStore.setState({ _reminderOfferClosed: true })
+
+    useCalendarStore.getState().startNewDay('2026-12-01')
+
+    expect(useCalendarStore.getState()._reminderOfferClosed).toBe(false)
+  })
 })
 
 // The three fields the invitation to write and the check-in are built on. They are here

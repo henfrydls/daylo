@@ -1,7 +1,7 @@
-import { useEffect, useRef } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { ConfirmDialog, useToast } from '../ui'
 import { useCalendarStore } from '../../store'
-import { useReminderOfferOwed, useRemindersAvailable } from '../../hooks'
+import { useOpenDialogs, useReminderOfferOwed, useRemindersAvailable } from '../../hooks'
 import { formatDate } from '../../lib/dates'
 import {
   disableReminder,
@@ -86,7 +86,12 @@ export function DailyReminder({ canAsk }: DailyReminderProps) {
       showToast('Daylo could not set the reminder on this phone', 'error')
       return
     }
-    if (outcome === 'unavailable') return
+    // Not an answer either: the phone said reminders do not exist here after all. Said, so
+    // that "Turn on" does not close on nothing, and left owed.
+    if (outcome === 'unavailable') {
+      showToast('Daylo could not set the reminder on this phone', 'error')
+      return
+    }
     markReminderOffered()
     if (outcome === 'on') {
       setReminder(true, offerHour, offerMinute)
@@ -107,9 +112,11 @@ export function DailyReminder({ canAsk }: DailyReminderProps) {
   // - Owed, by the one rule in lib/reminders.ts that App also reads: a habit, a second
   //   day of use with a tick, not answered, not closed this session, and after a close
   //   without an answer, only on a later day with a tick.
-  // - After something was ticked in this session, with nothing else open (canAsk): the
-  //   question is about the moment somebody has just logged, and it does not stack on the
-  //   day sheet or whatever closing it leads into.
+  // - After something was ticked in this session, with nothing else open: canAsk from App,
+  //   and no other dialog anywhere (useOpenDialogs). The question is about the moment
+  //   somebody has just logged, and it does not stack on the day sheet or whatever
+  //   closing it leads into.
+  // - Once open it stays until it is answered or closed, whatever opens behind it.
   // - Tapping beside it or back is not an answer. It puts it off to a later day, and the
   //   third time counts as no. "Not now" and "Turn on" are the answers.
   const owed = useReminderOfferOwed(available)
@@ -124,7 +131,14 @@ export function DailyReminder({ canAsk }: DailyReminderProps) {
   // this offer, the check-in's, and the invitation to write. Whichever opens first takes
   // the session, and the other two stand down until the next one.
   const offerThisSession = useCalendarStore((state) => state._offerThisSession)
-  const offerIsOpen = owed && tickedThisSession && canAsk && offerThisSession !== 'checkin'
+  const otherDialogs = useOpenDialogs((state) => state.open)
+  const mayOpen =
+    owed && tickedThisSession && canAsk && otherDialogs === 0 && offerThisSession !== 'checkin'
+  // Latched: whether it may open is checked to open it, not to keep it open. Its own
+  // dialog counts in useOpenDialogs, and canAsk can change under it; either would
+  // otherwise take it away without an answer, and bring it back later in the session.
+  const [offerIsOpen, setOfferIsOpen] = useState(false)
+  if (mayOpen && !offerIsOpen) setOfferIsOpen(true)
   const claimOffer = useCalendarStore((state) => state.claimOffer)
   useEffect(() => {
     if (offerIsOpen) claimOffer('reminder')
@@ -139,16 +153,23 @@ export function DailyReminder({ canAsk }: DailyReminderProps) {
   return (
     <ConfirmDialog
       isOpen={offerIsOpen}
+      // The dialog stays in the page while it leaves, and its backdrop still takes taps.
+      // Everything after the first close is ignored until it opens again: a double tap is
+      // one close, and a stray tap after an answer is not a close without one.
       onClose={() => {
+        if (!offerIsOpen) return
         if (answered.current) closeReminderOffer()
         else dismissReminderOffer(formatDate(new Date()))
         answered.current = false
+        setOfferIsOpen(false)
       }}
       onCancel={() => {
+        if (!offerIsOpen) return
         answered.current = true
         markReminderOffered()
       }}
       onConfirm={() => {
+        if (!offerIsOpen) return
         answered.current = true
         void accept()
       }}

@@ -775,15 +775,18 @@ function App() {
 
           {/* Daily reminder: the one-time offer. The setting itself is in Settings now. */}
           {/* It may ask only with nothing else open: not over the day sheet where the tick
-              happens, and not over Settings, the phone's activities sheet, Export or
-              Import, which closing the day sheet can lead straight into. */}
+              happens, and not over Settings, the phone's activities sheet, Export, Import
+              or the feedback question, which closing the day sheet can lead straight
+              into. Any other dialog (the activity form, a delete confirmation) is counted
+              by DailyReminder itself through useOpenDialogs. */}
           <DailyReminder
             canAsk={
               selectedDate === null &&
               !isBottomSheetOpen &&
               settings === 'closed' &&
               !isExportOpen &&
-              !isImportOpen
+              !isImportOpen &&
+              !questionIsOpen
             }
           />
 

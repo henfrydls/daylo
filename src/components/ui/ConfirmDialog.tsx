@@ -1,7 +1,7 @@
 import { useRef, useEffect } from 'react'
 import { createPortal } from 'react-dom'
 import { Button } from './Button'
-import { useFocusTrap, useAnimatedPresence, useArrival } from '../../hooks'
+import { useFocusTrap, useAnimatedPresence, useArrival, useCountsAsOpenDialog } from '../../hooks'
 import { DIALOG_CURVE, DIALOG_STAYS_FOR } from './Modal'
 
 interface ConfirmDialogProps {
@@ -49,6 +49,7 @@ export function ConfirmDialog({
 
   // Use focus trap with autoFocus disabled so we can focus the cancel button instead
   useFocusTrap(dialogRef, isOpen, { onEscape: onClose, autoFocus: false })
+  useCountsAsOpenDialog(isOpen)
 
   // Focus the cancel button when dialog opens (safer default)
   useEffect(() => {

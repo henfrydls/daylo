@@ -656,6 +656,10 @@ export const useCalendarStore = create<CalendarState>()(
           selectedDate: null,
           currentView: 'month',
           _viewTransitionDirection: null,
+          // On Android the process can live for days. A reminder offer closed yesterday
+          // may be asked again after a tick today; when it was closed without an answer,
+          // reminderOfferDismissedOn still keeps it off for the rest of that day.
+          _reminderOfferClosed: false,
         })
       },
 
