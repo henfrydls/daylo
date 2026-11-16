@@ -1,9 +1,8 @@
 import { useState, useRef, useEffect, useCallback, useMemo, memo } from 'react'
 import { useCalendarStore } from '../../store'
-import { formatDisplayDate, parseDateString } from '../../lib/dates'
+import { formatDisplayDate, formatTodayTitle, parseDateString } from '../../lib/dates'
 import { useToday } from '../../lib/today'
 import { onScreen } from '../../lib/onScreen'
-import { format } from 'date-fns'
 import { ACTIVITY_COLORS, firstFreeColor } from '../../lib/colors'
 import { Button, Checkbox, ColorPicker, PlusIcon, XIcon } from '../ui'
 import { useFocusTrap, useAnimatedPresence } from '../../hooks'
@@ -383,7 +382,7 @@ export const QuickLog = memo(function QuickLog() {
         </div>
         <div className="flex items-center justify-between mb-4">
           <h2 id="quicklog-title" className="text-base sm:text-lg font-semibold text-gray-900">
-            {day === todayStr ? `Today · ${format(date, 'MMM d')}` : formatDisplayDate(date)}
+            {day === todayStr ? formatTodayTitle(date) : formatDisplayDate(date)}
           </h2>
           <button
             onClick={() => setSelectedDate(null)}
