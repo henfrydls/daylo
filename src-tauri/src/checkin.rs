@@ -368,6 +368,28 @@ mod tests {
         assert_eq!(farewell["payload"]["data"]["last"], serde_json::json!(true));
     }
 
+    /// `last` and `activities` are two booleans side by side in `message`, so swapping them
+    /// at a call site would compile. The two mixed cases are what tell them apart: with
+    /// only (false, false) and (true, true) above, a swap would pass.
+    #[test]
+    fn last_and_activities_are_not_swapped() {
+        let id = "4f9c2a7e1b60d3a8c5e2f1b74a9d0c6e";
+
+        let farewell_without_a_habit =
+            message(id, "1.6.0", "android", "apk", "2026-11-16", true, false);
+        let data = &farewell_without_a_habit["payload"]["data"];
+        assert_eq!(data["last"], serde_json::json!(true));
+        assert_eq!(data["activities"], serde_json::json!(false));
+
+        let ordinary_with_a_habit =
+            message(id, "1.6.0", "android", "apk", "2026-11-16", false, true);
+        let data = ordinary_with_a_habit["payload"]["data"]
+            .as_object()
+            .unwrap();
+        assert!(!data.contains_key("last"));
+        assert_eq!(data["activities"], serde_json::json!(true));
+    }
+
     /// The switch, from the two ends that matter: the helper reads it, and both commands
     /// go through the helper. One test and not two, because the variable is process wide
     /// and Rust runs tests in threads: two tests setting and clearing it race, and the
