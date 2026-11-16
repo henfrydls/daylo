@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
-import { useCalendarStore, STORAGE_KEY } from './index'
+import { useCalendarStore, STORAGE_KEY, PERSIST_VERSION } from './index'
 import { useRescueStore } from './rescue'
 
 /**
@@ -24,7 +24,9 @@ describe('a stored value that will not open', () => {
 
   beforeEach(async () => {
     useRescueStore.setState({ failure: null })
-    useCalendarStore.setState({ _hasHydrated: false })
+    // Not 'new', which is what a new installation is told: a test that expects 'new' would
+    // otherwise pass on the value left from before.
+    useCalendarStore.setState({ _hasHydrated: false, _checkinStart: 'update' })
     await settle()
     localStorage.clear()
   })
@@ -69,5 +71,233 @@ describe('a stored value that will not open', () => {
 
     expect(useRescueStore.getState().failure).toBeNull()
     expect(useCalendarStore.getState()._hasHydrated).toBe(true)
+  })
+
+  /**
+   * #221. zustand hands merge `undefined` for three different things: an empty storage, a
+   * value that parses but carries no `state`, and a value saved under a version this build
+   * does not know how to migrate. Only the first is a new installation. The other two used
+   * to open as one, empty, and the first write of the launch put the empty state over what
+   * was there.
+   */
+  describe('something stored that does not open as a state', () => {
+    const activity = { id: 'a', name: 'Walk', color: '#10B981' }
+
+    it('treats a value with no state as unreadable, not as a new installation', async () => {
+      const stored = JSON.stringify({ activities: [activity], logs: [] })
+      localStorage.setItem(STORAGE_KEY, stored)
+
+      await useCalendarStore.persist.rehydrate()
+
+      expect(useRescueStore.getState().failure).toEqual({ reason: 'unreadable', raw: stored })
+      expect(useCalendarStore.getState()._hasHydrated).toBe(false)
+      await settle()
+      expect(localStorage.getItem(STORAGE_KEY)).toBe(stored)
+    })
+
+    /** What a copy downgraded from a build that bumped `version` would hold. */
+    it('treats a value from a version it cannot migrate as unreadable', async () => {
+      vi.spyOn(console, 'error').mockImplementation(() => {})
+      const stored = JSON.stringify({ state: { activities: [activity], logs: [] }, version: 7 })
+      localStorage.setItem(STORAGE_KEY, stored)
+
+      await useCalendarStore.persist.rehydrate()
+
+      expect(useRescueStore.getState().failure).toEqual({ reason: 'unreadable', raw: stored })
+      expect(useCalendarStore.getState()._hasHydrated).toBe(false)
+      await settle()
+      expect(localStorage.getItem(STORAGE_KEY)).toBe(stored)
+    })
+
+    /**
+     * A migrate that has no answer for a version returns undefined, which reaches merge
+     * exactly as "nothing stored" does. The guard on the persisted format does not see it,
+     * because a migrate exists.
+     */
+    it('treats a value a migrate could not translate as unreadable', async () => {
+      const options = useCalendarStore.persist.getOptions()
+      useCalendarStore.persist.setOptions({ version: 1, migrate: () => undefined })
+      try {
+        const stored = JSON.stringify({ state: { activities: [activity], logs: [] }, version: 0 })
+        localStorage.setItem(STORAGE_KEY, stored)
+
+        await useCalendarStore.persist.rehydrate()
+
+        expect(useRescueStore.getState().failure).toEqual({ reason: 'unreadable', raw: stored })
+        await settle()
+        expect(localStorage.getItem(STORAGE_KEY)).toBe(stored)
+      } finally {
+        useCalendarStore.persist.setOptions({ version: options.version, migrate: options.migrate })
+      }
+    })
+
+    /**
+     * #263's review: hooks run while the rescue screen is up, and the one that starts a
+     * new day at midnight calls set(). Every set() is a write. Nothing may reach the disk
+     * while the screen that exists to save what is on it is open.
+     */
+    it('writes nothing while the rescue screen is up, a new day included', async () => {
+      const stored = JSON.stringify({ activities: [activity], logs: [] })
+      localStorage.setItem(STORAGE_KEY, stored)
+      await useCalendarStore.persist.rehydrate()
+      expect(useRescueStore.getState().failure).not.toBeNull()
+
+      useCalendarStore.getState().startNewDay('2026-11-17')
+      useCalendarStore.setState({ yearMode: 'all' })
+      await settle()
+
+      expect(localStorage.getItem(STORAGE_KEY)).toBe(stored)
+    })
+
+    /** (c) of the rule: a newer build's value, even with nothing recognisable in it. */
+    it('treats a value from a newer build as unreadable, even an empty one', async () => {
+      vi.spyOn(console, 'error').mockImplementation(() => {})
+      const stored = JSON.stringify({ state: {}, version: 7 })
+      localStorage.setItem(STORAGE_KEY, stored)
+
+      await useCalendarStore.persist.rehydrate()
+
+      expect(useRescueStore.getState().failure).toEqual({ reason: 'unreadable', raw: stored })
+      await settle()
+      expect(localStorage.getItem(STORAGE_KEY)).toBe(stored)
+    })
+
+    /** (b) under `state`, with logs and no activities: a day is enough to be worth keeping. */
+    it('treats a version it cannot migrate as unreadable when only logs are left', async () => {
+      vi.spyOn(console, 'error').mockImplementation(() => {})
+      const stored = JSON.stringify({
+        state: { activities: [], logs: [{ id: 'l', activityId: 'a', date: '2026-11-01' }] },
+        version: 3,
+      })
+      localStorage.setItem(STORAGE_KEY, stored)
+
+      await useCalendarStore.persist.rehydrate()
+
+      expect(useRescueStore.getState().failure).toEqual({ reason: 'unreadable', raw: stored })
+    })
+
+    /** #263's second review: an older version is as unknown as a newer one. */
+    it('treats a value from an older version as unreadable, even an empty one', async () => {
+      const stored = JSON.stringify({ state: {}, version: -1 })
+      localStorage.setItem(STORAGE_KEY, stored)
+
+      await useCalendarStore.persist.rehydrate()
+
+      expect(useRescueStore.getState().failure).toEqual({ reason: 'unreadable', raw: stored })
+      await settle()
+      expect(localStorage.getItem(STORAGE_KEY)).toBe(stored)
+    })
+
+    /**
+     * A `state` that is not an object used to be spread into the store as an update, and
+     * the first write replaced activities and logs. With something to lose beside it, it is
+     * unreadable.
+     */
+    it.each(['"walk"', '7', 'true'])(
+      'treats a state of %s beside activities as unreadable',
+      async (state) => {
+        const stored = `{"state":${state},"activities":[{"id":"a"}]}`
+        localStorage.setItem(STORAGE_KEY, stored)
+
+        await useCalendarStore.persist.rehydrate()
+
+        expect(useRescueStore.getState().failure).toEqual({ reason: 'unreadable', raw: stored })
+        await settle()
+        expect(localStorage.getItem(STORAGE_KEY)).toBe(stored)
+      }
+    )
+
+    it.each(['{"state":"walk"}', '{"state":7}', '{"state":[1]}'])(
+      'opens %s, with nothing beside it, as a new installation and not as an update',
+      async (stored) => {
+        localStorage.setItem(STORAGE_KEY, stored)
+
+        await useCalendarStore.persist.rehydrate()
+
+        expect(useRescueStore.getState().failure).toBeNull()
+        expect(useCalendarStore.getState()._checkinStart).toBe('new')
+        expect(useCalendarStore.getState()).not.toHaveProperty('0')
+      }
+    )
+
+    /**
+     * Privacy: somebody who turned the check-in off. Opened as new, the check-in would be
+     * on again against what they chose.
+     */
+    it.each(['{"checkinEnabled":false}', '{"state":"x","checkinEnabled":false}'])(
+      'treats %s as unreadable rather than turn the check-in back on',
+      async (stored) => {
+        localStorage.setItem(STORAGE_KEY, stored)
+
+        await useCalendarStore.persist.rehydrate()
+
+        expect(useRescueStore.getState().failure).toEqual({ reason: 'unreadable', raw: stored })
+      }
+    )
+
+    /**
+     * #263's second review: a write queued before the rescue screen came up must not land
+     * after it, through the flushes on pagehide and visibilitychange that bypass setItem.
+     */
+    it('drops a write that was waiting when the rescue screen came up', async () => {
+      const stored = JSON.stringify({ activities: [activity], logs: [] })
+      useCalendarStore.setState({ yearMode: 'all' })
+      // Queued, not yet flushed.
+      localStorage.setItem(STORAGE_KEY, stored)
+      useRescueStore.getState().couldNotOpen({ reason: 'unreadable', raw: stored })
+
+      window.dispatchEvent(new Event('pagehide'))
+      await settle()
+
+      expect(localStorage.getItem(STORAGE_KEY)).toBe(stored)
+    })
+
+    /**
+     * The other side of the rule. With nothing to lose, the rescue screen would claim there
+     * is data where there is none, on every launch, with no way past it (#220). These open
+     * as a new installation.
+     */
+    it.each(['null', '{}', '{"state":null}', '{"state":{}}'])(
+      'opens %s as a new installation',
+      async (stored) => {
+        localStorage.setItem(STORAGE_KEY, stored)
+
+        await useCalendarStore.persist.rehydrate()
+
+        expect(useRescueStore.getState().failure).toBeNull()
+        expect(useCalendarStore.getState()._hasHydrated).toBe(true)
+        expect(useCalendarStore.getState()._checkinStart).toBe('new')
+      }
+    )
+
+    it('still opens an empty storage as a new installation', async () => {
+      await useCalendarStore.persist.rehydrate()
+
+      expect(useRescueStore.getState().failure).toBeNull()
+      expect(useCalendarStore.getState()._hasHydrated).toBe(true)
+      expect(useCalendarStore.getState()._checkinStart).toBe('new')
+    })
+  })
+})
+
+/**
+ * The other half of #221's trap. A stored version this build does not know must reach the
+ * rescue screen, not merge: without a migrate, zustand throws the value away and hands
+ * merge undefined, which looks like a new installation.
+ */
+describe('the persisted format', () => {
+  it('refuses every version but its own', () => {
+    const { migrate } = useCalendarStore.persist.getOptions()
+    expect(migrate).toBeTypeOf('function')
+    for (const version of [-1, 1, 7]) {
+      expect(() => migrate!({}, version)).toThrow()
+    }
+  })
+
+  // When this changes, migrate has to translate every earlier version instead of refusing
+  // it, or every copy that updates lands on the rescue screen. Change this test with it.
+  it('is still at version 0', () => {
+    expect(useCalendarStore.persist.getOptions().version ?? 0).toBe(0)
+    expect(PERSIST_VERSION).toBe(0)
   })
 })
