@@ -131,14 +131,40 @@ describe('YearView', () => {
       expect(useCalendarStore.getState().selectedYear).toBe(2025)
     })
 
-    it('should navigate to current year when clicking Today button', () => {
-      useCalendarStore.setState({ selectedYear: 2020 })
+    // Today goes to today, in Month, from another year...
+    it('goes to the month of today in Month view from another year', () => {
+      useCalendarStore.setState({ selectedYear: 2020, selectedMonth: 0, currentView: 'year' })
       render(<YearView />)
 
-      const todayButton = screen.getByRole('button', { name: 'Go to current year' })
-      fireEvent.click(todayButton)
+      fireEvent.click(screen.getByRole('button', { name: 'Go to today' }))
 
-      expect(useCalendarStore.getState().selectedYear).toBe(2024)
+      const state = useCalendarStore.getState()
+      expect(state.currentView).toBe('month')
+      expect(state.selectedYear).toBe(2024)
+      expect(state.selectedMonth).toBe(5)
+    })
+
+    // ...and from this year, where it used to do nothing.
+    it('goes to the month of today in Month view from this year too', () => {
+      useCalendarStore.setState({ selectedYear: 2024, selectedMonth: 0, currentView: 'year' })
+      render(<YearView />)
+
+      fireEvent.click(screen.getByRole('button', { name: 'Go to today' }))
+
+      const state = useCalendarStore.getState()
+      expect(state.currentView).toBe('month')
+      expect(state.selectedYear).toBe(2024)
+      expect(state.selectedMonth).toBe(5)
+      // The day sheet stays closed: it goes to the month, it does not log.
+      expect(state.selectedDate).toBeNull()
+    })
+
+    // Never hidden, whichever year is shown.
+    it.each([2020, 2024])('shows Today on %i', (year) => {
+      useCalendarStore.setState({ selectedYear: year })
+      render(<YearView />)
+
+      expect(screen.getByRole('button', { name: 'Go to today' })).toBeVisible()
     })
 
     it('should navigate to month view when clicking month label', () => {
@@ -252,7 +278,7 @@ describe('YearView', () => {
 
       expect(screen.getByLabelText('Previous year')).toBeInTheDocument()
       expect(screen.getByLabelText('Next year')).toBeInTheDocument()
-      expect(screen.getByLabelText('Go to current year')).toBeInTheDocument()
+      expect(screen.getByLabelText('Go to today')).toBeInTheDocument()
     })
 
     it('should have accessible month buttons', () => {
@@ -292,7 +318,7 @@ describe('YearView', () => {
 
       const prevButton = screen.getByLabelText('Previous year')
       const nextButton = screen.getByLabelText('Next year')
-      const todayButton = screen.getByRole('button', { name: 'Go to current year' })
+      const todayButton = screen.getByRole('button', { name: 'Go to today' })
 
       // Navigation buttons should be focusable
       expect(prevButton).not.toHaveAttribute('tabindex', '-1')
@@ -578,7 +604,7 @@ describe('YearView', () => {
 
       expect(screen.getByLabelText('Previous year')).toBeInTheDocument()
       expect(screen.getByLabelText('Next year')).toBeInTheDocument()
-      expect(screen.getByRole('button', { name: 'Go to current year' })).toBeInTheDocument()
+      expect(screen.getByRole('button', { name: 'Go to today' })).toBeInTheDocument()
     })
 
     it('offers the same two ways of reading the year', () => {
