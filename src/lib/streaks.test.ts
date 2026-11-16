@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { currentStreak, longestStreak } from './streaks'
+import { currentStreak, isBestEver, lastDays, longestStreak } from './streaks'
 
 const on = (...dates: string[]) => new Set(dates)
 const march = (day: number) => new Date(2026, 2, day, 12)
@@ -93,5 +93,51 @@ describe('the longest streak', () => {
 
   it('does not join two runs separated by a gap', () => {
     expect(longestStreak(on('2026-03-01', '2026-03-03'), march(4))).toBe(1)
+  })
+})
+
+// The second tile of the streak sheet. "Longest" beside the same number as "Right now"
+// reads as a second fact when it is the same one, so the tile says so (agreed 2026-11-03).
+describe('whether the run going now is the best ever', () => {
+  it('is when the run now equals the best', () => {
+    expect(isBestEver(5, 5)).toBe(true)
+  })
+
+  it('is not while the run now is shorter than the best', () => {
+    expect(isBestEver(4, 9)).toBe(false)
+  })
+
+  // Nothing equals nothing, and "Your best ever" over 0 days would be a joke at somebody's
+  // expense.
+  it('is not with no run at all, even when there has never been one', () => {
+    expect(isBestEver(0, 0)).toBe(false)
+  })
+})
+
+describe('the last days', () => {
+  it('lists the days ending today, oldest first, today last', () => {
+    const days = lastDays(on(), march(14), 14)
+
+    expect(days).toHaveLength(14)
+    expect(days[0].date).toBe('2026-03-01')
+    expect(days[13].date).toBe('2026-03-14')
+    expect(days.filter((day) => day.isToday).map((day) => day.date)).toEqual(['2026-03-14'])
+  })
+
+  it('says which of them have something logged', () => {
+    const days = lastDays(on('2026-03-02', '2026-03-04', '2026-02-27'), march(4), 3)
+
+    expect(days.map((day) => [day.date, day.done])).toEqual([
+      ['2026-03-02', true],
+      ['2026-03-03', false],
+      ['2026-03-04', true],
+    ])
+  })
+
+  it('crosses the end of a month and a year', () => {
+    const days = lastDays(on('2025-12-31'), new Date(2026, 0, 2, 12), 3)
+
+    expect(days.map((day) => day.date)).toEqual(['2025-12-31', '2026-01-01', '2026-01-02'])
+    expect(days[0].done).toBe(true)
   })
 })
