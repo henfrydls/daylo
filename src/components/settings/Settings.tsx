@@ -225,7 +225,7 @@ export function Settings({
         {/* Clear of the notch at the top and of the system's gesture strip at the bottom:
             this surface is fixed to the viewport, so it is outside the wrapper that keeps
             the rest of the app clear of both. */}
-        <div className="sticky top-0 z-10 flex items-center gap-2 border-b border-gray-200 bg-white px-4 pb-3 pt-[calc(0.75rem+env(safe-area-inset-top))] sm:px-5 sm:pt-3">
+        <div className="sticky top-0 z-10 flex items-center gap-2 border-b border-gray-200 bg-white px-4 pb-3 pt-[calc(0.75rem+var(--inset-top))] sm:px-5 sm:pt-3">
           <button
             type="button"
             onClick={onClose}
@@ -241,7 +241,7 @@ export function Settings({
 
         <div
           data-testid="settings-scroller"
-          className="px-4 pb-[calc(4rem+env(safe-area-inset-bottom))] pt-5 sm:px-5"
+          className="px-4 pb-[calc(4rem+var(--inset-bottom))] pt-5 sm:px-5"
         >
           {hasReminders ? (
             <Section title="Reminders">

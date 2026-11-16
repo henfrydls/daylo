@@ -126,7 +126,7 @@ export function ConfirmDialog({
       />
       <div
         ref={dialogRef}
-        className={`relative bg-white rounded-t-xl sm:rounded-xl shadow-xl max-w-sm w-full mx-0 sm:mx-4 p-4 sm:p-6 motion-safe:transition-[translate,scale,opacity] duration-[250ms] ${DIALOG_CURVE} ${
+        className={`relative bg-white rounded-t-xl sm:rounded-xl shadow-xl max-w-sm w-full mx-0 sm:mx-4 p-4 pb-[calc(1rem+var(--inset-bottom))] sm:p-6 motion-safe:transition-[translate,scale,opacity] duration-[250ms] ${DIALOG_CURVE} ${
           arrived
             ? 'translate-y-0 opacity-100 sm:scale-100'
             : 'translate-y-full opacity-0 sm:translate-y-0 sm:scale-95'

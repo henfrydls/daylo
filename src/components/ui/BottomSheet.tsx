@@ -442,7 +442,7 @@ export function BottomSheet({
             handing it on to the page behind. */}
         <div
           ref={listRef}
-          className="min-h-0 overflow-y-auto overscroll-contain touch-pan-y px-4 pb-6"
+          className="min-h-0 overflow-y-auto overscroll-contain touch-pan-y px-4 pb-[calc(1.5rem+var(--inset-bottom))]"
           data-testid="bottom-sheet-list"
         >
           {children}
