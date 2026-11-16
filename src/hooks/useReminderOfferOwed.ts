@@ -9,7 +9,6 @@ import { reminderOfferOwed } from '../lib/reminders'
 export function useReminderOfferOwed(available: boolean): boolean {
   const offered = useCalendarStore((s) => s.reminderOffered)
   const activityCount = useCalendarStore((s) => s.activities.length)
-  const tickDays = useCalendarStore((s) => s.reminderTickDays)
   const lastTickDay = useCalendarStore((s) => s.reminderLastTickDay)
   const dismissedOn = useCalendarStore((s) => s.reminderOfferDismissedOn)
   const closedThisSession = useCalendarStore((s) => s._reminderOfferClosed)
@@ -17,7 +16,6 @@ export function useReminderOfferOwed(available: boolean): boolean {
     available,
     offered,
     activityCount,
-    tickDays,
     lastTickDay,
     dismissedOn,
     closedThisSession,

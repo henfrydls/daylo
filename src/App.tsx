@@ -234,10 +234,13 @@ function App() {
   const feedbackAsked = useCalendarStore((state) => state._feedbackAsked)
   const { showToast } = useToast()
 
-  // The same rule DailyReminder opens it by (lib/reminders.ts, reminderOfferOwed). Owed
-  // from the first launch, as it used to be, it held back the invitation to write for as
-  // long as somebody logged on a single day; and closed beside it, it stayed owed for the
-  // rest of the session.
+  // The same rule DailyReminder opens it by (lib/reminders.ts, reminderOfferOwed). It is
+  // owed as soon as the first activity exists, as in 1.5.5, on purpose: a product
+  // decision, so the offer reaches somebody on their first day, once the sheet that day
+  // was logged in has closed, rather than only those who come back. Somebody who never
+  // returns would otherwise never be asked, and the reminder is what brings them back.
+  // The invitation to write waits behind it while it is owed; closed without an answer,
+  // it is not owed again in that session, nor before a tick on a later day.
   const reminderOfferOwed = useReminderOfferOwed(hasReminders)
 
   // The day on screen, and what happens when it is no longer today.

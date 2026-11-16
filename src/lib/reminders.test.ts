@@ -440,13 +440,13 @@ describe('whether the offer is owed', () => {
     available: true,
     offered: false,
     activityCount: 1,
-    tickDays: 2,
     lastTickDay: '2026-10-09',
     dismissedOn: null,
     closedThisSession: false,
   }
 
-  it('is owed on the second day of use with a habit', () => {
+  // The first habit is enough, on the day it is made.
+  it('is owed as soon as there is a habit, on the first day of use', () => {
     expect(reminderOfferOwed(owed)).toBe(true)
   })
 
@@ -456,10 +456,6 @@ describe('whether the offer is owed', () => {
 
   it('is not owed without a habit', () => {
     expect(reminderOfferOwed({ ...owed, activityCount: 0 })).toBe(false)
-  })
-
-  it('is not owed on the first day of use', () => {
-    expect(reminderOfferOwed({ ...owed, tickDays: 1 })).toBe(false)
   })
 
   it('is not owed once answered', () => {

@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
-import { useCalendarStore } from './index'
+import { useCalendarStore, STORAGE_KEY } from './index'
 
 describe('useCalendarStore', () => {
   beforeEach(() => {
@@ -688,14 +688,13 @@ describe('what the store remembers about the check-in', () => {
   })
 })
 
-// The reminder offer's days of use (1.6). Counted by the phone's calendar when a tick
-// happens, not from the dates of the logs: filling in yesterday on the first day, or
-// importing a year, is not coming back.
-describe('the days of use the reminder offer counts', () => {
+// The reminder offer's last day of use (1.6). Recorded by the phone's calendar when a tick
+// happens, not from the dates of the logs: filling in yesterday, or importing a year, is
+// not coming back.
+describe('the last day of use the reminder offer reads', () => {
   const read = () => {
-    const { reminderTickDays, reminderLastTickDay, _tickedThisSession } =
-      useCalendarStore.getState()
-    return { reminderTickDays, reminderLastTickDay, _tickedThisSession }
+    const { reminderLastTickDay, _tickedThisSession } = useCalendarStore.getState()
+    return { reminderLastTickDay, _tickedThisSession }
   }
 
   beforeEach(() => {
@@ -719,7 +718,6 @@ describe('the days of use the reminder offer counts', () => {
         },
       ],
       logs: [],
-      reminderTickDays: 0,
       reminderLastTickDay: null,
       _tickedThisSession: false,
     })
@@ -729,41 +727,29 @@ describe('the days of use the reminder offer counts', () => {
     vi.useRealTimers()
   })
 
-  it('counts a tick as a day of use, and the session as one with a tick', () => {
+  it('records the day of a tick, and the session as one with a tick', () => {
     useCalendarStore.getState().toggleLog('a1', '2026-10-08')
 
     expect(read()).toEqual({
-      reminderTickDays: 1,
       reminderLastTickDay: '2026-10-08',
       _tickedThisSession: true,
     })
   })
 
-  // The case growth named: a first day spent filling in the week before is one day.
-  it('counts filling in earlier days on the first day as one day', () => {
+  // Filling in the week before is done today.
+  it("records the phone's day, not the day that was filled in", () => {
     useCalendarStore.getState().toggleLog('a1', '2026-10-06')
-    useCalendarStore.getState().toggleLog('a1', '2026-10-07')
-    useCalendarStore.getState().toggleLog('a2', '2026-10-08')
+    useCalendarStore.getState().toggleLog('a2', '2026-10-07')
 
-    expect(read().reminderTickDays).toBe(1)
+    expect(read().reminderLastTickDay).toBe('2026-10-08')
   })
 
-  it('counts a second day by the phone, whatever day is ticked', () => {
+  it('moves to a later day by the phone, whatever day is ticked', () => {
     useCalendarStore.getState().toggleLog('a1', '2026-10-08')
     vi.setSystemTime(new Date(2026, 9, 9, 8, 0))
     useCalendarStore.getState().toggleLog('a1', '2026-10-01')
 
-    expect(read()).toMatchObject({ reminderTickDays: 2, reminderLastTickDay: '2026-10-09' })
-  })
-
-  it('stops counting at two', () => {
-    useCalendarStore.getState().toggleLog('a1', '2026-10-08')
-    vi.setSystemTime(new Date(2026, 9, 9, 8, 0))
-    useCalendarStore.getState().toggleLog('a1', '2026-10-09')
-    vi.setSystemTime(new Date(2026, 9, 10, 8, 0))
-    useCalendarStore.getState().toggleLog('a1', '2026-10-10')
-
-    expect(read()).toMatchObject({ reminderTickDays: 2, reminderLastTickDay: '2026-10-10' })
+    expect(read()).toMatchObject({ reminderLastTickDay: '2026-10-09' })
   })
 
   it('does not count an untick', () => {
@@ -773,7 +759,6 @@ describe('the days of use the reminder offer counts', () => {
     useCalendarStore.getState().toggleLog('a1', '2026-10-08')
 
     expect(read()).toEqual({
-      reminderTickDays: 1,
       reminderLastTickDay: '2026-10-08',
       _tickedThisSession: false,
     })
@@ -795,7 +780,7 @@ describe('the days of use the reminder offer counts', () => {
 
     useCalendarStore.getState().toggleLog('a1', '2026-10-07')
 
-    expect(read()).toMatchObject({ reminderTickDays: 1, _tickedThisSession: true })
+    expect(read()).toEqual({ reminderLastTickDay: '2026-10-08', _tickedThisSession: true })
   })
 
   // Import writes activities and logs with setState (ImportModal), and nothing else.
@@ -820,21 +805,43 @@ describe('the days of use the reminder offer counts', () => {
     })
 
     expect(read()).toEqual({
-      reminderTickDays: 0,
       reminderLastTickDay: null,
       _tickedThisSession: false,
     })
   })
 
-  it('remembers the count and the dismissals across a restart, and not the session', () => {
+  // The count of days the offer once waited for is gone, and is not written back.
+  it('remembers the last day and the dismissals across a restart, and not the session', () => {
     const persisted = useCalendarStore.persist.getOptions().partialize!(useCalendarStore.getState())
 
-    expect(persisted).toHaveProperty('reminderTickDays')
+    expect(persisted).not.toHaveProperty('reminderTickDays')
     expect(persisted).toHaveProperty('reminderLastTickDay')
     expect(persisted).toHaveProperty('reminderOfferDismissals')
     expect(persisted).toHaveProperty('reminderOfferDismissedOn')
     expect(persisted).not.toHaveProperty('_tickedThisSession')
     expect(persisted).not.toHaveProperty('_reminderOfferClosed')
+  })
+
+  // A copy that stored the old count does not carry it into the state: merge drops it on
+  // the way in, and what is written next is without it.
+  it('drops the old count of days on the way in', async () => {
+    useCalendarStore.setState(useCalendarStore.getInitialState(), true)
+    await new Promise((resolve) => setTimeout(resolve, 20))
+    localStorage.clear()
+    localStorage.setItem(
+      STORAGE_KEY,
+      JSON.stringify({
+        state: { activities: [], logs: [], reminderTickDays: 2, reminderLastTickDay: '2026-11-14' },
+        version: 0,
+      })
+    )
+
+    await useCalendarStore.persist.rehydrate()
+
+    const state = useCalendarStore.getState()
+    expect(state).not.toHaveProperty('reminderTickDays')
+    expect(state.reminderLastTickDay).toBe('2026-11-14')
+    localStorage.clear()
   })
 })
 
