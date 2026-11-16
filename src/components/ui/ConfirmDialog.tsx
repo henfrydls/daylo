@@ -6,8 +6,15 @@ import { DIALOG_CURVE, DIALOG_STAYS_FOR } from './Modal'
 
 interface ConfirmDialogProps {
   isOpen: boolean
+  /** Closes it, whichever way: the cancel button, the backdrop, Escape, or after confirming. */
   onClose: () => void
   onConfirm: () => void
+  /**
+   * The cancel button only, called before onClose. For a question where saying no is an
+   * answer and tapping beside the dialog is not (the reminder offer): without it the two
+   * are the same door.
+   */
+  onCancel?: () => void
   title: string
   message: string
   confirmText?: string
@@ -20,6 +27,7 @@ export function ConfirmDialog({
   isOpen,
   onClose,
   onConfirm,
+  onCancel,
   title,
   message,
   confirmText = 'Confirm',
@@ -123,6 +131,7 @@ export function ConfirmDialog({
         className={`absolute inset-0 bg-black/50 transition-opacity duration-[250ms] ${arrived ? 'opacity-100' : 'opacity-0'}`}
         onClick={onClose}
         aria-hidden="true"
+        data-testid="confirm-dialog-backdrop"
       />
       <div
         ref={dialogRef}
@@ -154,7 +163,10 @@ export function ConfirmDialog({
           <Button
             variant="ghost"
             className="flex-1 order-2 sm:order-1"
-            onClick={onClose}
+            onClick={() => {
+              onCancel?.()
+              onClose()
+            }}
             data-testid="confirm-dialog-cancel"
           >
             {cancelText}

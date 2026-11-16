@@ -45,6 +45,7 @@ import { UpdateNotice } from './components/updates/UpdateNotice'
 import { StreakChip } from './components/streak/StreakChip'
 import { sendComment, sendRating, sendShown } from './lib/feedback'
 import { FEEDBACK_MAILTO, openMailto, shouldInviteFeedback } from './lib/feedbackInvite'
+import { reminderOfferDue } from './lib/reminders'
 import { openLink } from './lib/openLink'
 
 /**
@@ -228,7 +229,14 @@ function App() {
   const feedbackAsked = useCalendarStore((state) => state._feedbackAsked)
   const { showToast } = useToast()
 
-  const reminderOfferOwed = hasReminders && !reminderOffered
+  // Owed only once it can be asked: a habit and a second day with a log (see
+  // DailyReminder). Owed from the first launch, it held back the invitation to write for
+  // as long as somebody logged on a single day, and that may be for ever.
+  const activityCount = useCalendarStore((state) => state.activities.length)
+  const reminderOfferOwed = useMemo(
+    () => hasReminders && !reminderOffered && reminderOfferDue(activityCount, logs),
+    [hasReminders, reminderOffered, activityCount, logs]
+  )
 
   // The day on screen, and what happens when it is no longer today.
   //

@@ -794,11 +794,20 @@ describe('the line and the reminder, on a new Android installation', () => {
     await act(async () => {})
     await screen.findByTestId('checkin-notice')
 
-    // A first habit exists, so the reminder can finally ask. Its modal opens over the
-    // line, which is allowed: one is a question, the other is a statement.
+    // A habit, a second day with a log, and a tick in this session: the reminder can
+    // finally ask. Its modal opens over the line, which is allowed: one is a question,
+    // the other is a statement.
     await act(async () => {
       useCalendarStore.setState({
         activities: [{ id: 'a1', name: 'Read', color: '#10B981', createdAt: NOW, updatedAt: NOW }],
+        logs: ['2026-10-08', '2026-10-09'].map((date) => ({
+          id: date,
+          activityId: 'a1',
+          date,
+          completed: true,
+          createdAt: NOW,
+        })),
+        _loggedThisSession: true,
       })
     })
     expect(await screen.findByText('Remind me each evening?')).toBeInTheDocument()

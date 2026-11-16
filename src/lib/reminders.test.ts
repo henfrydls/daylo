@@ -4,7 +4,7 @@ import {
   REMINDER_ID,
   disableReminder,
   enableReminder,
-  offeredReminderTime,
+  reminderOfferDue,
   reconcileReminder,
   refreshReminder,
   remindersAvailable,
@@ -394,63 +394,33 @@ describe('a re-arm overtaken on its way', () => {
 })
 
 /**
- * What time to offer somebody who has just made their first activity.
- *
- * It used to be whatever hour this was written with, which is a reminder the person has to
- * go and move before it means anything. The next hour on the hour is soon enough to be
- * tonight, which is the point of being asked now.
+ * When the offer is worth making: a habit, and two different days with something ticked.
  */
-describe('the time the offer proposes', () => {
-  const at = (hour: number, minute: number) =>
-    offeredReminderTime(new Date(2026, 9, 9, hour, minute))
-
-  it('is the next hour, on the hour', () => {
-    expect(at(12, 0)).toEqual({ hour: 13, minute: 0 })
-    expect(at(14, 37)).toEqual({ hour: 15, minute: 0 })
+describe('whether the offer is due', () => {
+  const log = (date: string, completed = true) => ({
+    id: date,
+    activityId: 'a',
+    date,
+    completed,
+    createdAt: `${date}T12:00:00.000Z`,
   })
 
-  // Eleven at night to seven in the morning is a notification nobody wants. Eight in the
-  // evening is the next time of day somebody would plausibly be told anything.
-  it('stays out of the night', () => {
-    expect(at(22, 59)).toEqual({ hour: 20, minute: 0 })
-    expect(at(23, 30)).toEqual({ hour: 20, minute: 0 })
-    expect(at(3, 0)).toEqual({ hour: 20, minute: 0 })
-    expect(at(5, 0)).toEqual({ hour: 20, minute: 0 })
+  it('is not due without a habit, whatever the logs say', () => {
+    expect(reminderOfferDue(0, [log('2026-10-08'), log('2026-10-09')])).toBe(false)
   })
 
-  // The two edges of that window, which is where a rule like this goes wrong. Seven is
-  // outside it: being reminded at seven in the morning is a choice people make.
-  it('puts seven in the morning on the right side of it', () => {
-    expect(at(6, 30)).toEqual({ hour: 7, minute: 0 })
-    expect(at(6, 59)).toEqual({ hour: 7, minute: 0 })
-    expect(at(5, 59)).toEqual({ hour: 20, minute: 0 })
+  it('is not due on one day, however many ticks it has', () => {
+    expect(
+      reminderOfferDue(2, [log('2026-10-09'), { ...log('2026-10-09'), activityId: 'b' }])
+    ).toBe(false)
   })
 
-  it('does not propose eleven, the first hour of the window', () => {
-    expect(at(22, 0)).toEqual({ hour: 20, minute: 0 })
-    expect(at(21, 0)).toEqual({ hour: 22, minute: 0 })
+  it('is due on the second different day', () => {
+    expect(reminderOfferDue(1, [log('2026-10-08'), log('2026-10-09')])).toBe(true)
   })
 
-  /**
-   * The examples, which are the part that goes wrong.
-   *
-   * The rule was right and tested from the day it was written. What was wrong was the
-   * sentence explaining it, in the comment on `offeredReminderTime` and again in the
-   * changelog fragment, both giving 22:52 as a reminder for eleven tonight. That is the
-   * one case `does not propose eleven` exists to forbid, and nothing checked the example
-   * against the rule because an example in a comment is not run.
-   *
-   * It is run now. Change either sentence and this is what says so.
-   */
-  it('matches the example the comment gives, and the one the changelog gives', () => {
-    // "told at 20:52, a reminder at 21:00 is tonight"
-    expect(at(20, 52)).toEqual({ hour: 21, minute: 0 })
-    // "agreed to at ten to nine is one that arrives at nine"
-    expect(at(20, 50)).toEqual({ hour: 21, minute: 0 })
-    // "from ten at night until six in the morning ... eight in the evening"
-    expect(at(22, 0)).toEqual({ hour: 20, minute: 0 })
-    expect(at(5, 59)).toEqual({ hour: 20, minute: 0 })
-    expect(at(6, 0)).toEqual({ hour: 7, minute: 0 })
+  it('does not count a day that was unticked again', () => {
+    expect(reminderOfferDue(1, [log('2026-10-08'), log('2026-10-09', false)])).toBe(false)
   })
 })
 

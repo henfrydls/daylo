@@ -5,6 +5,7 @@ import {
   Schedule,
 } from '@tauri-apps/plugin-notification'
 import { invoke, isTauri } from '@tauri-apps/api/core'
+import type { ActivityLog } from '../types'
 
 /**
  * One fixed id, so Daylo owns exactly one reminder and can always find it again. Cancelling
@@ -70,33 +71,29 @@ export type ReminderOutcome =
  * platform. Desktop is deliberately out: a notification that only fires while the app is
  * running is not a reminder, and nobody has asked for one.
  */
-/** The earliest and latest the offer will ever propose, when the next hour is no good. */
-export const TOO_LATE = 23
-export const TOO_EARLY = 7
-export const INSTEAD = 20
+/**
+ * The time the offer proposes: nine in the evening (1.6, approved on 2026-11-02).
+ *
+ * It used to be the next hour on the hour, so somebody asked at two in the afternoon was
+ * offered three, a reminder for a day they had already logged. Nine is late enough that
+ * the day has happened and early enough to still log it.
+ */
+export const OFFERED_REMINDER_HOUR = 21
 
 /**
- * The time to offer somebody who has just made their first activity.
- *
- * The next hour on the hour, because the question is being asked now and the answer should
- * be soon enough to mean something: told at 20:52, a reminder at 21:00 is tonight. A fixed
- * hour chosen when this was written is a reminder somebody has to go and move.
- *
- * Except at night. Between eleven and seven the next hour is a notification nobody wants,
- * so it offers eight in the evening instead: the next time of day somebody would plausibly
- * be told anything. Seven is outside the quiet window on purpose, because being reminded
- * at seven in the morning is a choice people make.
- *
- * That is a rule about the hour offered, so read from the clock it starts an hour earlier:
- * from ten at night until six in the morning the next hour is already in the window, and
- * eight in the evening is what comes back. This paragraph used to give 22:52 as the
- * example of a reminder tonight, which is the one case `does not propose eleven` exists to
- * forbid. Nothing was wrong with the code; the example was.
+ * Whether the reminder is worth offering yet: there is a habit, and there are at least
+ * two different days with something ticked. The first day is for the habit; somebody who
+ * comes back and logs a second one is who a daily reminder is for. A record unticked
+ * again (completed: false) is not a day with a log.
  */
-export function offeredReminderTime(now: Date = new Date()): { hour: number; minute: number } {
-  const next = (now.getHours() + 1) % 24
-  if (next >= TOO_LATE || next < TOO_EARLY) return { hour: INSTEAD, minute: 0 }
-  return { hour: next, minute: 0 }
+export function reminderOfferDue(activityCount: number, logs: ActivityLog[]): boolean {
+  if (activityCount === 0) return false
+  const days = new Set<string>()
+  for (const entry of logs) {
+    if (entry.completed) days.add(entry.date)
+    if (days.size >= 2) return true
+  }
+  return false
 }
 
 export async function remindersAvailable(): Promise<boolean> {

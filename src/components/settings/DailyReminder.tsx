@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { ConfirmDialog, useToast } from '../ui'
 import { useCalendarStore } from '../../store'
 import { useRemindersAvailable } from '../../hooks'
@@ -6,21 +6,23 @@ import {
   disableReminder,
   enableReminder,
   formatReminderTime,
-  offeredReminderTime,
+  OFFERED_REMINDER_HOUR,
   reconcileReminder,
   refreshReminder,
+  reminderOfferDue,
 } from '../../lib/reminders'
 
 /**
  * Keeps the daily reminder in step with whether there is anything to be reminded about.
  *
- * Everything here follows from the same count. The offer is put once, and only after a
- * first habit exists, because asking on an empty app is asking about nothing; the alarm
+ * Everything here follows from the same count. The offer is put once, and only on the
+ * second day with something logged (see when it opens, below); the alarm
  * comes down when the last habit goes, because a notification that outlives what it
  * reminds about is how an app gets uninstalled; and it comes back when a habit does.
  *
  * Both the accepted and the declined answer are recorded, so the question is never put
- * again. The setting in the menu is what somebody uses to change their mind.
+ * again. Closing it without answering is not an answer. The setting in the menu is what
+ * somebody uses to change their mind.
  */
 export function DailyReminder() {
   const activityCount = useCalendarStore((state) => state.activities.length)
@@ -70,6 +72,9 @@ export function DailyReminder() {
   }, [available, activityCount, setReminder])
 
   const accept = async () => {
+    // Answered, whatever the phone says next: a refused permission is not a reason to ask
+    // the same question again tomorrow.
+    markReminderOffered()
     const { outcome } = await enableReminder(offerHour, offerMinute)
     if (outcome === 'on') {
       setReminder(true, offerHour, offerMinute)
@@ -85,35 +90,51 @@ export function DailyReminder() {
     }
   }
 
+  // When it opens (1.6, approved on 2026-11-02 and confirmed on 2026-11-15):
+  //
+  // - On the second different day with something logged, not on the first: the first day
+  //   is for the habit. It used to open in the first second of the first launch with a
+  //   habit, over the day sheet.
+  // - After something was logged in this session, and with the day sheet closed: the
+  //   question is about the moment somebody has just logged, and it does not sit on top of
+  //   the sheet where the tick happens. Closing the sheet clears selectedDate, and the
+  //   session flag stays true, so it opens the moment the sheet is out of the way.
+  // - Tapping beside it, or Escape, closes it for this session only. "Not now" and "Turn
+  //   on" are the answers, and only they spend it. It used to be spent by any close.
+  const logs = useCalendarStore((state) => state.logs)
+  const due = useMemo(() => reminderOfferDue(activityCount, logs), [activityCount, logs])
+  const loggedThisSession = useCalendarStore((state) => state._loggedThisSession)
+  const daySheetOpen = useCalendarStore((state) => state.selectedDate !== null)
+  const [closedThisSession, setClosedThisSession] = useState(false)
+
   // Three things want a person's attention once, and none of them may talk over another:
   // this offer, the check-in's, and the invitation to write. Whichever opens first takes
   // the session, and the other two stand down until the next one.
   const offerThisSession = useCalendarStore((state) => state._offerThisSession)
-  const offerIsOpen = available && !offered && activityCount > 0 && offerThisSession !== 'checkin'
+  const offerIsOpen =
+    available &&
+    !offered &&
+    due &&
+    loggedThisSession &&
+    !daySheetOpen &&
+    !closedThisSession &&
+    offerThisSession !== 'checkin'
   const claimOffer = useCalendarStore((state) => state.claimOffer)
   useEffect(() => {
     if (offerIsOpen) claimOffer('reminder')
   }, [offerIsOpen, claimOffer])
 
-  /**
-   * The hour this offer proposes, fixed the moment it is put.
-   *
-   * Worked out once and held, rather than read on every render: the question is being
-   * asked now, and a time that moved while the dialog was open would mean the sentence
-   * somebody read and the reminder they agreed to were different things. Somebody who
-   * leaves the dialog up across the hour gets what they were offered.
-   */
-  const [proposed] = useState(() => offeredReminderTime())
   const chosen = useCalendarStore((state) => state.reminderTimeChosen)
   // Theirs if they picked one, ours if nobody has. Somebody who went into Settings and set
   // a time before this was ever put has answered the question already.
-  const offerHour = chosen ? hour : proposed.hour
-  const offerMinute = chosen ? minute : proposed.minute
+  const offerHour = chosen ? hour : OFFERED_REMINDER_HOUR
+  const offerMinute = chosen ? minute : 0
 
   return (
     <ConfirmDialog
       isOpen={offerIsOpen}
-      onClose={markReminderOffered}
+      onClose={() => setClosedThisSession(true)}
+      onCancel={markReminderOffered}
       onConfirm={() => void accept()}
       title="Remind me each evening?"
       message={`A notification around ${formatReminderTime(offerHour, offerMinute)} so the day does not go unlogged. Android picks the exact moment. You can change the time or turn it off in Settings.`}
