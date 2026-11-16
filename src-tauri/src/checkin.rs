@@ -80,13 +80,17 @@ pub fn checkin_fields<R: tauri::Runtime>(
 }
 
 /// The message, and nothing but the message. `last` is added only when the switch is being
-/// turned off. Separate from the sending so that "exactly these five keys" is something a
+/// turned off. Separate from the sending so that "exactly these six keys" is something a
 /// test asserts rather than something a comment claims.
 ///
 /// `source` is one word for the way this copy was installed, and it is here because the
 /// panel could count twenty copies on Windows without knowing how many came from the Store.
 /// It says nothing about the person: two people who both installed the same file send the
 /// same word.
+///
+/// `activities` is whether there is at least one habit, a yes or a no and never how many
+/// or which (1.6). It lets the panel tell a copy that was installed and left empty from one
+/// where somebody started a habit, which is the step every later number depends on.
 pub fn message(
     id: &str,
     version: &str,
@@ -94,8 +98,16 @@ pub fn message(
     source: &str,
     date: &str,
     last: bool,
+    activities: bool,
 ) -> serde_json::Value {
-    let mut data = serde_json::json!({ "id": id, "version": version, "os": os, "source": source, "date": date });
+    let mut data = serde_json::json!({
+        "id": id,
+        "version": version,
+        "os": os,
+        "source": source,
+        "activities": activities,
+        "date": date,
+    });
     if last {
         data["last"] = serde_json::Value::Bool(true);
     }
@@ -112,6 +124,7 @@ pub async fn send_checkin<R: tauri::Runtime>(
     id: String,
     date: String,
     last: bool,
+    activities: bool,
 ) -> Result<(), String> {
     // Through the same gate as the screen, and before anything opens a socket: a webview
     // that was already open, or a caller that skips the screen entirely, gets the same
@@ -121,7 +134,7 @@ pub async fn send_checkin<R: tauri::Runtime>(
         os,
         source,
     } = fields(&app)?;
-    let body = message(&id, &version, os, source, &date, last);
+    let body = message(&id, &version, os, source, &date, last, activities);
     tauri::async_runtime::spawn_blocking(move || post(body))
         .await
         .map_err(|error| error.to_string())?
@@ -292,19 +305,20 @@ fn post(_body: serde_json::Value) -> Result<(), String> {
 mod tests {
     use super::{message, WEBSITE};
 
-    /// The promise the privacy policy makes, as an assertion. Five keys, and a sixth only
+    /// The promise the privacy policy makes, as an assertion. Six keys, and a seventh only
     /// when the switch is being turned off — which the dialog announces before anyone can
     /// turn anything on.
     ///
-    /// It was four until 1.4.1 added how the copy was installed. The list is written out
+    /// It was four until 1.4.1 added how the copy was installed, and five until 1.6 added
+    /// whether there is at least one habit. The list is written out
     /// rather than counted, so adding a field is a decision somebody makes here and then
     /// goes and writes into the policy, instead of something that slips out with a build.
     ///
     /// The number also travels outside `data`, in the envelope, where the panel reads it as
-    /// "who sent this". That is the same number written twice and not a sixth thing, and
+    /// "who sent this". That is the same number written twice and not a seventh thing, and
     /// `the_envelope_carries_the_number_and_nothing_else` is where it is pinned.
     #[test]
-    fn carries_five_things_and_a_sixth_only_at_the_end() {
+    fn carries_six_things_and_a_seventh_only_at_the_end() {
         let ordinary = message(
             "4f9c2a7e1b60d3a8c5e2f1b74a9d0c6e",
             "1.3.0",
@@ -312,13 +326,19 @@ mod tests {
             "apk",
             "2026-09-14",
             false,
+            false,
         );
         let data = ordinary["payload"]["data"].as_object().unwrap();
 
         let mut keys: Vec<&str> = data.keys().map(String::as_str).collect();
         keys.sort_unstable();
-        assert_eq!(keys, ["date", "id", "os", "source", "version"]);
+        assert_eq!(
+            keys,
+            ["activities", "date", "id", "os", "source", "version"]
+        );
         assert_eq!(data["source"], serde_json::json!("apk"));
+        // A boolean, so it cannot grow into a count without this line changing.
+        assert_eq!(data["activities"], serde_json::json!(false));
 
         let farewell = message(
             "4f9c2a7e1b60d3a8c5e2f1b74a9d0c6e",
@@ -327,11 +347,24 @@ mod tests {
             "apk",
             "2026-09-14",
             true,
+            true,
         );
         let data = farewell["payload"]["data"].as_object().unwrap();
         let mut keys: Vec<&str> = data.keys().map(String::as_str).collect();
         keys.sort_unstable();
-        assert_eq!(keys, ["date", "id", "last", "os", "source", "version"]);
+        assert_eq!(
+            keys,
+            [
+                "activities",
+                "date",
+                "id",
+                "last",
+                "os",
+                "source",
+                "version"
+            ]
+        );
+        assert_eq!(data["activities"], serde_json::json!(true));
         assert_eq!(farewell["payload"]["data"]["last"], serde_json::json!(true));
     }
 
@@ -357,6 +390,7 @@ mod tests {
             app.handle().clone(),
             "4f9c2a7e1b60d3a8c5e2f1b74a9d0c6e".into(),
             "2026-09-16".into(),
+            false,
             false,
         ));
         // The answers go through the same gate, and are asserted here rather than in a
@@ -478,7 +512,15 @@ mod tests {
     /// out here would be something nobody decided.
     #[test]
     fn the_envelope_carries_the_number_and_nothing_else() {
-        let m = message("the-number", "1.3.0", "linux", "deb", "2026-09-14", false);
+        let m = message(
+            "the-number",
+            "1.3.0",
+            "linux",
+            "deb",
+            "2026-09-14",
+            false,
+            false,
+        );
 
         assert_eq!(m["type"], serde_json::json!("event"));
         assert_eq!(m["payload"]["hostname"], serde_json::json!("app"));

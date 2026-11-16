@@ -58,6 +58,17 @@ export function generateCheckinId(): string {
   return Array.from(bytes, (byte) => byte.toString(16).padStart(2, '0')).join('')
 }
 
+/**
+ * Whether this copy has at least one habit, which is the sixth thing the message carries
+ * (1.6). With it the panel can tell a copy that was installed and left empty from one
+ * that started a habit. It is a yes or a no on purpose: how many, or which, would say
+ * something about what a person tracks, and the message says nothing about that. Read at
+ * the moment the message is made, so a habit created a minute ago counts today.
+ */
+function hasAHabit(): boolean {
+  return useCalendarStore.getState().activities.length > 0
+}
+
 /** The day as the person's own calendar has it, which is the day the message carries. */
 export function today(): string {
   return formatDate(new Date())
@@ -73,6 +84,8 @@ export async function sendCheckin(args: {
   id: string
   date: string
   last: boolean
+  /** Whether there is at least one habit. Not how many, and not which. */
+  activities: boolean
 }): Promise<boolean> {
   try {
     await invoke('send_checkin', args)
@@ -105,7 +118,7 @@ async function send(id: string, last: boolean): Promise<boolean> {
     // Read once. A send that crosses midnight records the day it said, not the day the
     // answer came back on, or tomorrow would be spent on a message about today.
     const date = today()
-    const ok = await sendCheckin({ id, date, last })
+    const ok = await sendCheckin({ id, date, last, activities: hasAHabit() })
     useCalendarStore.getState().recordCheckinAttempt(date, new Date().toISOString(), ok)
     return ok
   } finally {
@@ -176,5 +189,7 @@ export async function turnOffCheckin(): Promise<'sent' | 'lost'> {
   useCalendarStore.getState().setCheckin(false, null)
   if (!id) return 'lost'
 
-  return (await sendCheckin({ id, date: today(), last: true })) ? 'sent' : 'lost'
+  return (await sendCheckin({ id, date: today(), last: true, activities: hasAHabit() }))
+    ? 'sent'
+    : 'lost'
 }

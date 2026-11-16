@@ -20,7 +20,7 @@ interface WhatGetsSentProps {
  * The whole message, written out, behind a row that has to be opened.
  *
  * Closed by default and not a link: a decision about what a program sends should be
- * answerable without leaving the decision, and the five lines are short enough to put
+ * answerable without leaving the decision, and the six lines are short enough to put
  * here.
  *
  * Everything the check-in has to say is in here now, which is why it opens into a panel
@@ -59,7 +59,7 @@ export function WhatGetsSent({ fields, id }: WhatGetsSentProps) {
       {open ? (
         // A panel rather than more list, because what is in here is one thing: a sentence,
         // the message it describes, and what undoing it costs. Read together they answer
-        // the question the row asks; spread down the list they read as five more settings.
+        // the question the row asks; spread down the list they read as six more settings.
         <div
           id={contentId}
           className="mb-1 space-y-3 rounded-[10px] bg-gray-50 px-3.5 py-3 text-sm text-gray-600"
@@ -77,6 +77,10 @@ export function WhatGetsSent({ fields, id }: WhatGetsSentProps) {
               // people who installed the same file send the same word, which is why it
               // can be here at all.
               ['How it was installed', fields?.source ?? ''],
+              // A yes or a no, and the row says that rather than this copy's answer, so it
+              // reads the same before anybody turns the check-in on. Never how many or
+              // which: that would be about what somebody tracks.
+              ['Habits', 'Yes or no: whether you have at least one'],
               ['Date', today()],
             ].map(([label, value]) => (
               <div key={label} className="flex flex-wrap gap-x-2">
