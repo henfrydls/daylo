@@ -24,6 +24,9 @@ const enableReminder = vi.hoisted(() => vi.fn())
 const disableReminder = vi.hoisted(() => vi.fn())
 const exactAlarms = vi.hoisted(() => vi.fn())
 const askForExactAlarms = vi.hoisted(() => vi.fn())
+const notificationPermission = vi.hoisted(() => vi.fn())
+const openNotificationSettings = vi.hoisted(() => vi.fn())
+const remindersAvailable = vi.hoisted(() => vi.fn())
 
 vi.mock('../../lib/reminders', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../../lib/reminders')>()),
@@ -31,6 +34,9 @@ vi.mock('../../lib/reminders', async (importOriginal) => ({
   disableReminder,
   exactAlarms,
   askForExactAlarms,
+  notificationPermission,
+  openNotificationSettings,
+  remindersAvailable,
 }))
 
 const check = vi.fn()
@@ -66,6 +72,10 @@ beforeEach(() => {
   // The APK on a phone that allows it. The Play build has tests of its own below.
   exactAlarms.mockReset().mockResolvedValue('exact')
   askForExactAlarms.mockReset().mockResolvedValue(true)
+  notificationPermission.mockReset().mockResolvedValue('granted')
+  openNotificationSettings.mockReset().mockResolvedValue(true)
+  // The Android app, where the permission is read. Where reminders do not exist it is not.
+  remindersAvailable.mockReset().mockResolvedValue(true)
   inTheApp.yes = false
   check.mockReset()
   install.mockReset()
@@ -291,6 +301,68 @@ describe('the reminder row', () => {
     show({ hasReminders: true })
 
     expect(screen.getByText('Off')).toBeInTheDocument()
+  })
+})
+
+/**
+ * Notifications refused for good, or turned off for Daylo in the phone's settings (#192).
+ * The switch used to be refused with a toast and nothing else, and Android does not ask
+ * again after the second no: a dead end. The row says what is wrong and the switch goes to
+ * the one place it can be fixed.
+ */
+describe('the reminder row, with notifications blocked', () => {
+  it('says notifications are off for Daylo', async () => {
+    notificationPermission.mockResolvedValue('denied')
+    useCalendarStore.setState({ reminderEnabled: false })
+
+    show({ hasReminders: true })
+
+    expect(
+      await screen.findByText('Notifications are off for Daylo. Tap to allow them.')
+    ).toBeInTheDocument()
+    expect(screen.queryByText('Off')).not.toBeInTheDocument()
+  })
+
+  it('opens the phone settings for notifications instead of asking again', async () => {
+    notificationPermission.mockResolvedValue('denied')
+    useCalendarStore.setState({ reminderEnabled: false })
+    const user = userEvent.setup()
+    show({ hasReminders: true })
+    await screen.findByText('Notifications are off for Daylo. Tap to allow them.')
+
+    await user.click(screen.getByTestId('reminder-switch'))
+
+    expect(openNotificationSettings).toHaveBeenCalledTimes(1)
+    expect(enableReminder).not.toHaveBeenCalled()
+  })
+
+  // Read out with the switch, so somebody who cannot see the line knows what it does.
+  it('tells the switch what it does now', async () => {
+    notificationPermission.mockResolvedValue('denied')
+    show({ hasReminders: true })
+    await screen.findByText('Notifications are off for Daylo. Tap to allow them.')
+
+    expect(screen.getByTestId('reminder-switch')).toHaveAccessibleDescription(
+      'Notifications are off for Daylo. Tap to allow them.'
+    )
+  })
+
+  it('goes back to an ordinary switch once they are allowed', async () => {
+    notificationPermission.mockResolvedValue('denied')
+    useCalendarStore.setState({ reminderEnabled: false })
+    const user = userEvent.setup()
+    show({ hasReminders: true })
+    await screen.findByText('Notifications are off for Daylo. Tap to allow them.')
+
+    notificationPermission.mockResolvedValue('granted')
+    await act(async () => {
+      document.dispatchEvent(new Event('visibilitychange'))
+    })
+    await screen.findByText('Off')
+    await user.click(screen.getByTestId('reminder-switch'))
+
+    expect(enableReminder).toHaveBeenCalledTimes(1)
+    expect(openNotificationSettings).not.toHaveBeenCalled()
   })
 })
 

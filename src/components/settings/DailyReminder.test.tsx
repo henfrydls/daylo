@@ -651,3 +651,87 @@ describe('opening the app', () => {
     expect(disableReminder).not.toHaveBeenCalled()
   })
 })
+
+/**
+ * Logging today moves the reminder to tomorrow, and taking the last tick off brings it back
+ * to today (#192). The component only says when; what the next ring is, is decided where
+ * the reminder is armed (reminderStartsAfter in lib/reminders.ts), from the logs as they are.
+ */
+describe('logging today', () => {
+  const today = () => {
+    const d = new Date()
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+  }
+
+  async function onWithAHabit(enabled = true) {
+    remindersAvailable.mockResolvedValue(true)
+    useCalendarStore.setState({
+      activities: [anActivity('a'), anActivity('b')],
+      reminderEnabled: enabled,
+      reminderHour: 21,
+      reminderMinute: 30,
+      reminderOffered: true,
+    })
+    render(<DailyReminder canAsk={false} />)
+    await settle()
+  }
+
+  const tick = async (activityId: string, date: string) => {
+    act(() => useCalendarStore.getState().toggleLog(activityId, date))
+    await settle()
+  }
+
+  it('arms the reminder again when today gets its first tick', async () => {
+    await onWithAHabit()
+    expect(refreshReminder).toHaveBeenCalledTimes(1)
+
+    await tick('a', today())
+
+    expect(refreshReminder).toHaveBeenCalledTimes(2)
+    expect(refreshReminder).toHaveBeenLastCalledWith(21, 30)
+  })
+
+  it('arms it again when the last tick of today is taken off', async () => {
+    await onWithAHabit()
+    await tick('a', today())
+    await tick('a', today())
+
+    expect(refreshReminder).toHaveBeenCalledTimes(3)
+  })
+
+  // The day was already logged, and still is: the reminder is already on tomorrow.
+  it('leaves it alone for a second tick today, and for taking one of two off', async () => {
+    await onWithAHabit()
+    await tick('a', today())
+    await tick('b', today())
+    await tick('b', today())
+
+    expect(refreshReminder).toHaveBeenCalledTimes(2)
+  })
+
+  it('leaves it alone for a tick on another day', async () => {
+    await onWithAHabit()
+    await tick('a', '2026-01-05')
+
+    expect(refreshReminder).toHaveBeenCalledTimes(1)
+  })
+
+  it('does nothing while the reminder is off', async () => {
+    await onWithAHabit(false)
+    await tick('a', today())
+
+    expect(refreshReminder).not.toHaveBeenCalled()
+  })
+
+  // The same rule as at launch: a re-arm that finds the permission gone turns the switch off
+  // and takes down what is left on the phone.
+  it('turns the switch off when the re-arm finds it can no longer be armed', async () => {
+    await onWithAHabit()
+    refreshReminder.mockResolvedValue(false)
+
+    await tick('a', today())
+
+    expect(useCalendarStore.getState().reminderEnabled).toBe(false)
+    expect(disableReminder).toHaveBeenCalled()
+  })
+})

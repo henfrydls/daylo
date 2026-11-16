@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { useCalendarStore } from '../store'
 import {
   askForExactAlarms,
@@ -7,8 +7,12 @@ import {
   exactAlarms,
   type ExactAlarms,
   formatReminderTime,
+  notificationPermission,
+  type NotificationPermission,
+  openNotificationSettings,
 } from '../lib/reminders'
 import { useToast } from '../components/ui'
+import { useRemindersAvailable } from './useRemindersAvailable'
 
 /**
  * How close to its time the reminder will arrive, which is the one thing the screen needs
@@ -44,6 +48,17 @@ interface DailyReminder {
    * Google Play one, is not on that screen.
    */
   askForTime: () => Promise<void>
+  /**
+   * Android will not ask about notifications any more, after the second no, or they were
+   * turned off for Daylo in the phone's settings. Only the settings can change it, so the
+   * screen offers them instead of a switch that would be refused without a word.
+   */
+  notificationsBlocked: boolean
+  /**
+   * Open the phone's notification settings for Daylo. Coming back with notifications
+   * allowed turns the reminder on, because that is what the trip was for.
+   */
+  allowNotifications: () => Promise<void>
   turnOn: (hour: number, minute: number) => Promise<boolean>
   turnOff: () => Promise<void>
   changeTime: (hour: number, minute: number) => void
@@ -131,6 +146,25 @@ export function useDailyReminder(): DailyReminder {
     }
   }, [enabled])
 
+  // Whether Daylo may send notifications, as the phone has it now (#192). Read when the
+  // screen starts and every time the app comes back to the front, switch on or off, because
+  // the place it changes is the phone's settings, and the switch has to work the moment
+  // somebody comes back from allowing it there, without Daylo being restarted. Only a
+  // `denied` is acted on; not knowing leaves things as they were.
+  const [permission, setPermission] = useState<NotificationPermission>('unknown')
+  // Set when this screen sent somebody to the settings, and spent on the first return that
+  // finds notifications allowed: that return turns the reminder on.
+  const wentToSettings = useRef(false)
+  // Only where reminders exist. Everywhere else this screen has nothing to say about
+  // notifications, and every return to the front would be a question to a bridge that is
+  // not there.
+  const available = useRemindersAvailable()
+  const readPermission = useCallback(async (): Promise<NotificationPermission> => {
+    const now = await notificationPermission()
+    setPermission(now)
+    return now
+  }, [])
+
   // Changes take effect as they are made, the way a phone's own settings behave.
   const turnOn = async (nextHour: number, nextMinute: number): Promise<boolean> => {
     setBusy(true)
@@ -143,10 +177,17 @@ export function useDailyReminder(): DailyReminder {
       }
       if (outcome === 'permission-denied') {
         showToast('Daylo needs permission to send notifications', 'error')
+        // After the second no Android stops asking, and the plugin starts saying `denied`:
+        // read now, so the screen offers the settings from this refusal on.
+        void readPermission()
       }
       if (outcome === 'failed') {
         showToast('Daylo could not set the reminder on this phone', 'error')
         setFailure(reason ?? 'the phone did not say why')
+      }
+      if (outcome === 'unanswered') {
+        showToast('Daylo could not set the reminder on this phone', 'error')
+        setFailure('the phone did not say whether Daylo may send notifications')
       }
       // A refusal can come while it was on, with a new time picked after the permission
       // was taken away. The switch goes off, and the alarm already on the phone goes with
@@ -159,6 +200,42 @@ export function useDailyReminder(): DailyReminder {
     } finally {
       setBusy(false)
     }
+  }
+
+  // The latest turnOn, for the listener below, which is set up once and would otherwise
+  // call the one from the render it was made in, with that render's time.
+  const turnOnNow = useRef(turnOn)
+  turnOnNow.current = turnOn
+
+  useEffect(() => {
+    if (!available) return
+    let listening = true
+    const read = () => {
+      void readPermission().then((now) => {
+        if (!listening || now !== 'granted' || !wentToSettings.current) return
+        wentToSettings.current = false
+        const { reminderEnabled, reminderHour, reminderMinute } = useCalendarStore.getState()
+        if (!reminderEnabled) void turnOnNow.current(reminderHour, reminderMinute)
+      })
+    }
+    read()
+    const onReturn = () => {
+      if (document.visibilityState === 'visible') read()
+    }
+    // Both, because coming back from the phone's settings is not announced the same way
+    // everywhere: visibilitychange is the one Android's WebView sends, focus covers a
+    // window that was never hidden.
+    document.addEventListener('visibilitychange', onReturn)
+    window.addEventListener('focus', onReturn)
+    return () => {
+      listening = false
+      document.removeEventListener('visibilitychange', onReturn)
+      window.removeEventListener('focus', onReturn)
+    }
+  }, [available, readPermission])
+
+  const allowNotifications = async (): Promise<void> => {
+    wentToSettings.current = await openNotificationSettings()
   }
 
   const turnOff = async (): Promise<void> => {
@@ -205,6 +282,8 @@ export function useDailyReminder(): DailyReminder {
     failure,
     punctuality: answer ?? 'unknown',
     askForTime,
+    notificationsBlocked: permission === 'denied',
+    allowNotifications,
     turnOn,
     turnOff,
     changeTime,

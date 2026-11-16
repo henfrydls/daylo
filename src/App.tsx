@@ -36,6 +36,7 @@ import {
   useCheckinFields,
   useMediaQuery,
   useReminderOfferOwed,
+  useReminderOpensToday,
   useRemindersAvailable,
   useUpdates,
   useViewCarousel,
@@ -273,6 +274,15 @@ function App() {
     setShownDay(today)
     /* eslint-enable react-hooks/set-state-in-effect */
   }, [today, shownDay])
+
+  // A tap on the daily reminder opens today's sheet, over anything else App has open: the
+  // notification asks how today went, and the sheet is where that is answered (#192).
+  const clearTheWayForToday = useCallback(() => {
+    setSettings('closed')
+    setIsBottomSheetOpen(false)
+    setStreakSheetOpen(false)
+  }, [])
+  useReminderOpensToday(shownDay, hasHydrated, clearTheWayForToday)
 
   // The run the chip says, read the way the rest of the app reads it: a day counts as soon
   // as any one habit is logged, and today not being ticked yet does not end it. Read

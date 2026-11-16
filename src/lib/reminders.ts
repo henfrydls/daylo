@@ -1,10 +1,8 @@
-import {
-  cancel,
-  isPermissionGranted,
-  requestPermission,
-  Schedule,
-} from '@tauri-apps/plugin-notification'
+import { cancel, Schedule } from '@tauri-apps/plugin-notification'
 import { invoke, isTauri } from '@tauri-apps/api/core'
+import { useCalendarStore } from '../store'
+import { formatDate } from './dates'
+import type { ActivityLog } from '../types'
 
 /**
  * One fixed id, so Daylo owns exactly one reminder and can always find it again. Cancelling
@@ -61,6 +59,12 @@ export type ReminderOutcome =
   | 'permission-denied'
   /** Not the Android app. Nothing to schedule. */
   | 'unavailable'
+  /**
+   * The phone did not say whether Daylo may send notifications, within
+   * PERMISSION_PATIENCE_MS. Nothing is asked and nothing is scheduled: not an answer from
+   * the person or the phone, so nothing about the reminder is decided on it.
+   */
+  | 'unanswered'
 
 /**
  * Whether this build can schedule a reminder at all.
@@ -212,6 +216,125 @@ export async function askForExactAlarms(): Promise<boolean> {
 }
 
 /**
+ * Whether Daylo may send notifications, as the phone has it right now.
+ *
+ * - `granted` and `denied`, as Android says. From Android 13, `denied` is the plugin's word
+ *   for a permission Android will not ask about again, after the second no; below 13 it
+ *   means notifications were turned off for Daylo in the phone's settings. Either way only
+ *   the settings can change it.
+ * - `prompt`: Android 13 or later, and Android would still ask. Not asked yet, or asked and
+ *   refused once.
+ * - `unknown`: no phone, a question that failed, or one that did not come back within
+ *   PERMISSION_PATIENCE_MS.
+ *
+ * Asked of the plugin every time, and not through its isPermissionGranted. That one reads
+ * window.Notification.permission, which the plugin's script sets once, when the page loads.
+ * Somebody who said no, allowed notifications in the phone's settings and came back found
+ * a page that still believed the no: the switch refused until Daylo was closed and opened
+ * again (#192).
+ */
+export type NotificationPermission = 'granted' | 'denied' | 'prompt' | 'unknown'
+
+/**
+ * How long the permission question may take. It is a lookup on the phone and answers in
+ * milliseconds; one that has not answered in three seconds is not going to, and the switch,
+ * and every call queued behind it in inTurn, would wait for it for ever.
+ */
+export const PERMISSION_PATIENCE_MS = 3_000
+
+/** The promise, or a rejection once `ms` have passed without it settling. */
+function withPatience<T>(promise: Promise<T>, ms: number): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined
+  const late = new Promise<never>((_, reject) => {
+    timer = setTimeout(() => reject(new Error(`no answer within ${ms} ms`)), ms)
+  })
+  return Promise.race([promise, late]).finally(() => clearTimeout(timer))
+}
+
+export async function notificationPermission(): Promise<NotificationPermission> {
+  // Asked first so that the desktop, where the plugin is not registered, is not a console
+  // error every time a screen wants to know.
+  if (!(await remindersAvailable())) {
+    return 'unknown'
+  }
+  let answer: unknown
+  try {
+    // The plugin's own command, which asks Android (checkPermissions) every time: true,
+    // false, or null for "Android would still ask".
+    answer = await withPatience(
+      invoke('plugin:notification|is_permission_granted'),
+      PERMISSION_PATIENCE_MS
+    )
+  } catch (error) {
+    console.error('[Daylo] could not tell whether notifications are allowed', error)
+    return 'unknown'
+  }
+  if (answer === true) return 'granted'
+  if (answer === false) return 'denied'
+  if (answer === null) return 'prompt'
+  console.error('[Daylo] the answer about notifications made no sense', answer)
+  return 'unknown'
+}
+
+/**
+ * Ask the person, and say whether they said yes.
+ *
+ * The plugin's command rather than its requestPermission, which goes through the same
+ * cached window.Notification. Not given a time limit, because it waits for a person: while
+ * Android's question is on the screen there is nothing else to do. It used to be able to
+ * wait for ever with nobody to answer, from Android 13, when the permission was already
+ * granted: the plugin's Kotlin had no branch for that and never replied. The fork pinned in
+ * src-tauri/Cargo.toml replies.
+ */
+async function askForNotifications(): Promise<boolean> {
+  return (await invoke('plugin:notification|request_permission')) === 'granted'
+}
+
+/**
+ * Open the phone's own notification settings for Daylo, and say whether they opened.
+ *
+ * The only way left once Android has stopped asking, which it does after the second no, and
+ * the only way at all below Android 13 when notifications were turned off there. Opening
+ * them grants nothing: the person decides, and the app reads the permission again when it
+ * comes back to the front.
+ */
+export async function openNotificationSettings(): Promise<boolean> {
+  if (!isTauri()) {
+    return false
+  }
+  try {
+    return (await invoke<boolean>('open_notification_settings')) === true
+  } catch {
+    return false
+  }
+}
+
+/**
+ * When the reminder may first ring, as milliseconds since the epoch, or undefined for "the
+ * next time it comes round".
+ *
+ * After midnight when anything was logged today: "How did today go? Tap to log it." to
+ * somebody who logged at seven, every evening, teaches them to silence it (#192). Today is
+ * the clock's day at the moment of arming, the same one the log was ticked on, and any
+ * completed log counts, which is how the rest of the app decides a day was logged.
+ *
+ * Only the first ring moves. The plugin's interval re-arms itself every day from then on,
+ * so somebody who does not open Daylo for three days is still reminded on each of them.
+ * That is why this is not done by cancelling the reminder, which would stop it until the
+ * app was opened again.
+ */
+export function reminderStartsAfter(
+  logs: readonly Pick<ActivityLog, 'date' | 'completed'>[],
+  now: Date
+): number | undefined {
+  const today = formatDate(now)
+  if (!logs.some((log) => log.completed && log.date === today)) {
+    return undefined
+  }
+  return new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1).getTime()
+}
+
+/**
  * Put the reminder on the phone's alarm queue, and say whether it got there.
  *
  * Called through invoke rather than through the plugin's own sendNotification, which is
@@ -224,6 +347,19 @@ export async function askForExactAlarms(): Promise<boolean> {
  * time cannot leave yesterday's reminder behind.
  */
 async function putOnTheQueue(hour: number, minute: number): Promise<string | null> {
+  // The zero is load bearing. The plugin's Kotlin builds the next trigger from a calendar
+  // made of *now* and sets only the fields it was given, zeroing the milliseconds and
+  // leaving the seconds (NotificationSchedule.kt, buildNextTriggerTime). Without this, a
+  // reminder set at 21:00:36 fires at 21:00:36 every night: on the minute by accident of
+  // when the switch was pressed. Seen on a phone on 2026-10-13 as origWhen=21:00:36.
+  const schedule = Schedule.interval({ hour, minute, second: 0 }, true)
+  // Read here, at the moment of arming, so that every way in (the switch, the offer, the
+  // re-arm at launch and after a tick) decides the same way. `notBefore` is the fork's
+  // (src-tauri/Cargo.toml): the first ring is the first match at or after it.
+  const startsAfter = reminderStartsAfter(useCalendarStore.getState().logs, new Date())
+  if (startsAfter !== undefined && schedule.interval) {
+    schedule.interval = { ...schedule.interval, notBefore: startsAfter } as typeof schedule.interval
+  }
   try {
     await invoke('plugin:notification|notify', {
       options: {
@@ -231,13 +367,7 @@ async function putOnTheQueue(hour: number, minute: number): Promise<string | nul
         title: TITLE,
         body: BODY,
         icon: REMINDER_ICON,
-        // The zero is load bearing. The plugin's Kotlin builds the next trigger from a
-        // calendar made of *now* and sets only the fields it was given, zeroing the
-        // milliseconds and leaving the seconds (NotificationSchedule.kt,
-        // buildNextTriggerTime). Without this, a reminder set at 21:00:36 fires at
-        // 21:00:36 every night: on the minute by accident of when the switch was pressed.
-        // Seen on a phone on 2026-10-13 as origWhen=21:00:36.
-        schedule: Schedule.interval({ hour, minute, second: 0 }, true),
+        schedule,
       },
     })
     return null
@@ -314,10 +444,10 @@ function inTurn<T>(work: (overtaken: () => boolean) => Promise<T>): Promise<T> {
  * granted the permission too: the re-armed reminder still wakes a dozing phone, inexactly. See
  * `[patch.crates-io]` in src-tauri/Cargo.toml.
  *
- * It will fire whether or not anything was logged that day. Suppressing it on a day
- * already logged would mean cancelling and re-arming from inside the app, and then a
- * person who does not open Daylo for three days stops being reminded on the days they
- * most need it. The wording is neutral for that reason.
+ * On a day already logged it waits for tomorrow: see reminderStartsAfter, which moves only
+ * the first ring, so a person who does not open Daylo for three days is still reminded on
+ * each of them. It used to fire whether or not anything was logged, because the only way
+ * then to skip a day was to cancel and re-arm from inside the app.
  */
 export function enableReminder(hour: number, minute: number): Promise<ReminderResult> {
   return inTurn(async () => {
@@ -325,11 +455,14 @@ export function enableReminder(hour: number, minute: number): Promise<ReminderRe
       return { outcome: 'unavailable' }
     }
 
-    let granted = await isPermissionGranted()
-    if (!granted) {
-      granted = (await requestPermission()) === 'granted'
+    const permission = await notificationPermission()
+    if (permission === 'unknown') {
+      return { outcome: 'unanswered' }
     }
-    if (!granted) {
+    // Asked on `denied` too. It costs nothing, Android answers no at once without showing
+    // anything, and the plugin's `denied` is a note it keeps, which could be older than
+    // the phone's own state. The screen offers the settings for that case.
+    if (permission !== 'granted' && !(await askForNotifications())) {
       return { outcome: 'permission-denied' }
     }
 
@@ -373,7 +506,11 @@ export function enableReminder(hour: number, minute: number): Promise<ReminderRe
  *
  * Null when another call to arm or cancel came in while this one was on its way: it then
  * schedules nothing, and its answer is not acted on, because the newer call decides. See
- * inTurn.
+ * inTurn. Null too when the phone did not say whether notifications are allowed.
+ *
+ * Also what moves the reminder to tomorrow when today gets logged, and back to today when
+ * the last tick of the day is taken off and its time has not come yet: DailyReminder calls
+ * it on both, and putOnTheQueue reads the day as it is at that moment.
  */
 export function refreshReminder(hour: number, minute: number): Promise<boolean | null> {
   return inTurn(async (overtaken) => {
@@ -382,7 +519,13 @@ export function refreshReminder(hour: number, minute: number): Promise<boolean |
     }
     // Deliberately does not request it. Being asked again on every launch is how an app
     // teaches people to say no.
-    if (!(await isPermissionGranted())) {
+    const permission = await notificationPermission()
+    // Not knowing is not "off". Said as null, which the screen does not act on, so a slow
+    // answer cannot turn the switch off and cancel a reminder that may be fine.
+    if (permission === 'unknown') {
+      return null
+    }
+    if (permission !== 'granted') {
       return overtaken() ? null : false
     }
     if (overtaken()) {

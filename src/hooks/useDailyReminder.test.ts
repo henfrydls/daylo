@@ -7,6 +7,9 @@ const enableReminder = vi.hoisted(() => vi.fn())
 const disableReminder = vi.hoisted(() => vi.fn())
 const exactAlarms = vi.hoisted(() => vi.fn())
 const askForExactAlarms = vi.hoisted(() => vi.fn())
+const notificationPermission = vi.hoisted(() => vi.fn())
+const openNotificationSettings = vi.hoisted(() => vi.fn())
+const remindersAvailable = vi.hoisted(() => vi.fn())
 
 vi.mock('../lib/reminders', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../lib/reminders')>()),
@@ -14,6 +17,9 @@ vi.mock('../lib/reminders', async (importOriginal) => ({
   disableReminder,
   exactAlarms,
   askForExactAlarms,
+  notificationPermission,
+  openNotificationSettings,
+  remindersAvailable,
 }))
 
 const showToast = vi.fn()
@@ -30,6 +36,10 @@ beforeEach(() => {
   // its own below.
   exactAlarms.mockReset().mockResolvedValue('exact')
   askForExactAlarms.mockReset().mockResolvedValue(true)
+  notificationPermission.mockReset().mockResolvedValue('granted')
+  openNotificationSettings.mockReset().mockResolvedValue(true)
+  // The Android app, where the permission is read. Where reminders do not exist it is not.
+  remindersAvailable.mockReset().mockResolvedValue(true)
   disableReminder.mockReset().mockResolvedValue(undefined)
   showToast.mockReset()
   useCalendarStore.setState({ reminderEnabled: false, reminderHour: 21, reminderMinute: 0 })
@@ -488,5 +498,166 @@ describe('when the installed build does not ask for exact alarms', () => {
     await waitFor(() => expect(exactAlarms).toHaveBeenCalledTimes(2))
 
     expect(enableReminder).not.toHaveBeenCalled()
+  })
+})
+
+/**
+ * A permission that was refused is not a dead end (#192).
+ *
+ * Android stops asking after the second no, and below Android 13 it never asks: the only
+ * way back is the phone's notification settings. The screen offers them, and finds out
+ * what was decided there when the app comes back to the front, without being restarted.
+ */
+describe('notifications blocked on the phone', () => {
+  const comeBack = async () => {
+    await act(async () => {
+      document.dispatchEvent(new Event('visibilitychange'))
+    })
+  }
+
+  it('says so once the phone has said so', async () => {
+    notificationPermission.mockResolvedValue('denied')
+    const { result } = renderHook(() => useDailyReminder())
+
+    await waitFor(() => expect(result.current.notificationsBlocked).toBe(true))
+  })
+
+  // Not asked yet, or refused once: Android would still ask, so the switch asks.
+  it('is not blocked while Android would still ask', async () => {
+    notificationPermission.mockResolvedValue('prompt')
+    const { result } = renderHook(() => useDailyReminder())
+    await act(async () => {})
+
+    expect(result.current.notificationsBlocked).toBe(false)
+  })
+
+  // Not knowing is not blocked: the way to the settings is for a no, not for a slow answer.
+  it('is not blocked when the phone did not say', async () => {
+    notificationPermission.mockResolvedValue('unknown')
+    const { result } = renderHook(() => useDailyReminder())
+    await act(async () => {})
+
+    expect(result.current.notificationsBlocked).toBe(false)
+  })
+
+  it('asks again when the app comes back to the front', async () => {
+    notificationPermission.mockResolvedValue('denied')
+    const { result } = renderHook(() => useDailyReminder())
+    await waitFor(() => expect(result.current.notificationsBlocked).toBe(true))
+
+    notificationPermission.mockResolvedValue('granted')
+    await comeBack()
+
+    await waitFor(() => expect(result.current.notificationsBlocked).toBe(false))
+  })
+
+  it('opens the phone settings for notifications', async () => {
+    notificationPermission.mockResolvedValue('denied')
+    const { result } = renderHook(() => useDailyReminder())
+
+    await act(async () => {
+      await result.current.allowNotifications()
+    })
+
+    expect(openNotificationSettings).toHaveBeenCalledTimes(1)
+  })
+
+  // Somebody who pressed the reminder's switch, was sent to the settings and allowed
+  // notifications there came back to turn the reminder on. It is on.
+  it('turns the reminder on when they come back having allowed notifications', async () => {
+    useCalendarStore.setState({ reminderEnabled: false, reminderHour: 20, reminderMinute: 15 })
+    notificationPermission.mockResolvedValue('denied')
+    const { result } = renderHook(() => useDailyReminder())
+    await waitFor(() => expect(result.current.notificationsBlocked).toBe(true))
+
+    await act(async () => {
+      await result.current.allowNotifications()
+    })
+    notificationPermission.mockResolvedValue('granted')
+    await comeBack()
+
+    await waitFor(() => expect(reminder().reminderEnabled).toBe(true))
+    expect(enableReminder).toHaveBeenCalledWith(20, 15)
+  })
+
+  it('turns nothing on when they come back without allowing them', async () => {
+    notificationPermission.mockResolvedValue('denied')
+    const { result } = renderHook(() => useDailyReminder())
+    await act(async () => {
+      await result.current.allowNotifications()
+    })
+
+    await comeBack()
+    await act(async () => {})
+
+    expect(enableReminder).not.toHaveBeenCalled()
+    expect(result.current.notificationsBlocked).toBe(true)
+  })
+
+  // Coming back to the front is an ordinary thing. Only a return from the settings this
+  // screen sent somebody to turns anything on.
+  it('turns nothing on for an ordinary return to the front', async () => {
+    notificationPermission.mockResolvedValue('granted')
+    renderHook(() => useDailyReminder())
+    await act(async () => {})
+
+    await comeBack()
+    await act(async () => {})
+
+    expect(enableReminder).not.toHaveBeenCalled()
+  })
+
+  // Once: a second return later in the day is not a second request.
+  it('turns it on once for one trip to the settings', async () => {
+    notificationPermission.mockResolvedValue('denied')
+    const { result } = renderHook(() => useDailyReminder())
+    await act(async () => {
+      await result.current.allowNotifications()
+    })
+    notificationPermission.mockResolvedValue('granted')
+    await comeBack()
+    await waitFor(() => expect(enableReminder).toHaveBeenCalledTimes(1))
+
+    await act(async () => {
+      await result.current.turnOff()
+    })
+    await comeBack()
+    await act(async () => {})
+
+    expect(enableReminder).toHaveBeenCalledTimes(1)
+  })
+
+  // The second no is the one after which Android stops asking. The screen learns it by
+  // asking again after the refusal, and offers the settings from then on.
+  it('reads the permission again after a refusal', async () => {
+    notificationPermission.mockResolvedValue('prompt')
+    enableReminder.mockResolvedValue({ outcome: 'permission-denied' })
+    const { result } = renderHook(() => useDailyReminder())
+    await act(async () => {})
+
+    notificationPermission.mockResolvedValue('denied')
+    await act(async () => {
+      await result.current.turnOn(21, 0)
+    })
+
+    await waitFor(() => expect(result.current.notificationsBlocked).toBe(true))
+  })
+
+  it('stays off, and says the phone did not answer, when the permission is unknown', async () => {
+    enableReminder.mockResolvedValue({ outcome: 'unanswered' })
+    const { result } = renderHook(() => useDailyReminder())
+
+    await act(async () => {
+      await result.current.turnOn(21, 0)
+    })
+
+    expect(reminder().reminderEnabled).toBe(false)
+    expect(showToast).toHaveBeenCalledWith(
+      'Daylo could not set the reminder on this phone',
+      'error'
+    )
+    expect(result.current.failure).toBe(
+      'the phone did not say whether Daylo may send notifications'
+    )
   })
 })
