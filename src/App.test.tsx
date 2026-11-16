@@ -199,7 +199,7 @@ describe('the way into import from an empty app', () => {
     render(<App />)
     await act(async () => {})
 
-    await userEvent.click(screen.getByRole('button', { name: 'Import your backup.' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Import your backup' }))
 
     expect(await screen.findByRole('dialog', { name: 'Import Data' })).toBeInTheDocument()
     expect(screen.queryByTestId('settings')).not.toBeInTheDocument()
@@ -232,7 +232,7 @@ describe('the way into import from an empty app', () => {
     render(<App />)
     await act(async () => {})
 
-    await userEvent.click(screen.getByRole('button', { name: 'Import your backup.' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Import your backup' }))
     const dialog = await screen.findByRole('dialog', { name: 'Import Data' })
     await userEvent.upload(dialog.querySelector('input[type="file"]') as HTMLInputElement, backup())
     await userEvent.click(await screen.findByRole('button', { name: /Import Data/ }))
@@ -240,7 +240,8 @@ describe('the way into import from an empty app', () => {
 
     await act(async () => {})
     expect(useCalendarStore.getState().activities).toHaveLength(1)
-    expect(screen.queryByRole('button', { name: 'Import your backup.' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Import your backup' })).not.toBeInTheDocument()
+    expect(screen.queryByTestId('first-day-door')).not.toBeInTheDocument()
     expect(document.activeElement).toBe(screen.getByTestId('month-title-button'))
   })
 
@@ -251,7 +252,7 @@ describe('the way into import from an empty app', () => {
     render(<App />)
     await act(async () => {})
 
-    const line = screen.getByRole('button', { name: 'Import your backup.' })
+    const line = screen.getByRole('button', { name: 'Import your backup' })
     fireEvent.click(line)
     await screen.findByRole('dialog', { name: 'Import Data' })
     fireEvent.click(screen.getByRole('button', { name: 'Cancel' }))
@@ -264,16 +265,112 @@ describe('the way into import from an empty app', () => {
   // to reveal, and in Year that neighbour is an empty Month with its own line. It keeps
   // the line so the neighbour is as tall as it will be once it arrives, and it is inert:
   // hidden from screen readers and out of reach of the keyboard and the finger.
+  // Year has its own door and line now, so there are two lines on the page: the one on
+  // screen, which works, and the hidden neighbour's, which nothing can reach.
   it('keeps the line in the hidden month beside Year out of reach', async () => {
     useCalendarStore.setState({ currentView: 'year' })
     render(<App />)
     await act(async () => {})
 
-    const lines = document.querySelectorAll('[data-testid="month-empty-import"]')
-    expect(lines).toHaveLength(1)
-    expect(lines[0].closest('[inert]')).not.toBeNull()
-    expect(lines[0].closest('[aria-hidden="true"]')).not.toBeNull()
-    expect(screen.queryByRole('button', { name: 'Import your backup.' })).not.toBeInTheDocument()
+    const lines = [...document.querySelectorAll('[data-testid="month-empty-import"]')]
+    expect(lines).toHaveLength(2)
+    const hidden = lines.filter((line) => line.closest('[inert]') !== null)
+    expect(hidden).toHaveLength(1)
+    expect(hidden[0].closest('[aria-hidden="true"]')).not.toBeNull()
+    expect(screen.getAllByRole('button', { name: 'Import your backup' })).toHaveLength(1)
+  })
+})
+
+// The first day: the door, the floating button, and the run from its first day.
+describe('the first day', () => {
+  // The day sheet opened here would otherwise stay open into the next test, where it holds
+  // back everything that waits for it.
+  afterEach(() => {
+    useCalendarStore.setState({ selectedDate: null })
+  })
+
+  const habit = {
+    id: 'a1',
+    name: 'Exercise',
+    color: '#10B981',
+    createdAt: '2026-01-01',
+    updatedAt: '2026-01-01',
+  }
+
+  // With nothing to manage, the round button only led to a panel that said so. The door
+  // is the one green thing to press.
+  it('has no floating button with no activities', async () => {
+    render(<App />)
+    await act(async () => {})
+
+    expect(screen.queryByTestId('fab-button')).not.toBeInTheDocument()
+    expect(screen.getAllByTestId('first-day-door').length).toBeGreaterThan(0)
+  })
+
+  it('has the floating button once there is an activity', async () => {
+    useCalendarStore.setState({ activities: [habit] })
+    render(<App />)
+    await act(async () => {})
+
+    expect(screen.getByTestId('fab-button')).toBeInTheDocument()
+    expect(screen.queryByTestId('first-day-door')).not.toBeInTheDocument()
+  })
+
+  it('goes from the door to a logged today, with a run of one in the header', async () => {
+    render(<App />)
+    await act(async () => {})
+
+    const door = screen
+      .getAllByTestId('first-day-door')
+      .find((node) => node.closest('[inert]') === null)!
+    await userEvent.click(door)
+    const input = await screen.findByTestId('quicklog-new-activity-input')
+    await waitFor(() => expect(input).toHaveFocus())
+    await userEvent.type(input, 'Read')
+    await userEvent.click(screen.getByTestId('quicklog-add-activity'))
+
+    expect(screen.getByTestId('first-day-line')).toHaveTextContent(
+      'Today is in. Log it again tomorrow.'
+    )
+    const today = formatDate(new Date())
+    expect(useCalendarStore.getState().logs.filter((l) => l.date === today)).toHaveLength(1)
+    expect(screen.queryByTestId('first-day-door')).not.toBeInTheDocument()
+    expect(screen.getByTestId('fab-button')).toBeInTheDocument()
+
+    const chip = screen.getAllByTestId('streak-chip')[0]
+    expect(chip).toHaveTextContent('1 day')
+    expect(chip.querySelector('[data-testid="streak-flame"]')).toHaveAttribute('data-lit', 'true')
+  })
+
+  // The run is there from its first day, hollow on the morning after until today is in.
+  it('shows the run of one, hollow, on the second morning', async () => {
+    const yesterday = new Date()
+    yesterday.setDate(yesterday.getDate() - 1)
+    const date = formatDate(yesterday)
+    useCalendarStore.setState({
+      activities: [habit],
+      logs: [{ id: 'l1', activityId: 'a1', date, completed: true, createdAt: date }],
+    })
+    render(<App />)
+    await act(async () => {})
+
+    const chip = screen.getAllByTestId('streak-chip')[0]
+    expect(chip).toHaveTextContent('1 day')
+    expect(chip.querySelector('[data-testid="streak-flame"]')).toHaveAttribute('data-lit', 'false')
+    expect(screen.getAllByTestId('today-bar-line')[0]).toHaveTextContent(
+      'Log today to make 2 days in a row'
+    )
+  })
+
+  it('brings the door back, and takes the button away, when the last activity goes', async () => {
+    useCalendarStore.setState({ activities: [habit] })
+    render(<App />)
+    await act(async () => {})
+
+    act(() => useCalendarStore.getState().deleteActivity('a1'))
+
+    expect(screen.getAllByTestId('first-day-door').length).toBeGreaterThan(0)
+    expect(screen.queryByTestId('fab-button')).not.toBeInTheDocument()
   })
 })
 

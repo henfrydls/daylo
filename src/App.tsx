@@ -211,6 +211,9 @@ function App() {
   const markStoreReviewOffered = useCalendarStore((s) => s.markStoreReviewOffered)
   const offerStoreReview = checkinFields?.source === 'store' && !storeReviewOffered
   const logs = useCalendarStore((state) => state.logs)
+  // With no activities the round button only led to a panel that said so, beside the door
+  // that does the job: one green thing to press, not two.
+  const hasActivities = useCalendarStore((state) => state.activities.length > 0)
 
   const firstOpenedAt = useCalendarStore((state) => state.firstOpenedAt)
   const feedbackInviteSeen = useCalendarStore((state) => state.feedbackInviteSeen)
@@ -677,7 +680,11 @@ function App() {
                   // remounts the views once, between gestures, never under a finger.
                   <div ref={railRef} className="relative">
                     <DayScope day={shownDay}>
-                      {currentView === 'year' ? <YearView /> : <MonthView onImport={openImport} />}
+                      {currentView === 'year' ? (
+                        <YearView onImport={openImport} />
+                      ) : (
+                        <MonthView onImport={openImport} />
+                      )}
                     </DayScope>
                     <div
                       ref={otherRef}
@@ -693,7 +700,7 @@ function App() {
                         {currentView === 'year' ? (
                           <MonthView onImport={openImport} />
                         ) : (
-                          <YearView />
+                          <YearView onImport={openImport} />
                         )}
                       </DayScope>
                     </div>
@@ -713,7 +720,11 @@ function App() {
                     {/* Inside the view's own key, so a new day does not play the change of
                         view again. */}
                     <DayScope day={shownDay}>
-                      {currentView === 'year' ? <YearView /> : <MonthView onImport={openImport} />}
+                      {currentView === 'year' ? (
+                        <YearView onImport={openImport} />
+                      ) : (
+                        <MonthView onImport={openImport} />
+                      )}
                     </DayScope>
                   </div>
                 )}
@@ -727,28 +738,30 @@ function App() {
             </div>
           </main>
 
-          {/* FAB Button - Visible only on mobile (< lg) */}
-          <button
-            onClick={() => setIsBottomSheetOpen(true)}
-            className="fixed bottom-[calc(1.5rem+var(--inset-bottom))] right-[calc(1.5rem+var(--inset-right))] z-20 lg:hidden w-14 h-14 bg-emerald-500 hover:bg-emerald-600 active:bg-emerald-700 text-white rounded-full shadow-lg flex items-center justify-center transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 focus-visible:ring-offset-2"
-            aria-label="Open activities panel"
-            data-testid="fab-button"
-          >
-            <svg
-              className="w-6 h-6"
-              fill="none"
-              viewBox="0 0 24 24"
-              stroke="currentColor"
-              aria-hidden="true"
+          {/* FAB Button - Visible only on mobile (< lg), once there is something to manage */}
+          {hasActivities && (
+            <button
+              onClick={() => setIsBottomSheetOpen(true)}
+              className="fixed bottom-[calc(1.5rem+var(--inset-bottom))] right-[calc(1.5rem+var(--inset-right))] z-20 lg:hidden w-14 h-14 bg-emerald-500 hover:bg-emerald-600 active:bg-emerald-700 text-white rounded-full shadow-lg flex items-center justify-center transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 focus-visible:ring-offset-2"
+              aria-label="Open activities panel"
+              data-testid="fab-button"
             >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={2}
-                d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4"
-              />
-            </svg>
-          </button>
+              <svg
+                className="w-6 h-6"
+                fill="none"
+                viewBox="0 0 24 24"
+                stroke="currentColor"
+                aria-hidden="true"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4"
+                />
+              </svg>
+            </button>
+          )}
 
           {/* Bottom Sheet - Activities + Stats for mobile */}
           <BottomSheet
