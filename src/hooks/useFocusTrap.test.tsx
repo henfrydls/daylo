@@ -1,4 +1,4 @@
-import { describe, it, expect, afterEach } from 'vitest'
+import { describe, it, expect, afterEach, vi } from 'vitest'
 import { act, render } from '@testing-library/react'
 import { useRef } from 'react'
 import { useFocusTrap } from './useFocusTrap'
@@ -118,5 +118,121 @@ describe('giving the focus back', () => {
     rerender(<Page open={false} mounted />)
 
     expect(document.activeElement).toBe(byId('opener'))
+  })
+
+  // The door in Year is in the hidden view by the time the day sheet opens over Month, and
+  // the focus went with it to <body>. Body is somewhere nobody can be sent back to.
+  it('goes to the fallback when it opened with the focus on the page', () => {
+    const fallback = () => byId('other')
+    const { rerender } = render(<Page open={false} fallback={fallback} />)
+    expect(document.activeElement).toBe(document.body)
+    rerender(<Page open fallback={fallback} />)
+    act(() => byId('inside').focus())
+
+    rerender(<Page open={false} fallback={fallback} />)
+
+    expect(document.activeElement).toBe(byId('other'))
+  })
+
+  // A tap on the backdrop drops the focus on <body> with the opener still there. Sending
+  // it back then scrolled the page towards the opener and lit a ring after a tap.
+  it('leaves a tap on the backdrop alone while what opened it is still there', () => {
+    const fallback = () => byId('other')
+    const { rerender } = render(<Page open={false} fallback={fallback} />)
+    byId('opener').focus()
+    rerender(<Page open fallback={fallback} />)
+    act(() => byId('inside').focus())
+    act(() => byId('inside').blur())
+
+    rerender(<Page open={false} fallback={fallback} />)
+
+    expect(document.activeElement).toBe(document.body)
+  })
+
+  it.each([
+    ['inert', (node: HTMLElement) => node.parentElement!.setAttribute('inert', '')],
+    ['under display: none', (node: HTMLElement) => (node.parentElement!.style.display = 'none')],
+    ['invisible', (node: HTMLElement) => (node.style.visibility = 'hidden')],
+  ])('goes to the fallback when what opened it is still there but %s', (_, hide) => {
+    const fallback = () => byId('other')
+    const { rerender } = render(
+      <>
+        <div>
+          <button data-testid="far">Far</button>
+        </div>
+        <Page open={false} opener={false} fallback={fallback} />
+      </>
+    )
+    byId('far').focus()
+    const view = (open: boolean) => (
+      <>
+        <div>
+          <button data-testid="far">Far</button>
+        </div>
+        <Page open={open} opener={false} fallback={fallback} />
+      </>
+    )
+    rerender(view(true))
+    act(() => byId('inside').focus())
+    hide(byId('far'))
+
+    rerender(view(false))
+
+    expect(document.activeElement).toBe(byId('other'))
+  })
+
+  // Giving the focus back must not scroll anything: on the phone that moved the page, or
+  // the rail, towards what had opened the sheet.
+  it('gives it back without scrolling', () => {
+    const { rerender } = render(<Page open={false} />)
+    byId('opener').focus()
+    rerender(<Page open />)
+    act(() => byId('inside').focus())
+    const focus = vi.spyOn(byId('opener'), 'focus')
+
+    rerender(<Page open={false} />)
+
+    expect(focus).toHaveBeenCalledWith({ preventScroll: true })
+  })
+})
+
+/**
+ * A trap inside a trap: the delete confirmation over the activities panel. Deleting the
+ * last activity takes the confirmation's opener (the row's bin) with it, and with no
+ * fallback of its own the focus fell to <body> behind a panel that was still open, where
+ * Tab walked out of it. It goes into the trap underneath instead.
+ */
+describe('a trap over a trap', () => {
+  function Outer({ inner, row }: { inner: boolean; row: boolean }) {
+    const outer = useRef<HTMLDivElement>(null)
+    useFocusTrap(outer, true, { autoFocus: false })
+    return (
+      <div ref={outer} data-testid="outer">
+        <button data-testid="add">+ Add</button>
+        {row ? <button data-testid="bin">Delete</button> : null}
+        <Inner open={inner} />
+      </div>
+    )
+  }
+  function Inner({ open }: { open: boolean }) {
+    const ref = useRef<HTMLDivElement>(null)
+    useFocusTrap(ref, open, { autoFocus: false })
+    return open ? (
+      <div ref={ref}>
+        <button data-testid="confirm">Delete</button>
+      </div>
+    ) : null
+  }
+
+  it('sends the focus into the trap underneath when the opener has gone', () => {
+    const { rerender } = render(<Outer inner={false} row />)
+    byId('bin').focus()
+    rerender(<Outer inner row />)
+    act(() => byId('confirm').focus())
+
+    rerender(<Outer inner={false} row={false} />)
+
+    expect(byId('outer').contains(document.activeElement)).toBe(true)
+    expect(document.activeElement).toBe(byId('add'))
   })
 })

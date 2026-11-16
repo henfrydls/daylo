@@ -1,5 +1,6 @@
 import { useEffect, useRef, type RefObject } from 'react'
 import { onAndroidBack } from '../lib/androidBack'
+import { reachable } from '../lib/onScreen'
 
 /**
  * Everything on screen that answers Escape, oldest first. Only the last one does.
@@ -14,6 +15,13 @@ import { onAndroidBack } from '../lib/androidBack'
  * dialog rendered through a portal is in nobody's tree.
  */
 const answeringEscape: Array<{ fire: () => void }> = []
+
+/**
+ * The traps that are switched on, oldest first, so one that closes with nowhere to send the
+ * focus can give it to the one underneath: the delete confirmation over the activities
+ * panel, whose opener was the row it deleted.
+ */
+const openTraps: Array<RefObject<HTMLElement | null>> = []
 
 const FOCUSABLE_SELECTOR =
   'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])'
@@ -86,6 +94,7 @@ export function useFocusTrap(
 
     // Capture container node for cleanup (React hooks/exhaustive-deps rule)
     const container = containerRef.current
+    openTraps.push(containerRef)
 
     // Lock body scroll
     document.body.style.overflow = 'hidden'
@@ -102,20 +111,40 @@ export function useFocusTrap(
       // Restore body scroll
       document.body.style.overflow = 'unset'
 
-      // Give it back while it is still the trap's to give: inside the container, or lost to
-      // the page because whatever held it went away. Anywhere else, somebody put it there.
+      const at = openTraps.lastIndexOf(containerRef)
+      if (at !== -1) openTraps.splice(at, 1)
+      if (!restoreFocus) return
+
       // The container as it is now, and not as it was when the trap switched on: the day
       // sheet is put on the page a render after it opens, so that one was always null and
       // the focus was never given back from it at all.
       // eslint-disable-next-line react-hooks/exhaustive-deps -- the node now, on purpose
       const holder = containerRef.current ?? container
       const active = document.activeElement
+      const inside = holder?.contains(active) ?? false
       const lost = active === null || active === document.body
-      if (restoreFocus && (lost || holder?.contains(active))) {
-        const before = previousActiveElement.current
-        const back = before?.isConnected ? before : (fallback.current?.() ?? null)
-        back?.focus()
+
+      // Back to what opened it, when somebody could still be there. <body> is not
+      // somewhere to go back to: the door in Year has gone into the hidden view by the time
+      // the day sheet opens, and the focus went with it.
+      const before = previousActiveElement.current
+      if (before !== null && before !== document.body && reachable(before)) {
+        // Only from inside. Focus dropped on the page by a tap on the backdrop, with the
+        // opener still there, stays where it fell: sending it back scrolled the page to
+        // the opener and lit a ring after a tap.
+        if (inside) before.focus({ preventScroll: true })
+        return
       }
+      // Nowhere to go back to. From inside, or lost to the page when what held it went
+      // away: what replaced the opener, or else into the trap underneath, so Tab does not
+      // walk out from behind a panel that is still open.
+      if (!inside && !lost) return
+      const underneath = openTraps[openTraps.length - 1]?.current ?? null
+      const target =
+        fallback.current?.() ??
+        underneath?.querySelector<HTMLElement>(FOCUSABLE_SELECTOR) ??
+        underneath
+      target?.focus({ preventScroll: true })
     }
   }, [isActive, restoreFocus, autoFocus, containerRef])
 

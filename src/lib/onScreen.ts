@@ -7,10 +7,23 @@
  */
 export function onScreen(selector: string): HTMLElement | null {
   for (const node of document.querySelectorAll<HTMLElement>(selector)) {
-    if (node.closest('[inert]') !== null) continue
-    if (getComputedStyle(node).visibility !== 'hidden' && !underDisplayNone(node)) return node
+    if (reachable(node)) return node
   }
   return null
+}
+
+/**
+ * Whether the focus could land on this node and somebody see it there: on the page, not
+ * inert, drawn. Being on the page alone is not enough: the door in Year is still connected
+ * when it has gone into the hidden, inert view beside Month.
+ */
+export function reachable(node: HTMLElement): boolean {
+  return (
+    node.isConnected &&
+    node.closest('[inert]') === null &&
+    getComputedStyle(node).visibility !== 'hidden' &&
+    !underDisplayNone(node)
+  )
 }
 
 /** `display` is not inherited, so a node inside a `display: none` box says block. */
