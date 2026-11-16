@@ -71,6 +71,18 @@ export function yesterdayStillOpen(done: ReadonlySet<string>, today: Date): numb
 }
 
 /**
+ * The second day, and only that one: one day has ever been logged, it was yesterday, and
+ * today is still open.
+ *
+ * Read from the logs, so nothing is saved to know it and it ends by itself: logging today
+ * makes two days, and a day later yesterday is no longer the one there was. A backup
+ * comes home with more than one day in it, so somebody who imported never sees it.
+ */
+export function isSecondDay(done: ReadonlySet<string>, today: Date): boolean {
+  return done.size === 1 && done.has(formatDate(subDays(today, 1)))
+}
+
+/**
  * The best run there has ever been, up to today.
  *
  * Days still to come are not part of it: an imported file can carry dates in the future,

@@ -5,6 +5,7 @@ import { ActivityForm } from './ActivityForm'
 import { useCalendarStore } from '../../store'
 import { ACTIVITY_COLORS } from '../../lib/colors'
 import type { Activity } from '../../types'
+import { formatDate } from '../../lib/dates'
 
 // Mock the store
 vi.mock('../../store', () => ({
@@ -23,11 +24,30 @@ const mockActivity: Activity = {
   updatedAt: '2024-01-01T00:00:00.000Z',
 }
 
+/** The store as the form sees it, with these activities already made. */
+function storeWith(activities: Activity[]) {
+  const mockStore = vi.mocked(useCalendarStore)
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  mockStore.mockImplementation((selector?: (state: any) => any) => {
+    const state = {
+      addActivity: mockAddActivity,
+      updateActivity: mockUpdateActivity,
+      toggleLog: mockToggleLog,
+      activities,
+    }
+    if (typeof selector === 'function') {
+      return selector(state)
+    }
+    return state
+  })
+}
+
 describe('ActivityForm', () => {
   beforeEach(() => {
     vi.clearAllMocks()
 
-    // Setup default store mock
+    // Setup default store mock. One activity already exists, so the form is the ordinary
+    // one; the first activity's form is tested on its own below.
     const mockStore = vi.mocked(useCalendarStore)
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     mockStore.mockImplementation((selector?: (state: any) => any) => {
@@ -35,7 +55,7 @@ describe('ActivityForm', () => {
         addActivity: mockAddActivity,
         updateActivity: mockUpdateActivity,
         toggleLog: mockToggleLog,
-        activities: [],
+        activities: [{ ...mockActivity, id: 'existing', color: '#EC4899' }],
       }
       if (typeof selector === 'function') {
         return selector(state)
@@ -394,6 +414,50 @@ describe('ActivityForm', () => {
 
       expect(mockAddActivity).toHaveBeenCalled()
       expect(mockToggleLog).toHaveBeenCalled()
+    })
+  })
+
+  // The first activity is made to be done today, whichever door it comes through. From the
+  // desktop's "+ Add" it used to leave today empty and four zeros under it.
+  describe('the first activity', () => {
+    it('opens with "Also log for a date" ticked, on today', () => {
+      storeWith([])
+      render(<ActivityForm isOpen={true} onClose={() => {}} />)
+
+      expect(screen.getByTestId('log-for-date-checkbox')).toBeChecked()
+      expect(screen.getByTestId('selected-date-input')).toHaveValue(formatDate(new Date()))
+    })
+
+    it('says Create & Log, and logs it on today', async () => {
+      const user = userEvent.setup()
+      storeWith([])
+      render(<ActivityForm isOpen={true} onClose={() => {}} />)
+
+      await user.type(screen.getByTestId('activity-name-input'), 'Read')
+      expect(screen.getByTestId('activity-form-submit')).toHaveTextContent('Create & Log')
+      await user.click(screen.getByTestId('activity-form-submit'))
+
+      expect(mockToggleLog).toHaveBeenCalledWith('new-activity-id', formatDate(new Date()))
+    })
+
+    // In sight and undoable: somebody who did not do it today unticks it.
+    it('can be unticked, and then logs nothing', async () => {
+      const user = userEvent.setup()
+      storeWith([])
+      render(<ActivityForm isOpen={true} onClose={() => {}} />)
+
+      await user.type(screen.getByTestId('activity-name-input'), 'Read')
+      await user.click(screen.getByTestId('log-for-date-checkbox'))
+      await user.click(screen.getByTestId('activity-form-submit'))
+
+      expect(mockAddActivity).toHaveBeenCalled()
+      expect(mockToggleLog).not.toHaveBeenCalled()
+    })
+
+    it('leaves the box unticked from the second activity on', () => {
+      render(<ActivityForm isOpen={true} onClose={() => {}} />)
+
+      expect(screen.getByTestId('log-for-date-checkbox')).not.toBeChecked()
     })
   })
 

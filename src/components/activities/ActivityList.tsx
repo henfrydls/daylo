@@ -55,8 +55,11 @@ export const ActivityList = memo(function ActivityList() {
     <div className="bg-white rounded-xl border border-gray-200 p-3 sm:p-4">
       <div className="flex items-center justify-between mb-4">
         <h2 className="text-base sm:text-lg font-semibold text-gray-900">Activities</h2>
+        {/* Grey while there is nothing yet: the green to press then is the door on the
+            calendar, and two greens are two things to choose between. */}
         <Button
           size="sm"
+          variant={activities.length === 0 ? 'secondary' : 'primary'}
           onClick={() => {
             setEditingActivity(undefined)
             setIsFormOpen(true)
@@ -68,8 +71,14 @@ export const ActivityList = memo(function ActivityList() {
       </div>
 
       {activities.length === 0 ? (
-        <p className="text-gray-500 text-sm text-center py-8">
-          No activities yet. Create one to start tracking!
+        // Below lg this panel is a sheet from the bottom edge, and deleting the last
+        // activity raises "Activity deleted" in that corner: pb-24 keeps the words above
+        // the toast. In the desktop sidebar the toast is nowhere near.
+        <p
+          className="text-gray-500 text-sm text-center pt-8 pb-24 lg:pb-8"
+          data-testid="activity-list-empty"
+        >
+          No activities yet.
         </p>
       ) : (
         <ul className="space-y-2" role="list" aria-label="Activities list">

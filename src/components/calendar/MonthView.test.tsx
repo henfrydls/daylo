@@ -97,89 +97,233 @@ describe('MonthView', () => {
     })
   })
 
-  describe('Empty state', () => {
-    it('should show empty state when no activities exist', () => {
-      useCalendarStore.setState({ activities: [] })
+  describe('the first day', () => {
+    const habit = {
+      id: '1',
+      name: 'Exercise',
+      color: '#10B981',
+      createdAt: '2024-01-01',
+      updatedAt: '2024-01-01',
+    }
+    const door = () => screen.getByTestId('first-day-door')
 
-      render(<MonthView />)
+    // With nothing to log, the Today bar is the way in: the same box in the same place,
+    // saying what to do instead of counting nothing.
+    it('puts the door where the Today bar goes, saying what to do', () => {
+      render(<MonthView onImport={vi.fn()} />)
 
-      const emptyState = screen.getByTestId('month-empty-state')
-      expect(emptyState).toBeInTheDocument()
-      expect(emptyState).toHaveTextContent(
-        'No activities yet. Tap any day to create your first activity and start tracking.'
-      )
+      expect(door()).toHaveTextContent('Add your first activity')
+      expect(door()).toHaveAccessibleName('Today: add your first activity')
+      expect(screen.queryByTestId('log-today-bar')).not.toBeInTheDocument()
+      // The sentence at the bottom that used to be the only instruction is gone.
+      expect(screen.queryByText(/Tap any day/)).not.toBeInTheDocument()
     })
 
-    it('should not show empty state when activities exist', () => {
-      useCalendarStore.setState({
-        activities: [
-          {
-            id: '1',
-            name: 'Exercise',
-            color: '#10B981',
-            createdAt: '2024-01-01',
-            updatedAt: '2024-01-01',
-          },
-        ],
-      })
+    it('opens today from the door, from whatever month is on screen', () => {
+      const other = currentMonth === 0 ? 1 : currentMonth - 1
+      useCalendarStore.setState({ selectedMonth: other })
+      render(<MonthView onImport={vi.fn()} />)
 
-      render(<MonthView />)
+      fireEvent.click(door())
 
-      expect(screen.queryByTestId('month-empty-state')).not.toBeInTheDocument()
+      const state = useCalendarStore.getState()
+      expect(state.selectedDate).toBe(formatDate(today))
+      expect(state.selectedMonth).toBe(currentMonth)
+      expect(state.selectedYear).toBe(currentYear)
+    })
+
+    it('draws today on the door as a day that has not happened yet', () => {
+      render(<MonthView onImport={vi.fn()} />)
+
+      const tile = screen.getByTestId('today-tile')
+      expect(tile).toHaveTextContent(String(today.getDate()))
+      expect(tile.className).toContain('border-dashed')
+      expect(tile.className).not.toContain('bg-emerald')
     })
 
     // Somebody who reinstalled, changed phones or changed where they got Daylo from opens
     // an app that looks like the first day. Without this they rebuild their activities by
     // hand, and those collide with the backup the day they do find Import.
-    it('offers to import a backup when there are no activities', () => {
+    it('offers the backup right under the door, without a full stop', () => {
       const onImport = vi.fn()
       render(<MonthView onImport={onImport} />)
 
       const line = screen.getByTestId('month-empty-import')
-      expect(line).toHaveTextContent('Used Daylo before? Import your backup.')
+      expect(line.textContent).toBe('Used Daylo before? Import your backup')
+      // Under the door, in the same block, and not under the calendar.
+      expect(screen.getByTestId('month-empty-state')).toContainElement(door())
+      expect(screen.getByTestId('month-empty-state')).toContainElement(line)
 
-      fireEvent.click(screen.getByRole('button', { name: 'Import your backup.' }))
+      fireEvent.click(screen.getByRole('button', { name: 'Import your backup' }))
       expect(onImport).toHaveBeenCalledTimes(1)
     })
 
-    it('stops offering the backup once there is an activity', () => {
-      useCalendarStore.setState({
-        activities: [
-          {
-            id: '1',
-            name: 'Exercise',
-            color: '#10B981',
-            createdAt: '2024-01-01',
-            updatedAt: '2024-01-01',
-          },
-        ],
-      })
-
-      render(<MonthView onImport={vi.fn()} />)
-
-      expect(screen.queryByTestId('month-empty-import')).not.toBeInTheDocument()
-      expect(screen.queryByRole('button', { name: 'Import your backup.' })).not.toBeInTheDocument()
-    })
-
-    // The sentence above it is what people already know the empty month by, and other
-    // tests match it whole: the offer is a line of its own, not words added to that one.
-    it('leaves the empty-state sentence as it was', () => {
-      render(<MonthView onImport={vi.fn()} />)
-
-      expect(
-        screen.getByText(
-          'No activities yet. Tap any day to create your first activity and start tracking.'
-        )
-      ).toBeInTheDocument()
-    })
-
-    // A link that opens nothing is worse than no link: where nobody passed a way to open
-    // Import, the empty month says only what it always said.
+    // A link that opens nothing is worse than no link.
     it('offers no backup when there is nothing to open Import with', () => {
       render(<MonthView />)
 
-      expect(screen.getByTestId('month-empty-state')).toBeInTheDocument()
+      expect(door()).toBeInTheDocument()
       expect(screen.queryByTestId('month-empty-import')).not.toBeInTheDocument()
+    })
+
+    it('goes, line and all, once there is an activity', () => {
+      useCalendarStore.setState({ activities: [habit] })
+      render(<MonthView onImport={vi.fn()} />)
+
+      expect(screen.queryByTestId('first-day-door')).not.toBeInTheDocument()
+      expect(screen.queryByTestId('month-empty-state')).not.toBeInTheDocument()
+      expect(screen.queryByTestId('month-empty-import')).not.toBeInTheDocument()
+      expect(screen.getByTestId('log-today-bar')).toBeInTheDocument()
+    })
+
+    // Decided: somebody who deletes the last activity reads "first" again. Telling them
+    // apart would mean saving something new.
+    it('comes back when the last activity is deleted', () => {
+      useCalendarStore.setState({ activities: [habit] })
+      render(<MonthView onImport={vi.fn()} />)
+      expect(screen.queryByTestId('first-day-door')).not.toBeInTheDocument()
+
+      act(() => useCalendarStore.getState().deleteActivity('1'))
+
+      expect(door()).toBeInTheDocument()
+      expect(screen.getByTestId('month-empty-import')).toBeInTheDocument()
+    })
+  })
+
+  describe('the square on the Today bar', () => {
+    const habit = {
+      id: '1',
+      name: 'Exercise',
+      color: '#10B981',
+      createdAt: '2024-01-01',
+      updatedAt: '2024-01-01',
+    }
+    const logOn = (date: string) => ({
+      id: `l-${date}`,
+      activityId: '1',
+      date,
+      completed: true,
+      createdAt: date,
+    })
+
+    // The same rule as the grid: dashed is a day that has not happened yet, filled is a day
+    // that has. For everybody and every day, not only the first.
+    it('is dashed while today is empty', () => {
+      useCalendarStore.setState({ activities: [habit], logs: [] })
+      render(<MonthView />)
+
+      const tile = screen.getByTestId('today-tile')
+      expect(tile.className).toContain('border-dashed')
+      expect(tile.className).not.toContain('bg-emerald')
+    })
+
+    it('is filled once today has anything in it', () => {
+      useCalendarStore.setState({ activities: [habit], logs: [logOn(formatDate(today))] })
+      render(<MonthView />)
+
+      const tile = screen.getByTestId('today-tile')
+      expect(tile.className).not.toContain('border-dashed')
+      expect(tile.className).toContain('bg-emerald-700')
+      expect(tile.className).toContain('text-white')
+    })
+
+    it('does not count an unticked log as something done', () => {
+      useCalendarStore.setState({
+        activities: [habit],
+        logs: [{ ...logOn(formatDate(today)), completed: false }],
+      })
+      render(<MonthView />)
+
+      expect(screen.getByTestId('today-tile').className).toContain('border-dashed')
+    })
+  })
+
+  describe('the second day', () => {
+    const habit = {
+      id: '1',
+      name: 'Exercise',
+      color: '#10B981',
+      createdAt: '2024-01-01',
+      updatedAt: '2024-01-01',
+    }
+    const daysBack = (back: number): string => {
+      const day = new Date()
+      day.setDate(day.getDate() - back)
+      return formatDate(day)
+    }
+    const loggedOn = (...backs: number[]) =>
+      backs.map((back) => ({
+        id: `l${back}`,
+        activityId: '1',
+        date: daysBack(back),
+        completed: true,
+        createdAt: daysBack(back),
+      }))
+    const second = () => screen.getByTestId('today-bar-line')
+
+    it('says what today would make, the morning after the first day', () => {
+      useCalendarStore.setState({ activities: [habit], logs: loggedOn(1) })
+      render(<MonthView />)
+
+      expect(second()).toHaveTextContent(/^Log today to make 2 days in a row$/)
+    })
+
+    it('counts again once today is logged', () => {
+      useCalendarStore.setState({ activities: [habit], logs: loggedOn(1, 0) })
+      render(<MonthView />)
+
+      expect(second()).toHaveTextContent(/^1\/1 activity$/)
+    })
+
+    it('counts when the one day there was is not yesterday', () => {
+      useCalendarStore.setState({ activities: [habit], logs: loggedOn(2) })
+      render(<MonthView />)
+
+      expect(second()).toHaveTextContent(/^0\/1 activity$/)
+    })
+
+    // Two days in the history: somebody past their second day, or a backup that came home.
+    it('counts when there is more than one day in the history', () => {
+      useCalendarStore.setState({ activities: [habit], logs: loggedOn(3, 1) })
+      render(<MonthView />)
+
+      expect(second()).toHaveTextContent(/^0\/1 activity$/)
+    })
+
+    it('counts after a backup with its history comes home', () => {
+      useCalendarStore.setState({ activities: [habit], logs: loggedOn(5, 4, 3, 2, 1) })
+      render(<MonthView />)
+
+      expect(second()).toHaveTextContent(/^0\/1 activity$/)
+    })
+
+    it('counts on the first day itself', () => {
+      useCalendarStore.setState({ activities: [habit], logs: [] })
+      render(<MonthView />)
+
+      expect(second()).toHaveTextContent(/^0\/1 activity$/)
+    })
+
+    // Neither the first day nor the second has a run of three behind it, so the row about
+    // yesterday has nothing to rescue on either.
+    it.each([
+      ['the first day, logged', [0]],
+      ['the second day, still open', [1]],
+      ['the second day, logged', [1, 0]],
+    ])('has no row about yesterday on %s', (_, backs) => {
+      useCalendarStore.setState({ activities: [habit], logs: loggedOn(...backs) })
+      render(<MonthView />)
+
+      expect(screen.queryByText('Yesterday is still open')).not.toBeInTheDocument()
+      expect(screen.queryByTestId('log-yesterday-row')).not.toBeInTheDocument()
+    })
+
+    // The other side of the one above, so it cannot pass by looking for the wrong thing.
+    it('has the row about yesterday after three days and a miss', () => {
+      useCalendarStore.setState({ activities: [habit], logs: loggedOn(4, 3, 2) })
+      render(<MonthView />)
+
+      expect(screen.getByTestId('log-yesterday-row')).toHaveTextContent('Yesterday is still open')
     })
   })
 

@@ -8,17 +8,17 @@ import { test, expect, type Page } from '@playwright/test'
  * gear, in Settings, so the natural thing is to rebuild the activities by hand, and those
  * collide with the backup on the day it is finally found.
  *
- * The line under the empty month is the way in. It is only worth anything where the person
- * is already looking, so the test measures that it is inside the window without scrolling,
- * and does not take "visible" for it: Playwright calls a node visible when it is merely
- * below the fold.
+ * The line under the first day's door is the way in. It is only worth anything where the
+ * person is already looking, so the test measures that it is inside the window without
+ * scrolling, and does not take "visible" for it: Playwright calls a node visible when it is
+ * merely below the fold.
  */
 
 const DIALOG = '[role="dialog"][aria-labelledby="modal-title"]'
 // The one on screen. On a phone in Year the hidden Month beside it has its own line, which
 // is inert and is checked on its own below.
 const LINE = '[data-testid="month-empty-import"] >> visible=true'
-const NAME = 'Import your backup.'
+const NAME = 'Import your backup'
 
 const backup = {
   name: 'daylo-backup.json',
@@ -60,17 +60,17 @@ const boxOf = (page: Page) =>
   })
 
 /**
- * The boxes of the words above and beside the link: the empty-state sentence, and "Used
- * Daylo before?" itself, measured as text with a Range so the paragraph's own width does
- * not count. The link's target may be bigger than its words, but not over these: a tap or
- * a text selection there opened Import.
+ * The boxes of what is above and beside the link: the door, and "Used Daylo before?"
+ * itself, measured as text with a Range so the paragraph's own width does not count. The
+ * link's target may be bigger than its words, but not over these: a tap or a text selection
+ * there opened Import, and a tap on the door's edge should open the door.
  */
 const wordsAround = (page: Page) =>
   page.locator(LINE).evaluate((line) => {
-    const sentence = line.parentElement!.querySelector('p')!
+    const door = line.parentElement!.querySelector('[data-testid="first-day-door"]')!
     const range = document.createRange()
     range.selectNodeContents(line.firstChild!)
-    return [sentence.getBoundingClientRect(), ...Array.from(range.getClientRects())].map((r) => ({
+    return [door.getBoundingClientRect(), ...Array.from(range.getClientRects())].map((r) => ({
       x: r.left,
       y: r.top,
       width: r.width,
@@ -103,7 +103,8 @@ for (const [width, height] of [
 
     const line = page.locator(LINE)
     await expect(line).toBeVisible()
-    await expect(line).toHaveText('Used Daylo before? Import your backup.')
+    // No full stop: the link is not a sentence.
+    await expect(line).toHaveText('Used Daylo before? Import your backup')
 
     const box = await boxOf(page)
     expect(box.scrollY).toBe(0)
@@ -118,11 +119,9 @@ for (const [width, height] of [
     // ...grown below the words and not over the ones above them.
     for (const words of await wordsAround(page)) expect(overlap(target, words)).toBe(false)
 
-    // Below lg the round button that opens the activities floats over the bottom right
-    // corner, which is where a centred line ends on a phone. A link half under it is half
-    // a link, and Playwright still clicks it because it aims at the middle.
-    const fab = page.locator('[data-testid="fab-button"]')
-    if (await fab.isVisible()) expect(overlap(target, (await fab.boundingBox())!)).toBe(false)
+    // The round button that opens the activities is not there until there is one: the
+    // door is the one green thing to press.
+    await expect(page.locator('[data-testid="fab-button"]')).toHaveCount(0)
 
     await button.click()
     await expect(page.locator(DIALOG)).toBeVisible()
@@ -131,27 +130,24 @@ for (const [width, height] of [
     await importTheBackup(page)
     await expect(page.locator('[data-testid="month-empty-import"]')).toHaveCount(0)
     await expect(page.locator('[data-testid="month-empty-state"]')).toHaveCount(0)
+    await expect(page.locator('[data-testid="first-day-door"]')).toHaveCount(0)
     // The button that had focus went with the line. Focus goes to the month's title,
     // which was there before and is there after, rather than falling to the page.
     await expect(page.getByTestId('month-title-button')).toBeFocused()
   })
 }
 
-// On the shortest phones the line falls below the fold, and the brief is to say so rather
-// than move other things to make room. What has to hold is that it is still there to be
-// reached: one scroll away, whole, and clear of the round button.
-test('at 360x640 the line is one scroll away and clear of the round button', async ({ page }) => {
+// Under the door the line is near the top, so even the shortest phones have it in the
+// window without scrolling. It used to be under the calendar, one scroll away.
+test('at 360x640 the line is in the window without scrolling', async ({ page }) => {
   await openEmpty(page, 360, 640)
-  const button = page.getByRole('button', { name: NAME })
-  await button.scrollIntoViewIfNeeded()
 
   const box = await boxOf(page)
+  expect(box.scrollY).toBe(0)
   expect(box.top).toBeGreaterThanOrEqual(0)
   expect(box.bottom).toBeLessThanOrEqual(box.innerHeight)
-  const target = (await button.boundingBox())!
-  expect(overlap(target, (await page.getByTestId('fab-button').boundingBox())!)).toBe(false)
 
-  await button.click()
+  await page.getByRole('button', { name: NAME }).click()
   await expect(page.locator(DIALOG)).toBeVisible()
 })
 
@@ -166,15 +162,20 @@ test('closing Import with nothing imported leaves focus on the line', async ({ p
 })
 
 // In Year on a phone the Month beside it is drawn, hidden, so a drag has something to
-// reveal. It keeps its line so it is as tall as it will be once it arrives, and it is
-// inert: nothing can focus its link and no finger can land on it.
+// reveal. It keeps its line so it is as tall as it will be once it arrives, without the
+// test ids (each is on the page once, the one that works), and it is inert: nothing can
+// focus its link and no finger can land on it. Year has its own door and line.
 test('the hidden month beside Year keeps its line out of reach', async ({ page }) => {
   await openEmpty(page, 360, 800)
   await page.getByRole('button', { name: 'Year', exact: true }).click()
   await expect(page.locator('[data-testid="month-empty-import"]')).toHaveCount(1)
-  await expect(page.getByRole('button', { name: NAME })).toHaveCount(0)
+  await expect(page.locator('[data-testid="first-day-door"]')).toHaveCount(1)
+  await expect(page.locator('[inert] [data-testid]').filter({ hasText: NAME })).toHaveCount(0)
+  await expect(page.getByRole('button', { name: NAME })).toHaveCount(1)
 
-  const reach = await page.locator('[data-testid="month-empty-import"] button').evaluate((b) => {
+  const hidden = page.locator('[inert] button', { hasText: NAME })
+  await expect(hidden).toHaveCount(1)
+  const reach = await hidden.evaluate((b) => {
     ;(b as HTMLElement).focus()
     const r = b.getBoundingClientRect()
     const hit = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2)

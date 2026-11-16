@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { render, screen, fireEvent, within, act } from '@testing-library/react'
 import { YearView } from './YearView'
 import { useCalendarStore } from '../../store'
+import { TravelContext } from '../../lib/travel'
 import type { Activity, ActivityLog } from '../../types'
 
 // Get initial state for reset
@@ -107,6 +108,212 @@ describe('YearView', () => {
       // month completion row is full of numbers that are not this one.
       const summary = screen.getByText('completions this year')
       expect(summary.parentElement).toHaveTextContent('2 completions this year')
+    })
+  })
+
+  describe('the first day', () => {
+    const phone = () =>
+      Object.defineProperty(window, 'matchMedia', {
+        writable: true,
+        configurable: true,
+        value: vi.fn().mockImplementation((query: string) => ({
+          matches: false,
+          media: query,
+          onchange: null,
+          addListener: vi.fn(),
+          removeListener: vi.fn(),
+          addEventListener: vi.fn(),
+          removeEventListener: vi.fn(),
+          dispatchEvent: vi.fn(),
+        })),
+      })
+
+    // The same door as Month: somebody who opened Year first is on their first day too.
+    it.each([
+      ['desktop', () => {}],
+      ['phone', phone],
+    ])('shows the door and the backup with no activities, on %s', (_, size) => {
+      size()
+      render(<YearView onImport={vi.fn()} />)
+
+      expect(screen.getByTestId('first-day-door')).toHaveTextContent('Add your first activity')
+      expect(screen.getByTestId('month-empty-import').textContent).toBe(
+        'Used Daylo before? Import your backup'
+      )
+    })
+
+    it('takes the door to today, in Month, and opens it', () => {
+      useCalendarStore.setState({ selectedYear: 2023, currentView: 'year' })
+      render(<YearView onImport={vi.fn()} />)
+
+      fireEvent.click(screen.getByTestId('first-day-door'))
+
+      const state = useCalendarStore.getState()
+      expect(state.selectedDate).toBe('2024-06-15')
+      expect(state.currentView).toBe('month')
+      expect(state.selectedYear).toBe(2024)
+      expect(state.selectedMonth).toBe(5)
+    })
+
+    // On the phone the door walks the rail to Month, and the sheet opening in the same tick
+    // came up over a rail still sliding. It waits for Month to arrive.
+    it('on the phone, opens today only once the journey to Month has arrived', () => {
+      const toMonth = vi.fn()
+      useCalendarStore.setState({ currentView: 'year', selectedDate: null })
+      render(
+        <TravelContext.Provider value={{ toYear: vi.fn(), toMonth }}>
+          <YearView onImport={vi.fn()} />
+        </TravelContext.Provider>
+      )
+
+      fireEvent.click(screen.getByTestId('first-day-door'))
+
+      expect(toMonth).toHaveBeenCalledWith({ year: 2024, month: 5 })
+      expect(useCalendarStore.getState().selectedDate).toBeNull()
+
+      act(() => useCalendarStore.setState({ currentView: 'month' }))
+      expect(useCalendarStore.getState().selectedDate).toBe('2024-06-15')
+
+      // Once: coming back to Month later does not open it again.
+      act(() => useCalendarStore.setState({ selectedDate: null, currentView: 'year' }))
+      act(() => useCalendarStore.setState({ currentView: 'month' }))
+      expect(useCalendarStore.getState().selectedDate).toBeNull()
+    })
+
+    // A journey that does not change the view in time (a resize, a frame that never came
+    // in the background, a rail that was not there) must not leave a door that did
+    // nothing: once the wait is over, today opens anyway.
+    it('on the phone, opens today anyway when the journey does not arrive in time', () => {
+      useCalendarStore.setState({ currentView: 'year', selectedDate: null })
+      render(
+        <TravelContext.Provider value={{ toYear: vi.fn(), toMonth: vi.fn() }}>
+          <YearView onImport={vi.fn()} />
+        </TravelContext.Provider>
+      )
+
+      fireEvent.click(screen.getByTestId('first-day-door'))
+      act(() => {
+        vi.advanceTimersByTime(1499)
+      })
+      expect(useCalendarStore.getState().selectedDate).toBeNull()
+      act(() => {
+        vi.advanceTimersByTime(1)
+      })
+      expect(useCalendarStore.getState().selectedDate).toBe('2024-06-15')
+
+      // And nothing is left waiting for a later visit to Month.
+      act(() => useCalendarStore.setState({ selectedDate: null }))
+      act(() => useCalendarStore.setState({ currentView: 'month' }))
+      expect(useCalendarStore.getState().selectedDate).toBeNull()
+    })
+
+    // Two taps while the rail is moving are one journey and one sheet. A second wait would
+    // be left behind to open the sheet on a later visit to Month.
+    it('on the phone, takes a second tap during the journey as the same one', () => {
+      const toMonth = vi.fn()
+      useCalendarStore.setState({ currentView: 'year', selectedDate: null })
+      render(
+        <TravelContext.Provider value={{ toYear: vi.fn(), toMonth }}>
+          <YearView onImport={vi.fn()} />
+        </TravelContext.Provider>
+      )
+      const opened: Array<string | null> = []
+      const unsubscribe = useCalendarStore.subscribe((state, before) => {
+        if (state.selectedDate !== before.selectedDate) opened.push(state.selectedDate)
+      })
+
+      fireEvent.click(screen.getByTestId('first-day-door'))
+      fireEvent.click(screen.getByTestId('first-day-door'))
+      expect(toMonth).toHaveBeenCalledTimes(1)
+
+      act(() => useCalendarStore.setState({ currentView: 'month' }))
+      act(() => useCalendarStore.setState({ selectedDate: null, currentView: 'year' }))
+      act(() => useCalendarStore.setState({ currentView: 'month' }))
+      act(() => {
+        vi.advanceTimersByTime(2000)
+      })
+      unsubscribe()
+
+      expect(opened).toEqual(['2024-06-15', null])
+    })
+
+    it('on the phone, opens nothing once the door has left the page mid-journey', () => {
+      useCalendarStore.setState({ currentView: 'year', selectedDate: null })
+      const { unmount } = render(
+        <TravelContext.Provider value={{ toYear: vi.fn(), toMonth: vi.fn() }}>
+          <YearView onImport={vi.fn()} />
+        </TravelContext.Provider>
+      )
+
+      fireEvent.click(screen.getByTestId('first-day-door'))
+      unmount()
+      act(() => useCalendarStore.setState({ currentView: 'month' }))
+      act(() => {
+        vi.advanceTimersByTime(2000)
+      })
+
+      expect(useCalendarStore.getState().selectedDate).toBeNull()
+    })
+
+    // On the phone Year stays mounted beside Month, so the wait cannot count on leaving the
+    // page to be called off. An import during the journey takes the door away: neither the
+    // arrival nor the deadline may then open a sheet the door no longer promises.
+    it.each([
+      ['the deadline', () => vi.advanceTimersByTime(2000)],
+      ['the arrival', () => useCalendarStore.setState({ currentView: 'month' })],
+    ])('on the phone, opens nothing at %s once activities arrived mid-journey', (_, then) => {
+      useCalendarStore.setState({ currentView: 'year', selectedDate: null })
+      render(
+        <TravelContext.Provider value={{ toYear: vi.fn(), toMonth: vi.fn() }}>
+          <YearView onImport={vi.fn()} />
+        </TravelContext.Provider>
+      )
+
+      fireEvent.click(screen.getByTestId('first-day-door'))
+      act(() =>
+        useCalendarStore.setState({
+          activities: [
+            {
+              id: 'b1',
+              name: 'Swim',
+              color: '#3B82F6',
+              createdAt: '2024-06-01T00:00:00.000Z',
+              updatedAt: '2024-06-01T00:00:00.000Z',
+            },
+          ],
+        })
+      )
+      act(() => {
+        then()
+      })
+
+      expect(useCalendarStore.getState().selectedDate).toBeNull()
+    })
+
+    it('opens Import from the line', () => {
+      const onImport = vi.fn()
+      render(<YearView onImport={onImport} />)
+
+      fireEvent.click(screen.getByRole('button', { name: 'Import your backup' }))
+      expect(onImport).toHaveBeenCalledTimes(1)
+    })
+
+    it('has no door once there is an activity', () => {
+      useCalendarStore.setState({
+        activities: [
+          {
+            id: '1',
+            name: 'Exercise',
+            color: '#22c55e',
+            createdAt: '2024-01-01',
+            updatedAt: '2024-01-01',
+          },
+        ],
+      })
+      render(<YearView onImport={vi.fn()} />)
+
+      expect(screen.queryByTestId('first-day-door')).not.toBeInTheDocument()
+      expect(screen.queryByTestId('month-empty-import')).not.toBeInTheDocument()
     })
   })
 
@@ -273,6 +480,23 @@ describe('YearView', () => {
   })
 
   describe('Accessibility', () => {
+    // The heading takes the focus by script (after an import from the first day's door).
+    // From the keyboard it has to show where the focus went, like Month's title does.
+    it('shows the focus ring on the year heading, like the month title', () => {
+      render(<YearView />)
+
+      const title = screen.getByTestId('year-title')
+      for (const name of [
+        'focus:outline-none',
+        'focus-visible:ring-2',
+        'focus-visible:ring-emerald-500',
+        'focus-visible:ring-offset-1',
+        'rounded-lg',
+      ]) {
+        expect(title).toHaveClass(name)
+      }
+    })
+
     it('should have accessible navigation buttons', () => {
       render(<YearView />)
 
@@ -535,6 +759,23 @@ describe('YearView', () => {
       render(<YearView />)
 
       expect(screen.getByTestId('month-cards-grid')).toBeInTheDocument()
+    })
+
+    // The heading takes the focus by script (after an import from the first day's door).
+    // From the keyboard it has to show where the focus went, like Month's title does.
+    it('shows the focus ring on the year heading on the phone too', () => {
+      render(<YearView />)
+
+      const title = screen.getByTestId('year-title')
+      for (const name of [
+        'focus:outline-none',
+        'focus-visible:ring-2',
+        'focus-visible:ring-emerald-500',
+        'focus-visible:ring-offset-1',
+        'rounded-lg',
+      ]) {
+        expect(title).toHaveClass(name)
+      }
     })
 
     it('should render YearProgressBar when activities exist', () => {

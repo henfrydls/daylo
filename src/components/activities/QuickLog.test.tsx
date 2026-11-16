@@ -3,6 +3,7 @@ import { render, screen, fireEvent, waitFor, act } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { QuickLog } from './QuickLog'
 import { useCalendarStore } from '../../store'
+import { formatDate } from '../../lib/dates'
 
 // Helper to reset store state before each test
 const resetStore = () => {
@@ -225,6 +226,219 @@ describe('QuickLog', () => {
       await user.click(screen.getByTestId('quicklog-create-first-activity'))
 
       expect(screen.getByTestId('quicklog-new-activity-input')).toBeInTheDocument()
+    })
+  })
+
+  describe('the first day', () => {
+    const todayStr = () => formatDate(new Date())
+    const otherDay = () => {
+      const day = new Date()
+      day.setDate(day.getDate() - 5)
+      return formatDate(day)
+    }
+    const LINE = 'Today is in. Log it again tomorrow.'
+    const open = (date: string) => act(() => useCalendarStore.setState({ selectedDate: date }))
+    const close = () => {
+      act(() => useCalendarStore.setState({ selectedDate: null }))
+      act(() => {
+        vi.advanceTimersByTime(400)
+      })
+    }
+    const habit = {
+      id: 'activity-1',
+      name: 'Exercise',
+      color: '#10B981',
+      createdAt: '2024-01-01',
+      updatedAt: '2024-01-01',
+    }
+    const completedOn = (date: string) =>
+      useCalendarStore
+        .getState()
+        .logs.filter((l) => l.date === date && l.completed)
+        .map((l) => l.activityId)
+
+    // The door opens today's sheet, and with nothing to log the only thing to do there is
+    // to name the first activity: so the sheet opens on the form, with the cursor in it.
+    it("opens today's sheet on the form, with the focus in the name", () => {
+      render(<QuickLog />)
+      open(todayStr())
+
+      const input = screen.getByTestId('quicklog-new-activity-input')
+      expect(input).toHaveFocus()
+      expect(screen.queryByTestId('quicklog-create-first-activity')).not.toBeInTheDocument()
+    })
+
+    it('keeps the focus in the name once the sheet has settled', () => {
+      render(<QuickLog />)
+      open(todayStr())
+      act(() => {
+        vi.advanceTimersByTime(400)
+      })
+
+      expect(screen.getByTestId('quicklog-new-activity-input')).toHaveFocus()
+    })
+
+    // A sheet still on its way out when today opens is opened again rather than put
+    // there, and the focus trap then sends the focus to the first thing it finds, the
+    // cross, a moment later. The name has to win.
+    it('keeps the focus in the name when the sheet opens again before it has left', () => {
+      render(<QuickLog />)
+      open(otherDay())
+      act(() => {
+        vi.advanceTimersByTime(400)
+      })
+      act(() => useCalendarStore.setState({ selectedDate: null }))
+      act(() => {
+        vi.advanceTimersByTime(50)
+      })
+      open(todayStr())
+      act(() => {
+        vi.advanceTimersByTime(400)
+      })
+
+      expect(screen.getByTestId('quicklog-new-activity-input')).toHaveFocus()
+    })
+
+    it('says it is today in the title', () => {
+      render(<QuickLog />)
+      open(todayStr())
+
+      const now = new Date()
+      const month = now.toLocaleString('en-US', { month: 'short' })
+      expect(document.getElementById('quicklog-title')).toHaveTextContent(
+        `Today · ${month} ${now.getDate()}`
+      )
+    })
+
+    it('opens any other day on the empty state, as before', () => {
+      render(<QuickLog />)
+      open(otherDay())
+
+      expect(screen.getByTestId('quicklog-create-first-activity')).toBeInTheDocument()
+      expect(screen.queryByTestId('quicklog-new-activity-input')).not.toBeInTheDocument()
+      expect(document.getElementById('quicklog-title')).not.toHaveTextContent('Today')
+    })
+
+    it('opens today on the list once there is an activity', () => {
+      act(() => useCalendarStore.setState({ activities: [habit] }))
+      render(<QuickLog />)
+      open(todayStr())
+
+      expect(screen.queryByTestId('quicklog-new-activity-input')).not.toBeInTheDocument()
+      expect(screen.getByTestId('quicklog-activity-checkbox')).toBeInTheDocument()
+    })
+
+    // Cancel goes back to the empty state and stays there: it does not bounce back.
+    it('lets Cancel go back to the empty state', async () => {
+      const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime })
+      render(<QuickLog />)
+      open(todayStr())
+
+      await user.click(screen.getByTestId('quicklog-cancel-create'))
+
+      expect(screen.queryByTestId('quicklog-new-activity-input')).not.toBeInTheDocument()
+      expect(screen.getByTestId('quicklog-create-first-activity')).toBeInTheDocument()
+    })
+
+    it('uses examples for the placeholder, in a grey that can be read', () => {
+      render(<QuickLog />)
+      open(todayStr())
+
+      const input = screen.getByTestId('quicklog-new-activity-input')
+      expect(input).toHaveAttribute('placeholder', 'e.g., Exercise, Read, Meditate')
+      // The browser's own placeholder grey was 3.41:1 here; gray-500 is 4.84:1.
+      expect(input.className).toContain('placeholder:text-gray-500')
+    })
+
+    it('marks today when the first activity is added there, and says so once', async () => {
+      const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime })
+      render(<QuickLog />)
+      open(todayStr())
+
+      await user.type(screen.getByTestId('quicklog-new-activity-input'), 'Read')
+      await user.click(screen.getByTestId('quicklog-add-activity'))
+
+      const [created] = useCalendarStore.getState().activities
+      expect(completedOn(todayStr())).toEqual([created.id])
+      expect(screen.getByTestId('quicklog-activity-checkbox')).toBeChecked()
+      expect(screen.getByTestId('first-day-line')).toHaveTextContent(new RegExp(`^${LINE}$`))
+      expect(screen.getAllByText(LINE)).toHaveLength(1)
+
+      // Closing takes it away for good: the next opening of the same day says nothing.
+      close()
+      open(todayStr())
+      expect(screen.queryByTestId('first-day-line')).not.toBeInTheDocument()
+    })
+
+    // Once means once: opening the form for another activity takes it away, and Cancel
+    // does not bring it back to be read out a second time.
+    it('goes for good once the form is opened again', async () => {
+      const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime })
+      render(<QuickLog />)
+      open(todayStr())
+
+      await user.type(screen.getByTestId('quicklog-new-activity-input'), 'Read')
+      await user.click(screen.getByTestId('quicklog-add-activity'))
+      const line = screen.getByTestId('first-day-line')
+      expect(line).toHaveAttribute('aria-live', 'polite')
+      await user.click(screen.getByTestId('quicklog-new-activity-button'))
+      expect(screen.queryByTestId('first-day-line')).not.toBeInTheDocument()
+
+      await user.click(screen.getByTestId('quicklog-cancel-create'))
+      expect(screen.queryByTestId('first-day-line')).not.toBeInTheDocument()
+      expect(screen.queryByText(LINE)).not.toBeInTheDocument()
+    })
+
+    // "Today is in" is only true while today is ticked. Unticking makes it a lie, so it
+    // goes, and ticking again in the same opening does not bring it back: it was said.
+    it('goes when today is unticked, and does not come back on ticking it again', async () => {
+      const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime })
+      render(<QuickLog />)
+      open(todayStr())
+
+      await user.type(screen.getByTestId('quicklog-new-activity-input'), 'Read')
+      await user.click(screen.getByTestId('quicklog-add-activity'))
+      expect(screen.getByTestId('first-day-line')).toBeInTheDocument()
+
+      await user.click(screen.getByTestId('quicklog-activity-checkbox'))
+      expect(screen.getByTestId('quicklog-activity-checkbox')).not.toBeChecked()
+      expect(screen.queryByTestId('first-day-line')).not.toBeInTheDocument()
+
+      await user.click(screen.getByTestId('quicklog-activity-checkbox'))
+      expect(screen.getByTestId('quicklog-activity-checkbox')).toBeChecked()
+      expect(screen.queryByTestId('first-day-line')).not.toBeInTheDocument()
+    })
+
+    // Decided: the first activity made from another day's sheet marks that day, as it
+    // always has. "Today is in" would be untrue there, so the sheet says nothing.
+    it("marks the sheet's own day when the first activity is added on another day, and says nothing", async () => {
+      const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime })
+      render(<QuickLog />)
+      open(otherDay())
+
+      await user.click(screen.getByTestId('quicklog-create-first-activity'))
+      await user.type(screen.getByTestId('quicklog-new-activity-input'), 'Read')
+      await user.click(screen.getByTestId('quicklog-add-activity'))
+
+      const [created] = useCalendarStore.getState().activities
+      expect(completedOn(otherDay())).toEqual([created.id])
+      expect(completedOn(todayStr())).toEqual([])
+      expect(screen.queryByTestId('first-day-line')).not.toBeInTheDocument()
+      expect(screen.queryByText(LINE)).not.toBeInTheDocument()
+    })
+
+    it('says nothing when the activity added today is not the first', async () => {
+      const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime })
+      act(() => useCalendarStore.setState({ activities: [habit] }))
+      render(<QuickLog />)
+      open(todayStr())
+
+      await user.click(screen.getByTestId('quicklog-new-activity-button'))
+      await user.type(screen.getByTestId('quicklog-new-activity-input'), 'Read')
+      await user.click(screen.getByTestId('quicklog-add-activity'))
+
+      expect(completedOn(todayStr())).toHaveLength(1)
+      expect(screen.queryByTestId('first-day-line')).not.toBeInTheDocument()
     })
   })
 

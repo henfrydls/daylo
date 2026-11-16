@@ -41,6 +41,8 @@ import {
   useViewCarousel,
 } from './hooks'
 import { TravelContext, useTravel } from './lib/travel'
+import { onScreen } from './lib/onScreen'
+import { BesideContext } from './lib/beside'
 import { UpdateDot } from './components/updates/UpdateDot'
 import { UpdateNotice } from './components/updates/UpdateNotice'
 import { HeaderStreak } from './components/streak/HeaderStreak'
@@ -156,32 +158,28 @@ function App() {
   // at all. See where they are rendered for why it is not simply whether it is open.
   const [exportAsked, setExportAsked] = useState(false)
   const [importAsked, setImportAsked] = useState(false)
-  // The month whose line opened Import, and the line itself, so focus has somewhere to go
-  // back to. Settings passes a click event, not a line, and keeps its own focus.
-  const importOpener = useRef<{ line: HTMLElement; month: Element | null } | null>(null)
-  // From Settings and from the empty month. One function for the life of the app, so
+  // The line that opened Import, so focus has somewhere to go back to. Settings passes a
+  // click event, not a line, and keeps its own focus.
+  const importOpener = useRef<HTMLElement | null>(null)
+  // From Settings and from the first day's door, in Month or in Year. One function for the life of the app, so
   // MonthView's memo holds.
   const openImport = useCallback((opener?: unknown) => {
-    importOpener.current =
-      opener instanceof HTMLElement
-        ? {
-            line: opener,
-            month: opener.closest('[data-testid="month-empty-state"]')?.parentElement ?? null,
-          }
-        : null
+    importOpener.current = opener instanceof HTMLElement ? opener : null
     setImportAsked(true)
     setIsImportOpen(true)
   }, [])
   // When Import closes, focus goes back to the line if it is still there. An import that
   // filled the calendar took the line away, and with it the focus, which fell to the page:
-  // the month's title was there before and is there after, so it goes there instead. A
+  // the title of the view on screen was there before and is there after, so it goes there
+  // instead: the month's, or the year's, which had none to go to. A
   // click that does not focus a button, as in Safari, needs the first half as much.
   useEffect(() => {
     const opener = importOpener.current
     if (isImportOpen || opener === null) return
     importOpener.current = null
-    const title = opener.month?.querySelector<HTMLElement>('[data-testid="month-title-button"]')
-    ;(opener.line.isConnected ? opener.line : title)?.focus()
+    // The title of whichever view is on screen: the month's button, or the year's heading.
+    const title = () => onScreen('[data-testid="month-title-button"], [data-testid="year-title"]')
+    ;(opener.isConnected ? opener : title())?.focus()
   }, [isImportOpen])
   const [isBottomSheetOpen, setIsBottomSheetOpen] = useState(false)
   // One surface for everything there is to decide, and one flag for it. Reminders first
@@ -211,6 +209,9 @@ function App() {
   const markStoreReviewOffered = useCalendarStore((s) => s.markStoreReviewOffered)
   const offerStoreReview = checkinFields?.source === 'store' && !storeReviewOffered
   const logs = useCalendarStore((state) => state.logs)
+  // With no activities the round button only led to a panel that said so, beside the door
+  // that does the job: one green thing to press, not two.
+  const hasActivities = useCalendarStore((state) => state.activities.length > 0)
 
   const firstOpenedAt = useCalendarStore((state) => state.firstOpenedAt)
   const feedbackInviteSeen = useCalendarStore((state) => state.feedbackInviteSeen)
@@ -677,7 +678,11 @@ function App() {
                   // remounts the views once, between gestures, never under a finger.
                   <div ref={railRef} className="relative">
                     <DayScope day={shownDay}>
-                      {currentView === 'year' ? <YearView /> : <MonthView onImport={openImport} />}
+                      {currentView === 'year' ? (
+                        <YearView onImport={openImport} />
+                      ) : (
+                        <MonthView onImport={openImport} />
+                      )}
                     </DayScope>
                     <div
                       ref={otherRef}
@@ -689,13 +694,15 @@ function App() {
                       aria-hidden="true"
                       inert
                     >
-                      <DayScope day={shownDay}>
-                        {currentView === 'year' ? (
-                          <MonthView onImport={openImport} />
-                        ) : (
-                          <YearView />
-                        )}
-                      </DayScope>
+                      <BesideContext.Provider value={true}>
+                        <DayScope day={shownDay}>
+                          {currentView === 'year' ? (
+                            <MonthView onImport={openImport} />
+                          ) : (
+                            <YearView onImport={openImport} />
+                          )}
+                        </DayScope>
+                      </BesideContext.Provider>
                     </div>
                   </div>
                 ) : (
@@ -713,7 +720,11 @@ function App() {
                     {/* Inside the view's own key, so a new day does not play the change of
                         view again. */}
                     <DayScope day={shownDay}>
-                      {currentView === 'year' ? <YearView /> : <MonthView onImport={openImport} />}
+                      {currentView === 'year' ? (
+                        <YearView onImport={openImport} />
+                      ) : (
+                        <MonthView onImport={openImport} />
+                      )}
                     </DayScope>
                   </div>
                 )}
@@ -727,33 +738,38 @@ function App() {
             </div>
           </main>
 
-          {/* FAB Button - Visible only on mobile (< lg) */}
-          <button
-            onClick={() => setIsBottomSheetOpen(true)}
-            className="fixed bottom-[calc(1.5rem+var(--inset-bottom))] right-[calc(1.5rem+var(--inset-right))] z-20 lg:hidden w-14 h-14 bg-emerald-500 hover:bg-emerald-600 active:bg-emerald-700 text-white rounded-full shadow-lg flex items-center justify-center transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 focus-visible:ring-offset-2"
-            aria-label="Open activities panel"
-            data-testid="fab-button"
-          >
-            <svg
-              className="w-6 h-6"
-              fill="none"
-              viewBox="0 0 24 24"
-              stroke="currentColor"
-              aria-hidden="true"
+          {/* FAB Button - Visible only on mobile (< lg), once there is something to manage */}
+          {hasActivities && (
+            <button
+              onClick={() => setIsBottomSheetOpen(true)}
+              className="fixed bottom-[calc(1.5rem+var(--inset-bottom))] right-[calc(1.5rem+var(--inset-right))] z-20 lg:hidden w-14 h-14 bg-emerald-500 hover:bg-emerald-600 active:bg-emerald-700 text-white rounded-full shadow-lg flex items-center justify-center transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 focus-visible:ring-offset-2"
+              aria-label="Open activities panel"
+              data-testid="fab-button"
             >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={2}
-                d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4"
-              />
-            </svg>
-          </button>
+              <svg
+                className="w-6 h-6"
+                fill="none"
+                viewBox="0 0 24 24"
+                stroke="currentColor"
+                aria-hidden="true"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4"
+                />
+              </svg>
+            </button>
+          )}
 
           {/* Bottom Sheet - Activities + Stats for mobile */}
           <BottomSheet
             isOpen={isBottomSheetOpen}
             onClose={() => setIsBottomSheetOpen(false)}
+            // Deleting the last activity takes away the round button that opened it, and
+            // brings the door back: the one thing left to press.
+            fallbackFocus={() => onScreen('[data-testid="first-day-door"]')}
             aria-label="Activities and statistics"
           >
             <DayScope day={shownDay} className="space-y-6">

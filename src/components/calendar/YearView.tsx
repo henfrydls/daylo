@@ -1,4 +1,4 @@
-import { useMemo, useCallback, memo } from 'react'
+import { useMemo, useCallback, memo, useEffect, useRef } from 'react'
 import { YearHeatmap } from './YearHeatmap'
 import { YearByActivity } from './YearByActivity'
 import { MonthCard } from './MonthCard'
@@ -14,9 +14,15 @@ import { useMediaQuery } from '../../hooks/useMediaQuery'
 import { useTodayDate } from '../../lib/today'
 import { useShallow } from 'zustand/react/shallow'
 import { plural } from '../../lib/plural'
+import { FirstDayDoor } from './FirstDayDoor'
 
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
-export const YearView = memo(function YearView() {
+interface YearViewProps {
+  /** Opens Import from the line under the first day's door. See MonthView. */
+  onImport?: (opener: HTMLElement) => void
+}
+
+export const YearView = memo(function YearView({ onImport }: YearViewProps) {
   // Use individual selectors to prevent over-subscription
   const selectedYear = useCalendarStore((state) => state.selectedYear)
   const activities = useCalendarStore(useShallow((state) => state.activities))
@@ -139,6 +145,54 @@ export const YearView = memo(function YearView() {
   }, [today, travel, navigateToMonth])
 
   /**
+   * The wait for Month, on the phone, while one is going on: how to call it off. One at a
+   * time, so a second tap during the journey is the same journey and leaves nothing
+   * behind to open the sheet on some later visit to Month; and called off if the door
+   * leaves the page first.
+   */
+  const waiting = useRef<(() => void) | null>(null)
+  useEffect(() => () => waiting.current?.(), [])
+
+  const openToday = () => {
+    const day = formatDate(today)
+    if (travel === null) {
+      handleToday()
+      setSelectedDate(day)
+      return
+    }
+    if (waiting.current !== null) return
+    // On the phone the rail is still sliding to Month when handleToday returns, and a sheet
+    // coming up over it looked like two things fighting. So the sheet waits for the
+    // arrival: the first change of view, which from Year can only be to Month. A journey
+    // that has not landed in a second and a half (a resize, frames that stopped in the
+    // background) opens it anyway, rather than leave a door that did nothing.
+    // Only while the door is still there. On the phone Year stays mounted beside Month,
+    // so an import during the journey does not unmount anything: it takes the door away,
+    // and the sheet the door promised is no longer owed.
+    const open = () => {
+      stop()
+      const now = useCalendarStore.getState()
+      if (now.activities.length === 0) now.setSelectedDate(day)
+    }
+    const stop = () => {
+      unsubscribe()
+      window.clearTimeout(giveUp)
+      waiting.current = null
+    }
+    const unsubscribe = useCalendarStore.subscribe((state, before) => {
+      if (state.currentView !== before.currentView) open()
+    })
+    const giveUp = window.setTimeout(open, 1500)
+    waiting.current = stop
+    handleToday()
+  }
+
+  // With no activities the year has the same door as the month: to today, in Month, with
+  // its sheet open on the form.
+  const door =
+    activities.length === 0 ? <FirstDayDoor onOpenToday={openToday} onImport={onImport} /> : null
+
+  /**
    * Both layouts show the same control, so it is written once. Rendering it twice with
    * two copies of the markup is how a phone and a desktop end up disagreeing about what
    * a button is called.
@@ -179,7 +233,15 @@ export const YearView = memo(function YearView() {
         {/* Year Navigation */}
         <div className="flex items-center justify-between mb-4">
           <div className="flex items-center gap-3">
-            <h1 className="text-2xl font-bold text-gray-900">{selectedYear}</h1>
+            {/* Focusable by script only: where the focus goes after an import from the
+                first day's door, which takes the door and its line away. */}
+            <h1
+              tabIndex={-1}
+              data-testid="year-title"
+              className="text-2xl font-bold text-gray-900 focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 focus-visible:ring-offset-1 rounded-lg px-1 -mx-1"
+            >
+              {selectedYear}
+            </h1>
             <div className="flex items-center gap-1">
               <button
                 onClick={handlePrevYear}
@@ -231,6 +293,8 @@ export const YearView = memo(function YearView() {
             Today
           </button>
         </div>
+
+        {door}
 
         {/* Year Progress Bar */}
         <div className="mb-5">
@@ -305,7 +369,14 @@ export const YearView = memo(function YearView() {
         data-testid="year-header"
       >
         <div className="flex items-center gap-4">
-          <h1 className="text-2xl font-bold text-gray-900 sm:text-3xl">{selectedYear}</h1>
+          {/* See the phone's heading above. */}
+          <h1
+            tabIndex={-1}
+            data-testid="year-title"
+            className="text-2xl font-bold text-gray-900 sm:text-3xl focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 focus-visible:ring-offset-1 rounded-lg px-1 -mx-1"
+          >
+            {selectedYear}
+          </h1>
           <div className="flex items-center gap-1">
             <button
               onClick={handlePrevYear}
@@ -368,6 +439,8 @@ export const YearView = memo(function YearView() {
           {yearMode === 'all' ? <HeatmapLegend /> : null}
         </div>
       </div>
+
+      {door}
 
       {/* One continuous heatmap: a column per week, Sunday at the top */}
       <div className="w-full">

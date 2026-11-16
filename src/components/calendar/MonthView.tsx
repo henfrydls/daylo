@@ -4,13 +4,14 @@ import { useTravel } from '../../lib/travel'
 import { formatDate, formatMonthYear } from '../../lib/dates'
 import { useTodayDate } from '../../lib/today'
 import { completedDates } from '../../lib/activityYear'
-import { yesterdayStillOpen } from '../../lib/streaks'
+import { isSecondDay, yesterdayStillOpen } from '../../lib/streaks'
 import { subDays } from 'date-fns'
 import type { Activity, ActivityLog } from '../../types'
 import { useShallow } from 'zustand/react/shallow'
 import { count } from '../../lib/plural'
 import { TODAY_RING, YESTERDAY_RING } from './rings'
 import { YesterdayRow } from './YesterdayRow'
+import { FirstDayDoor, TodayTile } from './FirstDayDoor'
 
 const DAYS_OF_WEEK = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
 const DAYS_OF_WEEK_SHORT = ['S', 'M', 'T', 'W', 'T', 'F', 'S']
@@ -218,6 +219,10 @@ export const MonthView = memo(function MonthView({ onImport }: MonthViewProps) {
 
   const yesterdayStr = formatDate(subDays(today, 1))
 
+  // The morning after the first day ever logged, the bar's second line says what today
+  // would make rather than "0/1 activity". See `isSecondDay`: logging today ends it.
+  const secondDay = useMemo(() => isSecondDay(completedDates(logs), today), [logs, today])
+
   return (
     <div className="p-3 sm:p-4 md:p-6">
       {/* Month Navigation */}
@@ -287,6 +292,18 @@ export const MonthView = memo(function MonthView({ onImport }: MonthViewProps) {
           On a morning when yesterday is still open the bar carries a second row: under
           Today on the phone, beside it from 640px. Without a rescue it is the bar of any
           other morning. */}
+      {/* With no activities the door takes the bar's place, in any month: it leads to
+          today, not to the month on screen. */}
+      {activities.length === 0 && (
+        <FirstDayDoor
+          onOpenToday={() => {
+            handleToday()
+            handleDayClick(todayStr)
+          }}
+          onImport={onImport}
+        />
+      )}
+
       {isCurrentMonth && activities.length > 0 && (
         <div
           className={
@@ -306,13 +323,16 @@ export const MonthView = memo(function MonthView({ onImport }: MonthViewProps) {
             aria-label={`Log today: ${todayCompletedCount} of ${count(activities.length, 'activity', 'activities')} completed`}
           >
             <div className="flex items-center gap-3">
-              <div className="w-10 h-10 bg-emerald-500 text-white rounded-lg flex items-center justify-center font-bold text-sm">
-                {today.getDate()}
-              </div>
+              <TodayTile day={today.getDate()} done={todayCompletedCount > 0} />
               <div className="text-left">
                 <div className="text-sm font-semibold text-gray-900">Today</div>
-                <div className="text-xs text-gray-500">
-                  {todayCompletedCount}/{count(activities.length, 'activity', 'activities')}
+                <div
+                  className={`text-xs ${secondDay ? 'text-gray-600' : 'text-gray-500'}`}
+                  data-testid="today-bar-line"
+                >
+                  {secondDay
+                    ? 'Log today to make 2 days in a row'
+                    : `${todayCompletedCount}/${count(activities.length, 'activity', 'activities')}`}
                 </div>
               </div>
             </div>
@@ -432,37 +452,6 @@ export const MonthView = memo(function MonthView({ onImport }: MonthViewProps) {
           </div>
         </div>
       </div>
-
-      {/* Empty state */}
-      {activities.length === 0 && (
-        <div className="text-center py-6 px-4" data-testid="month-empty-state">
-          <p className="text-gray-500 text-sm">
-            No activities yet. Tap any day to create your first activity and start tracking.
-          </p>
-          {/* An app that was reinstalled, or moved to a new phone or to the Store, opens
-              looking like the first day, and Import is behind the gear. People rebuilt
-              their activities by hand instead, and those collided with the backup once
-              they found it. Here, where they are already looking, and gone with the first
-              activity because by then it is not the first day any more.
-              The padding is the finger's 44px, all of it below the words: padded above as
-              well, it reached over the words before it, and a tap or a text selection
-              there opened Import. The negative margin keeps the line no taller. On a phone the link takes a
-              line of its own, centred: at the end of one line it sat under the round
-              activities button, which floats over that corner below lg. */}
-          {onImport === undefined ? null : (
-            <p className="mt-1 text-gray-500 text-sm" data-testid="month-empty-import">
-              Used Daylo before? <br className="sm:hidden" />
-              <button
-                type="button"
-                onClick={(event) => onImport(event.currentTarget)}
-                className="-mb-6 rounded-lg pb-6 font-medium text-emerald-700 underline underline-offset-2 hover:text-emerald-800 focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500"
-              >
-                Import your backup.
-              </button>
-            </p>
-          )}
-        </div>
-      )}
     </div>
   )
 })

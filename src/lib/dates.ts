@@ -18,6 +18,11 @@ export function formatDisplayDate(date: Date): string {
   return format(date, 'MMM d, yyyy')
 }
 
+/** The day sheet's title when the sheet is today's: "Today · Nov 13". */
+export function formatTodayTitle(date: Date): string {
+  return `Today · ${format(date, 'MMM d')}`
+}
+
 export function formatMonthYear(date: Date): string {
   return format(date, 'MMMM yyyy')
 }

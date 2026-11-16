@@ -1,5 +1,12 @@
 import { describe, it, expect } from 'vitest'
-import { currentStreak, isBestEver, lastDays, longestStreak, yesterdayStillOpen } from './streaks'
+import {
+  currentStreak,
+  isBestEver,
+  isSecondDay,
+  lastDays,
+  longestStreak,
+  yesterdayStillOpen,
+} from './streaks'
 
 const on = (...dates: string[]) => new Set(dates)
 const march = (day: number) => new Date(2026, 2, day, 12)
@@ -90,6 +97,38 @@ describe('a yesterday that is still open', () => {
   it('crosses the end of a year', () => {
     const newYear = new Date(2027, 0, 1, 9)
     expect(yesterdayStillOpen(on('2026-12-28', '2026-12-29', '2026-12-30'), newYear)).toBe(4)
+  })
+})
+
+describe('the second day', () => {
+  // The morning after the first day ever logged, with today still open. Nothing is saved
+  // to know it: the logs already say it.
+  it('is the day after the only day ever logged, with today still open', () => {
+    expect(isSecondDay(on('2026-03-03'), march(4))).toBe(true)
+  })
+
+  it('is over once today is logged', () => {
+    expect(isSecondDay(on('2026-03-03', '2026-03-04'), march(4))).toBe(false)
+  })
+
+  // A backup comes home with its history, so it is never anybody's second day.
+  it('is not a history of more than one day, however it ends', () => {
+    expect(isSecondDay(on('2026-03-01', '2026-03-03'), march(4))).toBe(false)
+    expect(isSecondDay(on('2026-03-02', '2026-03-03'), march(4))).toBe(false)
+  })
+
+  it('is not a day after a gap', () => {
+    expect(isSecondDay(on('2026-03-02'), march(4))).toBe(false)
+  })
+
+  it('is not the first day itself, logged or not', () => {
+    expect(isSecondDay(on('2026-03-04'), march(4))).toBe(false)
+    expect(isSecondDay(on(), march(4))).toBe(false)
+  })
+
+  // Only today matters for "today". A day in the future, from a backup, is not yesterday.
+  it('is not a single day that is tomorrow', () => {
+    expect(isSecondDay(on('2026-03-05'), march(4))).toBe(false)
   })
 })
 

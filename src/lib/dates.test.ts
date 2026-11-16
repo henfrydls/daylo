@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest'
 import {
   formatDate,
   formatDisplayDate,
+  formatTodayTitle,
   formatMonthYear,
   getYearDays,
   getWeekDay,
@@ -131,5 +132,12 @@ describe('dates utility functions', () => {
       const id = generateId()
       expect(typeof id).toBe('string')
     })
+  })
+})
+
+describe('formatTodayTitle', () => {
+  it('says it is today, with the month and the day and no year', () => {
+    expect(formatTodayTitle(new Date(2026, 10, 13))).toBe('Today · Nov 13')
+    expect(formatTodayTitle(new Date(2027, 0, 1))).toBe('Today · Jan 1')
   })
 })
