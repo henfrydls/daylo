@@ -278,6 +278,27 @@ describe('QuickLog', () => {
       expect(screen.getByTestId('quicklog-new-activity-input')).toHaveFocus()
     })
 
+    // A sheet still on its way out when today opens is opened again rather than put
+    // there, and the focus trap then sends the focus to the first thing it finds, the
+    // cross, a moment later. The name has to win.
+    it('keeps the focus in the name when the sheet opens again before it has left', () => {
+      render(<QuickLog />)
+      open(otherDay())
+      act(() => {
+        vi.advanceTimersByTime(400)
+      })
+      act(() => useCalendarStore.setState({ selectedDate: null }))
+      act(() => {
+        vi.advanceTimersByTime(50)
+      })
+      open(todayStr())
+      act(() => {
+        vi.advanceTimersByTime(400)
+      })
+
+      expect(screen.getByTestId('quicklog-new-activity-input')).toHaveFocus()
+    })
+
     it('says it is today in the title', () => {
       render(<QuickLog />)
       open(todayStr())

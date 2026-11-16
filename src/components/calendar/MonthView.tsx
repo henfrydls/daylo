@@ -220,11 +220,8 @@ export const MonthView = memo(function MonthView({ onImport }: MonthViewProps) {
   const yesterdayStr = formatDate(subDays(today, 1))
 
   // The morning after the first day ever logged, the bar's second line says what today
-  // would make rather than "0/1 activity". See `isSecondDay`.
-  const secondDay = useMemo(
-    () => todayCompletedCount === 0 && isSecondDay(completedDates(logs), today),
-    [logs, today, todayCompletedCount]
-  )
+  // would make rather than "0/1 activity". See `isSecondDay`: logging today ends it.
+  const secondDay = useMemo(() => isSecondDay(completedDates(logs), today), [logs, today])
 
   return (
     <div className="p-3 sm:p-4 md:p-6">
