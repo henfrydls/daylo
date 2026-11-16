@@ -455,7 +455,6 @@ export const MonthView = memo(function MonthView({ onImport }: MonthViewProps) {
           </div>
         </div>
       </div>
-
     </div>
   )
 })
