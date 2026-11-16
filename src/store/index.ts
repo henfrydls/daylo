@@ -356,6 +356,11 @@ interface CalendarState {
   /** The reminder offer was closed in this session, answered or not. Not persisted. */
   _reminderOfferClosed: boolean
   /**
+   * The daily reminder was tapped and today's sheet has not been opened for it yet. Not
+   * persisted: a tap is answered in the session it happened in. See useReminderOpensToday.
+   */
+  _openTodayAsked: boolean
+  /**
    * Which of the one-time offers has already been made in this session, if any.
    * Not persisted. Several things want the same moment and none may talk over another.
    */
@@ -418,6 +423,10 @@ interface CalendarState {
   // Navigation
   setSelectedYear: (year: number) => void
   setSelectedDate: (date: string | null) => void
+  /** The reminder was tapped: today's sheet is owed. */
+  askToOpenToday: () => void
+  /** Open the sheet for `day`, with its month behind it, and mark the tap answered. */
+  openToday: (day: string) => void
   setCurrentView: (view: ViewType, direction?: ViewTransitionDirection) => void
   setYearMode: (mode: 'all' | 'byActivity') => void
   setSelectedMonth: (month: number) => void
@@ -524,6 +533,7 @@ export const useCalendarStore = create<CalendarState>()(
       _loggedThisSession: false,
       _tickedThisSession: false,
       _reminderOfferClosed: false,
+      _openTodayAsked: false,
       _offerThisSession: null,
       // Nothing stored is what a new installation looks like: merge is only called when
       // there is something to merge.
@@ -692,6 +702,16 @@ export const useCalendarStore = create<CalendarState>()(
 
       setSelectedYear: (year) => set({ selectedYear: year }),
       setSelectedDate: (date) => set({ selectedDate: date }),
+      askToOpenToday: () => set({ _openTodayAsked: true }),
+      openToday: (day) => {
+        const date = parseDateString(day)
+        set({
+          selectedDate: day,
+          selectedYear: date.getFullYear(),
+          selectedMonth: date.getMonth(),
+          _openTodayAsked: false,
+        })
+      },
       setCurrentView: (view, direction) =>
         set({ currentView: view, _viewTransitionDirection: direction ?? null }),
       setYearMode: (mode) => set({ yearMode: mode }),

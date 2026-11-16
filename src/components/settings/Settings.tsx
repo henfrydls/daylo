@@ -245,14 +245,27 @@ export function Settings({
         >
           {hasReminders ? (
             <Section title="Reminders">
+              {/* With notifications blocked, Android no longer asks (after the second no,
+                  or never, below Android 13, when they were turned off in its settings).
+                  Asking again would be refused without a word, which is the dead end this
+                  replaces (#192): the line says what is wrong and the switch goes to the
+                  phone's notification settings for Daylo. Coming back with them allowed
+                  turns the reminder on, and the row goes back to what it was. */}
               <SwitchRow
                 label="Daily reminder"
-                under={reminder.enabled ? `At ${reminder.at}` : 'Off'}
+                under={
+                  reminder.notificationsBlocked
+                    ? 'Notifications are off for Daylo. Tap to allow them.'
+                    : reminder.enabled
+                      ? `At ${reminder.at}`
+                      : 'Off'
+                }
                 checked={reminder.enabled}
                 busy={reminder.busy}
                 testId="reminder-switch"
                 onChange={(next) => {
-                  if (next) void reminder.turnOn(reminder.hour, reminder.minute)
+                  if (next && reminder.notificationsBlocked) void reminder.allowNotifications()
+                  else if (next) void reminder.turnOn(reminder.hour, reminder.minute)
                   else void reminder.turnOff()
                 }}
               />

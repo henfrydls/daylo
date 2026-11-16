@@ -3,6 +3,7 @@ import { ConfirmDialog, useToast } from '../ui'
 import { useCalendarStore } from '../../store'
 import { useOpenDialogs, useReminderOfferOwed, useRemindersAvailable } from '../../hooks'
 import { formatDate } from '../../lib/dates'
+import { useToday } from '../../lib/today'
 import {
   disableReminder,
   enableReminder,
@@ -24,6 +25,27 @@ import {
  * again. Closing it without answering is not an answer. The setting in the menu is what
  * somebody uses to change their mind.
  */
+/**
+ * Arm the reminder again at its stored time, and when it can no longer be armed, usually
+ * because the permission was taken away in the phone's settings, turn the switch off and
+ * take down the alarm still on the queue. The plugin restores that alarm after a restart,
+ * so left there it would ring the day the permission came back, under a switch that says
+ * off.
+ *
+ * Not when the answer is null: something newer, the switch or the last habit going, came
+ * in while this was on its way and has decided already, or the phone did not say whether
+ * notifications are allowed. A late "off" acted on here would cancel a reminder somebody
+ * had just turned on.
+ */
+function armAgain(hour: number, minute: number): void {
+  void refreshReminder(hour, minute).then((stillOn) => {
+    if (stillOn === false) {
+      useCalendarStore.getState().setReminder(false, hour, minute)
+      void disableReminder().catch(() => {})
+    }
+  })
+}
+
 interface DailyReminderProps {
   /** Nothing else is open: no day sheet, no Settings, no sheet, no Export or Import. */
   canAsk: boolean
@@ -59,21 +81,34 @@ export function DailyReminder({ canAsk }: DailyReminderProps) {
     const { reminderEnabled, reminderHour, reminderMinute } = useCalendarStore.getState()
     if (!reminderEnabled) return
 
-    // When it could not be armed again, usually because the permission was taken away in
-    // the phone's settings, the switch goes off and so does the alarm still on the queue.
-    // The plugin restores that alarm after a restart, so left there it would ring the day
-    // the permission came back, under a switch that says off.
-    //
-    // Not when the answer is null: something newer, the switch or the last habit going,
-    // came in while this was on its way and has decided already. A late "off" acted on here
-    // would cancel a reminder somebody had just turned on.
-    void refreshReminder(reminderHour, reminderMinute).then((stillOn) => {
-      if (stillOn === false) {
-        setReminder(false, reminderHour, reminderMinute)
-        void disableReminder().catch(() => {})
-      }
-    })
-  }, [available, activityCount, setReminder])
+    armAgain(reminderHour, reminderMinute)
+  }, [available, activityCount])
+
+  // Whether today is logged decides when the reminder next rings: tomorrow when it is, today
+  // when it is not and its time has not come yet (#192). So it is armed again when that
+  // changes within a day: the first tick of the day, and the last one taken off. Not on the
+  // first answer, which the effect above has just armed with, and not for ticks that leave
+  // it as it was. Not when the day itself changes either: a day logged yesterday armed the
+  // reminder from midnight, which is now, so the phone already has today's ring.
+  const today = useToday()
+  const loggedToday = useCalendarStore((state) =>
+    state.logs.some((log) => log.completed && log.date === today)
+  )
+  const before = useRef<{ day: string } | null>(null)
+  useEffect(() => {
+    if (!available) return
+    const was = before.current
+    before.current = { day: today }
+    // Within a day this runs only when loggedToday changed: it is the one dependency left
+    // that can, `available` turns true once, and that first run is the one with nothing
+    // before it.
+    if (was === null || was.day !== today) return
+
+    const { reminderEnabled, reminderHour, reminderMinute, activities } =
+      useCalendarStore.getState()
+    if (!reminderEnabled || activities.length === 0) return
+    armAgain(reminderHour, reminderMinute)
+  }, [available, today, loggedToday])
 
   // Spent only on an answer the phone gave: on, a refused permission, or a refused
   // schedule. A call that threw is not an answer, so the offer stays owed and somebody is

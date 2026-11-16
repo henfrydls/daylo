@@ -10,21 +10,27 @@ import {
   remindersAvailable,
   askForExactAlarms,
   exactAlarms,
+  notificationPermission,
+  openNotificationSettings,
+  PERMISSION_PATIENCE_MS,
+  reminderStartsAfter,
 } from './reminders'
+import { useCalendarStore } from '../store'
 
-const isPermissionGranted = vi.hoisted(() => vi.fn())
-const requestPermission = vi.hoisted(() => vi.fn())
 const cancel = vi.hoisted(() => vi.fn())
 const pending = vi.hoisted(() => vi.fn())
 const invoke = vi.hoisted(() => vi.fn())
 
 vi.mock('@tauri-apps/plugin-notification', () => ({
-  isPermissionGranted,
-  requestPermission,
   cancel,
   pending,
   Schedule: {
-    interval: (interval: unknown, allowWhileIdle: boolean) => ({ interval, allowWhileIdle }),
+    // The real shape, so that what is added to it is seen where the plugin would read it.
+    interval: (interval: unknown, allowWhileIdle: boolean) => ({
+      at: undefined,
+      interval: { interval, allowWhileIdle },
+      every: undefined,
+    }),
   },
 }))
 vi.mock('@tauri-apps/api/core', async (importOriginal) => ({
@@ -32,13 +38,42 @@ vi.mock('@tauri-apps/api/core', async (importOriginal) => ({
   invoke,
 }))
 
-/** The Android app: the commands exist and answer. */
+const PERMISSION = 'plugin:notification|is_permission_granted'
+const REQUEST = 'plugin:notification|request_permission'
+const NOTIFY = 'plugin:notification|notify'
+
+/**
+ * What the phone answers, command by command. Each test changes the answers it is about.
+ * The permission is asked of the plugin every time, live: the page's own
+ * Notification.permission is read once when the page loads and never again, so a
+ * permission given in the phone's settings never reached it.
+ */
+let phone: Record<string, (args?: unknown) => Promise<unknown>> = {}
+
+/** The Android app: the commands exist and answer, and notifications are allowed. */
 function pretendAndroid() {
   vi.stubGlobal('isTauri', true)
-  invoke.mockImplementation((command: string) =>
-    command === 'reminders_available' ? Promise.resolve(true) : Promise.resolve(undefined)
+  phone = {
+    reminders_available: () => Promise.resolve(true),
+    [PERMISSION]: () => Promise.resolve(true),
+    [REQUEST]: () => Promise.resolve('granted'),
+  }
+  invoke.mockImplementation((command: string, args?: unknown) =>
+    (phone[command] ?? (() => Promise.resolve(undefined)))(args)
   )
 }
+
+/** The plugin's live answer: true granted, false denied, null not asked yet. */
+function permissionIs(answer: boolean | null) {
+  phone[PERMISSION] = () => Promise.resolve(answer)
+}
+
+/** What the person answers when they are asked, as the plugin names it. */
+function personAnswers(state: string) {
+  phone[REQUEST] = () => Promise.resolve(state)
+}
+
+const callsTo = (command: string) => invoke.mock.calls.filter(([c]) => c === command).length
 
 /** What the plugin was asked to schedule, or undefined if it was never asked. */
 function scheduled() {
@@ -46,7 +81,8 @@ function scheduled() {
 }
 
 beforeEach(() => {
-  for (const m of [isPermissionGranted, requestPermission, cancel, pending, invoke]) m.mockReset()
+  for (const m of [cancel, pending, invoke]) m.mockReset()
+  useCalendarStore.setState({ logs: [] })
 })
 
 afterEach(() => {
@@ -84,7 +120,7 @@ describe('where reminders exist', () => {
 describe('turning the reminder on', () => {
   it('schedules a daily interval that can wake a sleeping phone', async () => {
     pretendAndroid()
-    isPermissionGranted.mockResolvedValue(true)
+    permissionIs(true)
 
     await expect(enableReminder(21, 0)).resolves.toMatchObject({ outcome: 'on' })
 
@@ -95,7 +131,9 @@ describe('turning the reminder on', () => {
         // restores after a restart or an update. Not Schedule.at: with repeating it computes the
         // repeat gap as the time left until the first fire, so a reminder set at 20:00 for
         // 21:00 would repeat hourly.
-        schedule: { interval: { hour: 21, minute: 0, second: 0 }, allowWhileIdle: true },
+        schedule: {
+          interval: { interval: { hour: 21, minute: 0, second: 0 }, allowWhileIdle: true },
+        },
       }),
     })
   })
@@ -105,7 +143,7 @@ describe('turning the reminder on', () => {
   // the app at startup. See reminderNotificationIcon.test.ts.
   it('names the drawable Android should put in the status bar', async () => {
     pretendAndroid()
-    isPermissionGranted.mockResolvedValue(true)
+    permissionIs(true)
 
     await enableReminder(21, 0)
 
@@ -116,19 +154,19 @@ describe('turning the reminder on', () => {
 
   it('asks for permission only when it does not have it', async () => {
     pretendAndroid()
-    isPermissionGranted.mockResolvedValue(true)
+    permissionIs(true)
 
     await enableReminder(21, 0)
 
-    expect(requestPermission).not.toHaveBeenCalled()
+    expect(callsTo(REQUEST)).toBe(0)
   })
 
   // Asked once. A person who said no gets nothing scheduled and is not asked again by this
   // path; the setting is what they use if they change their mind.
   it('schedules nothing when permission is refused', async () => {
     pretendAndroid()
-    isPermissionGranted.mockResolvedValue(false)
-    requestPermission.mockResolvedValue('denied')
+    permissionIs(false)
+    personAnswers('denied')
 
     await expect(enableReminder(21, 0)).resolves.toMatchObject({ outcome: 'permission-denied' })
     expect(scheduled()).toBeUndefined()
@@ -139,12 +177,8 @@ describe('turning the reminder on', () => {
   // vanish and this said 'on' over nothing scheduled.
   it('says so when the phone refuses it', async () => {
     pretendAndroid()
-    isPermissionGranted.mockResolvedValue(true)
-    invoke.mockImplementation((command: string) =>
-      command === 'reminders_available'
-        ? Promise.resolve(true)
-        : Promise.reject(new Error('notification channel is blocked'))
-    )
+    permissionIs(true)
+    phone[NOTIFY] = () => Promise.reject(new Error('notification channel is blocked'))
     const complaint = vi.spyOn(console, 'error').mockImplementation(() => {})
 
     await expect(enableReminder(21, 0)).resolves.toMatchObject({ outcome: 'failed' })
@@ -159,7 +193,7 @@ describe('turning the reminder on', () => {
 
   it('does nothing at all off Android', async () => {
     await expect(enableReminder(21, 0)).resolves.toMatchObject({ outcome: 'unavailable' })
-    expect(isPermissionGranted).not.toHaveBeenCalled()
+    expect(callsTo(PERMISSION)).toBe(0)
     expect(scheduled()).toBeUndefined()
   })
 })
@@ -261,14 +295,16 @@ describe('when the last activity goes', () => {
 describe('re-arming at launch', () => {
   it('schedules again at the stored time', async () => {
     pretendAndroid()
-    isPermissionGranted.mockResolvedValue(true)
+    permissionIs(true)
 
     await expect(refreshReminder(21, 0)).resolves.toBe(true)
 
     expect(scheduled()).toEqual({
       options: expect.objectContaining({
         id: REMINDER_ID,
-        schedule: { interval: { hour: 21, minute: 0, second: 0 }, allowWhileIdle: true },
+        schedule: {
+          interval: { interval: { hour: 21, minute: 0, second: 0 }, allowWhileIdle: true },
+        },
       }),
     })
   })
@@ -277,16 +313,16 @@ describe('re-arming at launch', () => {
   // permission away has said what they think of it.
   it('never asks for the permission', async () => {
     pretendAndroid()
-    isPermissionGranted.mockResolvedValue(false)
+    permissionIs(false)
 
     await refreshReminder(21, 0)
 
-    expect(requestPermission).not.toHaveBeenCalled()
+    expect(callsTo(REQUEST)).toBe(0)
   })
 
   it('reports itself off when the permission has been taken away', async () => {
     pretendAndroid()
-    isPermissionGranted.mockResolvedValue(false)
+    permissionIs(false)
 
     await expect(refreshReminder(21, 0)).resolves.toBe(false)
     expect(scheduled()).toBeUndefined()
@@ -294,15 +330,13 @@ describe('re-arming at launch', () => {
 
   it('does nothing at all off Android', async () => {
     await expect(refreshReminder(21, 0)).resolves.toBe(false)
-    expect(isPermissionGranted).not.toHaveBeenCalled()
+    expect(callsTo(PERMISSION)).toBe(0)
   })
 
   it('reports itself off when the phone refuses the schedule', async () => {
     pretendAndroid()
-    isPermissionGranted.mockResolvedValue(true)
-    invoke.mockImplementation((command: string) =>
-      command === 'reminders_available' ? Promise.resolve(true) : Promise.reject(new Error('nope'))
-    )
+    permissionIs(true)
+    phone[NOTIFY] = () => Promise.reject(new Error('nope'))
     vi.spyOn(console, 'error').mockImplementation(() => {})
 
     await expect(refreshReminder(21, 0)).resolves.toBe(false)
@@ -320,12 +354,18 @@ describe('re-arming at launch', () => {
 describe('a re-arm overtaken on its way', () => {
   function heldOpen() {
     let answer!: (granted: boolean) => void
-    isPermissionGranted.mockReturnValueOnce(new Promise<boolean>((r) => (answer = r)))
+    const held = new Promise<boolean>((r) => (answer = r))
+    const later = phone[PERMISSION]
+    let first = true
+    phone[PERMISSION] = () => {
+      if (!first) return later()
+      first = false
+      return held
+    }
     return (granted: boolean) => answer(granted)
   }
 
-  const notified = () =>
-    invoke.mock.calls.filter(([command]) => command === 'plugin:notification|notify').length
+  const notified = () => callsTo(NOTIFY)
 
   // The last habit is deleted while the re-arm is on its way. The cancel used to go
   // through at once and the re-arm landed after it, and the plugin stores what it arms:
@@ -351,7 +391,6 @@ describe('a re-arm overtaken on its way', () => {
   it('does not report off after the switch was turned on', async () => {
     pretendAndroid()
     const answer = heldOpen()
-    isPermissionGranted.mockResolvedValue(true)
 
     const refreshed = refreshReminder(21, 0)
     const enabled = enableReminder(21, 0)
@@ -559,5 +598,238 @@ describe('asking for exact alarms', () => {
     vi.stubGlobal('isTauri', true)
     invoke.mockRejectedValue('no activity')
     await expect(askForExactAlarms()).resolves.toBe(false)
+  })
+})
+
+/**
+ * The permission, read from the plugin each time it is needed (#192).
+ *
+ * The plugin's own isPermissionGranted reads window.Notification.permission, which its
+ * script sets once when the page loads. Somebody who said no, went to the phone's settings
+ * and allowed notifications came back to a page that still believed the no, and the switch
+ * stayed dead until Daylo was closed and opened again.
+ */
+describe('the permission, as the phone has it now', () => {
+  it('is granted, denied, or not asked yet, as the plugin says', async () => {
+    pretendAndroid()
+    permissionIs(true)
+    await expect(notificationPermission()).resolves.toBe('granted')
+    permissionIs(false)
+    await expect(notificationPermission()).resolves.toBe('denied')
+    permissionIs(null)
+    await expect(notificationPermission()).resolves.toBe('prompt')
+  })
+
+  it('asks the plugin every time rather than remembering', async () => {
+    pretendAndroid()
+    await notificationPermission()
+    await notificationPermission()
+    expect(callsTo(PERMISSION)).toBe(2)
+  })
+
+  // A question that never comes back must not hold the switch, or every call queued
+  // behind it, for ever. Not knowing is its own answer.
+  it('is unknown when the plugin does not answer in time', async () => {
+    vi.useFakeTimers()
+    try {
+      pretendAndroid()
+      phone[PERMISSION] = () => new Promise(() => {})
+      vi.spyOn(console, 'error').mockImplementation(() => {})
+
+      const asked = notificationPermission()
+      await vi.advanceTimersByTimeAsync(PERMISSION_PATIENCE_MS - 1)
+      let settled = false
+      void asked.then(() => (settled = true))
+      await Promise.resolve()
+      expect(settled).toBe(false)
+      await vi.advanceTimersByTimeAsync(1)
+      await expect(asked).resolves.toBe('unknown')
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('is unknown, and says so in the console, when the question fails', async () => {
+    pretendAndroid()
+    phone[PERMISSION] = () => Promise.reject('no such command')
+    const logged = vi.spyOn(console, 'error').mockImplementation(() => {})
+
+    await expect(notificationPermission()).resolves.toBe('unknown')
+    expect(logged).toHaveBeenCalledWith(expect.stringContaining('[Daylo]'), 'no such command')
+  })
+
+  it('is unknown for an answer in a shape it does not know', async () => {
+    pretendAndroid()
+    phone[PERMISSION] = () => Promise.resolve('granted')
+    vi.spyOn(console, 'error').mockImplementation(() => {})
+    await expect(notificationPermission()).resolves.toBe('unknown')
+  })
+
+  it('is unknown, without asking anything, where there are no reminders', async () => {
+    await expect(notificationPermission()).resolves.toBe('unknown')
+    expect(invoke).not.toHaveBeenCalled()
+  })
+})
+
+describe('turning it on, with the permission as it is now', () => {
+  it('asks the person when the phone has not asked yet, and schedules on a yes', async () => {
+    pretendAndroid()
+    permissionIs(null)
+    personAnswers('granted')
+
+    await expect(enableReminder(21, 0)).resolves.toEqual({ outcome: 'on' })
+    expect(callsTo(REQUEST)).toBe(1)
+    expect(callsTo(NOTIFY)).toBe(1)
+  })
+
+  // The plugin calls one refusal "prompt-with-rationale": Android would still ask again.
+  it('schedules nothing when the person says no', async () => {
+    pretendAndroid()
+    permissionIs(null)
+    personAnswers('prompt-with-rationale')
+
+    await expect(enableReminder(21, 0)).resolves.toEqual({ outcome: 'permission-denied' })
+    expect(callsTo(NOTIFY)).toBe(0)
+  })
+
+  // A permission given in the phone's settings, after the page loaded: the cached
+  // Notification.permission still says denied, the plugin says granted.
+  it('schedules without asking once the permission was given in the settings', async () => {
+    pretendAndroid()
+    permissionIs(true)
+
+    await expect(enableReminder(21, 0)).resolves.toEqual({ outcome: 'on' })
+    expect(callsTo(REQUEST)).toBe(0)
+  })
+
+  // Nothing is asked and nothing is scheduled on a question that did not come back: the
+  // request could hang the same way, and it holds every call behind it.
+  it('says the phone did not answer, and asks nothing, when the permission is unknown', async () => {
+    pretendAndroid()
+    phone[PERMISSION] = () => Promise.reject('stuck')
+    vi.spyOn(console, 'error').mockImplementation(() => {})
+
+    await expect(enableReminder(21, 0)).resolves.toMatchObject({ outcome: 'unanswered' })
+    expect(callsTo(REQUEST)).toBe(0)
+    expect(callsTo(NOTIFY)).toBe(0)
+  })
+})
+
+describe('re-arming, with the permission as it is now', () => {
+  // Not knowing is not "off": the screen would turn the switch off and cancel a reminder
+  // that may be perfectly fine, on a slow answer.
+  it('decides nothing when the permission is unknown', async () => {
+    pretendAndroid()
+    phone[PERMISSION] = () => Promise.reject('stuck')
+    vi.spyOn(console, 'error').mockImplementation(() => {})
+
+    await expect(refreshReminder(21, 0)).resolves.toBeNull()
+    expect(callsTo(NOTIFY)).toBe(0)
+  })
+
+  it('reports itself off when the phone has not asked yet', async () => {
+    pretendAndroid()
+    permissionIs(null)
+
+    await expect(refreshReminder(21, 0)).resolves.toBe(false)
+    expect(callsTo(REQUEST)).toBe(0)
+  })
+})
+
+/**
+ * Not on a day already logged (#192). "How did today go? Tap to log it." at nine, to
+ * somebody who logged at seven, every day, teaches them to silence it.
+ *
+ * The plugin's interval keeps going by itself every day after its first firing, so the
+ * reminder is still an interval: only its first firing is moved, to tomorrow. A day nobody
+ * opens Daylo is still reminded, which is why it was not done by cancelling.
+ */
+describe('a day already logged', () => {
+  const activity = 'a1'
+  const log = (date: string, completed = true) => ({
+    id: `${activity}-${date}`,
+    activityId: activity,
+    date,
+    completed,
+    createdAt: '2026-11-16T08:00:00.000Z',
+  })
+
+  it('starts after midnight when anything was logged today', () => {
+    const now = new Date(2026, 10, 16, 19, 30)
+    expect(reminderStartsAfter([log('2026-11-16')], now)).toBe(
+      new Date(2026, 10, 17, 0, 0, 0, 0).getTime()
+    )
+  })
+
+  it('starts now when today has nothing logged', () => {
+    const now = new Date(2026, 10, 16, 19, 30)
+    expect(reminderStartsAfter([log('2026-11-15')], now)).toBeUndefined()
+    expect(reminderStartsAfter([], now)).toBeUndefined()
+  })
+
+  // Unticking keeps a log that has a note, with completed false. That day is not logged.
+  it('does not count a log that was unticked', () => {
+    const now = new Date(2026, 10, 16, 19, 30)
+    expect(reminderStartsAfter([log('2026-11-16', false)], now)).toBeUndefined()
+  })
+
+  // The day is the phone's own, read at the moment of arming: just before midnight, the
+  // next one is minutes away, and the reminder is tomorrow evening's.
+  it('reads the day from the clock it is given', () => {
+    expect(reminderStartsAfter([log('2026-11-16')], new Date(2026, 10, 16, 23, 59))).toBe(
+      new Date(2026, 10, 17).getTime()
+    )
+    expect(reminderStartsAfter([log('2026-11-16')], new Date(2026, 10, 17, 0, 1))).toBeUndefined()
+  })
+
+  it('tells the plugin to start tomorrow when it arms on a logged day', async () => {
+    pretendAndroid()
+    const today = new Date()
+    const day = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`
+    useCalendarStore.setState({ logs: [log(day)] })
+
+    await refreshReminder(21, 0)
+    const tomorrow = new Date(today.getFullYear(), today.getMonth(), today.getDate() + 1)
+    expect(scheduled()).toEqual({
+      options: expect.objectContaining({
+        schedule: {
+          interval: {
+            interval: { hour: 21, minute: 0, second: 0 },
+            allowWhileIdle: true,
+            notBefore: tomorrow.getTime(),
+          },
+        },
+      }),
+    })
+  })
+
+  it('says nothing about tomorrow on a day with nothing logged', async () => {
+    pretendAndroid()
+
+    await enableReminder(21, 0)
+    const options = (scheduled() as { options: { schedule: { interval: object } } }).options
+    expect(options.schedule.interval).not.toHaveProperty('notBefore')
+  })
+})
+
+describe('the phone settings for notifications', () => {
+  it('opens them, and says whether they opened', async () => {
+    pretendAndroid()
+    phone.open_notification_settings = () => Promise.resolve(true)
+
+    await expect(openNotificationSettings()).resolves.toBe(true)
+    expect(callsTo('open_notification_settings')).toBe(1)
+  })
+
+  it('says no when they would not open', async () => {
+    pretendAndroid()
+    phone.open_notification_settings = () => Promise.reject('no activity')
+
+    await expect(openNotificationSettings()).resolves.toBe(false)
+  })
+
+  it('does nothing where there is no phone', async () => {
+    await expect(openNotificationSettings()).resolves.toBe(false)
+    expect(invoke).not.toHaveBeenCalled()
   })
 })

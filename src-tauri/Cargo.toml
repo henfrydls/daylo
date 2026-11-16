@@ -203,6 +203,15 @@ strip = false
 # Daylo is opened, as before. Opening 1.5.3 or later once is enough: that re-arms the
 # reminder through `show`, and from then on it is stored.
 #
+# The third (#192, branch daylo/notification-2.3.3-reminder-192, on top of the second):
+# - An interval can say when it may first fire (`notBefore`). Daylo asks for the start of
+#   tomorrow when today is already logged, so the reminder does not ask how the day went
+#   after it was logged, and still comes back every day after by itself.
+# - The notification channel is called "Daily reminder" in the phone's settings instead of
+#   "Default". Same id, so phones that have it see it renamed and keep its sound settings.
+# - From Android 13, asking for the notification permission while it is already granted
+#   replies "granted". It replied nothing, and the switch stayed busy for good.
+#
 # Pinned to a commit and not to a branch: a moving branch is a build that changes under
 # us, and this one has to be the same bytes in CI, on a tag, and on the machine that
 # measured it. The branch is based on notification-v2.3.3 and keeps that version number,
@@ -211,7 +220,7 @@ strip = false
 #
 # It goes upstream once it has been measured on a phone over two nights.
 [patch.crates-io]
-tauri-plugin-notification = { git = "https://github.com/henfrydls/plugins-workspace", rev = "b044a952d5fd1cc96755b05658df395dde67d44e" }
+tauri-plugin-notification = { git = "https://github.com/henfrydls/plugins-workspace", rev = "7276d808db001e343470e9ac0245062dfbf75667" }
 
 # wry and tauri-runtime-wry, for #201: on Android Daylo could close by itself about ten
 # seconds after opening. At startup tauri asks the webview its version; the question is

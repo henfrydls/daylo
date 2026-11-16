@@ -205,6 +205,36 @@ fn ask_for_exact_alarms() -> bool {
     android::ask_for_exact_alarms()
 }
 
+/// The id of the notification whose tap started the app, the first time it is asked, and
+/// None every time after that and whenever the app was started some other way.
+///
+/// The page asks once, when it starts, and opens today's sheet when the id is the reminder's
+/// (src/lib/reminderTap.ts). Once per process, because the intent outlives the moment: a page
+/// that loaded again, or a second question from the same page, would open the sheet again
+/// for a tap already answered. A tap while the app is in memory comes as the plugin's
+/// `actionPerformed` event instead, and does not pass through here.
+#[cfg(target_os = "android")]
+#[tauri::command]
+fn launch_notification() -> Option<i32> {
+    use std::sync::atomic::{AtomicBool, Ordering};
+    static ASKED: AtomicBool = AtomicBool::new(false);
+    if ASKED.swap(true, Ordering::SeqCst) {
+        return None;
+    }
+    android::launch_notification_id()
+}
+
+/// Open the phone's notification settings for Daylo.
+///
+/// Returns whether they opened, not whether anything was allowed: once Android has stopped
+/// asking, which it does after the second no, these settings are the only way back, and
+/// Daylo reads the permission again when the person returns.
+#[cfg(target_os = "android")]
+#[tauri::command]
+fn open_notification_settings() -> bool {
+    android::open_notification_settings()
+}
+
 /// What a second launch does to the copy that is already running: shows its window, out
 /// of the taskbar if it was minimised, and in front. The second launch's arguments and
 /// working directory are not used, because Daylo takes none: no deep link, no file to
@@ -394,6 +424,8 @@ pub fn run() {
             install_source,
             exact_alarms,
             ask_for_exact_alarms,
+            launch_notification,
+            open_notification_settings,
             checkin::checkin_fields,
             checkin::send_checkin,
             checkin::send_feedback
