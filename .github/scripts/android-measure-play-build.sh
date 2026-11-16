@@ -142,7 +142,7 @@ measure() {
       reminderEnabled: true, reminderHour: $H, reminderMinute: 0,
       reminderTimeChosen: true, reminderOffered: true,
       firstOpenedAt: '$now', feedbackInviteSeen: true, storeReviewOffered: true,
-      checkinEnabled: false, checkinNoticeSeen: true, checkinId: null,
+      checkinEnabled: false, checkinId: null,
       checkinLastAttempt: null, updateNoticeSeenFor: null, updatesEnabled: true } }));
     const written = localStorage.getItem('simple-calendar-storage').length
     // The app still holds its own state in memory and writes all of it on its next change.

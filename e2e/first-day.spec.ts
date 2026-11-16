@@ -339,8 +339,8 @@ test.describe('the reminder offer on the first day', () => {
 
 /**
  * The anonymous check-in, on the first day and on the day of an update, with nothing on
- * the screen about it. Until 1.6 a line under the header said whether it was on; it is
- * gone, and the switch and what it sends are in the menu.
+ * the screen about it. From 1.3.0 to 1.5.x a line under the header said whether it was on;
+ * it is gone, and the switch and what it sends are in the menu.
  *
  * The page is told it is the Android build, as above, and this time the check-in answers
  * too, so the code that turns it on and sends runs for real. Every native call answers
@@ -348,17 +348,18 @@ test.describe('the reminder offer on the first day', () => {
  * would have been sent.
  *
  * Absence asserted once at the end would pass for a line that came and went. So the page
- * watches itself from before the app loads, and writes down any moment at which the line,
- * or any words about the check-in, are in the document.
+ * watches itself from before the app loads, and keeps the first sign of the line: its
+ * test id, or the sentence it opened with. Not any mention of the check-in, which other
+ * things rightly make (the question with stars says its message carries the check-in's
+ * number when the check-in is on).
  */
 async function asTheAndroidApp(page: Page) {
   await page.addInitScript(() => {
     const calls: string[] = []
-    const seen: string[] = []
     Object.assign(window, {
       isTauri: true,
       __calls: calls,
-      __checkinSeen: seen,
+      __checkinSeen: null,
       __TAURI_INTERNALS__: {
         invoke: (command: string) => {
           calls.push(command)
@@ -379,13 +380,19 @@ async function asTheAndroidApp(page: Page) {
       configurable: true,
       value: { permission: 'granted' },
     })
-    const look = () => {
+    const observer = new MutationObserver(() => {
       const body = document.body
       if (!body) return
-      if (body.querySelector('[data-testid="checkin-notice"]')) seen.push('the line')
-      if (/check-in/i.test(body.textContent ?? '')) seen.push('words about the check-in')
-    }
-    new MutationObserver(look).observe(document, {
+      const found = body.querySelector('[data-testid="checkin-notice"]')
+        ? 'the line'
+        : /Anonymous check-in is (on|off)\./.test(body.textContent ?? '')
+          ? 'its sentence'
+          : null
+      if (found === null) return
+      Object.assign(window, { __checkinSeen: found })
+      observer.disconnect()
+    })
+    observer.observe(document, {
       subtree: true,
       childList: true,
       characterData: true,
@@ -396,7 +403,7 @@ async function asTheAndroidApp(page: Page) {
 const calls = (page: Page) =>
   page.evaluate(() => (window as unknown as { __calls: string[] }).__calls)
 const checkinSeen = (page: Page) =>
-  page.evaluate(() => (window as unknown as { __checkinSeen: string[] }).__checkinSeen)
+  page.evaluate(() => (window as unknown as { __checkinSeen: string | null }).__checkinSeen)
 const stored = (page: Page) =>
   page.evaluate(() => JSON.parse(localStorage.getItem('simple-calendar-storage') ?? '{}').state)
 
@@ -431,7 +438,7 @@ test.describe('the check-in, with nothing on the screen about it', () => {
     await expect(offer).toHaveCount(0)
     await settle(page)
 
-    expect(await checkinSeen(page)).toEqual([])
+    expect(await checkinSeen(page)).toBeNull()
   })
 
   test('an update: off, and the invitation to write still comes when it is due', async ({
@@ -495,6 +502,6 @@ test.describe('the check-in, with nothing on the screen about it', () => {
 
     await expect(page.getByTestId('feedback-rating')).toBeVisible()
     expect(await calls(page)).not.toContain('send_checkin')
-    expect(await checkinSeen(page)).toEqual([])
+    expect(await checkinSeen(page)).toBeNull()
   })
 })

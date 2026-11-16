@@ -642,10 +642,10 @@ describe('what the store remembers about the check-in', () => {
     }
   })
 
-  // Until 1.6 a line on the screen said whether the check-in was on, and checkinNoticeSeen
-  // remembered that it had been shown. The line is gone and so is the field. It never
-  // decided the default: that is whether the switch itself was stored, so a copy that
-  // carries the old field starts exactly as it would have, and the field is not kept.
+  // From 1.3.0 to 1.5.x a line on the screen said whether the check-in was on, and
+  // checkinNoticeSeen remembered that it had been shown. The line is gone and so is the
+  // field. It never decided the default: that is whether the switch itself was stored, so
+  // a copy that carries the old field starts exactly as it would have, and it is not kept.
   it('drops whether the line about the check-in was shown, and starts the same', async () => {
     const cases = [
       [{ checkinNoticeSeen: true }, 'update', false],
@@ -655,7 +655,9 @@ describe('what the store remembers about the check-in', () => {
     ] as const
     for (const [stored, start, enabled] of cases) {
       useCalendarStore.setState(useCalendarStore.getInitialState(), true)
-      await new Promise((resolve) => setTimeout(resolve, 20))
+      // The reset is a write the storage holds back; pagehide lands it now, so it cannot
+      // land later over the value put below.
+      window.dispatchEvent(new Event('pagehide'))
       localStorage.clear()
       localStorage.setItem(
         STORAGE_KEY,
@@ -858,7 +860,9 @@ describe('the last day of use the reminder offer reads', () => {
   // the way in, and what is written next is without it.
   it('drops the old count of days on the way in', async () => {
     useCalendarStore.setState(useCalendarStore.getInitialState(), true)
-    await new Promise((resolve) => setTimeout(resolve, 20))
+    // The reset is a write the storage holds back; pagehide lands it now, so it cannot
+    // land later over the value put below.
+    window.dispatchEvent(new Event('pagehide'))
     localStorage.clear()
     localStorage.setItem(
       STORAGE_KEY,

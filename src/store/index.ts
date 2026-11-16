@@ -836,7 +836,7 @@ export const useCalendarStore = create<CalendarState>()(
         // it, and dropped here it is not written back either.
         delete (stored as Record<string, unknown>).reminderTickDays
         // Whether the line about the check-in had been shown, from when there was one
-        // (1.4 to 1.6). Nothing reads it, and it never decided whether the check-in is on:
+        // (1.3.0 to 1.5.x). Nothing reads it, and it never decided whether the check-in is on:
         // that is the presence of checkinEnabled, read just below.
         delete (stored as Record<string, unknown>).checkinNoticeSeen
         return {

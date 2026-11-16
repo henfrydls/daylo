@@ -109,7 +109,7 @@ js "(() => {
     reminderEnabled: false, reminderHour: 20, reminderMinute: 0,
     reminderTimeChosen: false, reminderOffered: true,
     firstOpenedAt: '$now', feedbackInviteSeen: true, storeReviewOffered: true,
-    checkinEnabled: false, checkinNoticeSeen: true, checkinId: null,
+    checkinEnabled: false, checkinId: null,
     checkinLastAttempt: null, updateNoticeSeenFor: null, updatesEnabled: false } }))
   // The app flushes its own pending write when the page goes away, which would put the
   // empty state back over this before the reload reads it (it did, once in four runs).
