@@ -530,3 +530,117 @@ pub fn ask_for_exact_alarms() -> bool {
     })
     .unwrap_or(false)
 }
+
+/// `Intent.FLAG_ACTIVITY_LAUNCHED_FROM_HISTORY`: Android set this activity going again from
+/// the recent apps, with the intent it was first started with.
+const FLAG_ACTIVITY_LAUNCHED_FROM_HISTORY: i32 = 0x0010_0000;
+
+/// The extra the notification plugin puts on the intent a notification opens the app with,
+/// holding that notification's id (`NOTIFICATION_INTENT_KEY` in its TauriNotificationManager.kt).
+const NOTIFICATION_ID_EXTRA: &str = "NotificationId";
+
+/// The id of the notification whose tap started this activity, or None when it was started
+/// some other way or the intent could not be read.
+///
+/// For a tap that starts the app from nothing. The plugin turns the tap into an event, but it
+/// does it while it loads, before the page has had a chance to listen, and Tauri drops a
+/// plugin event nobody is listening for. A tap on a notification of an app that is still in
+/// memory arrives later, through onNewIntent, as that event; this is for the other one.
+///
+/// Not when Android started the activity from the recent apps. It hands back the intent the
+/// activity was first started with, so somebody who opened Daylo from the reminder, left,
+/// and came back the next day from the recent apps after Android had ended the process would
+/// be taken to the day sheet again, by a tap made the day before.
+///
+/// The extra is read and not removed. Asking twice is for the caller to prevent (see
+/// `launch_notification` in lib.rs), because removing it here would change what the plugin
+/// itself reads from the same intent.
+pub fn launch_notification_id() -> Option<i32> {
+    with_the_activity(|env, activity| {
+        let intent = env
+            .call_method(activity, "getIntent", "()Landroid/content/Intent;", &[])?
+            .l()?;
+        if intent.is_null() {
+            return Ok(None);
+        }
+        let flags = env.call_method(&intent, "getFlags", "()I", &[])?.i()?;
+        if flags & FLAG_ACTIVITY_LAUNCHED_FROM_HISTORY != 0 {
+            return Ok(None);
+        }
+        let key = env.new_string(NOTIFICATION_ID_EXTRA)?;
+        let id = env
+            .call_method(
+                &intent,
+                "getIntExtra",
+                "(Ljava/lang/String;I)I",
+                &[JValue::Object(&key), JValue::Int(i32::MIN)],
+            )?
+            .i()?;
+        // The same "none" the plugin uses for the same extra.
+        if id == i32::MIN {
+            return Ok(None);
+        }
+        Ok(Some(id))
+    })
+    .flatten()
+}
+
+/// Open the phone's notification settings for this app, and say whether they opened.
+///
+/// From Android 8 that is the app's own notification screen, with the switch that the
+/// permission is. Below that there is no such screen, and the app's page in the system
+/// settings is where notifications are turned on and off. Neither grants anything: the
+/// person decides, and the app asks again when it comes back to the front.
+pub fn open_notification_settings() -> bool {
+    with_the_activity(|env, activity| {
+        let package = package_name(env, activity)?;
+        let intent = if sdk_int(env)? >= 26 {
+            let action = env.new_string("android.settings.APP_NOTIFICATION_SETTINGS")?;
+            let intent = env.new_object(
+                "android/content/Intent",
+                "(Ljava/lang/String;)V",
+                &[JValue::Object(&action)],
+            )?;
+            let extra = env.new_string("android.provider.extra.APP_PACKAGE")?;
+            env.call_method(
+                &intent,
+                "putExtra",
+                "(Ljava/lang/String;Ljava/lang/String;)Landroid/content/Intent;",
+                &[JValue::Object(&extra), JValue::Object(&package)],
+            )?;
+            intent
+        } else {
+            let action = env.new_string("android.settings.APPLICATION_DETAILS_SETTINGS")?;
+            let intent = env.new_object(
+                "android/content/Intent",
+                "(Ljava/lang/String;)V",
+                &[JValue::Object(&action)],
+            )?;
+            let name = String::from(env.get_string(&JString::from(package))?);
+            let target = env.new_string(format!("package:{name}"))?;
+            let uri = env
+                .call_static_method(
+                    "android/net/Uri",
+                    "parse",
+                    "(Ljava/lang/String;)Landroid/net/Uri;",
+                    &[JValue::Object(&target)],
+                )?
+                .l()?;
+            env.call_method(
+                &intent,
+                "setData",
+                "(Landroid/net/Uri;)Landroid/content/Intent;",
+                &[JValue::Object(&uri)],
+            )?;
+            intent
+        };
+        env.call_method(
+            activity,
+            "startActivity",
+            "(Landroid/content/Intent;)V",
+            &[JValue::Object(&intent)],
+        )?;
+        Ok(true)
+    })
+    .unwrap_or(false)
+}
