@@ -704,6 +704,97 @@ describe('what the new day leaves alone', () => {
 })
 
 /**
+ * R-09b, and Henfry's worry about it: a row in the Today bar that moves the screen down
+ * and never goes away. It goes by itself in both of the ways it can: once yesterday is
+ * logged, in the same session, and once the next day comes in with the app left open. On
+ * a morning with nothing to rescue it is never there.
+ *
+ * The run is the 9th, 10th and 11th of November; the 12th, a Thursday, is empty.
+ */
+describe('a yesterday that is still open', () => {
+  const row = () => screen.queryByTestId('log-yesterday-row')
+  const theRun = [done('2026-11-09'), done('2026-11-10'), done('2026-11-11')]
+  const ringIsOn = (date: string) =>
+    within(cell(date))
+      .getByText(String(Number(date.slice(8))))
+      .className.includes('border-gray-500')
+
+  it('goes when yesterday is logged, through the row and its sheet, with nothing reloaded', async () => {
+    const user = userEvent.setup()
+    useCalendarStore.setState({ logs: theRun })
+    vi.setSystemTime(new Date(2026, 10, 13, 9, 0))
+    render(<App />)
+    await act(async () => {})
+    expect(row()).toHaveTextContent('Log it to make 4 days in a row')
+    expect(ringIsOn('2026-11-12')).toBe(true)
+
+    await user.click(row()!)
+    const sheet = screen.getByTestId('quicklog-modal')
+    expect(within(sheet).getByTestId('yesterday-line')).toHaveTextContent(
+      'Yesterday is still open. Log any activity to make 4 days in a row.'
+    )
+    await user.click(within(sheet).getByTestId('quicklog-activity-checkbox'))
+    expect(within(sheet).getByTestId('yesterday-line')).toHaveTextContent('4 days in a row')
+    await user.click(within(sheet).getByTestId('quicklog-done-button'))
+    await waitForElementToBeRemoved(() => screen.queryByTestId('quicklog-modal'))
+
+    expect(row()).not.toBeInTheDocument()
+    expect(ringIsOn('2026-11-12')).toBe(false)
+    expect(screen.queryByText(/still open/)).not.toBeInTheDocument()
+    // What the row promised is what the header says.
+    for (const chip of screen.getAllByTestId('streak-chip')) {
+      expect(chip).toHaveAccessibleName(/^4 days in a row/)
+    }
+  })
+
+  it('goes when the next day comes in with the app left open', async () => {
+    useCalendarStore.setState({ logs: theRun })
+    vi.setSystemTime(new Date(2026, 10, 13, 21, 0))
+    render(<App />)
+    await act(async () => {})
+    expect(row()).toBeInTheDocument()
+
+    await theNextMorningComes(2026, 10, 14)
+
+    expect(isTodayIn('2026-11-14')).toBe(true)
+    expect(row()).not.toBeInTheDocument()
+    expect(ringIsOn('2026-11-12')).toBe(false)
+    expect(screen.getByLabelText(/^2026-11-12,/)).toHaveAccessibleName(
+      '2026-11-12, 0 activities completed'
+    )
+  })
+
+  // The other half of the same clock: it comes in with the new day too. Thursday evening
+  // yesterday was logged and there is nothing to say; Friday morning the Thursday is empty.
+  it('comes when the new day leaves yesterday open', async () => {
+    useCalendarStore.setState({ logs: theRun })
+    vi.setSystemTime(new Date(2026, 10, 12, 21, 0))
+    render(<App />)
+    await act(async () => {})
+    expect(row()).not.toBeInTheDocument()
+
+    await theNextMorningComes(2026, 10, 13)
+
+    expect(row()).toHaveTextContent('Log it to make 4 days in a row')
+  })
+
+  it.each([
+    ['a run of two', [done('2026-11-10'), done('2026-11-11')]],
+    ['two empty days', [done('2026-11-08'), done('2026-11-09'), done('2026-11-10')]],
+  ])('is never there after %s', async (_, logs) => {
+    useCalendarStore.setState({ logs })
+    vi.setSystemTime(new Date(2026, 10, 13, 9, 0))
+    render(<App />)
+    await act(async () => {})
+
+    expect(screen.getByTestId('log-today-bar')).toBeInTheDocument()
+    expect(row()).not.toBeInTheDocument()
+    expect(screen.queryByText(/still open/)).not.toBeInTheDocument()
+    expect(ringIsOn('2026-11-12')).toBe(false)
+  })
+})
+
+/**
  * The other way a day arrives: Daylo closed last night and opened this morning. Saved last
  * night on the year view with the sheet of last night open, it opens on today, on Month,
  * with no sheet: the same place the app goes to when the day changes with it open. The real

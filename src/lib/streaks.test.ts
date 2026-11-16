@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { currentStreak, longestStreak } from './streaks'
+import { currentStreak, longestStreak, yesterdayStillOpen } from './streaks'
 
 const on = (...dates: string[]) => new Set(dates)
 const march = (day: number) => new Date(2026, 2, day, 12)
@@ -48,6 +48,48 @@ describe('the current streak, continued', () => {
   it('crosses the end of a year', () => {
     const dates = ['2025-12-30', '2025-12-31', '2026-01-01', '2026-01-02']
     expect(currentStreak(on(...dates), new Date(2026, 0, 2, 12))).toBe(4)
+  })
+})
+
+describe('a yesterday that is still open', () => {
+  // Friday 13 November 2026, the morning after an empty Thursday.
+  const friday = new Date(2026, 10, 13, 9)
+  const nov = (...days: number[]) => on(...days.map((d) => `2026-11-${String(d).padStart(2, '0')}`))
+
+  // What the bar and yesterday's sheet promise is the number the header will show once
+  // yesterday is logged, so every row is checked against currentStreak with yesterday in.
+  it.each([
+    ['three days up to the day before yesterday', 4, nov(9, 10, 11)],
+    ['the same with today already logged, which joins the run', 5, nov(9, 10, 11, 13)],
+    ['a long run behind a gap, counting only the run', 8, nov(1, 2, 3, 5, 6, 7, 8, 9, 10, 11)],
+    ['a day logged in the future, which counts for nothing', 4, nov(9, 10, 11, 20)],
+  ])('is open after %s, and promises %i', (_, promised, done) => {
+    expect(yesterdayStillOpen(done, friday)).toBe(promised)
+    expect(currentStreak(new Set([...done, '2026-11-12']), friday)).toBe(promised)
+  })
+
+  // Case 2: nothing to rescue, and Daylo says nothing.
+  it.each([
+    ['nothing logged at all', nov()],
+    ['a run of one', nov(11)],
+    ['a run of two', nov(10, 11)],
+    ['a run of two with today logged', nov(10, 11, 13)],
+    ['two empty days, after a run of four', nov(7, 8, 9, 10)],
+    ['yesterday already logged', nov(9, 10, 11, 12)],
+    ['yesterday logged and today too', nov(10, 11, 12, 13)],
+    ['only today logged', nov(13)],
+  ])('is not open with %s', (_, done) => {
+    expect(yesterdayStillOpen(done, friday)).toBeNull()
+  })
+
+  it('crosses the end of a month: on 1 December, yesterday is 30 November', () => {
+    const december = new Date(2026, 11, 1, 9)
+    expect(yesterdayStillOpen(nov(27, 28, 29), december)).toBe(4)
+  })
+
+  it('crosses the end of a year', () => {
+    const newYear = new Date(2027, 0, 1, 9)
+    expect(yesterdayStillOpen(on('2026-12-28', '2026-12-29', '2026-12-30'), newYear)).toBe(4)
   })
 })
 

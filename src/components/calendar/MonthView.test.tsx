@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { render, screen, fireEvent } from '@testing-library/react'
+import { act, render, screen, fireEvent } from '@testing-library/react'
 import { MonthView } from './MonthView'
 import { useCalendarStore } from '../../store'
 import { formatDate } from '../../lib/dates'
@@ -16,6 +16,30 @@ function createMockMatchMedia(matches: boolean) {
     removeEventListener: vi.fn(),
     dispatchEvent: vi.fn(),
   }))
+}
+
+// A matchMedia that answers min-width and max-width queries against a window this wide.
+function atWidth(width: number) {
+  Object.defineProperty(window, 'matchMedia', {
+    writable: true,
+    configurable: true,
+    value: vi.fn().mockImplementation((query: string) => {
+      const min = /min-width:\s*(\d+)px/.exec(query)
+      const max = /max-width:\s*(\d+)px/.exec(query)
+      const matches =
+        (min === null || width >= Number(min[1])) && (max === null || width <= Number(max[1]))
+      return {
+        matches,
+        media: query,
+        onchange: null,
+        addListener: vi.fn(),
+        removeListener: vi.fn(),
+        addEventListener: vi.fn(),
+        removeEventListener: vi.fn(),
+        dispatchEvent: vi.fn(),
+      }
+    }),
+  })
 }
 
 describe('MonthView', () => {
@@ -187,7 +211,10 @@ describe('MonthView', () => {
       expect(screen.getByTestId('log-today-bar')).toBeInTheDocument()
     })
 
-    it('should not render Log Today bar on desktop', () => {
+    // #190: below 640 there was the bar, from 1024 the sidebar, and between the two
+    // nothing that said where today is logged. The desktop window opens at 800 at least.
+    it.each([639, 640, 800, 1023, 1280])('renders the Log Today bar at %ipx wide', (width) => {
+      atWidth(width)
       useCalendarStore.setState({
         activities: [activity],
         selectedYear: currentYear,
@@ -196,7 +223,7 @@ describe('MonthView', () => {
 
       render(<MonthView />)
 
-      expect(screen.queryByTestId('log-today-bar')).not.toBeInTheDocument()
+      expect(screen.getByTestId('log-today-bar')).toBeInTheDocument()
     })
 
     it('should not render Log Today bar when not viewing current month', () => {
@@ -454,6 +481,218 @@ describe('MonthView', () => {
       expect(yesterday.className).toContain('border-dashed')
       expect(yesterday.className).not.toContain('text-gray-400')
       vi.useRealTimers()
+    })
+  })
+
+  /**
+   * R-09b. The morning after an empty day that a run of three was going into: the ring on
+   * yesterday is grey and thin, and the Today bar says what it is with a second row.
+   *
+   * Friday 13 November 2026, with the 9th, 10th and 11th logged and the 12th empty.
+   */
+  describe('a yesterday that is still open', () => {
+    const oneHabit = [
+      {
+        id: 'a1',
+        name: 'Exercise',
+        color: '#10B981',
+        createdAt: '2026-01-01',
+        updatedAt: '2026-01-01',
+      },
+    ]
+    const loggedOn = (...dates: string[]) =>
+      dates.map((date) => ({
+        id: `l-${date}`,
+        activityId: 'a1',
+        date,
+        completed: true,
+        createdAt: date,
+      }))
+    const rescue = loggedOn('2026-11-09', '2026-11-10', '2026-11-11')
+    const numberIn = (dateStr: string) =>
+      screen.getByLabelText(new RegExp(`^${dateStr},`)).querySelector('span') as HTMLElement
+    const row = () => screen.queryByTestId('log-yesterday-row')
+    const phone = () =>
+      Object.defineProperty(window, 'matchMedia', {
+        writable: true,
+        configurable: true,
+        value: createMockMatchMedia(false),
+      })
+
+    beforeEach(() => {
+      vi.useFakeTimers({ toFake: ['Date'] })
+      vi.setSystemTime(new Date(2026, 10, 13, 9, 0))
+      useCalendarStore.setState({
+        activities: oneHabit,
+        logs: rescue,
+        selectedYear: 2026,
+        selectedMonth: 10,
+      })
+    })
+
+    afterEach(() => {
+      vi.useRealTimers()
+    })
+
+    // Grey and 1px against today's green and 2px: two differences, because gray-500 and
+    // emerald-700 are almost the same lightness, and somebody who cannot tell the hue
+    // apart would see two identical rings. The weight shows without colour.
+    it('rings yesterday in grey, one pixel thick, and leaves today green and two', () => {
+      render(<MonthView />)
+
+      const yesterday = numberIn('2026-11-12').className
+      expect(yesterday).toContain('border-dashed')
+      expect(yesterday).toContain('border-gray-500')
+      expect(yesterday).not.toContain('border-2')
+      expect(yesterday).not.toContain('emerald')
+
+      const today = numberIn('2026-11-13').className
+      expect(today).toContain('border-2')
+      expect(today).toContain('border-emerald-700')
+    })
+
+    it('tells a screen reader that yesterday is still open, and only yesterday', () => {
+      render(<MonthView />)
+
+      expect(screen.getByLabelText(/^2026-11-12,/)).toHaveAccessibleName(
+        '2026-11-12, 0 activities completed, yesterday, still open'
+      )
+      expect(screen.getByLabelText(/^2026-11-13,/)).toHaveAccessibleName(
+        '2026-11-13, 0 activities completed'
+      )
+    })
+
+    it('says nothing extra to a screen reader with no run behind yesterday', () => {
+      useCalendarStore.setState({ logs: loggedOn('2026-11-10', '2026-11-11') })
+      render(<MonthView />)
+
+      expect(screen.getByLabelText(/^2026-11-12,/)).toHaveAccessibleName(
+        '2026-11-12, 0 activities completed'
+      )
+    })
+
+    it('puts a row under Today on the phone, with the number it will make', () => {
+      phone()
+      render(<MonthView />)
+
+      expect(screen.getByTestId('log-today-bar')).toBeInTheDocument()
+      expect(row()).toHaveTextContent('Yesterday is still open')
+      expect(row()).toHaveTextContent('Log it to make 4 days in a row')
+      // The same ring as the grid, with its number: the row is the ring's legend.
+      const ring = row()!.querySelector('[data-testid="yesterday-ring"]') as HTMLElement
+      expect(ring).toHaveTextContent('12')
+      for (const part of ['border', 'border-dashed', 'border-gray-500']) {
+        expect(ring.className.split(' ')).toContain(part)
+      }
+      expect(ring.className).not.toContain('border-2')
+    })
+
+    it('opens the sheet of yesterday when the row is pressed', () => {
+      phone()
+      render(<MonthView />)
+
+      fireEvent.click(row()!)
+
+      expect(useCalendarStore.getState().selectedDate).toBe('2026-11-12')
+    })
+
+    // The row promises what the header will say, and with today in that is one more.
+    it('stays when today is already logged, and promises today too', () => {
+      phone()
+      useCalendarStore.setState({ logs: [...rescue, ...loggedOn('2026-11-13')] })
+      render(<MonthView />)
+
+      expect(row()).toHaveTextContent('Log it to make 5 days in a row')
+    })
+
+    // Henfry's worry: a row that never goes away. It goes the moment yesterday is logged,
+    // in the same session, with nothing reloaded.
+    it('goes the moment yesterday is logged, and the ring goes with it', () => {
+      phone()
+      render(<MonthView />)
+      expect(row()).toBeInTheDocument()
+
+      act(() => {
+        useCalendarStore.getState().toggleLog('a1', '2026-11-12')
+      })
+
+      expect(row()).not.toBeInTheDocument()
+      expect(numberIn('2026-11-12').className).not.toContain('border-dashed')
+      expect(screen.getByLabelText(/^2026-11-12,/)).toHaveAccessibleName(
+        '2026-11-12, 1 activity completed'
+      )
+    })
+
+    // Case 2. Nothing new on the screen: the bar is the bar of any morning.
+    it.each([
+      ['a run of two', ['2026-11-10', '2026-11-11']],
+      ['two empty days', ['2026-11-07', '2026-11-08', '2026-11-09', '2026-11-10']],
+    ])('says nothing after %s', (_, dates) => {
+      phone()
+      useCalendarStore.setState({ logs: loggedOn(...dates) })
+      render(<MonthView />)
+
+      expect(row()).not.toBeInTheDocument()
+      expect(screen.queryByText(/still open/)).not.toBeInTheDocument()
+      expect(screen.getByTestId('log-today-bar')).toBeInTheDocument()
+    })
+
+    // From 640px the row sits beside Today, inside the same bar; below it, under Today.
+    // The order of the classes is what the layout reads: the bar's box turns into a row
+    // at sm, and the row trades its top border for a left one at the same width.
+    it.each([800, 1280])('puts the row beside Today at %ipx', (width) => {
+      atWidth(width)
+      render(<MonthView />)
+
+      const box = row()!.parentElement!
+      expect(box).toContainElement(screen.getByTestId('log-today-bar'))
+      expect(box.className.split(' ')).toContain('sm:flex')
+      expect(row()!.className).toContain('sm:border-l')
+      expect(row()!.className).toContain('sm:border-t-0')
+      expect(box.firstElementChild).toBe(screen.getByTestId('log-today-bar'))
+      expect(box.lastElementChild).toBe(row())
+    })
+
+    it('puts the row under Today on the phone', () => {
+      atWidth(360)
+      render(<MonthView />)
+
+      const box = row()!.parentElement!
+      expect(box.firstElementChild).toBe(screen.getByTestId('log-today-bar'))
+      expect(box.lastElementChild).toBe(row())
+      expect(row()!.className.split(' ')).toContain('border-t')
+      expect(row()!.className.split(' ')).toContain('w-full')
+    })
+
+    it('keeps the bar on the desktop without a rescue, with no row', () => {
+      useCalendarStore.setState({ logs: loggedOn('2026-11-10', '2026-11-11') })
+      render(<MonthView />)
+
+      expect(screen.getByTestId('log-today-bar')).toBeInTheDocument()
+      expect(row()).not.toBeInTheDocument()
+    })
+
+    it('is not said on another month', () => {
+      phone()
+      useCalendarStore.setState({ selectedMonth: 9 })
+      render(<MonthView />)
+
+      expect(row()).not.toBeInTheDocument()
+    })
+
+    // On the 1st, yesterday is in the month before: a grey cell, and the row still names it.
+    it('names a yesterday in the month before', () => {
+      phone()
+      vi.setSystemTime(new Date(2026, 11, 1, 9, 0))
+      useCalendarStore.setState({
+        logs: loggedOn('2026-11-27', '2026-11-28', '2026-11-29'),
+        selectedMonth: 11,
+      })
+      render(<MonthView />)
+
+      expect(row()).toHaveTextContent('Log it to make 4 days in a row')
+      expect(row()).toHaveTextContent('30')
+      expect(numberIn('2026-11-30').className).toContain('border-gray-500')
     })
   })
 })

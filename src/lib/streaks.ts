@@ -40,6 +40,37 @@ export function currentStreak(done: ReadonlySet<string>, today: Date): number {
 }
 
 /**
+ * Whether yesterday can still be saved, and if so the run it would make.
+ *
+ * Yesterday is open when it is empty and a run of three or more was going into it: the run
+ * that ended **the day before yesterday**. Logging it then joins that run to today, and the
+ * number returned is the one the header will show once it is logged, today counted if today
+ * is already in. It is worked out with `currentStreak` over the same days plus yesterday, so
+ * it is not an estimate, which is what lets the screen say it in the future tense.
+ *
+ * `null` is every other morning, and on those Daylo says nothing at all: a line that only
+ * ever appeared the day after a miss would be, by existing, the mark of the miss.
+ *
+ * Two halves, and each one is load-bearing:
+ * - Asked the ordinary way, the streak is already 0 here, because an empty yesterday is
+ *   exactly what ends it. A rule reading `currentStreak(done, today)` would never once fire.
+ * - The `has` on the day before yesterday. `currentStreak` forgives a day, so asked about
+ *   that day without checking it is there, it walks one further back and answers about a
+ *   run that ended earlier, and logging yesterday would join nothing to anything.
+ *
+ * Three, and not one or two: rescuing a run of one or two is not worth a word on screen.
+ */
+export function yesterdayStillOpen(done: ReadonlySet<string>, today: Date): number | null {
+  const yesterday = formatDate(subDays(today, 1))
+  const before = subDays(today, 2)
+  if (done.has(yesterday)) return null
+  if (!done.has(formatDate(before))) return null
+  if (currentStreak(done, before) < 3) return null
+
+  return currentStreak(new Set([...done, yesterday]), today)
+}
+
+/**
  * The best run there has ever been, up to today.
  *
  * Days still to come are not part of it: an imported file can carry dates in the future,
