@@ -370,18 +370,43 @@ describe('QuickLog', () => {
       expect(screen.queryByTestId('first-day-line')).not.toBeInTheDocument()
     })
 
-    it('hides the line while another activity is being named, and has it after', async () => {
+    // Once means once: opening the form for another activity takes it away, and Cancel
+    // does not bring it back to be read out a second time.
+    it('goes for good once the form is opened again', async () => {
       const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime })
       render(<QuickLog />)
       open(todayStr())
 
       await user.type(screen.getByTestId('quicklog-new-activity-input'), 'Read')
       await user.click(screen.getByTestId('quicklog-add-activity'))
+      const line = screen.getByTestId('first-day-line')
+      expect(line).toHaveAttribute('aria-live', 'polite')
       await user.click(screen.getByTestId('quicklog-new-activity-button'))
       expect(screen.queryByTestId('first-day-line')).not.toBeInTheDocument()
 
       await user.click(screen.getByTestId('quicklog-cancel-create'))
+      expect(screen.queryByTestId('first-day-line')).not.toBeInTheDocument()
+      expect(screen.queryByText(LINE)).not.toBeInTheDocument()
+    })
+
+    // "Today is in" is only true while today is ticked. Unticking makes it a lie, so it
+    // goes, and ticking again in the same opening does not bring it back: it was said.
+    it('goes when today is unticked, and does not come back on ticking it again', async () => {
+      const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime })
+      render(<QuickLog />)
+      open(todayStr())
+
+      await user.type(screen.getByTestId('quicklog-new-activity-input'), 'Read')
+      await user.click(screen.getByTestId('quicklog-add-activity'))
       expect(screen.getByTestId('first-day-line')).toBeInTheDocument()
+
+      await user.click(screen.getByTestId('quicklog-activity-checkbox'))
+      expect(screen.getByTestId('quicklog-activity-checkbox')).not.toBeChecked()
+      expect(screen.queryByTestId('first-day-line')).not.toBeInTheDocument()
+
+      await user.click(screen.getByTestId('quicklog-activity-checkbox'))
+      expect(screen.getByTestId('quicklog-activity-checkbox')).toBeChecked()
+      expect(screen.queryByTestId('first-day-line')).not.toBeInTheDocument()
     })
 
     // Decided: the first activity made from another day's sheet marks that day, as it

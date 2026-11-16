@@ -34,7 +34,8 @@ export const QuickLog = memo(function QuickLog() {
   /**
    * Whether the first activity was born in this opening of today's sheet, which is all the
    * line under the title remembers, and only for as long as the sheet is open. Nothing is
-   * saved. Never on another day's sheet: "Today is in" would not be true there.
+   * saved. Never on another day's sheet: "Today is in" would not be true there. Gone for
+   * good, in this opening too, once today is unticked or the form opens again.
    */
   const [firstBornHere, setFirstBornHere] = useState(false)
   const [newName, setNewName] = useState('')
@@ -174,11 +175,17 @@ export const QuickLog = memo(function QuickLog() {
       if (!selectedDate) return
       toggleLog(activityId, selectedDate)
       setBouncingId(activityId)
+      // While the first day's line is up, the one row there is the activity just born
+      // ticked, so any tick unticks it and "Today is in" stops being true. It goes, and
+      // ticking again does not bring it back: it has been said.
+      setFirstBornHere(false)
     },
     [selectedDate, toggleLog]
   )
 
   const handleStartCreating = useCallback((): void => {
+    // Once means once: Cancel must not bring the line back to be read out again.
+    setFirstBornHere(false)
     setIsCreating(true)
     setNewName('')
     setPickedColor(null)
@@ -391,10 +398,11 @@ export const QuickLog = memo(function QuickLog() {
         <YesterdayLine key={`${opening}-${day}`} day={day} />
 
         {/* The first day's reward, said once: in the opening of today's sheet where the
-            first activity was born. Closing the sheet takes it for good. The same box as
+            first activity was born, until today is unticked or another activity is started.
+            Closing the sheet takes it for good. The same box as
             yesterday's line, so the list does not move: -mt-2 brings it to the title, mb-4
             parts it from the row. gray-600 on white is 7.56:1. */}
-        {firstBornHere && !isCreating ? (
+        {firstBornHere ? (
           <p
             className="-mt-2 mb-4 text-sm text-gray-600 sm:text-balance"
             aria-live="polite"
