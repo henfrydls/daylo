@@ -60,3 +60,35 @@ export function longestStreak(done: ReadonlySet<string>, today: Date): number {
 
   return best
 }
+
+/**
+ * Whether the run going now is the best there has ever been.
+ *
+ * What the streak sheet's second tile is called: "Your best ever" when it is, "Longest"
+ * when it is not. Beside a run of the same length, "Longest" reads as a second fact when it
+ * is the same one. Never with no run, because nothing equalling nothing is not a record.
+ */
+export function isBestEver(current: number, best: number): boolean {
+  return current > 0 && current === best
+}
+
+export interface RecentDay {
+  /** yyyy-MM-dd */
+  date: string
+  /** Whether anything was logged that day. */
+  done: boolean
+  isToday: boolean
+}
+
+/**
+ * The last `count` days ending today, oldest first, so today is always the last one.
+ *
+ * Read with the same set the streak is read from, so a day the sheet shows as done is a day
+ * the streak counts.
+ */
+export function lastDays(done: ReadonlySet<string>, today: Date, count: number): RecentDay[] {
+  return Array.from({ length: count }, (_, i) => {
+    const date = formatDate(subDays(today, count - 1 - i))
+    return { date, done: done.has(date), isToday: i === count - 1 }
+  })
+}
