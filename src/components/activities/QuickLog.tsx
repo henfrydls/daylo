@@ -245,7 +245,7 @@ export const QuickLog = memo(function QuickLog() {
           // of it comes home.
           maxLength={LONGEST_NAME}
           // The browser's placeholder grey is half the text colour, 3.41:1 on white, and the
-          // examples are words to read now. gray-500 is 4.83:1.
+          // examples are words to read now. gray-500 is 4.84:1.
           className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm placeholder:text-gray-500 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent min-h-[44px] sm:min-h-0"
           data-testid="quicklog-new-activity-input"
         />

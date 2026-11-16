@@ -54,7 +54,7 @@ export function FirstDayDoor({ onOpenToday, onImport }: FirstDayDoorProps) {
           <TodayTile day={today.getDate()} done={false} />
           <div className="text-left">
             <div className="text-sm font-semibold text-gray-900">Today</div>
-            {/* gray-600 on emerald-50 is 7.13:1. */}
+            {/* gray-600 on emerald-50 is 7.17:1. */}
             <div className="text-xs text-gray-600">Add your first activity</div>
           </div>
         </div>

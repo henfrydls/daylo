@@ -346,7 +346,7 @@ describe('QuickLog', () => {
 
       const input = screen.getByTestId('quicklog-new-activity-input')
       expect(input).toHaveAttribute('placeholder', 'e.g., Exercise, Read, Meditate')
-      // The browser's own placeholder grey was 3.41:1 here; gray-500 is 4.83:1.
+      // The browser's own placeholder grey was 3.41:1 here; gray-500 is 4.84:1.
       expect(input.className).toContain('placeholder:text-gray-500')
     })
 
