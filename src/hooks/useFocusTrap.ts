@@ -25,6 +25,12 @@ interface UseFocusTrapOptions {
   restoreFocus?: boolean
   /** Whether to auto-focus the first focusable element when activated */
   autoFocus?: boolean
+  /**
+   * Where the focus goes back to when what opened the trap is no longer on the page. The
+   * first activity replaces the door that opened the day sheet with the Today bar, and
+   * deleting the last one takes away the round button that opened the activities panel.
+   */
+  fallbackFocus?: () => HTMLElement | null
 }
 
 /**
@@ -40,8 +46,14 @@ export function useFocusTrap(
   isActive: boolean,
   options: UseFocusTrapOptions = {}
 ): void {
-  const { onEscape, restoreFocus = true, autoFocus = true } = options
+  const { onEscape, restoreFocus = true, autoFocus = true, fallbackFocus } = options
   const previousActiveElement = useRef<HTMLElement | null>(null)
+  // In a ref for the same reason as Escape below: read when the trap lets go, not when it
+  // was set up.
+  const fallback = useRef(fallbackFocus)
+  useEffect(() => {
+    fallback.current = fallbackFocus
+  })
 
   // Android's back button, in the same place as Escape and for the same reason: they are
   // one gesture, "take away the thing in front of me". Here rather than in each dialog
@@ -90,14 +102,19 @@ export function useFocusTrap(
       // Restore body scroll
       document.body.style.overflow = 'unset'
 
-      // Restore focus only on keyboard-driven close (focus still inside container)
-      // Mouse clicks on backdrop/Done move focus outside, so skip restoration
-      if (
-        restoreFocus &&
-        previousActiveElement.current &&
-        container?.contains(document.activeElement)
-      ) {
-        previousActiveElement.current.focus()
+      // Give it back while it is still the trap's to give: inside the container, or lost to
+      // the page because whatever held it went away. Anywhere else, somebody put it there.
+      // The container as it is now, and not as it was when the trap switched on: the day
+      // sheet is put on the page a render after it opens, so that one was always null and
+      // the focus was never given back from it at all.
+      // eslint-disable-next-line react-hooks/exhaustive-deps -- the node now, on purpose
+      const holder = containerRef.current ?? container
+      const active = document.activeElement
+      const lost = active === null || active === document.body
+      if (restoreFocus && (lost || holder?.contains(active))) {
+        const before = previousActiveElement.current
+        const back = before?.isConnected ? before : (fallback.current?.() ?? null)
+        back?.focus()
       }
     }
   }, [isActive, restoreFocus, autoFocus, containerRef])
