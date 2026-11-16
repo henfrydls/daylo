@@ -861,3 +861,130 @@ describe('arriving and leaving', () => {
     expect(screen.getByText('Feb 20, 2024')).toBeInTheDocument()
   })
 })
+
+/**
+ * R-09. Yesterday's sheet, on a morning when yesterday is still open, says so under the
+ * date, and once something is ticked the same line says the run it made. Friday 13
+ * November 2026, with the 9th, 10th and 11th logged and the 12th empty.
+ */
+describe("yesterday's sheet, while yesterday is still open", () => {
+  const habits = [
+    {
+      id: 'a1',
+      name: 'Exercise',
+      color: '#10B981',
+      createdAt: '2026-01-01',
+      updatedAt: '2026-01-01',
+    },
+    {
+      id: 'a2',
+      name: 'Reading',
+      color: '#3B82F6',
+      createdAt: '2026-01-01',
+      updatedAt: '2026-01-01',
+    },
+  ]
+  const loggedOn = (...dates: string[]) =>
+    dates.map((date) => ({
+      id: `l-${date}`,
+      activityId: 'a1',
+      date,
+      completed: true,
+      createdAt: date,
+    }))
+  const rescue = loggedOn('2026-11-09', '2026-11-10', '2026-11-11')
+  const line = () => screen.queryByTestId('yesterday-line')
+  const offer = 'Yesterday is still open. Log any activity to make 4 days in a row.'
+
+  const openOn = (date: string, logs = rescue) => {
+    act(() => {
+      useCalendarStore.setState({ activities: habits, logs, selectedDate: date })
+    })
+  }
+
+  beforeEach(() => {
+    vi.useFakeTimers({ toFake: ['Date'] })
+    vi.setSystemTime(new Date(2026, 10, 13, 9, 0))
+    resetStore()
+  })
+
+  afterEach(() => {
+    vi.useRealTimers()
+  })
+
+  it('says yesterday is still open, and the run logging it will make', () => {
+    render(<QuickLog />)
+    openOn('2026-11-12')
+
+    expect(line()).toHaveTextContent(offer)
+  })
+
+  it('promises one more when today is already logged', () => {
+    render(<QuickLog />)
+    openOn('2026-11-12', [...rescue, ...loggedOn('2026-11-13')])
+
+    expect(line()).toHaveTextContent('Log any activity to make 5 days in a row.')
+  })
+
+  // The instant of the rescue happens where the person is looking. The line is the same
+  // element before and after, so its reserved height stays and the list does not move
+  // under the finger.
+  it('turns into the run it made once something is ticked, in the same place', () => {
+    render(<QuickLog />)
+    openOn('2026-11-12')
+    const before = line()
+    const firstBox = screen.getAllByTestId('quicklog-activity-checkbox')[0]
+
+    fireEvent.click(firstBox)
+
+    expect(line()).toBe(before)
+    expect(line()).toHaveTextContent('4 days in a row')
+    expect(line()).not.toHaveTextContent('still open')
+    expect(line()!.className).toContain('min-h-10')
+    expect(screen.getAllByTestId('quicklog-activity-checkbox')[0]).toBe(firstBox)
+  })
+
+  it('offers again if what was ticked is unticked', () => {
+    render(<QuickLog />)
+    openOn('2026-11-12')
+    const box = screen.getAllByTestId('quicklog-activity-checkbox')[0]
+
+    fireEvent.click(box)
+    fireEvent.click(box)
+
+    expect(line()).toHaveTextContent(offer)
+  })
+
+  it('says nothing once yesterday is logged and the sheet is opened again', () => {
+    render(<QuickLog />)
+    openOn('2026-11-12')
+    fireEvent.click(screen.getAllByTestId('quicklog-activity-checkbox')[0])
+    act(() => {
+      useCalendarStore.setState({ selectedDate: null })
+    })
+
+    // Straight back, while the sheet is still on its way out and so never unmounted.
+    act(() => {
+      useCalendarStore.setState({ selectedDate: '2026-11-12' })
+    })
+
+    expect(line()).not.toBeInTheDocument()
+  })
+
+  it.each([
+    ["today's sheet", '2026-11-13', rescue],
+    ['the sheet of an older day', '2026-11-10', rescue],
+    ["yesterday's sheet after a run of two", '2026-11-12', loggedOn('2026-11-10', '2026-11-11')],
+    [
+      "yesterday's sheet after two empty days",
+      '2026-11-12',
+      loggedOn('2026-11-07', '2026-11-08', '2026-11-09', '2026-11-10'),
+    ],
+  ])('says nothing on %s', (_, date, logs) => {
+    render(<QuickLog />)
+    openOn(date, logs)
+
+    expect(screen.getByTestId('quicklog-modal')).toBeInTheDocument()
+    expect(line()).not.toBeInTheDocument()
+  })
+})

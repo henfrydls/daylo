@@ -6,6 +6,7 @@ import { Button, Checkbox, ColorPicker, PlusIcon, XIcon } from '../ui'
 import { useFocusTrap, useAnimatedPresence } from '../../hooks'
 import { useShallow } from 'zustand/react/shallow'
 import { LONGEST_NAME } from '../../lib/limits'
+import { YesterdayLine } from './YesterdayLine'
 
 export const QuickLog = memo(function QuickLog() {
   // Use individual selectors to prevent over-subscription
@@ -53,9 +54,13 @@ export const QuickLog = memo(function QuickLog() {
   // would fold the form up while the sheet is still sliding away, and waiting for the
   // sheet to finish leaving let a quick close and reopen bring the form back.
   const [wasOpen, setWasOpen] = useState(isOpen)
+  // Counts the openings, so what yesterday's line remembers lasts one of them. A quick close
+  // and reopen keeps the sheet mounted, and without this the line would remember the last.
+  const [opening, setOpening] = useState(0)
   if (isOpen !== wasOpen) {
     setWasOpen(isOpen)
     if (isOpen) {
+      setOpening((n) => n + 1)
       setIsCreating(false)
       setNewName('')
       setPickedColor(null)
@@ -343,6 +348,9 @@ export const QuickLog = memo(function QuickLog() {
             <XIcon className="w-5 h-5" />
           </button>
         </div>
+
+        {/* Only on yesterday's sheet, and only on a morning when yesterday is still open. */}
+        <YesterdayLine key={`${opening}-${day}`} day={day} />
 
         <div
           key={isCreating ? 'creating' : 'list'}

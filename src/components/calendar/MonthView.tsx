@@ -4,12 +4,13 @@ import { useTravel } from '../../lib/travel'
 import { formatDate, formatMonthYear } from '../../lib/dates'
 import { useTodayDate } from '../../lib/today'
 import { completedDates } from '../../lib/activityYear'
-import { currentStreak } from '../../lib/streaks'
+import { yesterdayStillOpen } from '../../lib/streaks'
 import { subDays } from 'date-fns'
-import { useMediaQuery } from '../../hooks/useMediaQuery'
 import type { Activity, ActivityLog } from '../../types'
 import { useShallow } from 'zustand/react/shallow'
 import { count } from '../../lib/plural'
+import { TODAY_RING, YESTERDAY_RING } from './rings'
+import { YesterdayRow } from './YesterdayRow'
 
 const DAYS_OF_WEEK = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
 const DAYS_OF_WEEK_SHORT = ['S', 'M', 'T', 'W', 'T', 'F', 'S']
@@ -92,13 +93,12 @@ function getMonthDays(year: number, month: number, today: string): DayInfo[] {
  *
  * Returning one string from one branch makes both of those impossible to write.
  */
-function tone(day: DayInfo, yesterdayStr: string, yesterdayIsWorthSaying: boolean): string {
+function tone(day: DayInfo, yesterdayStr: string, yesterdayIsOpen: boolean): string {
   if (day.isToday && day.logs.length > 0) return 'bg-emerald-700 text-white'
-
-  const ringed =
-    (day.isToday && day.logs.length === 0) ||
-    (day.dateStr === yesterdayStr && yesterdayIsWorthSaying)
-  if (ringed) return 'border-2 border-dashed border-emerald-700 text-gray-900'
+  if (day.isToday) return TODAY_RING
+  // The same shape as today's and not the same ring, so that today stays the only green
+  // ring on the screen. See rings.ts for why it differs in weight as well as colour.
+  if (day.dateStr === yesterdayStr && yesterdayIsOpen) return YESTERDAY_RING
 
   return day.isCurrentMonth ? 'text-gray-900' : 'text-gray-400'
 }
@@ -124,8 +124,6 @@ export const MonthView = memo(function MonthView({ onImport }: MonthViewProps) {
   const travel = useTravel()
   const activities = useCalendarStore(useShallow((state) => state.activities))
   const logs = useCalendarStore(useShallow((state) => state.logs))
-
-  const isMobile = !useMediaQuery('(min-width: 640px)')
 
   const [slideDirection, setSlideDirection] = useState<'left' | 'right' | null>(null)
 
@@ -210,27 +208,13 @@ export const MonthView = memo(function MonthView({ onImport }: MonthViewProps) {
   const todayCompletedCount = logsMap.get(todayStr)?.length ?? 0
 
   /**
-   * Yesterday, when it is empty and a run was going into it.
-   *
-   * The run this speaks of is the one that ended **the day before yesterday**, and that is
-   * not a detail. Asked the ordinary way the streak is already 0 here, because yesterday
-   * being empty is exactly what ends it, so a guard reading `currentStreak(done, today)`
-   * would never once fire and the ring would never appear. Nothing would break; it simply
-   * would not be there, which is the kind of fault that ships.
-   *
-   * The `has` is the other half. `currentStreak` has a day of grace built in, so asked
-   * about the day before yesterday without checking that the day itself is there, it walks
-   * one further back and answers about a run that ended earlier. The ring would then offer
-   * a yesterday whose logging joins nothing to anything.
+   * What logging yesterday would make, on a morning when yesterday is still open, and
+   * `null` on every other morning. The rule and why it has two halves are in
+   * `yesterdayStillOpen`. Read against the app's day, so the row and the grey ring go the
+   * moment a new day comes in, with the window left open.
    */
-  const yesterdayIsWorthSaying = useMemo(() => {
-    const done = completedDates(logs)
-    const yesterday = subDays(today, 1)
-    const before = subDays(today, 2)
-    if (done.has(formatDate(yesterday))) return false
-    if (!done.has(formatDate(before))) return false
-    return currentStreak(done, before) >= 3
-  }, [logs, today])
+  const rescue = useMemo(() => yesterdayStillOpen(completedDates(logs), today), [logs, today])
+  const yesterdayIsOpen = rescue !== null
 
   const yesterdayStr = formatDate(subDays(today, 1))
 
@@ -292,35 +276,64 @@ export const MonthView = memo(function MonthView({ onImport }: MonthViewProps) {
         </div>
       </div>
 
-      {/* Log Today Bar - Mobile only, current month only */}
-      {isMobile && isCurrentMonth && activities.length > 0 && (
-        <button
-          onClick={() => handleDayClick(todayStr)}
-          className="w-full flex items-center justify-between p-3 mb-4 bg-emerald-50 border border-emerald-200 rounded-xl min-h-[44px] transition-colors hover:bg-emerald-100 active:bg-emerald-100"
-          data-testid="log-today-bar"
-          aria-label={`Log today: ${todayCompletedCount} of ${count(activities.length, 'activity', 'activities')} completed`}
+      {/* Log Today Bar - current month only, at every width.
+
+          It used to be on the phone only, below 640px, and the sidebar only arrives at
+          1024px, so between the two there was nothing on the screen that said where today
+          is logged (#190). The desktop window opens at 800 at the least, so every desktop
+          copy could land there. Above 1024 it is the same bar beside the sidebar: one way to
+          log today at every width, rather than one per width.
+
+          On a morning when yesterday is still open the bar carries a second row: under
+          Today on the phone, beside it from 640px. Without a rescue it is the bar of any
+          other morning. */}
+      {isCurrentMonth && activities.length > 0 && (
+        <div
+          className={
+            yesterdayIsOpen
+              ? 'mb-4 overflow-hidden rounded-xl border border-emerald-200 sm:flex'
+              : 'contents'
+          }
         >
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 bg-emerald-500 text-white rounded-lg flex items-center justify-center font-bold text-sm">
-              {today.getDate()}
-            </div>
-            <div className="text-left">
-              <div className="text-sm font-semibold text-gray-900">Today</div>
-              <div className="text-xs text-gray-500">
-                {todayCompletedCount}/{count(activities.length, 'activity', 'activities')}
+          <button
+            onClick={() => handleDayClick(todayStr)}
+            // The ring for the keyboard is emerald-700, 5.36:1 on white, inset so the bar's
+            // own rounded border does not cut it. On the desktop the bar is reached by Tab.
+            className={`w-full flex items-center justify-between p-3 bg-emerald-50 min-h-[44px] transition-colors hover:bg-emerald-100 active:bg-emerald-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-emerald-700 ${
+              yesterdayIsOpen ? 'sm:w-auto sm:flex-1' : 'mb-4 border border-emerald-200 rounded-xl'
+            }`}
+            data-testid="log-today-bar"
+            aria-label={`Log today: ${todayCompletedCount} of ${count(activities.length, 'activity', 'activities')} completed`}
+          >
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 bg-emerald-500 text-white rounded-lg flex items-center justify-center font-bold text-sm">
+                {today.getDate()}
+              </div>
+              <div className="text-left">
+                <div className="text-sm font-semibold text-gray-900">Today</div>
+                <div className="text-xs text-gray-500">
+                  {todayCompletedCount}/{count(activities.length, 'activity', 'activities')}
+                </div>
               </div>
             </div>
-          </div>
-          <svg
-            className="w-5 h-5 text-gray-400"
-            fill="none"
-            viewBox="0 0 24 24"
-            stroke="currentColor"
-            aria-hidden="true"
-          >
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-          </svg>
-        </button>
+            <svg
+              className="w-5 h-5 text-gray-400"
+              fill="none"
+              viewBox="0 0 24 24"
+              stroke="currentColor"
+              aria-hidden="true"
+            >
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+            </svg>
+          </button>
+          {rescue !== null && (
+            <YesterdayRow
+              day={subDays(today, 1).getDate()}
+              wouldBe={rescue}
+              onOpen={() => handleDayClick(yesterdayStr)}
+            />
+          )}
+        </div>
       )}
 
       {/* Calendar Grid */}
@@ -369,7 +382,9 @@ export const MonthView = memo(function MonthView({ onImport }: MonthViewProps) {
                     ${!isLastColumn ? 'border-r border-gray-200' : ''}
                     ${isSelected ? 'bg-emerald-50 ring-2 ring-inset ring-emerald-500' : day.isCurrentMonth ? 'bg-white' : 'bg-gray-50'}
                   `}
-                  aria-label={`${day.dateStr}, ${count(day.logs.length, 'activity', 'activities')} completed`}
+                  aria-label={`${day.dateStr}, ${count(day.logs.length, 'activity', 'activities')} completed${
+                    day.dateStr === yesterdayStr && yesterdayIsOpen ? ', yesterday, still open' : ''
+                  }`}
                 >
                   {/* Day Number. Dashed is a day that exists and has not happened yet;
                       filled is a day that has. One rule, two places: today and the
@@ -383,7 +398,7 @@ export const MonthView = memo(function MonthView({ onImport }: MonthViewProps) {
                   <span
                     className={`
                       inline-flex items-center justify-center w-6 h-6 sm:w-7 sm:h-7 text-xs sm:text-sm font-medium rounded-full
-                      ${tone(day, yesterdayStr, yesterdayIsWorthSaying)}
+                      ${tone(day, yesterdayStr, yesterdayIsOpen)}
                     `}
                   >
                     {day.date.getDate()}
