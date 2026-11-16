@@ -455,7 +455,6 @@ describe('starting a new day', () => {
       _feedbackAsked: true,
       _loggedThisSession: true,
       _offerThisSession: 'reminder',
-      _checkinNoticeShown: true,
       _hasHydrated: true,
     })
 
@@ -465,7 +464,6 @@ describe('starting a new day', () => {
     expect(state._feedbackAsked).toBe(true)
     expect(state._loggedThisSession).toBe(true)
     expect(state._offerThisSession).toBe('reminder')
-    expect(state._checkinNoticeShown).toBe(true)
     expect(state._hasHydrated).toBe(true)
   })
 
@@ -508,9 +506,10 @@ describe('what the store remembers about how long somebody has been here', () =>
     expect(useCalendarStore.getState().firstOpenedAt).toBe('2020-01-01')
   })
 
-  it('gives this session to whoever asks first', () => {
+  it('gives this session to the reminder offer once it is made', () => {
+    expect(useCalendarStore.getState()._offerThisSession).toBeNull()
+
     useCalendarStore.getState().claimOffer('reminder')
-    useCalendarStore.getState().claimOffer('checkin')
 
     expect(useCalendarStore.getState()._offerThisSession).toBe('reminder')
   })
@@ -641,6 +640,39 @@ describe('what the store remembers about the check-in', () => {
       expect(useCalendarStore.getState()._checkinStart).toBe('decided')
       expect(useCalendarStore.getState().checkinEnabled).toBe(enabled)
     }
+  })
+
+  // Until 1.6 a line on the screen said whether the check-in was on, and checkinNoticeSeen
+  // remembered that it had been shown. The line is gone and so is the field. It never
+  // decided the default: that is whether the switch itself was stored, so a copy that
+  // carries the old field starts exactly as it would have, and the field is not kept.
+  it('drops whether the line about the check-in was shown, and starts the same', async () => {
+    const cases = [
+      [{ checkinNoticeSeen: true }, 'update', false],
+      [{ checkinNoticeSeen: false }, 'update', false],
+      [{ checkinNoticeSeen: true, checkinEnabled: true }, 'decided', true],
+      [{ checkinNoticeSeen: false, checkinEnabled: false }, 'decided', false],
+    ] as const
+    for (const [stored, start, enabled] of cases) {
+      useCalendarStore.setState(useCalendarStore.getInitialState(), true)
+      await new Promise((resolve) => setTimeout(resolve, 20))
+      localStorage.clear()
+      localStorage.setItem(
+        STORAGE_KEY,
+        JSON.stringify({ state: { activities: [], logs: [], ...stored }, version: 0 })
+      )
+
+      await useCalendarStore.persist.rehydrate()
+
+      const state = useCalendarStore.getState()
+      expect(state._checkinStart).toBe(start)
+      expect(state.checkinEnabled).toBe(enabled)
+      expect(state).not.toHaveProperty('checkinNoticeSeen')
+      expect(useCalendarStore.persist.getOptions().partialize!(state)).not.toHaveProperty(
+        'checkinNoticeSeen'
+      )
+    }
+    localStorage.clear()
   })
 
   // Daylo 1.3 asked once whether it could check in, and kept the answer in

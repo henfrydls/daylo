@@ -162,13 +162,11 @@ export function DailyReminder({ canAsk }: DailyReminderProps) {
   // follows them is not read as a close without an answer.
   const answered = useRef(false)
 
-  // Three things want a person's attention once, and none of them may talk over another:
-  // this offer, the check-in's, and the invitation to write. Whichever opens first takes
-  // the session, and the other two stand down until the next one.
-  const offerThisSession = useCalendarStore((state) => state._offerThisSession)
+  // Two things want a person's attention once, and neither may talk over the other: this
+  // offer and the invitation to write. This one waits while any other dialog is open, and
+  // once it has been made the invitation stands down for the session (lib/feedbackInvite.ts).
   const otherDialogs = useOpenDialogs((state) => state.open)
-  const mayOpen =
-    owed && tickedThisSession && canAsk && otherDialogs === 0 && offerThisSession !== 'checkin'
+  const mayOpen = owed && tickedThisSession && canAsk && otherDialogs === 0
   // Latched: whether it may open is checked to open it, not to keep it open. Its own
   // dialog counts in useOpenDialogs, and canAsk can change under it; either would
   // otherwise take it away without an answer, and bring it back later in the session.

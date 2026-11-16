@@ -303,17 +303,6 @@ describe('the one-time offer', () => {
     await settle()
     noOffer()
   })
-
-  // The session belongs to whoever asked first, and this one waits for the next.
-  it('stands down in a session the check-in already took', async () => {
-    tickedOnAndroid()
-    useCalendarStore.setState({ _offerThisSession: 'checkin' })
-
-    render(<DailyReminder canAsk />)
-
-    await settle()
-    noOffer()
-  })
 })
 
 describe('answering the offer', () => {

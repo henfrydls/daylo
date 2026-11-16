@@ -5,9 +5,9 @@ import { useCalendarStore } from '../../store'
 /**
  * What the app says about a newer version, and nothing more than that.
  *
- * The same card as the check-in's line, in the same place, for a reason that is a rule and
- * not a coincidence: there is one way this app tells somebody something, and a second
- * shape would make the first one mean less. A dialog was considered and rejected, and the
+ * A card under the header and not a dialog, for a reason that is a rule and not a
+ * coincidence: there is one way this app tells somebody something, and a second shape
+ * would make the first one mean less. A dialog was considered and rejected, and the
  * test for choosing between the two is whether an answer is wanted. The question with
  * stars wants one, so it interrupts. This does not: whoever does not care about updating
  * should be able to read straight past it.

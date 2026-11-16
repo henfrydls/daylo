@@ -139,8 +139,6 @@ beforeEach(() => {
     _offerThisSession: null,
     checkinEnabled: false,
     checkinId: null,
-    checkinNoticeSeen: true,
-    _checkinNoticeShown: false,
     _checkinStart: 'decided',
   })
   itIsTheEveningOf(2026, 10, 13)
@@ -364,7 +362,7 @@ describe('what the new day leaves alone', () => {
   it("sends the new day's check-in once, and does not start the check-in again", async () => {
     inTheApp.yes = true
     checkinFields.mockResolvedValue({ version: '1.5.3', os: 'linux', source: 'deb' })
-    useCalendarStore.setState({ _checkinStart: 'new', checkinNoticeSeen: false })
+    useCalendarStore.setState({ _checkinStart: 'new' })
     const daysSent: string[] = []
     sendCheckinIfDue.mockImplementation(async () => {
       daysSent.push(formatDate(new Date()))
@@ -638,29 +636,6 @@ describe('what the new day leaves alone', () => {
     await theNextMorningComes(2026, 10, 14)
 
     expect(useCalendarStore.getState().firstOpenedAt).toBe('2026-11-13')
-  })
-
-  it('leaves the line about the check-in where it was', async () => {
-    inTheApp.yes = true
-    checkinFields.mockResolvedValue({ version: '1.5.3', os: 'linux', source: 'deb' })
-    useCalendarStore.setState({ _checkinStart: 'update', checkinNoticeSeen: false })
-    render(<App />)
-    await act(async () => {})
-    await screen.findByTestId('checkin-notice')
-
-    await theNextMorningComes(2026, 10, 14)
-
-    expect(screen.getByTestId('checkin-notice')).toBeInTheDocument()
-  })
-
-  it('does not bring back a line about the check-in that was closed', async () => {
-    useCalendarStore.setState({ checkinNoticeSeen: true, _checkinNoticeShown: false })
-    render(<App />)
-    await act(async () => {})
-
-    await theNextMorningComes(2026, 10, 14)
-
-    expect(screen.queryByTestId('checkin-notice')).not.toBeInTheDocument()
   })
 
   it('does not read the store from disk again, nor lose a tick still being written', async () => {
