@@ -35,6 +35,7 @@ import {
   useAppVersion,
   useCheckinFields,
   useMediaQuery,
+  useReminderOfferOwed,
   useRemindersAvailable,
   useUpdates,
   useViewCarousel,
@@ -45,7 +46,6 @@ import { UpdateNotice } from './components/updates/UpdateNotice'
 import { StreakChip } from './components/streak/StreakChip'
 import { sendComment, sendRating, sendShown } from './lib/feedback'
 import { FEEDBACK_MAILTO, openMailto, shouldInviteFeedback } from './lib/feedbackInvite'
-import { reminderOfferDue } from './lib/reminders'
 import { openLink } from './lib/openLink'
 
 /**
@@ -212,7 +212,6 @@ function App() {
   const feedbackInviteSeen = useCalendarStore((state) => state.feedbackInviteSeen)
   const loggedThisSession = useCalendarStore((state) => state._loggedThisSession)
   const offerThisSession = useCalendarStore((state) => state._offerThisSession)
-  const reminderOffered = useCalendarStore((state) => state.reminderOffered)
   const checkinNoticeSeen = useCalendarStore((state) => state.checkinNoticeSeen)
   const checkinNoticeShown = useCalendarStore((state) => state._checkinNoticeShown)
   const checkinEnabled = useCalendarStore((state) => state.checkinEnabled)
@@ -229,14 +228,11 @@ function App() {
   const feedbackAsked = useCalendarStore((state) => state._feedbackAsked)
   const { showToast } = useToast()
 
-  // Owed only once it can be asked: a habit and a second day with a log (see
-  // DailyReminder). Owed from the first launch, it held back the invitation to write for
-  // as long as somebody logged on a single day, and that may be for ever.
-  const activityCount = useCalendarStore((state) => state.activities.length)
-  const reminderOfferOwed = useMemo(
-    () => hasReminders && !reminderOffered && reminderOfferDue(activityCount, logs),
-    [hasReminders, reminderOffered, activityCount, logs]
-  )
+  // The same rule DailyReminder opens it by (lib/reminders.ts, reminderOfferOwed). Owed
+  // from the first launch, as it used to be, it held back the invitation to write for as
+  // long as somebody logged on a single day; and closed beside it, it stayed owed for the
+  // rest of the session.
+  const reminderOfferOwed = useReminderOfferOwed(hasReminders)
 
   // The day on screen, and what happens when it is no longer today.
   //
@@ -778,7 +774,18 @@ function App() {
           </Suspense>
 
           {/* Daily reminder: the one-time offer. The setting itself is in Settings now. */}
-          <DailyReminder />
+          {/* It may ask only with nothing else open: not over the day sheet where the tick
+              happens, and not over Settings, the phone's activities sheet, Export or
+              Import, which closing the day sheet can lead straight into. */}
+          <DailyReminder
+            canAsk={
+              selectedDate === null &&
+              !isBottomSheetOpen &&
+              settings === 'closed' &&
+              !isExportOpen &&
+              !isImportOpen
+            }
+          />
 
           {/* The question, wherever it came from. Behind a Suspense with no fallback: it is
             asked for by a gate that has already waited a week, so a few milliseconds more

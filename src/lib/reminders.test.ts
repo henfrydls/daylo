@@ -4,7 +4,7 @@ import {
   REMINDER_ID,
   disableReminder,
   enableReminder,
-  reminderOfferDue,
+  reminderOfferOwed,
   reconcileReminder,
   refreshReminder,
   remindersAvailable,
@@ -394,33 +394,51 @@ describe('a re-arm overtaken on its way', () => {
 })
 
 /**
- * When the offer is worth making: a habit, and two different days with something ticked.
+ * Whether the offer is owed: the one rule DailyReminder and App both read.
  */
-describe('whether the offer is due', () => {
-  const log = (date: string, completed = true) => ({
-    id: date,
-    activityId: 'a',
-    date,
-    completed,
-    createdAt: `${date}T12:00:00.000Z`,
+describe('whether the offer is owed', () => {
+  const owed = {
+    available: true,
+    offered: false,
+    activityCount: 1,
+    tickDays: 2,
+    lastTickDay: '2026-10-09',
+    dismissedOn: null,
+    closedThisSession: false,
+  }
+
+  it('is owed on the second day of use with a habit', () => {
+    expect(reminderOfferOwed(owed)).toBe(true)
   })
 
-  it('is not due without a habit, whatever the logs say', () => {
-    expect(reminderOfferDue(0, [log('2026-10-08'), log('2026-10-09')])).toBe(false)
+  it('is not owed where reminders do not exist', () => {
+    expect(reminderOfferOwed({ ...owed, available: false })).toBe(false)
   })
 
-  it('is not due on one day, however many ticks it has', () => {
+  it('is not owed without a habit', () => {
+    expect(reminderOfferOwed({ ...owed, activityCount: 0 })).toBe(false)
+  })
+
+  it('is not owed on the first day of use', () => {
+    expect(reminderOfferOwed({ ...owed, tickDays: 1 })).toBe(false)
+  })
+
+  it('is not owed once answered', () => {
+    expect(reminderOfferOwed({ ...owed, offered: true })).toBe(false)
+  })
+
+  it('is not owed again in the session it was closed in', () => {
+    expect(reminderOfferOwed({ ...owed, closedThisSession: true })).toBe(false)
+  })
+
+  it('is not owed on the day it was put off, even after a tick', () => {
+    expect(reminderOfferOwed({ ...owed, dismissedOn: '2026-10-09' })).toBe(false)
+  })
+
+  it('is owed again after a tick on a later day', () => {
     expect(
-      reminderOfferDue(2, [log('2026-10-09'), { ...log('2026-10-09'), activityId: 'b' }])
-    ).toBe(false)
-  })
-
-  it('is due on the second different day', () => {
-    expect(reminderOfferDue(1, [log('2026-10-08'), log('2026-10-09')])).toBe(true)
-  })
-
-  it('does not count a day that was unticked again', () => {
-    expect(reminderOfferDue(1, [log('2026-10-08'), log('2026-10-09', false)])).toBe(false)
+      reminderOfferOwed({ ...owed, dismissedOn: '2026-10-09', lastTickDay: '2026-10-10' })
+    ).toBe(true)
   })
 })
 

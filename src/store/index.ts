@@ -173,6 +173,22 @@ const createDeferredStorage = (): StateStorage => {
   }
 }
 
+/**
+ * What a tick changes in the reminder offer's count of days of use: the phone's own day,
+ * not the date of the log, which can be any day somebody fills in.
+ */
+function aTickToday(
+  state: Pick<CalendarState, 'reminderTickDays' | 'reminderLastTickDay'>
+): Partial<CalendarState> {
+  const today = formatDate(new Date())
+  const newDay = state.reminderLastTickDay !== today
+  return {
+    _tickedThisSession: true,
+    reminderLastTickDay: today,
+    reminderTickDays: newDay ? Math.min(state.reminderTickDays + 1, 2) : state.reminderTickDays,
+  }
+}
+
 interface CalendarState {
   activities: Activity[]
   logs: ActivityLog[]
@@ -197,6 +213,22 @@ interface CalendarState {
   reminderHour: number
   reminderMinute: number
   reminderOffered: boolean
+  /**
+   * The reminder offer's own count of days of use (1.6): how many different days, by the
+   * phone's calendar, somebody ticked something on, stopping at 2, and the last of them.
+   * Counted when the tick happens, not read from the logs: a log's date is the day it is
+   * for, so filling in yesterday on the first day, or importing a year, would otherwise
+   * look like coming back. Unticking does not count.
+   */
+  reminderTickDays: number
+  reminderLastTickDay: string | null
+  /**
+   * How many times the offer was closed without an answer (tapping beside it, or back),
+   * and the day of the last time. Closing it puts it off until a later day with a tick;
+   * the third time counts as an answer.
+   */
+  reminderOfferDismissals: number
+  reminderOfferDismissedOn: string | null
   /**
    * Whether the time came from the person rather than from us.
    *
@@ -252,6 +284,13 @@ interface CalendarState {
    * that has not touched a day has not opened that sheet.
    */
   _loggedThisSession: boolean
+  /**
+   * Whether something was ticked, not unticked, in this session. The reminder offer
+   * waits for it: the question is about the moment somebody has just logged.
+   */
+  _tickedThisSession: boolean
+  /** The reminder offer was closed in this session, answered or not. Not persisted. */
+  _reminderOfferClosed: boolean
   /**
    * Which of the one-time offers has already been made in this session, if any.
    * Not persisted. Several things want the same moment and none may talk over another.
@@ -328,6 +367,10 @@ interface CalendarState {
   // Reminder
   setReminder: (enabled: boolean, hour?: number, minute?: number) => void
   markReminderOffered: () => void
+  /** Closed without an answer on `day`: put off, and spent the third time. */
+  dismissReminderOffer: (day: string) => void
+  /** Closed after an answer: gone for this session, and the answer is recorded elsewhere. */
+  closeReminderOffer: () => void
   markReminderTimeChosen: () => void
   /** Records the first day, once. Called when the store finishes hydrating. */
   markOpened: () => void
@@ -402,6 +445,10 @@ export const useCalendarStore = create<CalendarState>()(
       reminderMinute: 0,
       reminderOffered: false,
       reminderTimeChosen: false,
+      reminderTickDays: 0,
+      reminderLastTickDay: null,
+      reminderOfferDismissals: 0,
+      reminderOfferDismissedOn: null,
 
       firstOpenedAt: null,
       feedbackInviteSeen: false,
@@ -411,6 +458,8 @@ export const useCalendarStore = create<CalendarState>()(
       checkinId: null,
       checkinLastAttempt: null,
       _loggedThisSession: false,
+      _tickedThisSession: false,
+      _reminderOfferClosed: false,
       _offerThisSession: null,
       // Nothing stored is what a new installation looks like: merge is only called when
       // there is something to merge.
@@ -428,6 +477,17 @@ export const useCalendarStore = create<CalendarState>()(
         })),
 
       markReminderOffered: () => set({ reminderOffered: true }),
+      dismissReminderOffer: (day) =>
+        set((state) => {
+          const dismissals = state.reminderOfferDismissals + 1
+          return {
+            reminderOfferDismissals: dismissals,
+            reminderOfferDismissedOn: day,
+            _reminderOfferClosed: true,
+            ...(dismissals >= 3 ? { reminderOffered: true } : {}),
+          }
+        }),
+      closeReminderOffer: () => set({ _reminderOfferClosed: true }),
 
       markReminderTimeChosen: () => set({ reminderTimeChosen: true }),
 
@@ -543,6 +603,7 @@ export const useCalendarStore = create<CalendarState>()(
             logs: state.logs
               .filter((l) => !(esDeEsteDia(l) && l.id !== existingLog.id && !l.notes?.trim()))
               .map((l) => (l.id === existingLog.id ? { ...l, completed: true } : l)),
+            ...aTickToday(state),
           }))
         } else {
           const newLog: ActivityLog = {
@@ -554,6 +615,7 @@ export const useCalendarStore = create<CalendarState>()(
           }
           set((state) => ({
             logs: [...state.logs, newLog],
+            ...aTickToday(state),
           }))
         }
       },
@@ -630,6 +692,10 @@ export const useCalendarStore = create<CalendarState>()(
         reminderTimeChosen: state.reminderTimeChosen,
         reminderMinute: state.reminderMinute,
         reminderOffered: state.reminderOffered,
+        reminderTickDays: state.reminderTickDays,
+        reminderLastTickDay: state.reminderLastTickDay,
+        reminderOfferDismissals: state.reminderOfferDismissals,
+        reminderOfferDismissedOn: state.reminderOfferDismissedOn,
         firstOpenedAt: state.firstOpenedAt,
         feedbackInviteSeen: state.feedbackInviteSeen,
         storeReviewOffered: state.storeReviewOffered,

@@ -5,7 +5,6 @@ import {
   Schedule,
 } from '@tauri-apps/plugin-notification'
 import { invoke, isTauri } from '@tauri-apps/api/core'
-import type { ActivityLog } from '../types'
 
 /**
  * One fixed id, so Daylo owns exactly one reminder and can always find it again. Cancelling
@@ -80,20 +79,36 @@ export type ReminderOutcome =
  */
 export const OFFERED_REMINDER_HOUR = 21
 
+/** What the offer's rule reads. */
+export interface ReminderOfferFacts {
+  available: boolean
+  offered: boolean
+  activityCount: number
+  tickDays: number
+  lastTickDay: string | null
+  dismissedOn: string | null
+  closedThisSession: boolean
+}
+
 /**
- * Whether the reminder is worth offering yet: there is a habit, and there are at least
- * two different days with something ticked. The first day is for the habit; somebody who
- * comes back and logs a second one is who a daily reminder is for. A record unticked
- * again (completed: false) is not a day with a log.
+ * Whether the reminder offer is owed: it may be asked, and has not been answered. The one
+ * rule, read by DailyReminder to open it and by App to hold the invitation to write back
+ * behind it, so the two cannot disagree.
+ *
+ * - A habit, and two different days of use with a tick (counted by the store when the
+ *   tick happens, not from the logs' dates). The first day is for the habit.
+ * - Not answered: "Not now" and "Turn on" answer it, and so does a third close without
+ *   an answer.
+ * - Not closed in this session, answered or not.
+ * - Closed without an answer on some day: owed again only after a tick on a later day.
+ *   Never the same day.
  */
-export function reminderOfferDue(activityCount: number, logs: ActivityLog[]): boolean {
-  if (activityCount === 0) return false
-  const days = new Set<string>()
-  for (const entry of logs) {
-    if (entry.completed) days.add(entry.date)
-    if (days.size >= 2) return true
-  }
-  return false
+export function reminderOfferOwed(facts: ReminderOfferFacts): boolean {
+  if (!facts.available || facts.offered || facts.closedThisSession) return false
+  if (facts.activityCount === 0 || facts.tickDays < 2) return false
+  if (facts.dismissedOn === null) return true
+  // YYYY-MM-DD compares as it reads.
+  return facts.lastTickDay !== null && facts.lastTickDay > facts.dismissedOn
 }
 
 export async function remindersAvailable(): Promise<boolean> {

@@ -794,7 +794,7 @@ describe('the line and the reminder, on a new Android installation', () => {
     await act(async () => {})
     await screen.findByTestId('checkin-notice')
 
-    // A habit, a second day with a log, and a tick in this session: the reminder can
+    // A habit, a second day of use, and a tick in this session: the reminder can
     // finally ask. Its modal opens over the line, which is allowed: one is a question,
     // the other is a statement.
     await act(async () => {
@@ -807,6 +807,9 @@ describe('the line and the reminder, on a new Android installation', () => {
           completed: true,
           createdAt: NOW,
         })),
+        reminderTickDays: 2,
+        reminderLastTickDay: '2026-10-09',
+        _tickedThisSession: true,
         _loggedThisSession: true,
       })
     })

@@ -677,3 +677,185 @@ describe('what the store remembers about the check-in', () => {
     expect(persisted).toHaveProperty('checkinLastAttempt')
   })
 })
+
+// The reminder offer's days of use (1.6). Counted by the phone's calendar when a tick
+// happens, not from the dates of the logs: filling in yesterday on the first day, or
+// importing a year, is not coming back.
+describe('the days of use the reminder offer counts', () => {
+  const read = () => {
+    const { reminderTickDays, reminderLastTickDay, _tickedThisSession } =
+      useCalendarStore.getState()
+    return { reminderTickDays, reminderLastTickDay, _tickedThisSession }
+  }
+
+  beforeEach(() => {
+    vi.useFakeTimers({ toFake: ['Date'] })
+    vi.setSystemTime(new Date(2026, 9, 8, 20, 0))
+    useCalendarStore.setState({
+      activities: [
+        {
+          id: 'a1',
+          name: 'Read',
+          color: '#10B981',
+          createdAt: '2026-01-01',
+          updatedAt: '2026-01-01',
+        },
+        {
+          id: 'a2',
+          name: 'Run',
+          color: '#3B82F6',
+          createdAt: '2026-01-01',
+          updatedAt: '2026-01-01',
+        },
+      ],
+      logs: [],
+      reminderTickDays: 0,
+      reminderLastTickDay: null,
+      _tickedThisSession: false,
+    })
+  })
+
+  afterEach(() => {
+    vi.useRealTimers()
+  })
+
+  it('counts a tick as a day of use, and the session as one with a tick', () => {
+    useCalendarStore.getState().toggleLog('a1', '2026-10-08')
+
+    expect(read()).toEqual({
+      reminderTickDays: 1,
+      reminderLastTickDay: '2026-10-08',
+      _tickedThisSession: true,
+    })
+  })
+
+  // The case growth named: a first day spent filling in the week before is one day.
+  it('counts filling in earlier days on the first day as one day', () => {
+    useCalendarStore.getState().toggleLog('a1', '2026-10-06')
+    useCalendarStore.getState().toggleLog('a1', '2026-10-07')
+    useCalendarStore.getState().toggleLog('a2', '2026-10-08')
+
+    expect(read().reminderTickDays).toBe(1)
+  })
+
+  it('counts a second day by the phone, whatever day is ticked', () => {
+    useCalendarStore.getState().toggleLog('a1', '2026-10-08')
+    vi.setSystemTime(new Date(2026, 9, 9, 8, 0))
+    useCalendarStore.getState().toggleLog('a1', '2026-10-01')
+
+    expect(read()).toMatchObject({ reminderTickDays: 2, reminderLastTickDay: '2026-10-09' })
+  })
+
+  it('stops counting at two', () => {
+    useCalendarStore.getState().toggleLog('a1', '2026-10-08')
+    vi.setSystemTime(new Date(2026, 9, 9, 8, 0))
+    useCalendarStore.getState().toggleLog('a1', '2026-10-09')
+    vi.setSystemTime(new Date(2026, 9, 10, 8, 0))
+    useCalendarStore.getState().toggleLog('a1', '2026-10-10')
+
+    expect(read()).toMatchObject({ reminderTickDays: 2, reminderLastTickDay: '2026-10-10' })
+  })
+
+  it('does not count an untick', () => {
+    useCalendarStore.getState().toggleLog('a1', '2026-10-08')
+    vi.setSystemTime(new Date(2026, 9, 9, 8, 0))
+    useCalendarStore.setState({ _tickedThisSession: false })
+    useCalendarStore.getState().toggleLog('a1', '2026-10-08')
+
+    expect(read()).toEqual({
+      reminderTickDays: 1,
+      reminderLastTickDay: '2026-10-08',
+      _tickedThisSession: false,
+    })
+  })
+
+  // Ticking again a day that was unticked is a tick.
+  it('counts ticking an unticked day again', () => {
+    useCalendarStore.setState({
+      logs: [
+        {
+          id: 'l1',
+          activityId: 'a1',
+          date: '2026-10-07',
+          completed: false,
+          createdAt: '2026-10-07',
+        },
+      ],
+    })
+
+    useCalendarStore.getState().toggleLog('a1', '2026-10-07')
+
+    expect(read()).toMatchObject({ reminderTickDays: 1, _tickedThisSession: true })
+  })
+
+  // Import writes activities and logs with setState (ImportModal), and nothing else.
+  it('does not count logs that arrive by import', () => {
+    useCalendarStore.setState({
+      logs: [
+        {
+          id: 'l1',
+          activityId: 'a1',
+          date: '2026-10-01',
+          completed: true,
+          createdAt: '2026-10-01',
+        },
+        {
+          id: 'l2',
+          activityId: 'a1',
+          date: '2026-10-02',
+          completed: true,
+          createdAt: '2026-10-02',
+        },
+      ],
+    })
+
+    expect(read()).toEqual({
+      reminderTickDays: 0,
+      reminderLastTickDay: null,
+      _tickedThisSession: false,
+    })
+  })
+
+  it('remembers the count and the dismissals across a restart, and not the session', () => {
+    const persisted = useCalendarStore.persist.getOptions().partialize!(useCalendarStore.getState())
+
+    expect(persisted).toHaveProperty('reminderTickDays')
+    expect(persisted).toHaveProperty('reminderLastTickDay')
+    expect(persisted).toHaveProperty('reminderOfferDismissals')
+    expect(persisted).toHaveProperty('reminderOfferDismissedOn')
+    expect(persisted).not.toHaveProperty('_tickedThisSession')
+    expect(persisted).not.toHaveProperty('_reminderOfferClosed')
+  })
+})
+
+describe('putting the reminder offer off', () => {
+  beforeEach(() => {
+    useCalendarStore.setState({
+      reminderOffered: false,
+      reminderOfferDismissals: 0,
+      reminderOfferDismissedOn: null,
+      _reminderOfferClosed: false,
+    })
+  })
+
+  it('records the day and closes it for the session', () => {
+    useCalendarStore.getState().dismissReminderOffer('2026-10-09')
+
+    const state = useCalendarStore.getState()
+    expect(state.reminderOfferDismissals).toBe(1)
+    expect(state.reminderOfferDismissedOn).toBe('2026-10-09')
+    expect(state._reminderOfferClosed).toBe(true)
+    expect(state.reminderOffered).toBe(false)
+  })
+
+  it('spends it the third time', () => {
+    const { dismissReminderOffer } = useCalendarStore.getState()
+    dismissReminderOffer('2026-10-09')
+    dismissReminderOffer('2026-10-10')
+    expect(useCalendarStore.getState().reminderOffered).toBe(false)
+
+    dismissReminderOffer('2026-10-11')
+
+    expect(useCalendarStore.getState().reminderOffered).toBe(true)
+  })
+})

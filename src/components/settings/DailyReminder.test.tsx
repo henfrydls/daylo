@@ -60,14 +60,19 @@ const aLog = (activityId: string, date: string): ActivityLog => ({
 })
 
 /**
- * The moment the offer is for: the Android app, a habit, a second day with a log, and in
- * this session something was just logged and the day sheet is closed again.
+ * The moment the offer is for: the Android app, a habit, a second day of use with a tick,
+ * and in this session something was just ticked and nothing else is open.
  */
 function secondDayOnAndroid() {
   firstHabitOnAndroid()
   useCalendarStore.setState({
     logs: [aLog('a', '2026-10-08'), aLog('a', '2026-10-09')],
-    _loggedThisSession: true,
+    reminderTickDays: 2,
+    reminderLastTickDay: '2026-10-09',
+    reminderOfferDismissals: 0,
+    reminderOfferDismissedOn: null,
+    _tickedThisSession: true,
+    _reminderOfferClosed: false,
     selectedDate: null,
   })
 }
@@ -101,10 +106,19 @@ beforeEach(() => {
     reminderHour: 21,
     reminderMinute: 0,
     reminderOffered: false,
-    _loggedThisSession: false,
+    reminderTickDays: 0,
+    reminderLastTickDay: null,
+    reminderOfferDismissals: 0,
+    reminderOfferDismissedOn: null,
+    _tickedThisSession: false,
+    _reminderOfferClosed: false,
     _offerThisSession: null,
     selectedDate: null,
   })
+})
+
+afterEach(() => {
+  vi.useRealTimers()
 })
 
 afterEach(() => {
@@ -116,7 +130,7 @@ describe('the one-time offer', () => {
     secondDayOnAndroid()
     remindersAvailable.mockResolvedValue(false)
 
-    render(<DailyReminder />)
+    render(<DailyReminder canAsk />)
 
     await settle()
     noOffer()
@@ -127,67 +141,95 @@ describe('the one-time offer', () => {
     secondDayOnAndroid()
     useCalendarStore.setState({ activities: [] })
 
-    render(<DailyReminder />)
+    render(<DailyReminder canAsk />)
 
     await settle()
     noOffer()
   })
 
   // The first day is for the habit, not for a question about it. Somebody who comes back
-  // and logs a second day is somebody a reminder is for.
-  it('is not made on the first day with a log', async () => {
+  // and ticks on a second day is somebody a reminder is for. The days are the store's own
+  // count of days of use; the logs' dates do not decide it (see store/index.test.ts).
+  it('is not made on the first day of use, whatever the logs say', async () => {
     secondDayOnAndroid()
-    useCalendarStore.setState({ logs: [aLog('a', '2026-10-09')] })
+    useCalendarStore.setState({ reminderTickDays: 1 })
 
-    render(<DailyReminder />)
+    render(<DailyReminder canAsk />)
 
     await settle()
     noOffer()
   })
 
-  it('is made on the second day with a log, once something was logged and the sheet is closed', async () => {
+  it('is made on the second day of use, once something was ticked and nothing is open', async () => {
     secondDayOnAndroid()
 
-    render(<DailyReminder />)
+    render(<DailyReminder canAsk />)
 
     expect(await theOffer()).toBeInTheDocument()
   })
 
-  // A day only counts when something on it is ticked. A day that was ticked and then
-  // unticked keeps a record with completed: false, and that is not a day with a log.
-  it('does not count a day whose only record was unticked', async () => {
+  // Not on opening the app: it comes after somebody has ticked in this session, which is
+  // the moment the question is about.
+  it('is not made in a session where nothing was ticked yet', async () => {
     secondDayOnAndroid()
-    useCalendarStore.setState({
-      logs: [aLog('a', '2026-10-08'), { ...aLog('a', '2026-10-09'), completed: false }],
-    })
+    useCalendarStore.setState({ _tickedThisSession: false })
 
-    render(<DailyReminder />)
+    render(<DailyReminder canAsk />)
 
     await settle()
     noOffer()
   })
 
-  // Not on opening the app: it comes after somebody has logged in this session, which is
-  // the moment the question is about.
-  it('is not made in a session where nothing was logged yet', async () => {
+  // The gesture, end to end: a tick in the session is what lets it open.
+  it('opens after a tick in this session', async () => {
     secondDayOnAndroid()
-    useCalendarStore.setState({ _loggedThisSession: false })
-
-    render(<DailyReminder />)
-
+    useCalendarStore.setState({ _tickedThisSession: false })
+    render(<DailyReminder canAsk />)
     await settle()
     noOffer()
+
+    act(() => useCalendarStore.getState().toggleLog('a', '2026-10-10'))
+
+    expect(await theOffer()).toBeInTheDocument()
+  })
+
+  // Unticking is not logging: it does not open the offer.
+  it('does not open after an untick', async () => {
+    secondDayOnAndroid()
+    useCalendarStore.setState({ _tickedThisSession: false })
+    render(<DailyReminder canAsk />)
+    await settle()
+
+    act(() => useCalendarStore.getState().toggleLog('a', '2026-10-09'))
+
+    await settle()
+    expect(
+      useCalendarStore.getState().logs.some((l) => l.date === '2026-10-09' && l.completed)
+    ).toBe(false)
+    noOffer()
+  })
+
+  // Not on top of anything: the day sheet, Settings, the activities sheet, Export, Import.
+  // App says which with canAsk; it waits for all of them to close.
+  it('waits while something else is open', async () => {
+    secondDayOnAndroid()
+    const { rerender } = render(<DailyReminder canAsk={false} />)
+    await settle()
+    noOffer()
+
+    rerender(<DailyReminder canAsk />)
+
+    expect(await theOffer()).toBeInTheDocument()
   })
 
   // Not on top of the day sheet, where the tick happens: it waits for the sheet to close.
   it('waits for the day sheet to close', async () => {
     secondDayOnAndroid()
-    useCalendarStore.setState({ selectedDate: '2026-10-09' })
-    render(<DailyReminder />)
+    const { rerender } = render(<DailyReminder canAsk={false} />)
     await settle()
     noOffer()
 
-    act(() => useCalendarStore.setState({ selectedDate: null }))
+    rerender(<DailyReminder canAsk />)
 
     expect(await theOffer()).toBeInTheDocument()
   })
@@ -197,7 +239,7 @@ describe('the one-time offer', () => {
     secondDayOnAndroid()
     vi.setSystemTime(new Date(2026, 9, 9, 14, 37))
 
-    render(<DailyReminder />)
+    render(<DailyReminder canAsk />)
 
     expect(await theOffer()).toBeInTheDocument()
     expect(screen.getByText(/9:00 PM/)).toBeInTheDocument()
@@ -209,7 +251,7 @@ describe('the one-time offer', () => {
     secondDayOnAndroid()
     useCalendarStore.setState({ reminderHour: 7, reminderMinute: 0, reminderTimeChosen: true })
 
-    render(<DailyReminder />)
+    render(<DailyReminder canAsk />)
 
     expect(await theOffer()).toBeInTheDocument()
     expect(screen.getByText(/7:00 AM/)).toBeInTheDocument()
@@ -219,7 +261,7 @@ describe('the one-time offer', () => {
     secondDayOnAndroid()
     useCalendarStore.setState({ reminderOffered: true })
 
-    render(<DailyReminder />)
+    render(<DailyReminder canAsk />)
 
     await settle()
     noOffer()
@@ -230,7 +272,7 @@ describe('the one-time offer', () => {
     secondDayOnAndroid()
     useCalendarStore.setState({ _offerThisSession: 'checkin' })
 
-    render(<DailyReminder />)
+    render(<DailyReminder canAsk />)
 
     await settle()
     noOffer()
@@ -242,7 +284,7 @@ describe('answering the offer', () => {
   it('turns the reminder on at nine in the evening', async () => {
     secondDayOnAndroid()
     enableReminder.mockResolvedValue({ outcome: 'on' })
-    render(<DailyReminder />)
+    render(<DailyReminder canAsk />)
     await theOffer()
 
     await userEvent.click(screen.getByText('Turn on'))
@@ -257,7 +299,7 @@ describe('answering the offer', () => {
     secondDayOnAndroid()
     useCalendarStore.setState({ reminderHour: 7, reminderMinute: 0, reminderTimeChosen: true })
     enableReminder.mockResolvedValue({ outcome: 'on' })
-    render(<DailyReminder />)
+    render(<DailyReminder canAsk />)
     await theOffer()
 
     await userEvent.click(screen.getByText('Turn on'))
@@ -269,7 +311,7 @@ describe('answering the offer', () => {
   // come back.
   it('records a no without scheduling anything', async () => {
     secondDayOnAndroid()
-    render(<DailyReminder />)
+    render(<DailyReminder canAsk />)
     await theOffer()
 
     await userEvent.click(screen.getByText('Not now'))
@@ -279,48 +321,87 @@ describe('answering the offer', () => {
     expect(useCalendarStore.getState().reminderEnabled).toBe(false)
   })
 
-  // Tapping outside, or Escape (the phone's back), is not an answer. It closes the
-  // question for this session and leaves it to be asked again in another one. It used to
-  // spend it for good: closing and declining were the same door.
-  it('is not spent by tapping outside, and comes back in another session', async () => {
+  // Tapping outside, or Escape (the phone's back), is not an answer. It puts the question
+  // off to a later day with a tick, never the same day, and the third time counts as no.
+  it('is not spent by tapping outside, and waits for a tick on a later day', async () => {
     secondDayOnAndroid()
-    const { unmount } = render(<DailyReminder />)
+    vi.useFakeTimers({ toFake: ['Date'] })
+    vi.setSystemTime(new Date(2026, 9, 9, 20, 0))
+    const { unmount } = render(<DailyReminder canAsk />)
     await theOffer()
 
     await userEvent.click(screen.getByTestId('confirm-dialog-backdrop'))
 
     await waitFor(noOffer)
-    expect(useCalendarStore.getState().reminderOffered).toBe(false)
+    const state = useCalendarStore.getState()
+    expect(state.reminderOffered).toBe(false)
+    expect(state.reminderOfferDismissals).toBe(1)
+    expect(state.reminderOfferDismissedOn).toBe('2026-10-09')
     expect(enableReminder).not.toHaveBeenCalled()
 
-    // Still closed for the rest of this session, however the store moves.
-    act(() => useCalendarStore.setState({ selectedDate: '2026-10-09' }))
-    act(() => useCalendarStore.setState({ selectedDate: null }))
+    // The same day, in a new session with a new tick: still not.
+    unmount()
+    useCalendarStore.setState({ _offerThisSession: null, _reminderOfferClosed: false })
+    const second = render(<DailyReminder canAsk />)
+    act(() => useCalendarStore.getState().toggleLog('a', '2026-10-07'))
     await settle()
     noOffer()
 
-    // A new session: the app opened again, a day logged again.
-    unmount()
-    useCalendarStore.setState({ _offerThisSession: null, _loggedThisSession: true })
-    render(<DailyReminder />)
+    // The next day, a tick: it comes back.
+    second.unmount()
+    vi.setSystemTime(new Date(2026, 9, 10, 20, 0))
+    useCalendarStore.setState({ _offerThisSession: null, _tickedThisSession: false })
+    render(<DailyReminder canAsk />)
+    await settle()
+    noOffer()
+    act(() => useCalendarStore.getState().toggleLog('a', '2026-10-10'))
     expect(await theOffer()).toBeInTheDocument()
   })
 
   it('is not spent by Escape either', async () => {
     secondDayOnAndroid()
-    render(<DailyReminder />)
+    render(<DailyReminder canAsk />)
     await theOffer()
 
     await userEvent.keyboard('{Escape}')
 
     await waitFor(noOffer)
     expect(useCalendarStore.getState().reminderOffered).toBe(false)
+    expect(useCalendarStore.getState().reminderOfferDismissals).toBe(1)
+  })
+
+  // Three closes without an answer is an answer.
+  it('counts the third close without an answer as no', async () => {
+    secondDayOnAndroid()
+    useCalendarStore.setState({
+      reminderOfferDismissals: 2,
+      reminderOfferDismissedOn: '2026-10-08',
+    })
+    render(<DailyReminder canAsk />)
+    await theOffer()
+
+    await userEvent.keyboard('{Escape}')
+
+    await waitFor(noOffer)
+    expect(useCalendarStore.getState().reminderOffered).toBe(true)
+  })
+
+  // An answer is not a close without one: "Not now" does not count towards the three.
+  it('does not count an answer as a dismissal', async () => {
+    secondDayOnAndroid()
+    render(<DailyReminder canAsk />)
+    await theOffer()
+
+    await userEvent.click(screen.getByText('Not now'))
+
+    await waitFor(noOffer)
+    expect(useCalendarStore.getState().reminderOfferDismissals).toBe(0)
   })
 
   it('leaves the reminder off when the permission is refused, and counts that as answered', async () => {
     secondDayOnAndroid()
     enableReminder.mockResolvedValue({ outcome: 'permission-denied' })
-    render(<DailyReminder />)
+    render(<DailyReminder canAsk />)
     await theOffer()
 
     await userEvent.click(screen.getByText('Turn on'))
@@ -329,13 +410,43 @@ describe('answering the offer', () => {
     expect(useCalendarStore.getState().reminderEnabled).toBe(false)
     expect(useCalendarStore.getState().reminderOffered).toBe(true)
   })
+
+  // A call that threw is not an answer from the phone: say it did not work, and keep the
+  // offer owed for another time.
+  it('keeps the offer owed when turning it on throws, and says so', async () => {
+    secondDayOnAndroid()
+    enableReminder.mockRejectedValue(new Error('bridge gone'))
+    render(<DailyReminder canAsk />)
+    await theOffer()
+
+    await userEvent.click(screen.getByText('Turn on'))
+
+    await waitFor(() => expect(showToast).toHaveBeenCalled())
+    expect(showToast.mock.calls[0][0]).toMatch(/could not set the reminder/i)
+    expect(useCalendarStore.getState().reminderOffered).toBe(false)
+    expect(useCalendarStore.getState().reminderEnabled).toBe(false)
+    // An attempted answer is not a dismissal either.
+    expect(useCalendarStore.getState().reminderOfferDismissals).toBe(0)
+  })
+
+  it('counts a refused schedule as answered', async () => {
+    secondDayOnAndroid()
+    enableReminder.mockResolvedValue({ outcome: 'failed', reason: 'no' })
+    render(<DailyReminder canAsk />)
+    await theOffer()
+
+    await userEvent.click(screen.getByText('Turn on'))
+
+    await waitFor(() => expect(showToast).toHaveBeenCalled())
+    expect(useCalendarStore.getState().reminderOffered).toBe(true)
+  })
 })
 
 describe('when the activities go', () => {
   it('takes the reminder down with the last one', async () => {
     firstHabitOnAndroid()
     useCalendarStore.setState({ reminderOffered: true, reminderEnabled: true })
-    render(<DailyReminder />)
+    render(<DailyReminder canAsk />)
     await settle()
 
     act(() => useCalendarStore.setState({ activities: [] }))
@@ -349,7 +460,7 @@ describe('opening the app', () => {
     firstHabitOnAndroid()
     useCalendarStore.setState({ reminderEnabled: true, reminderOffered: true })
 
-    render(<DailyReminder />)
+    render(<DailyReminder canAsk />)
 
     await waitFor(() => expect(refreshReminder).toHaveBeenCalledWith(21, 0))
   })
@@ -358,7 +469,7 @@ describe('opening the app', () => {
     firstHabitOnAndroid()
     useCalendarStore.setState({ reminderOffered: true })
 
-    render(<DailyReminder />)
+    render(<DailyReminder canAsk />)
 
     await settle()
     expect(refreshReminder).not.toHaveBeenCalled()
@@ -372,7 +483,7 @@ describe('opening the app', () => {
     remindersAvailable.mockResolvedValue(true)
     useCalendarStore.setState({ activities: [], reminderEnabled: true, reminderOffered: true })
 
-    render(<DailyReminder />)
+    render(<DailyReminder canAsk />)
 
     await settle()
     expect(refreshReminder).not.toHaveBeenCalled()
@@ -382,7 +493,7 @@ describe('opening the app', () => {
   it('arms again when a habit comes back', async () => {
     remindersAvailable.mockResolvedValue(true)
     useCalendarStore.setState({ activities: [], reminderEnabled: true, reminderOffered: true })
-    render(<DailyReminder />)
+    render(<DailyReminder canAsk />)
     await settle()
 
     act(() => useCalendarStore.setState({ activities: [anActivity('a')] }))
@@ -395,7 +506,7 @@ describe('opening the app', () => {
   it('says so when the phone refuses the schedule', async () => {
     secondDayOnAndroid()
     enableReminder.mockResolvedValue({ outcome: 'failed', reason: 'the phone said no' })
-    render(<DailyReminder />)
+    render(<DailyReminder canAsk />)
     await theOffer()
 
     await userEvent.click(screen.getByText('Turn on'))
@@ -412,7 +523,7 @@ describe('opening the app', () => {
     useCalendarStore.setState({ reminderEnabled: true, reminderOffered: true })
     refreshReminder.mockResolvedValue(false)
 
-    render(<DailyReminder />)
+    render(<DailyReminder canAsk />)
 
     await waitFor(() => expect(useCalendarStore.getState().reminderEnabled).toBe(false))
   })
@@ -425,7 +536,7 @@ describe('opening the app', () => {
     useCalendarStore.setState({ reminderEnabled: true, reminderOffered: true })
     refreshReminder.mockResolvedValue(false)
 
-    render(<DailyReminder />)
+    render(<DailyReminder canAsk />)
 
     await waitFor(() => expect(disableReminder).toHaveBeenCalled())
   })
@@ -438,7 +549,7 @@ describe('opening the app', () => {
     useCalendarStore.setState({ reminderEnabled: true, reminderOffered: true })
     refreshReminder.mockResolvedValue(null)
 
-    render(<DailyReminder />)
+    render(<DailyReminder canAsk />)
 
     await waitFor(() => expect(refreshReminder).toHaveBeenCalled())
     await settle()
@@ -450,7 +561,7 @@ describe('opening the app', () => {
     firstHabitOnAndroid()
     useCalendarStore.setState({ reminderEnabled: true, reminderOffered: true })
 
-    render(<DailyReminder />)
+    render(<DailyReminder canAsk />)
 
     await waitFor(() => expect(refreshReminder).toHaveBeenCalled())
     await settle()

@@ -1,7 +1,8 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useRef } from 'react'
 import { ConfirmDialog, useToast } from '../ui'
 import { useCalendarStore } from '../../store'
-import { useRemindersAvailable } from '../../hooks'
+import { useReminderOfferOwed, useRemindersAvailable } from '../../hooks'
+import { formatDate } from '../../lib/dates'
 import {
   disableReminder,
   enableReminder,
@@ -9,7 +10,6 @@ import {
   OFFERED_REMINDER_HOUR,
   reconcileReminder,
   refreshReminder,
-  reminderOfferDue,
 } from '../../lib/reminders'
 
 /**
@@ -24,9 +24,13 @@ import {
  * again. Closing it without answering is not an answer. The setting in the menu is what
  * somebody uses to change their mind.
  */
-export function DailyReminder() {
+interface DailyReminderProps {
+  /** Nothing else is open: no day sheet, no Settings, no sheet, no Export or Import. */
+  canAsk: boolean
+}
+
+export function DailyReminder({ canAsk }: DailyReminderProps) {
   const activityCount = useCalendarStore((state) => state.activities.length)
-  const offered = useCalendarStore((state) => state.reminderOffered)
   const hour = useCalendarStore((state) => state.reminderHour)
   const minute = useCalendarStore((state) => state.reminderMinute)
   const setReminder = useCalendarStore((state) => state.setReminder)
@@ -71,11 +75,19 @@ export function DailyReminder() {
     })
   }, [available, activityCount, setReminder])
 
+  // Spent only on an answer the phone gave: on, a refused permission, or a refused
+  // schedule. A call that threw is not an answer, so the offer stays owed and somebody is
+  // told it did not work, the same way a refused schedule is.
   const accept = async () => {
-    // Answered, whatever the phone says next: a refused permission is not a reason to ask
-    // the same question again tomorrow.
+    let outcome
+    try {
+      ;({ outcome } = await enableReminder(offerHour, offerMinute))
+    } catch {
+      showToast('Daylo could not set the reminder on this phone', 'error')
+      return
+    }
+    if (outcome === 'unavailable') return
     markReminderOffered()
-    const { outcome } = await enableReminder(offerHour, offerMinute)
     if (outcome === 'on') {
       setReminder(true, offerHour, offerMinute)
       return
@@ -90,35 +102,29 @@ export function DailyReminder() {
     }
   }
 
-  // When it opens (1.6, approved on 2026-11-02 and confirmed on 2026-11-15):
+  // When it opens (1.6, approved on 2026-11-02, confirmed and reviewed on 2026-11-15):
   //
-  // - On the second different day with something logged, not on the first: the first day
-  //   is for the habit. It used to open in the first second of the first launch with a
-  //   habit, over the day sheet.
-  // - After something was logged in this session, and with the day sheet closed: the
-  //   question is about the moment somebody has just logged, and it does not sit on top of
-  //   the sheet where the tick happens. Closing the sheet clears selectedDate, and the
-  //   session flag stays true, so it opens the moment the sheet is out of the way.
-  // - Tapping beside it, or Escape, closes it for this session only. "Not now" and "Turn
-  //   on" are the answers, and only they spend it. It used to be spent by any close.
-  const logs = useCalendarStore((state) => state.logs)
-  const due = useMemo(() => reminderOfferDue(activityCount, logs), [activityCount, logs])
-  const loggedThisSession = useCalendarStore((state) => state._loggedThisSession)
-  const daySheetOpen = useCalendarStore((state) => state.selectedDate !== null)
-  const [closedThisSession, setClosedThisSession] = useState(false)
+  // - Owed, by the one rule in lib/reminders.ts that App also reads: a habit, a second
+  //   day of use with a tick, not answered, not closed this session, and after a close
+  //   without an answer, only on a later day with a tick.
+  // - After something was ticked in this session, with nothing else open (canAsk): the
+  //   question is about the moment somebody has just logged, and it does not stack on the
+  //   day sheet or whatever closing it leads into.
+  // - Tapping beside it or back is not an answer. It puts it off to a later day, and the
+  //   third time counts as no. "Not now" and "Turn on" are the answers.
+  const owed = useReminderOfferOwed(available)
+  const tickedThisSession = useCalendarStore((state) => state._tickedThisSession)
+  const dismissReminderOffer = useCalendarStore((state) => state.dismissReminderOffer)
+  const closeReminderOffer = useCalendarStore((state) => state.closeReminderOffer)
+  // Set by the two answers just before the dialog closes itself, so that the close which
+  // follows them is not read as a close without an answer.
+  const answered = useRef(false)
 
   // Three things want a person's attention once, and none of them may talk over another:
   // this offer, the check-in's, and the invitation to write. Whichever opens first takes
   // the session, and the other two stand down until the next one.
   const offerThisSession = useCalendarStore((state) => state._offerThisSession)
-  const offerIsOpen =
-    available &&
-    !offered &&
-    due &&
-    loggedThisSession &&
-    !daySheetOpen &&
-    !closedThisSession &&
-    offerThisSession !== 'checkin'
+  const offerIsOpen = owed && tickedThisSession && canAsk && offerThisSession !== 'checkin'
   const claimOffer = useCalendarStore((state) => state.claimOffer)
   useEffect(() => {
     if (offerIsOpen) claimOffer('reminder')
@@ -133,9 +139,19 @@ export function DailyReminder() {
   return (
     <ConfirmDialog
       isOpen={offerIsOpen}
-      onClose={() => setClosedThisSession(true)}
-      onCancel={markReminderOffered}
-      onConfirm={() => void accept()}
+      onClose={() => {
+        if (answered.current) closeReminderOffer()
+        else dismissReminderOffer(formatDate(new Date()))
+        answered.current = false
+      }}
+      onCancel={() => {
+        answered.current = true
+        markReminderOffered()
+      }}
+      onConfirm={() => {
+        answered.current = true
+        void accept()
+      }}
       title="Remind me each evening?"
       message={`A notification around ${formatReminderTime(offerHour, offerMinute)} so the day does not go unlogged. Android picks the exact moment. You can change the time or turn it off in Settings.`}
       confirmText="Turn on"
