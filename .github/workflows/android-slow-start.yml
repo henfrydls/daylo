@@ -30,6 +30,10 @@ on:
         description: 'Starts on a quiet machine, as the control'
         type: number
         default: 4
+      block_ui_ms:
+        description: 'Hold the UI thread this long at the start of every launch (0 for no hold). Over 10000 makes the webview version question time out'
+        type: number
+        default: 0
 
 permissions:
   contents: read
@@ -96,6 +100,25 @@ jobs:
 
       - name: Install Tauri CLI
         run: npm install --save-dev @tauri-apps/cli
+
+      # The slow start, made on purpose instead of waited for (#201). At startup the Rust
+      # main thread asks the UI thread for the webview version and wry gives it ten
+      # seconds. A busy runner no longer makes the UI thread that late (2026-11-15: 0 of
+      # 12 starts on main), so a build that crashes there and one that does not looked
+      # the same. Holding the UI thread inside MainActivity.onCreate, right after the
+      # activity has started the Rust side, keeps the answer from leaving for as long as
+      # this says, every launch. Only in this job's copy of the file; nothing is committed.
+      - name: Hold the UI thread at start
+        if: inputs.block_ui_ms > 0
+        env:
+          HOLD_MS: ${{ inputs.block_ui_ms }}
+        run: |
+          set -euo pipefail
+          f=src-tauri/gen/android/app/src/main/java/com/daylo/app/MainActivity.kt
+          [ "$(grep -c 'super.onCreate(savedInstanceState)' "$f")" = 1 ] \
+            || { echo "::error::MainActivity.kt no longer has exactly one super.onCreate"; exit 1; }
+          sed -i "s/super.onCreate(savedInstanceState)/&\n    Thread.sleep(${HOLD_MS}L)/" "$f"
+          grep -n -A1 'super.onCreate' "$f"
 
       # Debug, which is the whole point: a release APK hides Logger.error, every
       # console.error from the app, and the plugin's own account of what it scheduled.
