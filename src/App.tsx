@@ -555,7 +555,7 @@ function App() {
             h, so a view taller than the screen still makes the page longer and still
             scrolls. The bottom inset is padding here, which keeps the card clear of the
             gesture bar on a phone that has one. */}
-        <div className="flex min-h-[100dvh] flex-col bg-gray-50 pb-[env(safe-area-inset-bottom)]">
+        <div className="flex min-h-[100dvh] flex-col bg-gray-50 pb-[var(--inset-bottom)]">
           {/* Skip Link for keyboard users */}
           <a
             href="#main-content"
@@ -565,10 +565,7 @@ function App() {
           </a>
 
           {/* Header */}
-          <header
-            ref={headerRef}
-            className="sticky top-0 z-30 bg-white pt-[env(safe-area-inset-top)]"
-          >
+          <header ref={headerRef} className="sticky top-0 z-30 bg-white pt-[var(--inset-top)]">
             <div className="bg-white border-b border-gray-200">
               <div className="max-w-7xl mx-auto px-3 sm:px-4 py-3 sm:py-4">
                 <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
@@ -713,7 +710,7 @@ function App() {
           {/* FAB Button - Visible only on mobile (< lg) */}
           <button
             onClick={() => setIsBottomSheetOpen(true)}
-            className="fixed bottom-6 right-6 z-20 lg:hidden w-14 h-14 bg-emerald-500 hover:bg-emerald-600 active:bg-emerald-700 text-white rounded-full shadow-lg flex items-center justify-center transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 focus-visible:ring-offset-2"
+            className="fixed bottom-[calc(1.5rem+var(--inset-bottom))] right-[calc(1.5rem+var(--inset-right))] z-20 lg:hidden w-14 h-14 bg-emerald-500 hover:bg-emerald-600 active:bg-emerald-700 text-white rounded-full shadow-lg flex items-center justify-center transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 focus-visible:ring-offset-2"
             aria-label="Open activities panel"
             data-testid="fab-button"
           >

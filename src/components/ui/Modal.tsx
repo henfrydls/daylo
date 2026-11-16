@@ -29,12 +29,14 @@ import { XIcon } from './Icons'
  *
  * calc rather than max. With max the system's strip eats the padding the design asked
  * for, and the button clears the bar by exactly nothing; with calc it keeps its own
- * breathing room above whatever the system takes. Where there is no inset — every
- * desktop, and a phone on button navigation — env() is 0 and this is exactly the padding
- * it always had, so nothing moves anywhere else.
+ * breathing room above whatever the system takes. Where there is no inset, which is every
+ * desktop, this is exactly the padding it always had, so nothing moves anywhere else.
  *
- * It needs viewport-fit=cover in the viewport meta to be anything but zero, which
- * index.html has.
+ * What the system takes is --inset-bottom from index.css, not env() alone. From Android 15
+ * a phone on three-button navigation has a 48 dp bar over the page too, and an older
+ * WebView reports it as 0 through env() (#198). The variable takes Android's own number
+ * when it is larger. env() also needs viewport-fit=cover in the viewport meta to be
+ * anything but zero, which index.html has.
  */
 /**
  * What the leaving classes say, and what the dialog is given to do it in.
@@ -115,7 +117,7 @@ export function Modal({
       />
       <div
         ref={modalRef}
-        className={`relative bg-white rounded-t-xl sm:rounded-xl shadow-xl max-w-md w-full mx-0 sm:mx-4 px-6 pt-4 sm:pt-6 pb-[calc(1rem_+_env(safe-area-inset-bottom))] sm:pb-[calc(1.5rem_+_env(safe-area-inset-bottom))] max-h-[90dvh] flex flex-col overflow-hidden motion-safe:transition-[translate,scale,opacity] duration-[250ms] ${DIALOG_CURVE} ${
+        className={`relative bg-white rounded-t-xl sm:rounded-xl shadow-xl max-w-md w-full mx-0 sm:mx-4 px-6 pt-4 sm:pt-6 pb-[calc(1rem_+_var(--inset-bottom))] sm:pb-[calc(1.5rem_+_var(--inset-bottom))] max-h-[90dvh] flex flex-col overflow-hidden motion-safe:transition-[translate,scale,opacity] duration-[250ms] ${DIALOG_CURVE} ${
           arrived
             ? 'translate-y-0 opacity-100 sm:scale-100'
             : 'translate-y-full opacity-0 sm:translate-y-0 sm:scale-95'

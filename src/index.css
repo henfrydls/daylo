@@ -18,6 +18,18 @@
 
 /* Custom CSS Variables - SaaS Modern Style */
 :root {
+  /* What the system bars cover, top and bottom (#198). The larger of what the WebView says
+     through env() and what Android says through MainActivity (lib/systemBars.ts): a WebView
+     older than the edge-to-edge Android 15 says 0 through env() while its bars cover the
+     page, and a newer one says the same number both ways, so max() never counts it twice.
+     Everywhere but Android the second is unset and this is env() alone. Use these, not
+     env(safe-area-inset-*), for anything that has to clear the bars. Left and right are
+     the navigation bar in landscape with three buttons, which sits on a side. */
+  --inset-top: max(env(safe-area-inset-top, 0px), var(--android-status-top, 0px));
+  --inset-bottom: max(env(safe-area-inset-bottom, 0px), var(--android-navigation-bottom, 0px));
+  --inset-left: max(env(safe-area-inset-left, 0px), var(--android-navigation-left, 0px));
+  --inset-right: max(env(safe-area-inset-right, 0px), var(--android-navigation-right, 0px));
+
   /* Backgrounds */
   --bg-primary: #ffffff;
   --bg-secondary: #f9fafb;
@@ -241,11 +253,13 @@ body {
     sans-serif;
 }
 
+/* No bottom padding here: App's column and the rescue screen each keep the bottom clear
+   inside their own background. Here as well it was counted twice, and with a 48 px bar the
+   page ended 96 px up and scrolled the extra 48 (#198 review). */
 #root {
   min-height: 100dvh;
-  padding-bottom: env(safe-area-inset-bottom, 0px);
-  padding-left: env(safe-area-inset-left, 0px);
-  padding-right: env(safe-area-inset-right, 0px);
+  padding-left: var(--inset-left);
+  padding-right: var(--inset-right);
 }
 
 /* Ripple touch feedback */
