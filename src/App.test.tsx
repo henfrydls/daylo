@@ -778,6 +778,9 @@ describe('the line and the reminder, on a new Android installation', () => {
       // Owed from this launch, and unanswerable: no habits exist yet.
       reminderOffered: false,
       activities: [],
+      // A session flag an earlier test leaves set. With it the feedback question is open,
+      // and the reminder offer rightly waits for it.
+      _feedbackAsked: false,
     })
   })
 
@@ -794,11 +797,23 @@ describe('the line and the reminder, on a new Android installation', () => {
     await act(async () => {})
     await screen.findByTestId('checkin-notice')
 
-    // A first habit exists, so the reminder can finally ask. Its modal opens over the
-    // line, which is allowed: one is a question, the other is a statement.
+    // A habit, a second day of use, and a tick in this session: the reminder can
+    // finally ask. Its modal opens over the line, which is allowed: one is a question,
+    // the other is a statement.
     await act(async () => {
       useCalendarStore.setState({
         activities: [{ id: 'a1', name: 'Read', color: '#10B981', createdAt: NOW, updatedAt: NOW }],
+        logs: ['2026-10-08', '2026-10-09'].map((date) => ({
+          id: date,
+          activityId: 'a1',
+          date,
+          completed: true,
+          createdAt: NOW,
+        })),
+        reminderTickDays: 2,
+        reminderLastTickDay: '2026-10-09',
+        _tickedThisSession: true,
+        _loggedThisSession: true,
       })
     })
     expect(await screen.findByText('Remind me each evening?')).toBeInTheDocument()
@@ -808,6 +823,64 @@ describe('the line and the reminder, on a new Android installation', () => {
     await act(async () => {})
 
     expect(screen.getByTestId('checkin-notice')).toBeInTheDocument()
+  })
+})
+
+// The day sheet, for real: selectedDate through App, not a canAsk handed in by a test.
+describe('the reminder offer and the day sheet', () => {
+  it('waits for the day sheet to close', async () => {
+    remindersAvailable.mockResolvedValue(true)
+    useCalendarStore.setState({
+      activities: [{ id: 'a1', name: 'Read', color: '#10B981', createdAt: NOW, updatedAt: NOW }],
+      logs: [],
+      reminderOffered: false,
+      reminderTickDays: 2,
+      reminderLastTickDay: '2026-10-09',
+      reminderOfferDismissals: 0,
+      reminderOfferDismissedOn: null,
+      _tickedThisSession: true,
+      _reminderOfferClosed: false,
+      _offerThisSession: null,
+      checkinNoticeSeen: true,
+      selectedDate: '2026-10-09',
+    })
+    render(<App />)
+    await act(async () => {})
+    await act(async () => {})
+
+    expect(screen.queryByText('Remind me each evening?')).not.toBeInTheDocument()
+
+    await act(async () => {
+      useCalendarStore.setState({ selectedDate: null })
+    })
+
+    expect(await screen.findByText('Remind me each evening?')).toBeInTheDocument()
+  })
+
+  // The feedback question is not in the day sheet's way and is not opened by App's
+  // sheets: it waits on its own condition, and the offer waits for it.
+  it('waits while the feedback question is open', async () => {
+    checkinFields.mockResolvedValue({ version: '1.3.0', os: 'android', source: 'apk' })
+    remindersAvailable.mockResolvedValue(true)
+    useCalendarStore.setState({
+      activities: [{ id: 'a1', name: 'Read', color: '#10B981', createdAt: NOW, updatedAt: NOW }],
+      reminderOffered: false,
+      reminderTickDays: 2,
+      reminderLastTickDay: '2026-10-09',
+      reminderOfferDismissals: 0,
+      reminderOfferDismissedOn: null,
+      _tickedThisSession: true,
+      _reminderOfferClosed: false,
+      _offerThisSession: null,
+      checkinNoticeSeen: true,
+      selectedDate: null,
+      _feedbackAsked: true,
+    })
+    render(<App />)
+
+    expect(await screen.findByTestId('feedback-rating')).toBeInTheDocument()
+    await act(async () => {})
+    expect(screen.queryByText('Remind me each evening?')).not.toBeInTheDocument()
   })
 })
 

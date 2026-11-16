@@ -70,33 +70,45 @@ export type ReminderOutcome =
  * platform. Desktop is deliberately out: a notification that only fires while the app is
  * running is not a reminder, and nobody has asked for one.
  */
-/** The earliest and latest the offer will ever propose, when the next hour is no good. */
-export const TOO_LATE = 23
-export const TOO_EARLY = 7
-export const INSTEAD = 20
+/**
+ * The time the offer proposes: nine in the evening (1.6, approved on 2026-11-02).
+ *
+ * It used to be the next hour on the hour, so somebody asked at two in the afternoon was
+ * offered three, a reminder for a day they had already logged. Nine is late enough that
+ * the day has happened and early enough to still log it.
+ */
+export const OFFERED_REMINDER_HOUR = 21
+
+/** What the offer's rule reads. */
+export interface ReminderOfferFacts {
+  available: boolean
+  offered: boolean
+  activityCount: number
+  tickDays: number
+  lastTickDay: string | null
+  dismissedOn: string | null
+  closedThisSession: boolean
+}
 
 /**
- * The time to offer somebody who has just made their first activity.
+ * Whether the reminder offer is owed: it may be asked, and has not been answered. The one
+ * rule, read by DailyReminder to open it and by App to hold the invitation to write back
+ * behind it, so the two cannot disagree.
  *
- * The next hour on the hour, because the question is being asked now and the answer should
- * be soon enough to mean something: told at 20:52, a reminder at 21:00 is tonight. A fixed
- * hour chosen when this was written is a reminder somebody has to go and move.
- *
- * Except at night. Between eleven and seven the next hour is a notification nobody wants,
- * so it offers eight in the evening instead: the next time of day somebody would plausibly
- * be told anything. Seven is outside the quiet window on purpose, because being reminded
- * at seven in the morning is a choice people make.
- *
- * That is a rule about the hour offered, so read from the clock it starts an hour earlier:
- * from ten at night until six in the morning the next hour is already in the window, and
- * eight in the evening is what comes back. This paragraph used to give 22:52 as the
- * example of a reminder tonight, which is the one case `does not propose eleven` exists to
- * forbid. Nothing was wrong with the code; the example was.
+ * - A habit, and two different days of use with a tick (counted by the store when the
+ *   tick happens, not from the logs' dates). The first day is for the habit.
+ * - Not answered: "Not now" and "Turn on" answer it, and so does a third close without
+ *   an answer.
+ * - Not closed in this session, answered or not.
+ * - Closed without an answer on some day: owed again only after a tick on a later day.
+ *   Never the same day.
  */
-export function offeredReminderTime(now: Date = new Date()): { hour: number; minute: number } {
-  const next = (now.getHours() + 1) % 24
-  if (next >= TOO_LATE || next < TOO_EARLY) return { hour: INSTEAD, minute: 0 }
-  return { hour: next, minute: 0 }
+export function reminderOfferOwed(facts: ReminderOfferFacts): boolean {
+  if (!facts.available || facts.offered || facts.closedThisSession) return false
+  if (facts.activityCount === 0 || facts.tickDays < 2) return false
+  if (facts.dismissedOn === null) return true
+  // YYYY-MM-DD compares as it reads.
+  return facts.lastTickDay !== null && facts.lastTickDay > facts.dismissedOn
 }
 
 export async function remindersAvailable(): Promise<boolean> {

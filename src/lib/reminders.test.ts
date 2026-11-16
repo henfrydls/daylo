@@ -4,7 +4,7 @@ import {
   REMINDER_ID,
   disableReminder,
   enableReminder,
-  offeredReminderTime,
+  reminderOfferOwed,
   reconcileReminder,
   refreshReminder,
   remindersAvailable,
@@ -394,63 +394,51 @@ describe('a re-arm overtaken on its way', () => {
 })
 
 /**
- * What time to offer somebody who has just made their first activity.
- *
- * It used to be whatever hour this was written with, which is a reminder the person has to
- * go and move before it means anything. The next hour on the hour is soon enough to be
- * tonight, which is the point of being asked now.
+ * Whether the offer is owed: the one rule DailyReminder and App both read.
  */
-describe('the time the offer proposes', () => {
-  const at = (hour: number, minute: number) =>
-    offeredReminderTime(new Date(2026, 9, 9, hour, minute))
+describe('whether the offer is owed', () => {
+  const owed = {
+    available: true,
+    offered: false,
+    activityCount: 1,
+    tickDays: 2,
+    lastTickDay: '2026-10-09',
+    dismissedOn: null,
+    closedThisSession: false,
+  }
 
-  it('is the next hour, on the hour', () => {
-    expect(at(12, 0)).toEqual({ hour: 13, minute: 0 })
-    expect(at(14, 37)).toEqual({ hour: 15, minute: 0 })
+  it('is owed on the second day of use with a habit', () => {
+    expect(reminderOfferOwed(owed)).toBe(true)
   })
 
-  // Eleven at night to seven in the morning is a notification nobody wants. Eight in the
-  // evening is the next time of day somebody would plausibly be told anything.
-  it('stays out of the night', () => {
-    expect(at(22, 59)).toEqual({ hour: 20, minute: 0 })
-    expect(at(23, 30)).toEqual({ hour: 20, minute: 0 })
-    expect(at(3, 0)).toEqual({ hour: 20, minute: 0 })
-    expect(at(5, 0)).toEqual({ hour: 20, minute: 0 })
+  it('is not owed where reminders do not exist', () => {
+    expect(reminderOfferOwed({ ...owed, available: false })).toBe(false)
   })
 
-  // The two edges of that window, which is where a rule like this goes wrong. Seven is
-  // outside it: being reminded at seven in the morning is a choice people make.
-  it('puts seven in the morning on the right side of it', () => {
-    expect(at(6, 30)).toEqual({ hour: 7, minute: 0 })
-    expect(at(6, 59)).toEqual({ hour: 7, minute: 0 })
-    expect(at(5, 59)).toEqual({ hour: 20, minute: 0 })
+  it('is not owed without a habit', () => {
+    expect(reminderOfferOwed({ ...owed, activityCount: 0 })).toBe(false)
   })
 
-  it('does not propose eleven, the first hour of the window', () => {
-    expect(at(22, 0)).toEqual({ hour: 20, minute: 0 })
-    expect(at(21, 0)).toEqual({ hour: 22, minute: 0 })
+  it('is not owed on the first day of use', () => {
+    expect(reminderOfferOwed({ ...owed, tickDays: 1 })).toBe(false)
   })
 
-  /**
-   * The examples, which are the part that goes wrong.
-   *
-   * The rule was right and tested from the day it was written. What was wrong was the
-   * sentence explaining it, in the comment on `offeredReminderTime` and again in the
-   * changelog fragment, both giving 22:52 as a reminder for eleven tonight. That is the
-   * one case `does not propose eleven` exists to forbid, and nothing checked the example
-   * against the rule because an example in a comment is not run.
-   *
-   * It is run now. Change either sentence and this is what says so.
-   */
-  it('matches the example the comment gives, and the one the changelog gives', () => {
-    // "told at 20:52, a reminder at 21:00 is tonight"
-    expect(at(20, 52)).toEqual({ hour: 21, minute: 0 })
-    // "agreed to at ten to nine is one that arrives at nine"
-    expect(at(20, 50)).toEqual({ hour: 21, minute: 0 })
-    // "from ten at night until six in the morning ... eight in the evening"
-    expect(at(22, 0)).toEqual({ hour: 20, minute: 0 })
-    expect(at(5, 59)).toEqual({ hour: 20, minute: 0 })
-    expect(at(6, 0)).toEqual({ hour: 7, minute: 0 })
+  it('is not owed once answered', () => {
+    expect(reminderOfferOwed({ ...owed, offered: true })).toBe(false)
+  })
+
+  it('is not owed again in the session it was closed in', () => {
+    expect(reminderOfferOwed({ ...owed, closedThisSession: true })).toBe(false)
+  })
+
+  it('is not owed on the day it was put off, even after a tick', () => {
+    expect(reminderOfferOwed({ ...owed, dismissedOn: '2026-10-09' })).toBe(false)
+  })
+
+  it('is owed again after a tick on a later day', () => {
+    expect(
+      reminderOfferOwed({ ...owed, dismissedOn: '2026-10-09', lastTickDay: '2026-10-10' })
+    ).toBe(true)
   })
 })
 

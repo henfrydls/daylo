@@ -2,7 +2,7 @@ import { useContext, useRef } from 'react'
 import { createPortal } from 'react-dom'
 import { DayScopeContext } from '../../lib/dayScope'
 import type { ReactNode } from 'react'
-import { useFocusTrap, useAnimatedPresence, useArrival } from '../../hooks'
+import { useFocusTrap, useAnimatedPresence, useArrival, useCountsAsOpenDialog } from '../../hooks'
 import { XIcon } from './Icons'
 
 /**
@@ -95,6 +95,7 @@ export function Modal({
   const arrived = useArrival(isVisible)
 
   useFocusTrap(modalRef, isOpen, { onEscape: onClose, autoFocus: false })
+  useCountsAsOpenDialog(isOpen)
 
   // A form opened from inside what the new day builds again keeps that mark, though the
   // portal draws it at the end of the page: see lib/dayScope.ts.

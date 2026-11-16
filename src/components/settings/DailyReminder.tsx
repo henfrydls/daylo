@@ -1,12 +1,13 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { ConfirmDialog, useToast } from '../ui'
 import { useCalendarStore } from '../../store'
-import { useRemindersAvailable } from '../../hooks'
+import { useOpenDialogs, useReminderOfferOwed, useRemindersAvailable } from '../../hooks'
+import { formatDate } from '../../lib/dates'
 import {
   disableReminder,
   enableReminder,
   formatReminderTime,
-  offeredReminderTime,
+  OFFERED_REMINDER_HOUR,
   reconcileReminder,
   refreshReminder,
 } from '../../lib/reminders'
@@ -14,17 +15,22 @@ import {
 /**
  * Keeps the daily reminder in step with whether there is anything to be reminded about.
  *
- * Everything here follows from the same count. The offer is put once, and only after a
- * first habit exists, because asking on an empty app is asking about nothing; the alarm
+ * Everything here follows from the same count. The offer is put once, and only on the
+ * second day with something logged (see when it opens, below); the alarm
  * comes down when the last habit goes, because a notification that outlives what it
  * reminds about is how an app gets uninstalled; and it comes back when a habit does.
  *
  * Both the accepted and the declined answer are recorded, so the question is never put
- * again. The setting in the menu is what somebody uses to change their mind.
+ * again. Closing it without answering is not an answer. The setting in the menu is what
+ * somebody uses to change their mind.
  */
-export function DailyReminder() {
+interface DailyReminderProps {
+  /** Nothing else is open: no day sheet, no Settings, no sheet, no Export or Import. */
+  canAsk: boolean
+}
+
+export function DailyReminder({ canAsk }: DailyReminderProps) {
   const activityCount = useCalendarStore((state) => state.activities.length)
-  const offered = useCalendarStore((state) => state.reminderOffered)
   const hour = useCalendarStore((state) => state.reminderHour)
   const minute = useCalendarStore((state) => state.reminderMinute)
   const setReminder = useCalendarStore((state) => state.setReminder)
@@ -69,8 +75,24 @@ export function DailyReminder() {
     })
   }, [available, activityCount, setReminder])
 
+  // Spent only on an answer the phone gave: on, a refused permission, or a refused
+  // schedule. A call that threw is not an answer, so the offer stays owed and somebody is
+  // told it did not work, the same way a refused schedule is.
   const accept = async () => {
-    const { outcome } = await enableReminder(offerHour, offerMinute)
+    let outcome
+    try {
+      ;({ outcome } = await enableReminder(offerHour, offerMinute))
+    } catch {
+      showToast('Daylo could not set the reminder on this phone', 'error')
+      return
+    }
+    // Not an answer either: the phone said reminders do not exist here after all. Said, so
+    // that "Turn on" does not close on nothing, and left owed.
+    if (outcome === 'unavailable') {
+      showToast('Daylo could not set the reminder on this phone', 'error')
+      return
+    }
+    markReminderOffered()
     if (outcome === 'on') {
       setReminder(true, offerHour, offerMinute)
       return
@@ -85,36 +107,72 @@ export function DailyReminder() {
     }
   }
 
+  // When it opens (1.6, approved on 2026-11-02, confirmed and reviewed on 2026-11-15):
+  //
+  // - Owed, by the one rule in lib/reminders.ts that App also reads: a habit, a second
+  //   day of use with a tick, not answered, not closed this session, and after a close
+  //   without an answer, only on a later day with a tick.
+  // - After something was ticked in this session, with nothing else open: canAsk from App,
+  //   and no other dialog anywhere (useOpenDialogs). The question is about the moment
+  //   somebody has just logged, and it does not stack on the day sheet or whatever
+  //   closing it leads into.
+  // - Once open it stays until it is answered or closed, whatever opens behind it.
+  // - Tapping beside it or back is not an answer. It puts it off to a later day, and the
+  //   third time counts as no. "Not now" and "Turn on" are the answers.
+  const owed = useReminderOfferOwed(available)
+  const tickedThisSession = useCalendarStore((state) => state._tickedThisSession)
+  const dismissReminderOffer = useCalendarStore((state) => state.dismissReminderOffer)
+  const closeReminderOffer = useCalendarStore((state) => state.closeReminderOffer)
+  // Set by the two answers just before the dialog closes itself, so that the close which
+  // follows them is not read as a close without an answer.
+  const answered = useRef(false)
+
   // Three things want a person's attention once, and none of them may talk over another:
   // this offer, the check-in's, and the invitation to write. Whichever opens first takes
   // the session, and the other two stand down until the next one.
   const offerThisSession = useCalendarStore((state) => state._offerThisSession)
-  const offerIsOpen = available && !offered && activityCount > 0 && offerThisSession !== 'checkin'
+  const otherDialogs = useOpenDialogs((state) => state.open)
+  const mayOpen =
+    owed && tickedThisSession && canAsk && otherDialogs === 0 && offerThisSession !== 'checkin'
+  // Latched: whether it may open is checked to open it, not to keep it open. Its own
+  // dialog counts in useOpenDialogs, and canAsk can change under it; either would
+  // otherwise take it away without an answer, and bring it back later in the session.
+  const [offerIsOpen, setOfferIsOpen] = useState(false)
+  if (mayOpen && !offerIsOpen) setOfferIsOpen(true)
   const claimOffer = useCalendarStore((state) => state.claimOffer)
   useEffect(() => {
     if (offerIsOpen) claimOffer('reminder')
   }, [offerIsOpen, claimOffer])
 
-  /**
-   * The hour this offer proposes, fixed the moment it is put.
-   *
-   * Worked out once and held, rather than read on every render: the question is being
-   * asked now, and a time that moved while the dialog was open would mean the sentence
-   * somebody read and the reminder they agreed to were different things. Somebody who
-   * leaves the dialog up across the hour gets what they were offered.
-   */
-  const [proposed] = useState(() => offeredReminderTime())
   const chosen = useCalendarStore((state) => state.reminderTimeChosen)
   // Theirs if they picked one, ours if nobody has. Somebody who went into Settings and set
   // a time before this was ever put has answered the question already.
-  const offerHour = chosen ? hour : proposed.hour
-  const offerMinute = chosen ? minute : proposed.minute
+  const offerHour = chosen ? hour : OFFERED_REMINDER_HOUR
+  const offerMinute = chosen ? minute : 0
 
   return (
     <ConfirmDialog
       isOpen={offerIsOpen}
-      onClose={markReminderOffered}
-      onConfirm={() => void accept()}
+      // The dialog stays in the page while it leaves, and its backdrop still takes taps.
+      // Everything after the first close is ignored until it opens again: a double tap is
+      // one close, and a stray tap after an answer is not a close without one.
+      onClose={() => {
+        if (!offerIsOpen) return
+        if (answered.current) closeReminderOffer()
+        else dismissReminderOffer(formatDate(new Date()))
+        answered.current = false
+        setOfferIsOpen(false)
+      }}
+      onCancel={() => {
+        if (!offerIsOpen) return
+        answered.current = true
+        markReminderOffered()
+      }}
+      onConfirm={() => {
+        if (!offerIsOpen) return
+        answered.current = true
+        void accept()
+      }}
       title="Remind me each evening?"
       message={`A notification around ${formatReminderTime(offerHour, offerMinute)} so the day does not go unlogged. Android picks the exact moment. You can change the time or turn it off in Settings.`}
       confirmText="Turn on"
