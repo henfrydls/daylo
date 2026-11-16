@@ -1,4 +1,4 @@
-import { useMemo, useCallback, memo } from 'react'
+import { useMemo, useCallback, memo, useEffect, useRef } from 'react'
 import { YearHeatmap } from './YearHeatmap'
 import { YearByActivity } from './YearByActivity'
 import { MonthCard } from './MonthCard'
@@ -144,38 +144,49 @@ export const YearView = memo(function YearView({ onImport }: YearViewProps) {
     else navigateToMonth(pick.year, pick.month)
   }, [today, travel, navigateToMonth])
 
+  /**
+   * The wait for Month, on the phone, while one is going on: how to call it off. One at a
+   * time, so a second tap during the journey is the same journey and leaves nothing
+   * behind to open the sheet on some later visit to Month; and called off if the door
+   * leaves the page first.
+   */
+  const waiting = useRef<(() => void) | null>(null)
+  useEffect(() => () => waiting.current?.(), [])
+
+  const openToday = () => {
+    const day = formatDate(today)
+    if (travel === null) {
+      handleToday()
+      setSelectedDate(day)
+      return
+    }
+    if (waiting.current !== null) return
+    // On the phone the rail is still sliding to Month when handleToday returns, and a sheet
+    // coming up over it looked like two things fighting. So the sheet waits for the
+    // arrival: the first change of view, which from Year can only be to Month. A journey
+    // that has not landed in a second and a half (a resize, frames that stopped in the
+    // background) opens it anyway, rather than leave a door that did nothing.
+    const open = () => {
+      stop()
+      useCalendarStore.getState().setSelectedDate(day)
+    }
+    const stop = () => {
+      unsubscribe()
+      window.clearTimeout(giveUp)
+      waiting.current = null
+    }
+    const unsubscribe = useCalendarStore.subscribe((state, before) => {
+      if (state.currentView !== before.currentView) open()
+    })
+    const giveUp = window.setTimeout(open, 1500)
+    waiting.current = stop
+    handleToday()
+  }
+
   // With no activities the year has the same door as the month: to today, in Month, with
   // its sheet open on the form.
   const door =
-    activities.length === 0 ? (
-      <FirstDayDoor
-        onOpenToday={() => {
-          const day = formatDate(today)
-          if (travel === null) {
-            handleToday()
-            setSelectedDate(day)
-            return
-          }
-          // On the phone the rail is still sliding to Month when handleToday returns, and a
-          // sheet coming up over it looked like two things fighting. So the sheet waits for
-          // the arrival: the first change of view, which from Year can only be to Month. A
-          // journey that never lands stops the wait, so no later visit to Month opens a
-          // sheet out of nowhere.
-          const stop = () => {
-            unsubscribe()
-            window.clearTimeout(giveUp)
-          }
-          const unsubscribe = useCalendarStore.subscribe((state, before) => {
-            if (state.currentView === before.currentView) return
-            stop()
-            state.setSelectedDate(day)
-          })
-          const giveUp = window.setTimeout(stop, 1500)
-          handleToday()
-        }}
-        onImport={onImport}
-      />
-    ) : null
+    activities.length === 0 ? <FirstDayDoor onOpenToday={openToday} onImport={onImport} /> : null
 
   /**
    * Both layouts show the same control, so it is written once. Rendering it twice with

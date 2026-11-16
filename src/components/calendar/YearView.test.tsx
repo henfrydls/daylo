@@ -180,9 +180,10 @@ describe('YearView', () => {
       expect(useCalendarStore.getState().selectedDate).toBeNull()
     })
 
-    // A journey that never lands (a drag took it back) leaves nothing waiting to open the
-    // sheet on some later, unrelated arrival in Month.
-    it('on the phone, stops waiting when the journey does not arrive', () => {
+    // A journey that does not change the view in time (a resize, a frame that never came
+    // in the background, a rail that was not there) must not leave a door that did
+    // nothing: once the wait is over, today opens anyway.
+    it('on the phone, opens today anyway when the journey does not arrive in time', () => {
       useCalendarStore.setState({ currentView: 'year', selectedDate: null })
       render(
         <TravelContext.Provider value={{ toYear: vi.fn(), toMonth: vi.fn() }}>
@@ -192,9 +193,64 @@ describe('YearView', () => {
 
       fireEvent.click(screen.getByTestId('first-day-door'))
       act(() => {
+        vi.advanceTimersByTime(1499)
+      })
+      expect(useCalendarStore.getState().selectedDate).toBeNull()
+      act(() => {
+        vi.advanceTimersByTime(1)
+      })
+      expect(useCalendarStore.getState().selectedDate).toBe('2024-06-15')
+
+      // And nothing is left waiting for a later visit to Month.
+      act(() => useCalendarStore.setState({ selectedDate: null }))
+      act(() => useCalendarStore.setState({ currentView: 'month' }))
+      expect(useCalendarStore.getState().selectedDate).toBeNull()
+    })
+
+    // Two taps while the rail is moving are one journey and one sheet. A second wait would
+    // be left behind to open the sheet on a later visit to Month.
+    it('on the phone, takes a second tap during the journey as the same one', () => {
+      const toMonth = vi.fn()
+      useCalendarStore.setState({ currentView: 'year', selectedDate: null })
+      render(
+        <TravelContext.Provider value={{ toYear: vi.fn(), toMonth }}>
+          <YearView onImport={vi.fn()} />
+        </TravelContext.Provider>
+      )
+      const opened: Array<string | null> = []
+      const unsubscribe = useCalendarStore.subscribe((state, before) => {
+        if (state.selectedDate !== before.selectedDate) opened.push(state.selectedDate)
+      })
+
+      fireEvent.click(screen.getByTestId('first-day-door'))
+      fireEvent.click(screen.getByTestId('first-day-door'))
+      expect(toMonth).toHaveBeenCalledTimes(1)
+
+      act(() => useCalendarStore.setState({ currentView: 'month' }))
+      act(() => useCalendarStore.setState({ selectedDate: null, currentView: 'year' }))
+      act(() => useCalendarStore.setState({ currentView: 'month' }))
+      act(() => {
         vi.advanceTimersByTime(2000)
       })
+      unsubscribe()
+
+      expect(opened).toEqual(['2024-06-15', null])
+    })
+
+    it('on the phone, opens nothing once the door has left the page mid-journey', () => {
+      useCalendarStore.setState({ currentView: 'year', selectedDate: null })
+      const { unmount } = render(
+        <TravelContext.Provider value={{ toYear: vi.fn(), toMonth: vi.fn() }}>
+          <YearView onImport={vi.fn()} />
+        </TravelContext.Provider>
+      )
+
+      fireEvent.click(screen.getByTestId('first-day-door'))
+      unmount()
       act(() => useCalendarStore.setState({ currentView: 'month' }))
+      act(() => {
+        vi.advanceTimersByTime(2000)
+      })
 
       expect(useCalendarStore.getState().selectedDate).toBeNull()
     })
