@@ -16,6 +16,20 @@ import { useRescueStore, whatIsOnDisk } from './rescue'
 export const STORAGE_KEY = 'simple-calendar-storage'
 
 /**
+ * Whether anything at all is under the key, asked of the disk itself and not of the
+ * deferred storage, which would answer with a write still waiting. A storage that refuses
+ * to be read counts as nothing here: hydration has already failed on it by then, and that
+ * failure has its own path.
+ */
+function somethingIsStored(): boolean {
+  try {
+    return localStorage.getItem(STORAGE_KEY) !== null
+  } catch {
+    return false
+  }
+}
+
+/**
  * What Daylo says when the disk refuses a write. Agreed word for word: it is the one
  * moment Daylo knows it is about to lose something and can still prevent it, because what
  * was not written is still in memory and Export still works.
@@ -653,8 +667,23 @@ export const useCalendarStore = create<CalendarState>()(
       // with a freshly cleared app that it was updating, so it stayed off and said the
       // wrong line. Nothing at all is a new installation; an object without the switch is
       // an update.
+      //
+      // Except that undefined does not only mean nothing at all (#221). zustand also hands
+      // it over for a value that parses but has no `state`, and for one saved under a
+      // version it has no migrate for, after discarding it. Read as a new installation,
+      // either one opened an empty app, and the first write of the launch put that empty
+      // state over the only copy. So the disk is asked: if something is there, this is
+      // "I could not read it", not "there is nothing". Throwing hands it to the same path
+      // as a value that will not parse: zustand calls onRehydrateStorage with the error,
+      // the rescue screen comes up with the bytes untouched, and nothing is written,
+      // because merge throwing means zustand never sets the state it would have saved.
       merge: (persisted, current) => {
-        if (persisted == null) return { ...current, _checkinStart: 'new' }
+        if (persisted == null) {
+          if (somethingIsStored()) {
+            throw new Error(`What is stored under ${STORAGE_KEY} does not open as a state`)
+          }
+          return { ...current, _checkinStart: 'new' }
+        }
 
         // Where somebody was is dropped on the way in, not only left out on the way out.
         // Every copy already installed has these four on disk from before this change, and

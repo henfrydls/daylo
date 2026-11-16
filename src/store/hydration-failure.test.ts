@@ -70,4 +70,64 @@ describe('a stored value that will not open', () => {
     expect(useRescueStore.getState().failure).toBeNull()
     expect(useCalendarStore.getState()._hasHydrated).toBe(true)
   })
+
+  /**
+   * #221. zustand hands merge `undefined` for three different things: an empty storage, a
+   * value that parses but carries no `state`, and a value saved under a version this build
+   * does not know how to migrate. Only the first is a new installation. The other two used
+   * to open as one, empty, and the first write of the launch put the empty state over what
+   * was there.
+   */
+  describe('something stored that does not open as a state', () => {
+    const activity = { id: 'a', name: 'Walk', color: '#10B981' }
+
+    it('treats a value with no state as unreadable, not as a new installation', async () => {
+      const stored = JSON.stringify({ activities: [activity], logs: [] })
+      localStorage.setItem(STORAGE_KEY, stored)
+
+      await useCalendarStore.persist.rehydrate()
+
+      expect(useRescueStore.getState().failure).toEqual({ reason: 'unreadable', raw: stored })
+      expect(useCalendarStore.getState()._hasHydrated).toBe(false)
+      await settle()
+      expect(localStorage.getItem(STORAGE_KEY)).toBe(stored)
+    })
+
+    /** What a copy downgraded from a build that bumped `version` would hold. */
+    it('treats a value from a version it cannot migrate as unreadable', async () => {
+      vi.spyOn(console, 'error').mockImplementation(() => {})
+      const stored = JSON.stringify({ state: { activities: [activity], logs: [] }, version: 7 })
+      localStorage.setItem(STORAGE_KEY, stored)
+
+      await useCalendarStore.persist.rehydrate()
+
+      expect(useRescueStore.getState().failure).toEqual({ reason: 'unreadable', raw: stored })
+      expect(useCalendarStore.getState()._hasHydrated).toBe(false)
+      await settle()
+      expect(localStorage.getItem(STORAGE_KEY)).toBe(stored)
+    })
+
+    it('still opens an empty storage as a new installation', async () => {
+      await useCalendarStore.persist.rehydrate()
+
+      expect(useRescueStore.getState().failure).toBeNull()
+      expect(useCalendarStore.getState()._hasHydrated).toBe(true)
+      expect(useCalendarStore.getState()._checkinStart).toBe('new')
+    })
+  })
+})
+
+/**
+ * The other half of #221's trap. Giving `persist` a version without a migrate makes zustand
+ * throw away every stored value written under the old one. With the merge above that now
+ * stops at the rescue screen instead of wiping the data, but every copy updating would
+ * still land there. A version bump has to come with its migration.
+ */
+describe('the persisted format', () => {
+  it('has no version without a migrate to go with it', () => {
+    const options = useCalendarStore.persist.getOptions()
+    if ((options.version ?? 0) !== 0) {
+      expect(options.migrate).toBeTypeOf('function')
+    }
+  })
 })
