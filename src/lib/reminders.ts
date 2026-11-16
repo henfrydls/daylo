@@ -88,7 +88,6 @@ export interface ReminderOfferFacts {
   available: boolean
   offered: boolean
   activityCount: number
-  tickDays: number
   lastTickDay: string | null
   dismissedOn: string | null
   closedThisSession: boolean
@@ -99,8 +98,9 @@ export interface ReminderOfferFacts {
  * rule, read by DailyReminder to open it and by App to hold the invitation to write back
  * behind it, so the two cannot disagree.
  *
- * - A habit, and two different days of use with a tick (counted by the store when the
- *   tick happens, not from the logs' dates). The first day is for the habit.
+ * - A habit. As in 1.5.5, the first one is enough: the offer comes on the day it is made,
+ *   once the sheet it was made in has closed (DailyReminder waits for that). From 1.6
+ *   until 2026-11-16 it waited for a second day of use with a tick, which was taken back.
  * - Not answered: "Not now" and "Turn on" answer it, and so does a third close without
  *   an answer.
  * - Not closed in this session, answered or not.
@@ -109,7 +109,7 @@ export interface ReminderOfferFacts {
  */
 export function reminderOfferOwed(facts: ReminderOfferFacts): boolean {
   if (!facts.available || facts.offered || facts.closedThisSession) return false
-  if (facts.activityCount === 0 || facts.tickDays < 2) return false
+  if (facts.activityCount === 0) return false
   if (facts.dismissedOn === null) return true
   // YYYY-MM-DD compares as it reads.
   return facts.lastTickDay !== null && facts.lastTickDay > facts.dismissedOn

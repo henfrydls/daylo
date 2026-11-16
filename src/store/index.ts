@@ -238,18 +238,14 @@ const createDeferredStorage = (): StateStorage => {
 }
 
 /**
- * What a tick changes in the reminder offer's count of days of use: the phone's own day,
- * not the date of the log, which can be any day somebody fills in.
+ * What a tick tells the reminder offer: that this session has one, and the last day of use
+ * with a tick, which is the phone's own day, not the date of the log, which can be any day
+ * somebody fills in.
  */
-function aTickToday(
-  state: Pick<CalendarState, 'reminderTickDays' | 'reminderLastTickDay'>
-): Partial<CalendarState> {
-  const today = formatDate(new Date())
-  const newDay = state.reminderLastTickDay !== today
+function aTickToday(): Partial<CalendarState> {
   return {
     _tickedThisSession: true,
-    reminderLastTickDay: today,
-    reminderTickDays: newDay ? Math.min(state.reminderTickDays + 1, 2) : state.reminderTickDays,
+    reminderLastTickDay: formatDate(new Date()),
   }
 }
 
@@ -278,13 +274,17 @@ interface CalendarState {
   reminderMinute: number
   reminderOffered: boolean
   /**
-   * The reminder offer's own count of days of use (1.6): how many different days, by the
-   * phone's calendar, somebody ticked something on, stopping at 2, and the last of them.
-   * Counted when the tick happens, not read from the logs: a log's date is the day it is
-   * for, so filling in yesterday on the first day, or importing a year, would otherwise
-   * look like coming back. Unticking does not count.
+   * The last day, by the phone's calendar, somebody ticked something on (1.6). Recorded
+   * when the tick happens, not read from the logs: a log's date is the day it is for, so
+   * filling in yesterday, or importing a year, would otherwise look like coming back.
+   * Unticking does not count. A close of the reminder offer without an answer is put off
+   * until this is a later day.
+   *
+   * There used to be a count of such days beside it, `reminderTickDays`, for an offer that
+   * waited for the second one. The offer no longer waits, and the count went. A copy that
+   * stored it keeps the key until its next write, which is harmless: nothing reads it, and
+   * partialize leaves it out, so that write drops it. No released version stored it.
    */
-  reminderTickDays: number
   reminderLastTickDay: string | null
   /**
    * How many times the offer was closed without an answer (tapping beside it, or back),
@@ -518,7 +518,6 @@ export const useCalendarStore = create<CalendarState>()(
       reminderMinute: 0,
       reminderOffered: false,
       reminderTimeChosen: false,
-      reminderTickDays: 0,
       reminderLastTickDay: null,
       reminderOfferDismissals: 0,
       reminderOfferDismissedOn: null,
@@ -677,7 +676,7 @@ export const useCalendarStore = create<CalendarState>()(
             logs: state.logs
               .filter((l) => !(esDeEsteDia(l) && l.id !== existingLog.id && !l.notes?.trim()))
               .map((l) => (l.id === existingLog.id ? { ...l, completed: true } : l)),
-            ...aTickToday(state),
+            ...aTickToday(),
           }))
         } else {
           const newLog: ActivityLog = {
@@ -689,7 +688,7 @@ export const useCalendarStore = create<CalendarState>()(
           }
           set((state) => ({
             logs: [...state.logs, newLog],
-            ...aTickToday(state),
+            ...aTickToday(),
           }))
         }
       },
@@ -791,7 +790,6 @@ export const useCalendarStore = create<CalendarState>()(
         reminderTimeChosen: state.reminderTimeChosen,
         reminderMinute: state.reminderMinute,
         reminderOffered: state.reminderOffered,
-        reminderTickDays: state.reminderTickDays,
         reminderLastTickDay: state.reminderLastTickDay,
         reminderOfferDismissals: state.reminderOfferDismissals,
         reminderOfferDismissedOn: state.reminderOfferDismissedOn,

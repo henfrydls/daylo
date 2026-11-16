@@ -920,9 +920,8 @@ describe('the line and the reminder, on a new Android installation', () => {
     await act(async () => {})
     await screen.findByTestId('checkin-notice')
 
-    // A habit, a second day of use, and a tick in this session: the reminder can
-    // finally ask. Its modal opens over the line, which is allowed: one is a question,
-    // the other is a statement.
+    // A habit and a tick in this session: the reminder can finally ask. Its modal opens
+    // over the line, which is allowed: one is a question, the other is a statement.
     await act(async () => {
       useCalendarStore.setState({
         activities: [{ id: 'a1', name: 'Read', color: '#10B981', createdAt: NOW, updatedAt: NOW }],
@@ -933,7 +932,6 @@ describe('the line and the reminder, on a new Android installation', () => {
           completed: true,
           createdAt: NOW,
         })),
-        reminderTickDays: 2,
         reminderLastTickDay: '2026-10-09',
         _tickedThisSession: true,
         _loggedThisSession: true,
@@ -957,7 +955,6 @@ describe('the reminder offer and the day sheet', () => {
       activities: [{ id: 'a1', name: 'Read', color: '#10B981', createdAt: NOW, updatedAt: NOW }],
       logs: [],
       reminderOffered: false,
-      reminderTickDays: 2,
       reminderLastTickDay: '2026-10-09',
       reminderOfferDismissals: 0,
       reminderOfferDismissedOn: null,
@@ -988,7 +985,6 @@ describe('the reminder offer and the day sheet', () => {
     useCalendarStore.setState({
       activities: [{ id: 'a1', name: 'Read', color: '#10B981', createdAt: NOW, updatedAt: NOW }],
       reminderOffered: false,
-      reminderTickDays: 2,
       reminderLastTickDay: '2026-10-09',
       reminderOfferDismissals: 0,
       reminderOfferDismissedOn: null,
@@ -1145,7 +1141,6 @@ describe('the streak in the header', () => {
     remindersAvailable.mockResolvedValue(true)
     useCalendarStore.setState({
       reminderOffered: false,
-      reminderTickDays: 2,
       reminderLastTickDay: '2026-10-09',
       reminderOfferDismissals: 0,
       reminderOfferDismissedOn: null,

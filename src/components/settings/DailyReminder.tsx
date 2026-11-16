@@ -16,8 +16,8 @@ import {
 /**
  * Keeps the daily reminder in step with whether there is anything to be reminded about.
  *
- * Everything here follows from the same count. The offer is put once, and only on the
- * second day with something logged (see when it opens, below); the alarm
+ * Everything here follows from the same count. The offer is put once there is a habit and
+ * something was ticked, once nothing else is open (see when it opens, below); the alarm
  * comes down when the last habit goes, because a notification that outlives what it
  * reminds about is how an app gets uninstalled; and it comes back when a habit does.
  *
@@ -144,9 +144,9 @@ export function DailyReminder({ canAsk }: DailyReminderProps) {
 
   // When it opens (1.6, approved on 2026-11-02, confirmed and reviewed on 2026-11-15):
   //
-  // - Owed, by the one rule in lib/reminders.ts that App also reads: a habit, a second
-  //   day of use with a tick, not answered, not closed this session, and after a close
-  //   without an answer, only on a later day with a tick.
+  // - Owed, by the one rule in lib/reminders.ts that App also reads: a habit (the first
+  //   one is enough, as in 1.5.5), not answered, not closed this session, and after a
+  //   close without an answer, only on a later day with a tick.
   // - After something was ticked in this session, with nothing else open: canAsk from App,
   //   and no other dialog anywhere (useOpenDialogs). The question is about the moment
   //   somebody has just logged, and it does not stack on the day sheet or whatever
