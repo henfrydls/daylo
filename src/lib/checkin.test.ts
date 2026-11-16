@@ -18,7 +18,12 @@ vi.mock('@tauri-apps/api/core', async (importOriginal) => ({
   isTauri: () => Boolean((globalThis as { isTauri?: boolean }).isTauri),
 }))
 
-const off = () => ({ checkinEnabled: false, checkinId: null, checkinLastAttempt: null })
+const off = () => ({
+  checkinEnabled: false,
+  checkinId: null,
+  checkinLastAttempt: null,
+  activities: [],
+})
 
 beforeEach(() => {
   invoke.mockReset()
@@ -78,12 +83,15 @@ describe('the random number', () => {
 })
 
 describe('sending one', () => {
-  it('passes the three arguments and nothing else', async () => {
-    expect(await sendCheckin({ id: 'abc', date: '2026-09-14', last: false })).toBe(true)
+  it('passes the four arguments and nothing else', async () => {
+    expect(
+      await sendCheckin({ id: 'abc', date: '2026-09-14', last: false, activities: false })
+    ).toBe(true)
     expect(invoke).toHaveBeenCalledExactlyOnceWith('send_checkin', {
       id: 'abc',
       date: '2026-09-14',
       last: false,
+      activities: false,
     })
   })
 
@@ -92,7 +100,9 @@ describe('sending one', () => {
   it('reports a refusal as false and never throws', async () => {
     invoke.mockRejectedValue(new Error('no route to host'))
 
-    await expect(sendCheckin({ id: 'abc', date: '2026-09-14', last: true })).resolves.toBe(false)
+    await expect(
+      sendCheckin({ id: 'abc', date: '2026-09-14', last: true, activities: false })
+    ).resolves.toBe(false)
   })
 })
 
@@ -107,6 +117,7 @@ describe('turning it on', () => {
       id: state.checkinId,
       date: today(),
       last: false,
+      activities: false,
     })
     expect(state.checkinLastAttempt).toEqual({ date: today(), at: expect.any(String), ok: true })
   })
@@ -140,6 +151,7 @@ describe('the first launch of a new installation', () => {
       id: state.checkinId,
       date: today(),
       last: false,
+      activities: false,
     })
   })
 
@@ -176,6 +188,29 @@ describe('the daily one', () => {
       id: '4f9c2a7e1b60d3a8c5e2f1b74a9d0c6e',
       date: today(),
       last: false,
+      activities: false,
+    })
+  })
+
+  // The sixth field: whether there is at least one habit, and nothing about which or how
+  // many. Read when the message is made, so a habit created a minute ago counts.
+  it('says whether there is at least one habit, and not how many', async () => {
+    on('2020-01-01')
+    const now = new Date().toISOString()
+    useCalendarStore.setState({
+      activities: [
+        { id: 'a', name: 'Walk', color: '#10B981', createdAt: now, updatedAt: now },
+        { id: 'b', name: 'Read', color: '#3B82F6', createdAt: now, updatedAt: now },
+      ],
+    })
+
+    await sendCheckinIfDue()
+
+    expect(invoke).toHaveBeenCalledExactlyOnceWith('send_checkin', {
+      id: '4f9c2a7e1b60d3a8c5e2f1b74a9d0c6e',
+      date: today(),
+      last: false,
+      activities: true,
     })
   })
 
@@ -287,6 +322,7 @@ describe('the daily one', () => {
         id: '4f9c2a7e1b60d3a8c5e2f1b74a9d0c6e',
         date: '2026-11-14',
         last: false,
+        activities: false,
       })
     } finally {
       vi.useRealTimers()
@@ -324,6 +360,23 @@ describe('turning it off', () => {
       id: '4f9c2a7e1b60d3a8c5e2f1b74a9d0c6e',
       date: today(),
       last: true,
+      activities: false,
+    })
+  })
+
+  it('says in the last note too whether there is a habit', async () => {
+    const now = new Date().toISOString()
+    useCalendarStore.setState({
+      activities: [{ id: 'a', name: 'Walk', color: '#10B981', createdAt: now, updatedAt: now }],
+    })
+
+    await turnOffCheckin()
+
+    expect(invoke).toHaveBeenCalledExactlyOnceWith('send_checkin', {
+      id: '4f9c2a7e1b60d3a8c5e2f1b74a9d0c6e',
+      date: today(),
+      last: true,
+      activities: true,
     })
   })
 

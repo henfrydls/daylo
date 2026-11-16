@@ -20,7 +20,7 @@ describe('what gets sent', () => {
   })
 
   /**
-   * Five rows since 1.4.1, and the list **is** the message. Somebody reading this is being
+   * Six rows since 1.6, and the list **is** the message. Somebody reading this is being
    * told what leaves their device, so a field that travels and is not written here makes
    * the screen a lie rather than an omission.
    */
@@ -35,8 +35,20 @@ describe('what gets sent', () => {
       'App version',
       'System',
       'How it was installed',
+      'Habits',
       'Date',
     ])
+  })
+
+  // The sixth field is a yes or a no, and the row says so in the words agreed for it,
+  // rather than showing this copy's answer: the panel is the same before anybody says yes.
+  it('says the habits line is only a yes or a no', async () => {
+    const user = userEvent.setup()
+    render(<WhatGetsSent fields={fields} id="abc" />)
+
+    await user.click(screen.getByRole('button'))
+
+    expect(screen.getByText('Yes or no: whether you have at least one')).toBeInTheDocument()
   })
 
   it('shows the real values it was given', async () => {
