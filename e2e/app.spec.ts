@@ -345,11 +345,11 @@ test.describe('Activity Tracker App', () => {
 
     await expect(page.locator('h1').filter({ hasText: String(currentYear - 1) })).toBeVisible()
 
-    // Go to today
-    const todayButton = page.getByLabel('Go to current year')
-    await todayButton.click()
+    // Today goes to today: Month, on the month that holds it.
+    await page.getByLabel('Go to today').click()
 
-    await expect(page.locator('h1').filter({ hasText: String(currentYear) })).toBeVisible()
+    const thisMonth = new Date().toLocaleString('en-US', { month: 'long' })
+    await expect(page.getByTestId('month-title-button')).toHaveText(`${thisMonth} ${currentYear}`)
   })
 
   // ── Statistics ────────────────────────────────────────────
@@ -509,7 +509,7 @@ test.describe('Activity Tracker App', () => {
     await openYearView(page)
     await expect(page.getByLabel('Previous year')).toBeVisible()
     await expect(page.getByLabel('Next year')).toBeVisible()
-    await expect(page.getByLabel('Go to current year')).toBeVisible()
+    await expect(page.getByLabel('Go to today')).toBeVisible()
   })
 
   test('should have legend for activity levels', async ({ page }) => {

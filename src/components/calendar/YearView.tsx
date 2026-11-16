@@ -128,10 +128,15 @@ export const YearView = memo(function YearView() {
     () => setSelectedYear(selectedYear + 1),
     [setSelectedYear, selectedYear]
   )
-  const handleCurrentYear = useCallback(
-    () => setSelectedYear(today.getFullYear()),
-    [setSelectedYear, today]
-  )
+  // Today goes to today: Month, on the month that holds it, where today is ringed and the
+  // Today bar is there to log it. It used to set the year to this one, which on this year,
+  // the case almost everybody is in, did nothing at all (2026-11-13 review, A-05). Always
+  // to Month, this year or not. On the phone it walks the same rail as a month card.
+  const handleToday = useCallback(() => {
+    const pick = { year: today.getFullYear(), month: today.getMonth() }
+    if (travel) travel.toMonth(pick)
+    else navigateToMonth(pick.year, pick.month)
+  }, [today, travel, navigateToMonth])
 
   /**
    * Both layouts show the same control, so it is written once. Rendering it twice with
@@ -219,9 +224,9 @@ export const YearView = memo(function YearView() {
             </div>
           </div>
           <button
-            onClick={handleCurrentYear}
+            onClick={handleToday}
             className="min-h-[44px] px-4 text-sm font-medium text-gray-600 hover:bg-gray-100 hover:text-gray-800 rounded-lg transition-colors border border-gray-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 focus-visible:ring-offset-1"
-            aria-label="Go to current year"
+            aria-label="Go to today"
           >
             Today
           </button>
@@ -343,9 +348,9 @@ export const YearView = memo(function YearView() {
               </svg>
             </button>
             <button
-              onClick={handleCurrentYear}
+              onClick={handleToday}
               className="ml-2 px-4 py-1.5 text-sm font-medium text-gray-600 hover:bg-gray-100 hover:text-gray-800 rounded-lg transition-colors border border-gray-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 focus-visible:ring-offset-1 min-h-[44px] sm:min-h-0"
-              aria-label="Go to current year"
+              aria-label="Go to today"
             >
               Today
             </button>
