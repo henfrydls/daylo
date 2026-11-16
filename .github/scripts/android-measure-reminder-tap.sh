@@ -28,7 +28,8 @@
 #   K1  Daylo force-stopped, then the tap: today's sheet is open.
 #   K2  Daylo force-stopped, then a plain launch: no sheet. The launch intent of K1 is not
 #       answered twice.
-#   N1  The notification channel is called "Daily reminder" in the phone's settings.
+#   N1  The notification channel is called "Daily reminder" in the phone's settings, as far
+#       as dumpsys shows it: the first three letters, "Dai", where it used to be "Def".
 #   P1  Asking for the notification permission while it is granted gets an answer
 #       ("granted") within five seconds. It used to get none, ever.
 #
@@ -218,12 +219,15 @@ fi
 
 # N1 and P1, while the app is up.
 sh_ dumpsys notification >"$OUT/dumpsys-notification.txt" 2>&1
-if grep -A3 "$PKG" "$OUT/dumpsys-notification.txt" | grep -q "Daily reminder" \
-   || grep -q "mId='default'.*Daily reminder" "$OUT/dumpsys-notification.txt"; then
-  set_result N1 "PASS  (the channel is called Daily reminder)"
+# dumpsys cuts a channel's name to its first three letters ("mName=Dai...", seen in the first
+# run of this job), so "Dai" is what tells "Daily reminder" from "Default". Read from
+# Daylo's own AppSettings block, the line after it, because other packages have a channel
+# with the id "default" too.
+grep -A1 "AppSettings: $PKG " "$OUT/dumpsys-notification.txt" >"$OUT/channel.txt" || true
+if grep -q "mId='default', mName=Dai" "$OUT/channel.txt"; then
+  set_result N1 "PASS  ($(grep -o "mName=[^,]*" "$OUT/channel.txt" | head -1), not Def...)"
 else
-  grep -n "NotificationChannel{mId='default'" "$OUT/dumpsys-notification.txt" >"$OUT/channel.txt" || true
-  set_result N1 "FAIL  (no channel called Daily reminder; see channel.txt)"
+  set_result N1 "FAIL  (Daylo's default channel is not Dai...; see channel.txt)"
 fi
 answer=$(js "Promise.race([
   window.__TAURI_INTERNALS__.invoke('plugin:notification|request_permission').then(String, (e) => 'error: ' + e),
