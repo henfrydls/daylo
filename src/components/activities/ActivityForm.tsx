@@ -67,7 +67,9 @@ export const ActivityForm = memo(function ActivityForm({
     if (openedFor !== null) {
       setName(activity?.name || '')
       setPickedColor(null)
-      setLogForDate(false)
+      // The first activity is made to be done today, so it opens logged on today: in
+      // sight, and one tick away from not. From the second on, as it always was.
+      setLogForDate(!activity && activities.length === 0)
       setSelectedDate(today)
     }
   }

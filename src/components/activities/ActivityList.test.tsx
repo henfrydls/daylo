@@ -205,7 +205,39 @@ describe('ActivityList', () => {
       setupStore([])
       render(<ActivityList />)
 
-      expect(screen.getByText(/No activities yet/)).toBeInTheDocument()
+      expect(screen.getByTestId('activity-list-empty').textContent).toBe('No activities yet.')
+    })
+
+    // With nothing made yet the green to press is the door on the calendar. A second green
+    // button here made two things to choose between, on the phone and on the desktop alike.
+    it('keeps "+ Add" grey while there are no activities', () => {
+      setupStore([])
+      render(<ActivityList />)
+
+      const add = screen.getByTestId('add-activity-button')
+      expect(add.className).toContain('bg-gray-100')
+      expect(add.className).not.toContain('bg-emerald-500')
+    })
+
+    it('makes "+ Add" green again once there is an activity', () => {
+      setupStore(makeActivities(1))
+      render(<ActivityList />)
+
+      const add = screen.getByTestId('add-activity-button')
+      expect(add.className).toContain('bg-emerald-500')
+      expect(add.className).not.toContain('bg-gray-100')
+    })
+
+    // Deleting the last activity raises "Activity deleted" in the bottom corner, and on a
+    // phone the panel ends right there: the words sat under the toast. The room below them
+    // is the toast's, only where the panel is a sheet from the bottom edge.
+    it('leaves room under the words for the toast, below the desktop width only', () => {
+      setupStore([])
+      render(<ActivityList />)
+
+      const words = screen.getByTestId('activity-list-empty')
+      expect(words.className).toMatch(/(^|\s)pb-24(\s|$)/)
+      expect(words.className).toMatch(/(^|\s)lg:pb-8(\s|$)/)
     })
   })
 })
