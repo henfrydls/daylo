@@ -24,7 +24,9 @@ describe('a stored value that will not open', () => {
 
   beforeEach(async () => {
     useRescueStore.setState({ failure: null })
-    useCalendarStore.setState({ _hasHydrated: false })
+    // Not 'new', which is what a new installation is told: a test that expects 'new' would
+    // otherwise pass on the value left from before.
+    useCalendarStore.setState({ _hasHydrated: false, _checkinStart: 'update' })
     await settle()
     localStorage.clear()
   })
@@ -106,6 +108,91 @@ describe('a stored value that will not open', () => {
       await settle()
       expect(localStorage.getItem(STORAGE_KEY)).toBe(stored)
     })
+
+    /**
+     * A migrate that has no answer for a version returns undefined, which reaches merge
+     * exactly as "nothing stored" does. The guard on the persisted format does not see it,
+     * because a migrate exists.
+     */
+    it('treats a value a migrate could not translate as unreadable', async () => {
+      const options = useCalendarStore.persist.getOptions()
+      useCalendarStore.persist.setOptions({ version: 1, migrate: () => undefined })
+      try {
+        const stored = JSON.stringify({ state: { activities: [activity], logs: [] }, version: 0 })
+        localStorage.setItem(STORAGE_KEY, stored)
+
+        await useCalendarStore.persist.rehydrate()
+
+        expect(useRescueStore.getState().failure).toEqual({ reason: 'unreadable', raw: stored })
+        await settle()
+        expect(localStorage.getItem(STORAGE_KEY)).toBe(stored)
+      } finally {
+        useCalendarStore.persist.setOptions({ version: options.version, migrate: options.migrate })
+      }
+    })
+
+    /**
+     * #263's review: hooks run while the rescue screen is up, and the one that starts a
+     * new day at midnight calls set(). Every set() is a write. Nothing may reach the disk
+     * while the screen that exists to save what is on it is open.
+     */
+    it('writes nothing while the rescue screen is up, a new day included', async () => {
+      const stored = JSON.stringify({ activities: [activity], logs: [] })
+      localStorage.setItem(STORAGE_KEY, stored)
+      await useCalendarStore.persist.rehydrate()
+      expect(useRescueStore.getState().failure).not.toBeNull()
+
+      useCalendarStore.getState().startNewDay('2026-11-17')
+      useCalendarStore.setState({ yearMode: 'all' })
+      await settle()
+
+      expect(localStorage.getItem(STORAGE_KEY)).toBe(stored)
+    })
+
+    /** (c) of the rule: a newer build's value, even with nothing recognisable in it. */
+    it('treats a value from a newer build as unreadable, even an empty one', async () => {
+      vi.spyOn(console, 'error').mockImplementation(() => {})
+      const stored = JSON.stringify({ state: {}, version: 7 })
+      localStorage.setItem(STORAGE_KEY, stored)
+
+      await useCalendarStore.persist.rehydrate()
+
+      expect(useRescueStore.getState().failure).toEqual({ reason: 'unreadable', raw: stored })
+      await settle()
+      expect(localStorage.getItem(STORAGE_KEY)).toBe(stored)
+    })
+
+    /** (b) under `state`, with logs and no activities: a day is enough to be worth keeping. */
+    it('treats a version it cannot migrate as unreadable when only logs are left', async () => {
+      vi.spyOn(console, 'error').mockImplementation(() => {})
+      const stored = JSON.stringify({
+        state: { activities: [], logs: [{ id: 'l', activityId: 'a', date: '2026-11-01' }] },
+        version: 3,
+      })
+      localStorage.setItem(STORAGE_KEY, stored)
+
+      await useCalendarStore.persist.rehydrate()
+
+      expect(useRescueStore.getState().failure).toEqual({ reason: 'unreadable', raw: stored })
+    })
+
+    /**
+     * The other side of the rule. With nothing to lose, the rescue screen would claim there
+     * is data where there is none, on every launch, with no way past it (#220). These open
+     * as a new installation.
+     */
+    it.each(['null', '{}', '{"state":null}', '{"state":{}}'])(
+      'opens %s as a new installation',
+      async (stored) => {
+        localStorage.setItem(STORAGE_KEY, stored)
+
+        await useCalendarStore.persist.rehydrate()
+
+        expect(useRescueStore.getState().failure).toBeNull()
+        expect(useCalendarStore.getState()._hasHydrated).toBe(true)
+        expect(useCalendarStore.getState()._checkinStart).toBe('new')
+      }
+    )
 
     it('still opens an empty storage as a new installation', async () => {
       await useCalendarStore.persist.rehydrate()

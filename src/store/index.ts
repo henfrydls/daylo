@@ -16,17 +16,40 @@ import { useRescueStore, whatIsOnDisk } from './rescue'
 export const STORAGE_KEY = 'simple-calendar-storage'
 
 /**
- * Whether anything at all is under the key, asked of the disk itself and not of the
- * deferred storage, which would answer with a write still waiting. A storage that refuses
- * to be read counts as nothing here: hydration has already failed on it by then, and that
- * failure has its own path.
+ * The version of what this build writes. 0, which is also zustand's default; named so the
+ * rescue rule below can tell a value written by a newer build.
  */
-function somethingIsStored(): boolean {
+const PERSIST_VERSION = 0
+
+/**
+ * Whether what is on the disk, which did not open as a state, has anything to lose (#221).
+ *
+ * - Bytes that are not JSON at all: yes. A truncated value can have every day in it.
+ * - JSON with a non-empty `activities` or `logs`, at the top or under `state`: yes.
+ * - A `version` newer than this build's: yes. That is a copy taken back to an older
+ *   version, and what the newer one wrote is somebody's data in a shape this one cannot
+ *   read.
+ * - Anything else, such as `null`, `{}` or `{"state":null}`: no. Opening it as a new
+ *   installation loses nothing, and the rescue screen would say there is data where there
+ *   is none, on every launch, with no way past it.
+ */
+export function worthRescuing(raw: string | null): boolean {
+  if (raw === null) return false
+  let value: unknown
   try {
-    return localStorage.getItem(STORAGE_KEY) !== null
+    value = JSON.parse(raw)
   } catch {
-    return false
+    return true
   }
+  if (typeof value !== 'object' || value === null) return false
+  const top = value as Record<string, unknown>
+  const state =
+    typeof top.state === 'object' && top.state !== null
+      ? (top.state as Record<string, unknown>)
+      : {}
+  const holds = (field: unknown) => Array.isArray(field) && field.length > 0
+  if ([top.activities, top.logs, state.activities, state.logs].some(holds)) return true
+  return typeof top.version === 'number' && top.version > PERSIST_VERSION
 }
 
 /**
@@ -156,6 +179,11 @@ const createDeferredStorage = (): StateStorage => {
       return localStorage.getItem(name)
     },
     setItem: (name: string, value: string): void => {
+      // Nothing is written while the rescue screen is up. Whatever is on the disk is the
+      // only copy, and hooks still run behind that screen: the new day at midnight calls
+      // set(), and persist turns every set() into a write here. Dropping it at the one
+      // door every write goes through covers that and anything added later.
+      if (useRescueStore.getState().failure !== null) return
       pendingWrite = value
       pendingKey = name
 
@@ -179,6 +207,7 @@ const createDeferredStorage = (): StateStorage => {
       }
     },
     removeItem: (name: string): void => {
+      if (useRescueStore.getState().failure !== null) return
       pendingWrite = null
       pendingKey = null
       cancelScheduledWrite()
@@ -621,6 +650,7 @@ export const useCalendarStore = create<CalendarState>()(
     }),
     {
       name: STORAGE_KEY,
+      version: PERSIST_VERSION,
       storage: createJSONStorage(() => createDeferredStorage()),
       // Where somebody was is not kept, and the four missing names are the whole of this
       // decision: `selectedDate`, `selectedMonth`, `selectedYear` and `currentView`.
@@ -670,16 +700,22 @@ export const useCalendarStore = create<CalendarState>()(
       //
       // Except that undefined does not only mean nothing at all (#221). zustand also hands
       // it over for a value that parses but has no `state`, and for one saved under a
-      // version it has no migrate for, after discarding it. Read as a new installation,
-      // either one opened an empty app, and the first write of the launch put that empty
-      // state over the only copy. So the disk is asked: if something is there, this is
-      // "I could not read it", not "there is nothing". Throwing hands it to the same path
+      // version it has no migrate for, after discarding it (or a migrate that had no
+      // answer). Read as a new installation, either one opened an empty app, and the
+      // first write of the launch put that empty state over the only copy. So the disk is
+      // asked, and if what is there has anything to lose (worthRescuing, above), this is
+      // "I could not read it", not "there is nothing". An empty `state` is read the same
+      // way, since it carries nothing either. Throwing hands it to the same path
       // as a value that will not parse: zustand calls onRehydrateStorage with the error,
       // the rescue screen comes up with the bytes untouched, and nothing is written,
       // because merge throwing means zustand never sets the state it would have saved.
       merge: (persisted, current) => {
-        if (persisted == null) {
-          if (somethingIsStored()) {
+        const empty =
+          persisted == null ||
+          (typeof persisted === 'object' && Object.keys(persisted as object).length === 0)
+        if (empty) {
+          const onDisk = whatIsOnDisk(() => localStorage.getItem(STORAGE_KEY))
+          if (worthRescuing(onDisk.raw)) {
             throw new Error(`What is stored under ${STORAGE_KEY} does not open as a state`)
           }
           return { ...current, _checkinStart: 'new' }
