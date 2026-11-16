@@ -212,3 +212,24 @@ strip = false
 # It goes upstream once it has been measured on a phone over two nights.
 [patch.crates-io]
 tauri-plugin-notification = { git = "https://github.com/henfrydls/plugins-workspace", rev = "b044a952d5fd1cc96755b05658df395dde67d44e" }
+
+# wry and tauri-runtime-wry, for #201: on Android Daylo could close by itself about ten
+# seconds after opening. At startup tauri asks the webview its version; the question is
+# asked from the Rust main thread and answered on the UI thread, and wry 0.54.1 waits ten
+# seconds and then unwraps, so a UI thread busy for longer during a cold start aborted the
+# process. Seen on the emulator, on the slowest starts only. It takes three changes
+# together, two in wry and one in tauri-runtime-wry:
+#
+# 1. wry, asking side: the timeout comes back as an error instead of a panic.
+# 2. wry, answering side: an answer that arrives after the question gave up is dropped.
+#    Without this, once (1) stops the abort, the late answer panics on the UI thread.
+# 3. tauri-runtime-wry: on Android an error there no longer means "no webview runtime".
+#    Without this, (1) turns the crash into a window with no webview, which is worse
+#    because nobody hears about it. macOS was already exempt the same way.
+#
+# The fork of tauri-runtime-wry takes tauri-runtime and tauri-utils from crates.io instead
+# of from its own repository, or this patch would bring a second copy of each and stop
+# matching the tauri crate from crates.io. Both branches keep their upstream version
+# numbers (0.54.1 and 2.10.0), pinned by commit for the reason given above.
+wry = { git = "https://github.com/henfrydls/wry", rev = "aa912399a3ae04d19663a17332d9f1c0cf997cae" }
+tauri-runtime-wry = { git = "https://github.com/henfrydls/tauri", rev = "b59b732160546274e370fb911d76173a758278ad" }
