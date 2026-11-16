@@ -706,7 +706,7 @@ function App() {
           {/* FAB Button - Visible only on mobile (< lg) */}
           <button
             onClick={() => setIsBottomSheetOpen(true)}
-            className="fixed bottom-[calc(1.5rem+var(--inset-bottom))] right-6 z-20 lg:hidden w-14 h-14 bg-emerald-500 hover:bg-emerald-600 active:bg-emerald-700 text-white rounded-full shadow-lg flex items-center justify-center transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 focus-visible:ring-offset-2"
+            className="fixed bottom-[calc(1.5rem+var(--inset-bottom))] right-[calc(1.5rem+var(--inset-right))] z-20 lg:hidden w-14 h-14 bg-emerald-500 hover:bg-emerald-600 active:bg-emerald-700 text-white rounded-full shadow-lg flex items-center justify-center transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 focus-visible:ring-offset-2"
             aria-label="Open activities panel"
             data-testid="fab-button"
           >

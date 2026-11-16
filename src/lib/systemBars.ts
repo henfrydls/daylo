@@ -6,14 +6,16 @@
  * one says 0, and measured on Android 15's own WebView 124 the three-button bar covered the
  * day sheet's Done, the floating button, the panel, the toasts and the confirmation dialog.
  *
- * MainActivity reads the sizes from Android and exposes them as `DayloSystemBars`. This
- * writes them as two custom properties, and index.css takes the larger of each and env(),
- * so a WebView that does report them is not padded twice. Everywhere else, the browser,
- * the desktop app, there is no bridge and nothing is written.
+ * MainActivity reads what the bars cover of the WebView and exposes it as `DayloSystemBars`.
+ * This writes it as four custom properties, and index.css takes the larger of each and
+ * env(), so a WebView that does report them is not padded twice. Everywhere else, the
+ * browser, the desktop app, there is no bridge and nothing is written.
  */
 interface SystemBarsBridge {
   statusTop(): number
   navigationBottom(): number
+  navigationLeft?(): number
+  navigationRight?(): number
 }
 
 /** A size in CSS pixels, or 0px for anything that is not one. */
@@ -32,25 +34,35 @@ export function followSystemBars(win: Window): () => void {
   const bridge = (win as Window & { DayloSystemBars?: SystemBarsBridge }).DayloSystemBars
   if (!bridge) return () => {}
 
-  const root = win.document.documentElement
+  const style = win.document.documentElement.style
+  // Written only when it changed: each write makes the browser work out the styles again,
+  // and a value that did not change is work for nothing.
+  const set = (name: string, value: string) => {
+    if (style.getPropertyValue(name) !== value) style.setProperty(name, value)
+  }
   const apply = () => {
-    root.style.setProperty(
+    set(
       '--android-status-top',
       px(() => bridge.statusTop())
     )
-    root.style.setProperty(
+    set(
       '--android-navigation-bottom',
       px(() => bridge.navigationBottom())
+    )
+    set(
+      '--android-navigation-left',
+      px(() => bridge.navigationLeft?.() ?? 0)
+    )
+    set(
+      '--android-navigation-right',
+      px(() => bridge.navigationRight?.() ?? 0)
     )
   }
 
   apply()
-  // MainActivity announces a change; a resize covers the phone being turned before the
-  // announcement arrives.
+  // MainActivity announces a change, and only a change (the phone turned, the navigation
+  // mode switched, split screen). Nothing listens to resize: the keyboard resizes the page
+  // on every frame it moves, and each read is a synchronous call across the bridge.
   win.addEventListener('daylo-insets', apply)
-  win.addEventListener('resize', apply)
-  return () => {
-    win.removeEventListener('daylo-insets', apply)
-    win.removeEventListener('resize', apply)
-  }
+  return () => win.removeEventListener('daylo-insets', apply)
 }

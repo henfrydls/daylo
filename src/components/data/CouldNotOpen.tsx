@@ -57,7 +57,7 @@ export function CouldNotOpen() {
 
   return (
     <div
-      className="flex min-h-[100dvh] flex-col items-center justify-center bg-gray-50 px-6"
+      className="flex min-h-[100dvh] flex-col items-center justify-center bg-gray-50 px-6 pt-[var(--inset-top)] pb-[var(--inset-bottom)]"
       data-testid="could-not-open"
     >
       <div className="w-full max-w-md space-y-4 rounded-xl border border-gray-200 bg-white p-6">

@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
-# Whether Android's navigation bar covers what Daylo pins to the bottom of the screen (#198),
-# on the CI emulator, on Android 15 with one navigation mode.
+# Whether Android's bars cover what Daylo pins to the top and bottom of the screen, or leave
+# empty space there (#198), on the CI emulator, with one navigation mode. Run on Android 15,
+# which draws the app edge to edge, and on Android 14, which does not.
 #
 # Usage: android-measure-insets.sh <apk> <out-dir> <threebutton|gestural>
 #
@@ -28,11 +29,19 @@
 #       is above the bar.
 #   S5  The confirmation dialog, from Delete on an activity in the panel: the bottom of its
 #       Cancel button is above the bar.
-# A surface whose bottom edge is below the top of the bar, by any amount, is COVERED.
+#   H0  The header: the top of its content is where the status bar ends, in the page.
+#
+# Each is compared with the free area of the page: what is left of it once the bars that
+# lie over it are taken away. Edge to edge (Android 15) that is the screen minus both bars;
+# otherwise the page already sits between them and the free area is the whole page.
+#
+# A surface that reaches into a bar, by any amount, is COVERED. One that is further from the
+# edge than the design's own margin (EXPECTED below) plus 2 px is GAP: the inset counted
+# twice, or counted where there is no bar, which is the other way to get this wrong.
 #
 # The network rule is measurement A's, from android-measure-common.sh.
 #
-# Exits 0 when every surface was measured and none is covered, and the network guard held.
+# Exits 0 when every surface was measured and is CLEAR, and the network guard held.
 # A surface that could not be measured makes it exit 1 and says which.
 
 set -uo pipefail
@@ -112,13 +121,26 @@ sleep 8
 seeded=$(js "JSON.parse(localStorage.getItem('simple-calendar-storage') || '{}').state?.activities?.length ?? 0" 2>&1)
 [ "$seeded" = 12 ] || { log "the seeded activities did not survive the reload ($seeded); nothing measured"; exit 1; }
 
-# The bar, from Android. The last navigationBars source with a frame is the one in use.
+# The bars, from Android: the insets sources of display 0, in its WindowInsetsStateController
+# section. Other windows list sources too (a dialog, the IME, the bar's own windows), and
+# taking the last match anywhere in the dump could read one of those.
 sh_ dumpsys window >"$OUT/dumpsys-window.txt" 2>&1
-BAR_TOP_PX=$(grep -oE 'type=navigationBars frame=\[[0-9]+,[0-9]+\]\[[0-9]+,[0-9]+\]' "$OUT/dumpsys-window.txt" \
-  | tail -1 | sed -E 's/.*frame=\[[0-9]+,([0-9]+)\].*/\1/')
+source_frame() {
+  awk -v want="type=$1 frame=" '
+    /^  Display: mDisplayId=/ { d = ($0 ~ /mDisplayId=0 /) }
+    /^WINDOW MANAGER / && !/DISPLAY CONTENTS/ { d = 0 }
+    d && /WindowInsetsStateController/ { w = 1 }
+    d && w && $1 == "InsetsSource" && index($0, want) { print; exit }
+  ' "$OUT/dumpsys-window.txt" | grep -oE 'frame=\[[0-9]+,[0-9]+\]\[[0-9]+,[0-9]+\]'
+}
+NAV_FRAME=$(source_frame navigationBars)
+STATUS_FRAME=$(source_frame statusBars)
+BAR_TOP_PX=$(sed -E 's/frame=\[[0-9]+,([0-9]+)\].*/\1/' <<<"$NAV_FRAME")
+STATUS_BOTTOM_PX=$(sed -E 's/.*\]\[[0-9]+,([0-9]+)\]/\1/' <<<"$STATUS_FRAME")
 SCREEN_H=$(sh_ wm size | grep -oE '[0-9]+x[0-9]+' | tail -1 | cut -dx -f2)
-[ -n "$BAR_TOP_PX" ] || { log "no navigationBars frame in dumpsys window; nothing measured"; exit 1; }
-log "navigation bar: top at ${BAR_TOP_PX}px of ${SCREEN_H}px, $(( SCREEN_H - BAR_TOP_PX ))px tall"
+[ -n "$BAR_TOP_PX" ] || { log "no navigationBars source for display 0 in dumpsys window; nothing measured"; exit 1; }
+[ -n "$STATUS_BOTTOM_PX" ] || { log "no statusBars source for display 0 in dumpsys window; nothing measured"; exit 1; }
+log "navigation bar: $NAV_FRAME, top at ${BAR_TOP_PX}px of ${SCREEN_H}px; status bar: $STATUS_FRAME"
 
 # What the page knows about itself. env() is read through a probe, because computed style
 # is the only way to see what the WebView substitutes for it.
@@ -136,11 +158,16 @@ cat "$OUT/page.json" | tee -a "$OUT/log.txt"
 DPR=$(jq -r .dpr "$OUT/page.json")
 INNER=$(jq -r .innerHeight "$OUT/page.json")
 INSET=$(jq -r .inset "$OUT/page.json")
-# The top of the bar in CSS pixels, measured from the top of the WebView, which in edge to
-# edge starts at the top of the screen. If the WebView ends above the bar (not edge to
-# edge), the bar is below the page and covers nothing; that is what min() expresses.
-BAR_TOP_CSS=$(awk -v t="$BAR_TOP_PX" -v d="$DPR" -v h="$INNER" 'BEGIN { v = t / d; if (v > h) v = h; printf "%.1f", v }')
-log "in CSS pixels: page ${INNER} tall, bar from ${BAR_TOP_CSS}, env(safe-area-inset-bottom) = ${INSET}"
+# Where the page sits on the screen. Edge to edge it fills the screen and starts at its top;
+# otherwise it sits between the bars and starts where the status bar ends. Told apart by
+# its height, which is the screen's only in the first case.
+EDGE=$(awk -v h="$INNER" -v d="$DPR" -v s="$SCREEN_H" 'BEGIN { x = h * d - s; print (x < 3 && x > -3) ? "yes" : "no" }')
+PAGE_TOP_PX=0; [ "$EDGE" = no ] && PAGE_TOP_PX=$STATUS_BOTTOM_PX
+# The free area, in the page's CSS pixels: below the status bar and above the navigation bar,
+# clipped to the page. Named FREE_* rather than BAR_* because that is what is compared.
+FREE_TOP=$(awk -v t="$STATUS_BOTTOM_PX" -v o="$PAGE_TOP_PX" -v d="$DPR" 'BEGIN { v = (t - o) / d; if (v < 0) v = 0; printf "%.1f", v }')
+FREE_BOTTOM=$(awk -v t="$BAR_TOP_PX" -v o="$PAGE_TOP_PX" -v d="$DPR" -v h="$INNER" 'BEGIN { v = (t - o) / d; if (v > h) v = h; printf "%.1f", v }')
+log "edge to edge: $EDGE; in CSS pixels: page ${INNER} tall, free from ${FREE_TOP} to ${FREE_BOTTOM}, env(safe-area-inset-bottom) = ${INSET}"
 
 # The bottom edge of one element, in CSS pixels, or "none".
 bottom_of() {
@@ -155,20 +182,40 @@ waitfor() {
   done
   return 1
 }
+# The design's own distance from the edge of the free area, in CSS pixels, for each surface:
+# what it has where there is no bar at all. bottom-6 for the floating button, the panel's
+# pb 1.5rem, pb 1rem for the day sheet, the toast stack and the confirmation, and nothing
+# for the header, whose padding is the inset alone.
+declare -A EXPECTED=([S1]=24 [S2]=24 [S3]=16 [S4]=16 [S5]=16 [H0]=0)
+# judge <id> <what> <edge in CSS px> <bottom|top>
 judge() {
-  local id=$1 what=$2 b=$3
+  local id=$1 what=$2 b=$3 side=${4:-bottom} gap
   if [ -z "$b" ] || [ "$b" = '"none"' ] || [ "$b" = null ]; then
     printf -v "R_$id" '%s' "NOT MEASURED"; printf -v "W_$id" '%s' "$what was not found"
-  elif awk -v b="$b" -v t="$BAR_TOP_CSS" 'BEGIN { exit !(b <= t + 0.5) }'; then
-    printf -v "R_$id" '%s' "CLEAR"; printf -v "W_$id" '%s' "$what ends at $b, the bar starts at $BAR_TOP_CSS"
-  else
-    printf -v "R_$id" '%s' "COVERED"; printf -v "W_$id" '%s' "$what ends at $b, $(awk -v b="$b" -v t="$BAR_TOP_CSS" 'BEGIN { printf "%.1f", b - t }') px under the bar starting at $BAR_TOP_CSS"
+    local r="R_$id" w="W_$id"; log "$id: ${!r} (${!w})"; return
   fi
+  if [ "$side" = bottom ]; then
+    gap=$(awk -v b="$b" -v t="$FREE_BOTTOM" 'BEGIN { printf "%.1f", t - b }')
+  else
+    gap=$(awk -v b="$b" -v t="$FREE_TOP" 'BEGIN { printf "%.1f", b - t }')
+  fi
+  local want=${EXPECTED[$id]}
+  local where="$what at $b, the free area ends at $([ "$side" = bottom ] && echo "$FREE_BOTTOM" || echo "$FREE_TOP"); $gap px from it, the design keeps $want"
+  if awk -v g="$gap" 'BEGIN { exit !(g < -0.5) }'; then
+    printf -v "R_$id" '%s' "COVERED"
+  elif awk -v g="$gap" -v w="$want" 'BEGIN { exit !(g > w + 2) }'; then
+    printf -v "R_$id" '%s' "GAP"
+  else
+    printf -v "R_$id" '%s' "CLEAR"
+  fi
+  printf -v "W_$id" '%s' "$where"
   local r="R_$id" w="W_$id"
   log "$id: ${!r} (${!w})"
 }
 
 shot 00-month
+judge H0 "the top of the header's content" "$(js "(() => { const h = document.querySelector('header'); const c = h && h.firstElementChild
+  return c ? c.getBoundingClientRect().top : 'none' })()" 2>/dev/null)" top
 judge S1 "the floating button" "$(bottom_of '[data-testid="fab-button"]')"
 
 # S2: the panel, scrolled to the end of its list.
@@ -245,13 +292,14 @@ checkin_logcat_guard || guard_ok=false
 {
   echo "Navigation bar over the bottom of the screen (#198), $(date -u '+%Y-%m-%d %H:%M UTC')"
   cat "$OUT/device.txt"
-  echo "bar: top at ${BAR_TOP_PX}px of ${SCREEN_H}px; in CSS pixels the page is ${INNER} tall and the bar starts at ${BAR_TOP_CSS}"
+  echo "bars: navigation $NAV_FRAME, status $STATUS_FRAME, screen ${SCREEN_H}px tall"
+  echo "edge to edge: $EDGE; in CSS pixels the page is ${INNER} tall and the free area runs from ${FREE_TOP} to ${FREE_BOTTOM}"
   echo "env(safe-area-inset-bottom) in the WebView: ${INSET}px"
   echo "network guard: $($guard_ok && echo held || echo BROKEN)"
   echo
-  for id in S1 S2 S3 S4 S5; do r="R_$id" w="W_$id"; printf '%-3s %-13s %s\n' "$id" "${!r:-NOT MEASURED}" "${!w:-}"; done
+  for id in H0 S1 S2 S3 S4 S5; do r="R_$id" w="W_$id"; printf '%-3s %-13s %s\n' "$id" "${!r:-NOT MEASURED}" "${!w:-}"; done
 } | tee "$OUT/summary.txt"
 
 $guard_ok || exit 1
-for id in S1 S2 S3 S4 S5; do r="R_$id"; [ "${!r:-}" = CLEAR ] || exit 1; done
+for id in H0 S1 S2 S3 S4 S5; do r="R_$id"; [ "${!r:-}" = CLEAR ] || exit 1; done
 exit 0

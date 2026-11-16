@@ -95,7 +95,7 @@ export const ToastContainer = memo(function ToastContainer() {
 
   return (
     <div
-      className="fixed bottom-[calc(1rem+var(--inset-bottom))] right-4 z-50 flex flex-col gap-2 max-w-sm"
+      className="fixed bottom-[calc(1rem+var(--inset-bottom))] right-[calc(1rem+var(--inset-right))] z-50 flex flex-col gap-2 max-w-sm"
       aria-label="Notifications"
     >
       {toasts.map((toast) => (

@@ -11,8 +11,9 @@ describe('following the system bars', () => {
   const read = (name: string) => root.style.getPropertyValue(name)
 
   afterEach(() => {
-    root.style.removeProperty('--android-status-top')
-    root.style.removeProperty('--android-navigation-bottom')
+    for (const side of ['status-top', 'navigation-bottom', 'navigation-left', 'navigation-right']) {
+      root.style.removeProperty(`--android-${side}`)
+    }
     delete (window as { DayloSystemBars?: unknown }).DayloSystemBars
   })
 
@@ -24,7 +25,27 @@ describe('following the system bars', () => {
     stop()
   })
 
-  it('writes the two sizes as CSS pixels', () => {
+  it('writes the four sizes as CSS pixels', () => {
+    ;(window as { DayloSystemBars?: unknown }).DayloSystemBars = {
+      statusTop: () => 24,
+      navigationBottom: () => 0,
+      navigationLeft: () => 0,
+      navigationRight: () => 48,
+    }
+
+    const stop = followSystemBars(window)
+
+    expect(read('--android-status-top')).toBe('24px')
+    expect(read('--android-navigation-bottom')).toBe('0px')
+    expect(read('--android-navigation-left')).toBe('0px')
+    // Landscape with three buttons: the bar is on a side.
+    expect(read('--android-navigation-right')).toBe('48px')
+    stop()
+  })
+
+  // An APK built before left and right existed in the bridge is not something the page
+  // meets, but the page must not break on a bridge that lacks them.
+  it('writes 0px for a side the bridge does not know', () => {
     ;(window as { DayloSystemBars?: unknown }).DayloSystemBars = {
       statusTop: () => 24,
       navigationBottom: () => 48,
@@ -32,8 +53,8 @@ describe('following the system bars', () => {
 
     const stop = followSystemBars(window)
 
-    expect(read('--android-status-top')).toBe('24px')
-    expect(read('--android-navigation-bottom')).toBe('48px')
+    expect(read('--android-navigation-left')).toBe('0px')
+    expect(read('--android-navigation-right')).toBe('0px')
     stop()
   })
 
@@ -49,6 +70,48 @@ describe('following the system bars', () => {
     window.dispatchEvent(new Event('daylo-insets'))
 
     expect(read('--android-navigation-bottom')).toBe('16px')
+    stop()
+  })
+
+  // The keyboard resizes the page on every frame it moves. Each read is a synchronous call
+  // across the bridge, so a resize reads nothing: only MainActivity's announcement does.
+  it('does not read the bridge on resize', () => {
+    let reads = 0
+    ;(window as { DayloSystemBars?: unknown }).DayloSystemBars = {
+      statusTop: () => {
+        reads++
+        return 24
+      },
+      navigationBottom: () => 48,
+    }
+    const stop = followSystemBars(window)
+    reads = 0
+
+    window.dispatchEvent(new Event('resize'))
+
+    expect(reads).toBe(0)
+    stop()
+  })
+
+  it('does not write a value that did not change', () => {
+    ;(window as { DayloSystemBars?: unknown }).DayloSystemBars = {
+      statusTop: () => 24,
+      navigationBottom: () => 48,
+    }
+    const stop = followSystemBars(window)
+    const writes: string[] = []
+    const original = root.style.setProperty.bind(root.style)
+    root.style.setProperty = (name: string, value: string | null) => {
+      writes.push(name)
+      original(name, value)
+    }
+    try {
+      window.dispatchEvent(new Event('daylo-insets'))
+    } finally {
+      root.style.setProperty = original
+    }
+
+    expect(writes).toEqual([])
     stop()
   })
 

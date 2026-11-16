@@ -1078,11 +1078,13 @@ jobs:
   #
   # What each line of summary.txt reads is at the top of android-measure-insets.sh.
   #
-  # API 35 and not the usual 34: edge to edge is only enforced from Android 15.
+  # API 35, where edge to edge is enforced (Android 15), in both navigation modes; and API
+  # 34 with three buttons, where it is not: there the bars sit beside the page, and the job
+  # fails if the page leaves room for them anyway.
   #
   # WHAT IT IS NOT: a check. It runs only when asked for and publishes nothing.
   measure-insets:
-    name: Navigation bar measurement (emulator, ${{ matrix.mode }})
+    name: Navigation bar measurement (emulator, API ${{ matrix.api }}, ${{ matrix.mode }})
     needs: build-measure-apks
     if: github.event_name == 'workflow_dispatch' && inputs.measure_insets
     runs-on: ubuntu-latest
@@ -1090,7 +1092,10 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        mode: [threebutton, gestural]
+        include:
+          - { api: '35', mode: threebutton }
+          - { api: '35', mode: gestural }
+          - { api: '34', mode: threebutton }
 
     steps:
       - name: Checkout repository
@@ -1111,7 +1116,7 @@ jobs:
       - name: Measure
         uses: ./.github/actions/android-emulator-measure
         with:
-          api-level: '35'
+          api-level: ${{ matrix.api }}
           script: bash .github/scripts/android-measure-insets.sh apks/daylo-test.apk measure-insets ${{ matrix.mode }}
           out: measure-insets
 
@@ -1119,7 +1124,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: insets-measurement-${{ matrix.mode }}
+          name: insets-measurement-api${{ matrix.api }}-${{ matrix.mode }}
           path: measure-insets/
           retention-days: 7
           if-no-files-found: warn
