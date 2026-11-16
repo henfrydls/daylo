@@ -75,7 +75,10 @@ test.describe('Activity Tracker App', () => {
   })
 
   test('should show empty state message when no activities exist', async ({ page }) => {
-    await expect(page.getByText('No activities yet. Create one to start tracking!')).toBeVisible()
+    await expect(page.getByText('No activities yet.', { exact: true })).toBeVisible()
+    await expect(page.locator('[data-testid="first-day-door"]:visible')).toHaveText(
+      /Add your first activity/
+    )
   })
 
   // ── Activity CRUD ─────────────────────────────────────────
@@ -398,16 +401,9 @@ test.describe('Activity Tracker App', () => {
     }) => {
       await page.setViewportSize(viewport)
 
-      // Through today's own sheet, which is the same road at both widths and leaves the
-      // first activity logged for today.
-      const now = new Date()
-      const today = [
-        now.getFullYear(),
-        String(now.getMonth() + 1).padStart(2, '0'),
-        String(now.getDate()).padStart(2, '0'),
-      ].join('-')
-      await page.getByLabel(new RegExp(`^${today}, `)).click()
-      await page.getByTestId('quicklog-create-first-activity').click()
+      // Through the first day's door, which is the same road at both widths, opens today's
+      // sheet on the form and leaves the first activity logged for today.
+      await page.locator('[data-testid="first-day-door"]:visible').click()
       await page.getByTestId('quicklog-new-activity-input').fill('Read')
       await page.getByTestId('quicklog-add-activity').click()
       await page.getByTestId('quicklog-done-button').click()
