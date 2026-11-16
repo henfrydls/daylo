@@ -271,18 +271,25 @@ if waitfor '[data-testid="confirm-dialog-cancel"]'; then
   b=$(bottom_of '[data-testid="confirm-dialog-cancel"]')
   shot 05-confirm
   judge S5 "the confirmation's Cancel" "$b"
-  js "document.querySelector('[data-testid=\"confirm-dialog-confirm\"]').click(), true" >/dev/null 2>&1
-else
-  shot 05-no-confirm
-  judge S5 "the confirmation's Cancel" ""
-fi
-if waitfor '[aria-label="Notifications"] > *'; then
-  sleep 0.5
-  b=$(bottom_of '[aria-label="Notifications"]')
+  # Confirmed and measured in one call, inside the page: the toast lives for a few seconds,
+  # and polling it from here, one adb round trip at a time, once found it already gone.
+  b=$(js "new Promise((ok) => {
+            document.querySelector('[data-testid=\"confirm-dialog-confirm\"]').click()
+            const t0 = Date.now()
+            const look = () => {
+              const n = document.querySelector('[aria-label=\"Notifications\"]')
+              const r = n && n.firstElementChild ? n.getBoundingClientRect() : null
+              if (r && r.height) return setTimeout(() => ok(n.getBoundingClientRect().bottom), 400)
+              if (Date.now() - t0 > 3000) return ok('none')
+              setTimeout(look, 50)
+            }
+            look()
+          })" 2>/dev/null)
   shot 04-toast
   judge S4 "the toast" "$b"
 else
-  shot 04-no-toast
+  shot 05-no-confirm
+  judge S5 "the confirmation's Cancel" ""
   judge S4 "the toast" ""
 fi
 
