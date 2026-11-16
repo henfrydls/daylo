@@ -202,21 +202,51 @@ describe('giving the focus back', () => {
  * fallback of its own the focus fell to <body> behind a panel that was still open, where
  * Tab walked out of it. It goes into the trap underneath instead.
  */
-function Outer({ inner, row }: { inner: boolean; row: boolean }) {
+type First = 'ok' | 'disabled' | 'hidden' | 'none'
+function Outer({
+  inner,
+  row,
+  first = 'ok',
+  innerFallback,
+  innerMounted = true,
+}: {
+  inner: boolean
+  row: boolean
+  first?: First
+  innerFallback?: () => HTMLElement | null
+  innerMounted?: boolean
+}) {
   const outer = useRef<HTMLDivElement>(null)
   useFocusTrap(outer, true, { autoFocus: false })
   return (
     <div ref={outer} data-testid="outer">
-      <button data-testid="add">+ Add</button>
+      {first === 'none' ? null : (
+        <button
+          data-testid="add"
+          disabled={first === 'disabled'}
+          style={first === 'hidden' ? { display: 'none' } : undefined}
+        >
+          + Add
+        </button>
+      )}
+      {first === 'ok' || first === 'none' ? null : <button data-testid="next">Next</button>}
       {row ? <button data-testid="bin">Delete</button> : null}
-      <Inner open={inner} />
+      <Inner open={inner} fallback={innerFallback} mounted={innerMounted} />
     </div>
   )
 }
-function Inner({ open }: { open: boolean }) {
+function Inner({
+  open,
+  fallback,
+  mounted = true,
+}: {
+  open: boolean
+  fallback?: () => HTMLElement | null
+  mounted?: boolean
+}) {
   const ref = useRef<HTMLDivElement>(null)
-  useFocusTrap(ref, open, { autoFocus: false })
-  return open ? (
+  useFocusTrap(ref, open, { autoFocus: false, fallbackFocus: fallback })
+  return open && mounted ? (
     <div ref={ref}>
       <button data-testid="confirm">Delete</button>
     </div>
@@ -234,6 +264,48 @@ describe('a trap over a trap', () => {
 
     expect(byId('outer').contains(document.activeElement)).toBe(true)
     expect(document.activeElement).toBe(byId('add'))
+  })
+
+  // The day sheet's fallback is the Today bar, on the page. With a panel still open under
+  // the sheet, the bar is behind the panel: the trap underneath comes first.
+  it('prefers the trap underneath to its own fallback', () => {
+    const page = document.createElement('button')
+    document.body.appendChild(page)
+    const { rerender } = render(<Outer inner={false} row innerFallback={() => page} />)
+    byId('bin').focus()
+    rerender(<Outer inner row innerFallback={() => page} />)
+    act(() => byId('confirm').focus())
+
+    rerender(<Outer inner={false} row={false} innerFallback={() => page} />)
+
+    expect(document.activeElement).toBe(byId('add'))
+    page.remove()
+  })
+
+  it.each([
+    ['disabled', 'disabled'],
+    ['hidden', 'hidden'],
+  ] as const)('skips a first control that is %s', (_, first) => {
+    const { rerender } = render(<Outer inner={false} row first={first} />)
+    byId('bin').focus()
+    rerender(<Outer inner row first={first} />)
+    act(() => byId('confirm').focus())
+
+    rerender(<Outer inner={false} row={false} first={first} />)
+
+    expect(document.activeElement).toBe(byId('next'))
+  })
+
+  it('takes the panel itself when nothing in it can have the focus', () => {
+    const { rerender } = render(<Outer inner={false} row first="none" />)
+    byId('bin').focus()
+    rerender(<Outer inner row first="none" />)
+    act(() => byId('confirm').focus())
+
+    rerender(<Outer inner={false} row={false} first="none" />)
+
+    expect(document.activeElement).toBe(byId('outer'))
+    expect(byId('outer').tabIndex).toBe(-1)
   })
 })
 
@@ -263,5 +335,18 @@ describe('keeping Tab inside', () => {
     fireEvent.keyDown(byId('confirm'), { key: 'Tab' })
 
     expect(document.activeElement).toBe(byId('confirm'))
+  })
+
+  // The trap in front can be switched on a render before its container is on the page.
+  // Until then the one underneath keeps Tab, rather than nobody.
+  it('leaves Tab to the trap underneath while the one in front has no container yet', () => {
+    const { rerender } = render(<Outer inner={false} row />)
+    rerender(<Outer inner row innerMounted={false} />)
+    act(() => byId('bin').focus())
+
+    const went = fireEvent.keyDown(byId('bin'), { key: 'Tab' })
+
+    expect(went).toBe(false)
+    expect(document.activeElement).toBe(byId('add'))
   })
 })

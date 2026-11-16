@@ -26,6 +26,18 @@ const openTraps: Array<RefObject<HTMLElement | null>> = []
 const FOCUSABLE_SELECTOR =
   'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])'
 
+/**
+ * The first control in a trap that the focus can land on: not disabled, and drawn. With
+ * none, the trap itself, made focusable by script only, so the focus is at least inside it.
+ */
+function firstReachable(container: HTMLElement): HTMLElement {
+  for (const node of container.querySelectorAll<HTMLElement>(FOCUSABLE_SELECTOR)) {
+    if (!node.matches(':disabled') && reachable(node)) return node
+  }
+  if (!container.hasAttribute('tabindex')) container.tabIndex = -1
+  return container
+}
+
 interface UseFocusTrapOptions {
   /** Callback when Escape key is pressed */
   onEscape?: () => void
@@ -136,14 +148,11 @@ export function useFocusTrap(
         return
       }
       // Nowhere to go back to. From inside, or lost to the page when what held it went
-      // away: what replaced the opener, or else into the trap underneath, so Tab does not
-      // walk out from behind a panel that is still open.
+      // away: into the trap underneath while one is open, so the focus does not go behind
+      // a panel that is still there; with none, to what replaced the opener on the page.
       if (!inside && !lost) return
       const underneath = openTraps[openTraps.length - 1]?.current ?? null
-      const target =
-        fallback.current?.() ??
-        underneath?.querySelector<HTMLElement>(FOCUSABLE_SELECTOR) ??
-        underneath
+      const target = underneath !== null ? firstReachable(underneath) : fallback.current?.()
       target?.focus({ preventScroll: true })
     }
   }, [isActive, restoreFocus, autoFocus, containerRef])
@@ -183,7 +192,10 @@ export function useFocusTrap(
 
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key !== 'Tab') return
-      if (openTraps[openTraps.length - 1] !== containerRef) return
+      // The highest one that is on the page: a trap switched on a render before its
+      // container arrives leaves Tab to the one underneath until then, rather than to nobody.
+      const front = [...openTraps].reverse().find((trap) => trap.current !== null)
+      if (front !== containerRef) return
       const container = containerRef.current
       if (container === null) return
 
