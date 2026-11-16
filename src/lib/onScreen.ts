@@ -8,8 +8,15 @@
 export function onScreen(selector: string): HTMLElement | null {
   for (const node of document.querySelectorAll<HTMLElement>(selector)) {
     if (node.closest('[inert]') !== null) continue
-    const style = getComputedStyle(node)
-    if (style.display !== 'none' && style.visibility !== 'hidden') return node
+    if (getComputedStyle(node).visibility !== 'hidden' && !underDisplayNone(node)) return node
   }
   return null
+}
+
+/** `display` is not inherited, so a node inside a `display: none` box says block. */
+function underDisplayNone(node: HTMLElement): boolean {
+  for (let at: HTMLElement | null = node; at !== null; at = at.parentElement) {
+    if (getComputedStyle(at).display === 'none') return true
+  }
+  return false
 }
