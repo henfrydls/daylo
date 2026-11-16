@@ -234,7 +234,7 @@ export const YearView = memo(function YearView({ onImport }: YearViewProps) {
             <h1
               tabIndex={-1}
               data-testid="year-title"
-              className="text-2xl font-bold text-gray-900 focus:outline-none"
+              className="text-2xl font-bold text-gray-900 focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 focus-visible:ring-offset-1 rounded-lg px-1 -mx-1"
             >
               {selectedYear}
             </h1>
@@ -369,7 +369,7 @@ export const YearView = memo(function YearView({ onImport }: YearViewProps) {
           <h1
             tabIndex={-1}
             data-testid="year-title"
-            className="text-2xl font-bold text-gray-900 sm:text-3xl focus:outline-none"
+            className="text-2xl font-bold text-gray-900 sm:text-3xl focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 focus-visible:ring-offset-1 rounded-lg px-1 -mx-1"
           >
             {selectedYear}
           </h1>

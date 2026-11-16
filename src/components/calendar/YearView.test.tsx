@@ -445,6 +445,23 @@ describe('YearView', () => {
   })
 
   describe('Accessibility', () => {
+    // The heading takes the focus by script (after an import from the first day's door).
+    // From the keyboard it has to show where the focus went, like Month's title does.
+    it('shows the focus ring on the year heading, like the month title', () => {
+      render(<YearView />)
+
+      const title = screen.getByTestId('year-title')
+      for (const name of [
+        'focus:outline-none',
+        'focus-visible:ring-2',
+        'focus-visible:ring-emerald-500',
+        'focus-visible:ring-offset-1',
+        'rounded-lg',
+      ]) {
+        expect(title).toHaveClass(name)
+      }
+    })
+
     it('should have accessible navigation buttons', () => {
       render(<YearView />)
 
@@ -707,6 +724,23 @@ describe('YearView', () => {
       render(<YearView />)
 
       expect(screen.getByTestId('month-cards-grid')).toBeInTheDocument()
+    })
+
+    // The heading takes the focus by script (after an import from the first day's door).
+    // From the keyboard it has to show where the focus went, like Month's title does.
+    it('shows the focus ring on the year heading on the phone too', () => {
+      render(<YearView />)
+
+      const title = screen.getByTestId('year-title')
+      for (const name of [
+        'focus:outline-none',
+        'focus-visible:ring-2',
+        'focus-visible:ring-emerald-500',
+        'focus-visible:ring-offset-1',
+        'rounded-lg',
+      ]) {
+        expect(title).toHaveClass(name)
+      }
     })
 
     it('should render YearProgressBar when activities exist', () => {
