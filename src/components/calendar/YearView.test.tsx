@@ -255,6 +255,41 @@ describe('YearView', () => {
       expect(useCalendarStore.getState().selectedDate).toBeNull()
     })
 
+    // On the phone Year stays mounted beside Month, so the wait cannot count on leaving the
+    // page to be called off. An import during the journey takes the door away: neither the
+    // arrival nor the deadline may then open a sheet the door no longer promises.
+    it.each([
+      ['the deadline', () => vi.advanceTimersByTime(2000)],
+      ['the arrival', () => useCalendarStore.setState({ currentView: 'month' })],
+    ])('on the phone, opens nothing at %s once activities arrived mid-journey', (_, then) => {
+      useCalendarStore.setState({ currentView: 'year', selectedDate: null })
+      render(
+        <TravelContext.Provider value={{ toYear: vi.fn(), toMonth: vi.fn() }}>
+          <YearView onImport={vi.fn()} />
+        </TravelContext.Provider>
+      )
+
+      fireEvent.click(screen.getByTestId('first-day-door'))
+      act(() =>
+        useCalendarStore.setState({
+          activities: [
+            {
+              id: 'b1',
+              name: 'Swim',
+              color: '#3B82F6',
+              createdAt: '2024-06-01T00:00:00.000Z',
+              updatedAt: '2024-06-01T00:00:00.000Z',
+            },
+          ],
+        })
+      )
+      act(() => {
+        then()
+      })
+
+      expect(useCalendarStore.getState().selectedDate).toBeNull()
+    })
+
     it('opens Import from the line', () => {
       const onImport = vi.fn()
       render(<YearView onImport={onImport} />)

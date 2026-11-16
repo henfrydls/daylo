@@ -166,9 +166,13 @@ export const YearView = memo(function YearView({ onImport }: YearViewProps) {
     // arrival: the first change of view, which from Year can only be to Month. A journey
     // that has not landed in a second and a half (a resize, frames that stopped in the
     // background) opens it anyway, rather than leave a door that did nothing.
+    // Only while the door is still there. On the phone Year stays mounted beside Month,
+    // so an import during the journey does not unmount anything: it takes the door away,
+    // and the sheet the door promised is no longer owed.
     const open = () => {
       stop()
-      useCalendarStore.getState().setSelectedDate(day)
+      const now = useCalendarStore.getState()
+      if (now.activities.length === 0) now.setSelectedDate(day)
     }
     const stop = () => {
       unsubscribe()
