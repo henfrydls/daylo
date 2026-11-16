@@ -129,3 +129,120 @@ test('the toast after deleting the last activity leaves the words in sight', asy
 
   await expect(page.getByTestId('fab-button')).toHaveCount(0)
 })
+
+/**
+ * Where the focus lands after the first day's surfaces close. Read from
+ * `document.activeElement`, because each of these used to leave it on <body>: the thing
+ * that had opened them was gone by the time they closed.
+ */
+test.describe('the focus after the first day changes the page', () => {
+  const active = (page: Page) =>
+    page.evaluate(() => {
+      const el = document.activeElement
+      return el === null || el === document.body
+        ? 'body'
+        : (el.getAttribute('data-testid') ?? el.tagName.toLowerCase())
+    })
+
+  for (const close of ['Escape', 'Done'] as const) {
+    test(`closing the sheet where the first activity was born gives the focus to the Today bar (${close})`, async ({
+      page,
+    }) => {
+      await page.goto('/')
+      const door = page.locator(DOOR)
+      await door.focus()
+      await page.keyboard.press('Enter')
+      const name = page.getByTestId('quicklog-new-activity-input')
+      await expect(name).toBeFocused()
+      await name.fill('Read')
+      await page.keyboard.press('Enter')
+      await expect(page.getByTestId('first-day-line')).toBeVisible()
+      await expect(page.locator(DOOR)).toHaveCount(0)
+
+      if (close === 'Escape') await page.keyboard.press('Escape')
+      else await page.getByTestId('quicklog-done-button').click()
+      await expect(page.locator(SHEET)).toHaveCount(0)
+
+      expect(await active(page)).toBe('log-today-bar')
+    })
+  }
+
+  test('closing the panel after deleting the last activity gives the focus to the door', async ({
+    page,
+  }) => {
+    await page.addInitScript(() => {
+      if (sessionStorage.getItem('seeded')) return
+      sessionStorage.setItem('seeded', '1')
+      localStorage.setItem(
+        'simple-calendar-storage',
+        JSON.stringify({
+          state: {
+            activities: [
+              {
+                id: 'a1',
+                name: 'Read',
+                color: '#10B981',
+                createdAt: '2026-01-01T00:00:00.000Z',
+                updatedAt: '2026-01-01T00:00:00.000Z',
+              },
+            ],
+            logs: [],
+          },
+          version: 0,
+        })
+      )
+    })
+    await page.goto('/')
+    await page.getByTestId('fab-button').click()
+    const sheet = page.getByTestId('bottom-sheet')
+    await expect(sheet).toBeVisible()
+    await expect(page.locator('[data-testid="bottom-sheet-backdrop"]')).toHaveCSS('opacity', '1')
+    await page.waitForTimeout(350)
+    await sheet.getByRole('button', { name: 'Delete Read' }).click()
+    await page
+      .getByTestId('delete-activity-confirm')
+      .getByRole('button', { name: 'Delete' })
+      .click()
+    await expect(page.getByTestId('delete-activity-confirm')).toHaveCount(0)
+    await expect(page.getByTestId('fab-button')).toHaveCount(0)
+
+    await page.keyboard.press('Escape')
+    await expect(sheet).toHaveCount(0)
+
+    expect(await active(page)).toBe('first-day-door')
+  })
+
+  test('importing from the door in Year leaves the focus on the year', async ({ page }) => {
+    await page.goto('/')
+    await page.getByRole('button', { name: 'Year', exact: true }).click()
+    await page.waitForFunction(() =>
+      document.getAnimations().every((a) => a.playState !== 'running')
+    )
+    await page.getByRole('button', { name: 'Import your backup' }).click()
+    const dialog = page.locator('[role="dialog"][aria-labelledby="modal-title"]')
+    await page.locator('input[type="file"]').setInputFiles({
+      name: 'daylo-backup.json',
+      mimeType: 'application/json',
+      buffer: Buffer.from(
+        JSON.stringify({
+          activities: [
+            {
+              id: 'b1',
+              name: 'Swim',
+              color: '#3B82F6',
+              createdAt: '2026-01-01T00:00:00.000Z',
+              updatedAt: '2026-01-01T00:00:00.000Z',
+            },
+          ],
+          logs: [],
+        })
+      ),
+    })
+    await dialog.getByRole('button', { name: 'Import Data' }).click()
+    await page.getByRole('button', { name: 'Import', exact: true }).click()
+    await expect(dialog).toBeHidden()
+    await expect(page.locator(DOOR)).toHaveCount(0)
+
+    expect(await active(page)).toBe('year-title')
+  })
+})

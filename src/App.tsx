@@ -41,6 +41,7 @@ import {
   useViewCarousel,
 } from './hooks'
 import { TravelContext, useTravel } from './lib/travel'
+import { onScreen } from './lib/onScreen'
 import { UpdateDot } from './components/updates/UpdateDot'
 import { UpdateNotice } from './components/updates/UpdateNotice'
 import { HeaderStreak } from './components/streak/HeaderStreak'
@@ -156,32 +157,28 @@ function App() {
   // at all. See where they are rendered for why it is not simply whether it is open.
   const [exportAsked, setExportAsked] = useState(false)
   const [importAsked, setImportAsked] = useState(false)
-  // The month whose line opened Import, and the line itself, so focus has somewhere to go
-  // back to. Settings passes a click event, not a line, and keeps its own focus.
-  const importOpener = useRef<{ line: HTMLElement; month: Element | null } | null>(null)
-  // From Settings and from the empty month. One function for the life of the app, so
+  // The line that opened Import, so focus has somewhere to go back to. Settings passes a
+  // click event, not a line, and keeps its own focus.
+  const importOpener = useRef<HTMLElement | null>(null)
+  // From Settings and from the first day's door, in Month or in Year. One function for the life of the app, so
   // MonthView's memo holds.
   const openImport = useCallback((opener?: unknown) => {
-    importOpener.current =
-      opener instanceof HTMLElement
-        ? {
-            line: opener,
-            month: opener.closest('[data-testid="month-empty-state"]')?.parentElement ?? null,
-          }
-        : null
+    importOpener.current = opener instanceof HTMLElement ? opener : null
     setImportAsked(true)
     setIsImportOpen(true)
   }, [])
   // When Import closes, focus goes back to the line if it is still there. An import that
   // filled the calendar took the line away, and with it the focus, which fell to the page:
-  // the month's title was there before and is there after, so it goes there instead. A
+  // the title of the view on screen was there before and is there after, so it goes there
+  // instead: the month's, or the year's, which had none to go to. A
   // click that does not focus a button, as in Safari, needs the first half as much.
   useEffect(() => {
     const opener = importOpener.current
     if (isImportOpen || opener === null) return
     importOpener.current = null
-    const title = opener.month?.querySelector<HTMLElement>('[data-testid="month-title-button"]')
-    ;(opener.line.isConnected ? opener.line : title)?.focus()
+    // The title of whichever view is on screen: the month's button, or the year's heading.
+    const title = () => onScreen('[data-testid="month-title-button"], [data-testid="year-title"]')
+    ;(opener.isConnected ? opener : title())?.focus()
   }, [isImportOpen])
   const [isBottomSheetOpen, setIsBottomSheetOpen] = useState(false)
   // One surface for everything there is to decide, and one flag for it. Reminders first
@@ -767,6 +764,9 @@ function App() {
           <BottomSheet
             isOpen={isBottomSheetOpen}
             onClose={() => setIsBottomSheetOpen(false)}
+            // Deleting the last activity takes away the round button that opened it, and
+            // brings the door back: the one thing left to press.
+            fallbackFocus={() => onScreen('[data-testid="first-day-door"]')}
             aria-label="Activities and statistics"
           >
             <DayScope day={shownDay} className="space-y-6">

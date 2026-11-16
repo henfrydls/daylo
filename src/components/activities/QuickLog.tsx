@@ -2,6 +2,7 @@ import { useState, useRef, useEffect, useCallback, useMemo, memo } from 'react'
 import { useCalendarStore } from '../../store'
 import { formatDisplayDate, parseDateString } from '../../lib/dates'
 import { useToday } from '../../lib/today'
+import { onScreen } from '../../lib/onScreen'
 import { format } from 'date-fns'
 import { ACTIVITY_COLORS, firstFreeColor } from '../../lib/colors'
 import { Button, Checkbox, ColorPicker, PlusIcon, XIcon } from '../ui'
@@ -55,7 +56,12 @@ export const QuickLog = memo(function QuickLog() {
     setSelectedDate(null)
   }, [setSelectedDate])
 
-  useFocusTrap(modalRef, !!selectedDate, { onEscape: handleClose })
+  // The door that opens today's sheet on the first day is gone once the first activity is
+  // made there, and the Today bar is in its place: that is where the focus goes back to.
+  useFocusTrap(modalRef, !!selectedDate, {
+    onEscape: handleClose,
+    fallbackFocus: () => onScreen('[data-testid="log-today-bar"]'),
+  })
 
   const isOpen = !!selectedDate
   const { shouldRender, isVisible } = useAnimatedPresence(isOpen, 250)

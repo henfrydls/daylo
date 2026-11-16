@@ -6,6 +6,8 @@ interface BottomSheetProps {
   isOpen: boolean
   onClose: () => void
   children: ReactNode
+  /** Where the focus goes on closing when what opened the sheet has gone. */
+  fallbackFocus?: () => HTMLElement | null
   'aria-label'?: string
 }
 
@@ -45,6 +47,7 @@ export function BottomSheet({
   isOpen,
   onClose,
   children,
+  fallbackFocus,
   'aria-label': ariaLabel = 'Bottom sheet',
 }: BottomSheetProps) {
   const sheetRef = useRef<HTMLDivElement>(null)
@@ -56,7 +59,7 @@ export function BottomSheet({
   // had: shut faster than they land and the next opening had nowhere to come up from.
   const sheetVisible = useArrival(isVisible)
 
-  useFocusTrap(sheetRef, isOpen, { onEscape: onClose, autoFocus: false })
+  useFocusTrap(sheetRef, isOpen, { onEscape: onClose, autoFocus: false, fallbackFocus })
 
   // Drag state. The state is what is drawn; the refs are what the next event reads, which
   // it needs before React has rendered anything, and which the list's own listeners need

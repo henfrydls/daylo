@@ -198,7 +198,15 @@ export const YearView = memo(function YearView({ onImport }: YearViewProps) {
         {/* Year Navigation */}
         <div className="flex items-center justify-between mb-4">
           <div className="flex items-center gap-3">
-            <h1 className="text-2xl font-bold text-gray-900">{selectedYear}</h1>
+            {/* Focusable by script only: where the focus goes after an import from the
+                first day's door, which takes the door and its line away. */}
+            <h1
+              tabIndex={-1}
+              data-testid="year-title"
+              className="text-2xl font-bold text-gray-900 focus:outline-none"
+            >
+              {selectedYear}
+            </h1>
             <div className="flex items-center gap-1">
               <button
                 onClick={handlePrevYear}
@@ -326,7 +334,14 @@ export const YearView = memo(function YearView({ onImport }: YearViewProps) {
         data-testid="year-header"
       >
         <div className="flex items-center gap-4">
-          <h1 className="text-2xl font-bold text-gray-900 sm:text-3xl">{selectedYear}</h1>
+          {/* See the phone's heading above. */}
+          <h1
+            tabIndex={-1}
+            data-testid="year-title"
+            className="text-2xl font-bold text-gray-900 sm:text-3xl focus:outline-none"
+          >
+            {selectedYear}
+          </h1>
           <div className="flex items-center gap-1">
             <button
               onClick={handlePrevYear}
