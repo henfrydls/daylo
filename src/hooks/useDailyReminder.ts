@@ -81,6 +81,11 @@ export function useDailyReminder(): DailyReminder {
   const minute = useCalendarStore((s) => s.reminderMinute)
   const setReminder = useCalendarStore((s) => s.setReminder)
   const markChosen = useCalendarStore((s) => s.markReminderTimeChosen)
+  // Turning it on here answers the question the one-time offer asks, and so does turning
+  // it off. Marked, so that the offer is not made later to somebody who already decided:
+  // with only the switch to go by, it was owed again the moment the switch went off, by
+  // hand or because the phone took the permission away.
+  const markOffered = useCalendarStore((s) => s.markReminderOffered)
   const { showToast } = useToast()
   const [busy, setBusy] = useState(false)
   const [failure, setFailure] = useState<string | null>(null)
@@ -173,6 +178,7 @@ export function useDailyReminder(): DailyReminder {
       if (outcome === 'on') {
         setFailure(null)
         setReminder(true, nextHour, nextMinute)
+        markOffered()
         return true
       }
       if (outcome === 'permission-denied') {
@@ -244,6 +250,9 @@ export function useDailyReminder(): DailyReminder {
       await disableReminder()
       setFailure(null)
       setReminder(false, hour, minute)
+      // Already marked when it was turned on here, except on a copy that turned it on
+      // before that was kept.
+      markOffered()
     } finally {
       setBusy(false)
     }

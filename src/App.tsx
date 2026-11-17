@@ -199,11 +199,22 @@ function App() {
   // need this: the sheet counts itself in useOpenDialogs, which is what the offer reads.
   const [streakOpenOn, setStreakOpenOn] = useState<'sheet' | 'panel' | null>(null)
   const streakSheetOpen = streakOpenOn !== null
-  const streakOpenChange = useMemo(() => {
-    const on = (surface: 'sheet' | 'panel') => (open: boolean) =>
-      setStreakOpenOn((was) => (open ? surface : was === surface ? null : was))
-    return { sheet: on('sheet'), panel: on('panel') }
-  }, [])
+  const streakOpenChange = useMemo(
+    () => ({
+      sheet: (open: boolean) => setStreakOpenOn(open ? 'sheet' : null),
+      panel: (open: boolean) => setStreakOpenOn(open ? 'panel' : null),
+    }),
+    []
+  )
+  // Across 640px the surface that was open is in the row that is no longer drawn: a phone
+  // turned on its side, a window made narrower. It closes, rather than stay up unseen and
+  // go on counting as an open dialog. Set during the render, so no frame has it.
+  const streakWide = useMediaQuery('(min-width: 640px)')
+  const [streakWidth, setStreakWidth] = useState(streakWide)
+  if (streakWide !== streakWidth) {
+    setStreakWidth(streakWide)
+    setStreakOpenOn(null)
+  }
   const appVersion = useAppVersion()
   // Android only: nowhere else can a notification arrive with the app closed, so nowhere
   // else is there a setting to show.
