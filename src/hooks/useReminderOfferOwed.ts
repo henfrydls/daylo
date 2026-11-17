@@ -7,6 +7,7 @@ import { reminderOfferOwed } from '../lib/reminders'
  * back behind it from this, so the two read the same thing.
  */
 export function useReminderOfferOwed(available: boolean): boolean {
+  const enabled = useCalendarStore((s) => s.reminderEnabled)
   const offered = useCalendarStore((s) => s.reminderOffered)
   const activityCount = useCalendarStore((s) => s.activities.length)
   const lastTickDay = useCalendarStore((s) => s.reminderLastTickDay)
@@ -14,6 +15,7 @@ export function useReminderOfferOwed(available: boolean): boolean {
   const closedThisSession = useCalendarStore((s) => s._reminderOfferClosed)
   return reminderOfferOwed({
     available,
+    enabled,
     offered,
     activityCount,
     lastTickDay,

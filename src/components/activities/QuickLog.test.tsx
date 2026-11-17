@@ -1202,3 +1202,61 @@ describe("yesterday's sheet, while yesterday is still open", () => {
     expect(line()).not.toBeInTheDocument()
   })
 })
+
+/**
+ * Where the focus goes when the sheet closes and what opened it is gone. The Today bar
+ * first, the first day's door after it: in that order whatever their order on the page.
+ */
+describe('the focus when what opened the sheet is gone', () => {
+  // Read while the tests are collected, before any of them runs: some above replace it
+  // with a spy that does not close the sheet, and leave it there.
+  const setSelectedDate = useCalendarStore.getState().setSelectedDate
+
+  beforeEach(() => {
+    resetStore()
+    useCalendarStore.setState({ setSelectedDate })
+  })
+
+  function closeWithTheFocusInside() {
+    const cross = screen.getByRole('button', { name: 'Close quick log' })
+    cross.focus()
+    fireEvent.click(cross)
+  }
+
+  it('goes to the Today bar before the door, though the door comes first on the page', async () => {
+    render(
+      <>
+        <button type="button" data-testid="first-day-door">
+          Door
+        </button>
+        <button type="button" data-testid="log-today-bar">
+          Today
+        </button>
+        <QuickLog />
+      </>
+    )
+    act(() => useCalendarStore.setState({ selectedDate: formatDate(new Date()) }))
+    await screen.findByTestId('quicklog-modal')
+
+    closeWithTheFocusInside()
+
+    await waitFor(() => expect(screen.getByTestId('log-today-bar')).toHaveFocus())
+  })
+
+  it('goes to the door when there is no Today bar', async () => {
+    render(
+      <>
+        <button type="button" data-testid="first-day-door">
+          Door
+        </button>
+        <QuickLog />
+      </>
+    )
+    act(() => useCalendarStore.setState({ selectedDate: formatDate(new Date()) }))
+    await screen.findByTestId('quicklog-modal')
+
+    closeWithTheFocusInside()
+
+    await waitFor(() => expect(screen.getByTestId('first-day-door')).toHaveFocus())
+  })
+})

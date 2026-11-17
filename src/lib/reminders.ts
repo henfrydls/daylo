@@ -86,6 +86,8 @@ export const OFFERED_REMINDER_HOUR = 21
 /** What the offer's rule reads. */
 export interface ReminderOfferFacts {
   available: boolean
+  /** The reminder is on now, whatever turned it on. */
+  enabled: boolean
   offered: boolean
   activityCount: number
   lastTickDay: string | null
@@ -98,6 +100,9 @@ export interface ReminderOfferFacts {
  * rule, read by DailyReminder to open it and by App to hold the invitation to write back
  * behind it, so the two cannot disagree.
  *
+ * - Not on already. Turning it on or off in Settings marks the offer as answered, and so
+ *   does the phone turning it off (useDailyReminder, armAgain), so this is only for a copy
+ *   that turned it on in Settings before that mark was kept: while it is on, it is not asked.
  * - A habit. The first one is enough: the offer comes on the day it is made, once the
  *   sheet it was made in has closed (DailyReminder waits for that).
  * - Not answered: "Not now" and "Turn on" answer it, and so does a third close without
@@ -108,6 +113,7 @@ export interface ReminderOfferFacts {
  */
 export function reminderOfferOwed(facts: ReminderOfferFacts): boolean {
   if (!facts.available || facts.offered || facts.closedThisSession) return false
+  if (facts.enabled) return false
   if (facts.activityCount === 0) return false
   if (facts.dismissedOn === null) return true
   // YYYY-MM-DD compares as it reads.

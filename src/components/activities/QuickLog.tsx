@@ -58,9 +58,14 @@ export const QuickLog = memo(function QuickLog() {
 
   // The door that opens today's sheet on the first day is gone once the first activity is
   // made there, and the Today bar is in its place: that is where the focus goes back to.
+  // Closed with nothing made, the door is still there, but maybe not the one that was
+  // pressed: from Year it went into the hidden view on the way to Month, and the focus
+  // goes to the door on the month instead. Asked one after the other: one selector with
+  // both would take whichever comes first on the page, not the bar first.
   useFocusTrap(modalRef, !!selectedDate, {
     onEscape: handleClose,
-    fallbackFocus: () => onScreen('[data-testid="log-today-bar"]'),
+    fallbackFocus: () =>
+      onScreen('[data-testid="log-today-bar"]') ?? onScreen('[data-testid="first-day-door"]'),
   })
 
   const isOpen = !!selectedDate

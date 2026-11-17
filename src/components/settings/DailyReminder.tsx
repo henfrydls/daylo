@@ -40,7 +40,12 @@ import {
 function armAgain(hour: number, minute: number): void {
   void refreshReminder(hour, minute).then((stillOn) => {
     if (stillOn === false) {
-      useCalendarStore.getState().setReminder(false, hour, minute)
+      const { setReminder, markReminderOffered } = useCalendarStore.getState()
+      setReminder(false, hour, minute)
+      // It was on, so somebody decided. Marked already if they turned it on in Settings or
+      // through the offer; not on a copy that turned it on before that was kept, which
+      // would otherwise be asked again now that it is off.
+      markReminderOffered()
       void disableReminder().catch(() => {})
     }
   })
