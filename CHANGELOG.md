@@ -106,9 +106,10 @@ check-in works as before: on for new installations, off if you updated from a ve
 without it. You can see what it sends, and turn it on or off, in Settings, under Anonymous
 check-in.
 
-**Daylo no longer offers the daily reminder when it is already on.**
-If you turned the reminder on in Settings before Daylo got round to offering it, the offer no
-longer asks you about something you have already done.
+**Daylo no longer offers the daily reminder to someone who has already turned it on.**
+If you turned the reminder on in Settings, the offer could still ask you about it, and it
+could ask again after you turned the reminder off. Now turning it on or off in Settings
+counts as your answer, and you are not asked.
 
 ## 1.5.5
 

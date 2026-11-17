@@ -1,9 +1,9 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { act, render, screen, waitFor } from '@testing-library/react'
+import { act, render, renderHook, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { DailyReminder } from './DailyReminder'
 import { useCalendarStore } from '../../store'
-import { useOpenDialogs } from '../../hooks'
+import { useDailyReminder, useOpenDialogs } from '../../hooks'
 import { Modal } from '../ui'
 import type { Activity, ActivityLog } from '../../types'
 import { formatDate } from '../../lib/dates'
@@ -312,6 +312,128 @@ describe('the one-time offer', () => {
     render(<DailyReminder canAsk />)
 
     await settle()
+    noOffer()
+  })
+})
+
+/**
+ * Somebody who decided in Settings has answered the question the offer asks. Turning the
+ * reminder off afterwards, by hand or because the phone took the permission away, does not
+ * make it a question again.
+ */
+describe('the offer, after the reminder was decided in Settings', () => {
+  /** A habit, nothing ticked yet in this session, and nothing open. */
+  function readyToTick() {
+    tickedOnAndroid()
+    useCalendarStore.setState({ _tickedThisSession: false })
+  }
+
+  /** The tick that would open the offer, if it were owed. */
+  async function tick() {
+    act(() => useCalendarStore.getState().toggleLog('a', '2026-10-10'))
+    await settle()
+  }
+
+  it('is not made after the switch was turned on and then off again', async () => {
+    readyToTick()
+    enableReminder.mockResolvedValue({ outcome: 'on' })
+    const { result } = renderHook(() => useDailyReminder())
+    await act(async () => {
+      await result.current.turnOn(21, 0)
+    })
+    await act(async () => {
+      await result.current.turnOff()
+    })
+    expect(useCalendarStore.getState().reminderEnabled).toBe(false)
+
+    render(<DailyReminder canAsk />)
+    await settle()
+    await tick()
+
+    noOffer()
+  })
+
+  it('is not made after the switch was turned on and the phone then turned it off', async () => {
+    readyToTick()
+    enableReminder.mockResolvedValue({ outcome: 'on' })
+    const { result } = renderHook(() => useDailyReminder())
+    await act(async () => {
+      await result.current.turnOn(21, 0)
+    })
+    // Opening the app arms it again, and the permission is gone.
+    refreshReminder.mockResolvedValue(false)
+
+    render(<DailyReminder canAsk />)
+    await waitFor(() => expect(useCalendarStore.getState().reminderEnabled).toBe(false))
+    await tick()
+
+    noOffer()
+  })
+
+  // The one way off that is neither the switch nor the phone at start: a new time the
+  // phone refuses to schedule. Only the mark made when it was turned on covers it.
+  it('is not made after it was turned on and a new time was refused', async () => {
+    readyToTick()
+    enableReminder.mockResolvedValue({ outcome: 'on' })
+    const { result } = renderHook(() => useDailyReminder())
+    await act(async () => {
+      await result.current.turnOn(21, 0)
+    })
+    enableReminder.mockResolvedValue({ outcome: 'failed', reason: 'no' })
+    await act(async () => {
+      result.current.changeTime(20, 0)
+    })
+    await waitFor(() => expect(useCalendarStore.getState().reminderEnabled).toBe(false))
+
+    render(<DailyReminder canAsk />)
+    await settle()
+    await tick()
+
+    noOffer()
+  })
+
+  it('is still made after the switch failed to turn on', async () => {
+    readyToTick()
+    enableReminder.mockResolvedValue({ outcome: 'failed', reason: 'no' })
+    const { result } = renderHook(() => useDailyReminder())
+    await act(async () => {
+      await result.current.turnOn(21, 0)
+    })
+
+    render(<DailyReminder canAsk />)
+    await settle()
+    await tick()
+
+    expect(await theOffer()).toBeInTheDocument()
+  })
+
+  // A copy that turned it on in Settings before this was kept has never been marked.
+  // While it is on, the rule itself holds the offer back; these are the two ways it goes
+  // off.
+  it('is not made on a copy that had it on from before, once it is turned off', async () => {
+    readyToTick()
+    useCalendarStore.setState({ reminderEnabled: true })
+    const { result } = renderHook(() => useDailyReminder())
+    await act(async () => {
+      await result.current.turnOff()
+    })
+
+    render(<DailyReminder canAsk />)
+    await settle()
+    await tick()
+
+    noOffer()
+  })
+
+  it('is not made on a copy that had it on from before, once the phone turns it off', async () => {
+    readyToTick()
+    useCalendarStore.setState({ reminderEnabled: true })
+    refreshReminder.mockResolvedValue(false)
+
+    render(<DailyReminder canAsk />)
+    await waitFor(() => expect(useCalendarStore.getState().reminderEnabled).toBe(false))
+    await tick()
+
     noOffer()
   })
 })

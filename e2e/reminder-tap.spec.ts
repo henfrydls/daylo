@@ -187,3 +187,39 @@ test.describe('a tap on the reminder with the streak panel open, on a tablet', (
     await expect(page.locator(CHIP)).toHaveAttribute('aria-expanded', 'false')
   })
 })
+
+/**
+ * The streak across 640px: a phone turned on its side, or a window made narrower. Each
+ * width has its own surface and the other is in a row that is not drawn, so whatever was
+ * open closes rather than stay up where nobody can see it, counted as an open dialog that
+ * holds back the reminder's offer and the feedback question.
+ */
+test.describe('the streak when the width crosses 640px', () => {
+  test.use({ hasTouch: true })
+
+  test('the panel closes when the screen gets narrow', async ({ page }) => {
+    await page.setViewportSize({ width: 915, height: 412 })
+    await asTheAndroidApp(page)
+    await page.locator(CHIP).click()
+    await expect(page.getByTestId('streak-panel')).toBeVisible()
+
+    await page.setViewportSize({ width: 412, height: 915 })
+
+    await expect(page.getByTestId('streak-panel')).toHaveCount(0)
+    await expect(page.getByTestId('streak-sheet')).toHaveCount(0)
+    await expect(page.locator(CHIP)).toHaveAttribute('aria-expanded', 'false')
+  })
+
+  test('the sheet closes when the screen gets wide', async ({ page }) => {
+    await page.setViewportSize({ width: 412, height: 915 })
+    await asTheAndroidApp(page)
+    await page.locator(CHIP).click()
+    await expect(page.getByTestId('streak-sheet')).toBeVisible()
+
+    await page.setViewportSize({ width: 915, height: 412 })
+
+    await expect(page.getByTestId('streak-sheet')).toHaveCount(0)
+    await expect(page.getByTestId('streak-panel')).toHaveCount(0)
+    await expect(page.locator(CHIP)).toHaveAttribute('aria-expanded', 'false')
+  })
+})
