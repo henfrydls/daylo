@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState, type FocusEvent } from 'react'
+import { useCallback, useEffect, useRef, type FocusEvent } from 'react'
 import { Modal } from '../ui'
 import { StreakChip } from './StreakChip'
 import { StreakDetails, StreakPanel, type StreakDetailsProps } from './StreakSheet'
@@ -11,10 +11,15 @@ interface HeaderStreakProps extends StreakDetailsProps {
    */
   surface: 'sheet' | 'panel'
   /**
-   * Told when the sheet opens and closes. App holds the feedback question back while it
-   * is open, the way it holds it back while the day sheet is.
+   * Whether it is open. Held by App and not here, so that App can close it: a tap on the
+   * daily reminder opens today's sheet, and this one sits above it (#270).
    */
-  onOpenChange?: (open: boolean) => void
+  open: boolean
+  /**
+   * Asked to open or close it: the chip, Escape, a press outside, the run going. App also
+   * holds the feedback question back while it is open, the way it does for the day sheet.
+   */
+  onOpenChange: (open: boolean) => void
 }
 
 /**
@@ -23,23 +28,30 @@ interface HeaderStreakProps extends StreakDetailsProps {
  * Nothing at all with no run, wrapper included: an empty box in the header row would still
  * take its share of the gap beside the gear.
  */
-export function HeaderStreak({ surface, onOpenChange, ...details }: HeaderStreakProps) {
-  const [open, setOpen] = useState(false)
+export function HeaderStreak({
+  surface,
+  open: asked,
+  onOpenChange,
+  ...details
+}: HeaderStreakProps) {
   const chipRef = useRef<HTMLButtonElement>(null)
 
   // Untick the one day there was and the run goes, and the sheet with it: there is nothing
-  // left to show, and the chip it would give the focus back to is gone too. Set during the
-  // render rather than in an effect, so no frame shows a sheet about a run of nothing.
-  if (details.streak === 0 && open) setOpen(false)
-
+  // left to show, and the chip it would give the focus back to is gone too. Read as closed
+  // in this very render, so no frame shows a sheet about a run of nothing; and whoever
+  // holds it is told, so it does not come back by itself with the next run.
+  const open = asked && details.streak > 0
   useEffect(() => {
-    onOpenChange?.(open)
-  }, [open, onOpenChange])
+    if (asked && details.streak === 0) onOpenChange(false)
+  }, [asked, details.streak, onOpenChange])
 
-  const close = useCallback((giveFocusBack = true) => {
-    setOpen(false)
-    if (giveFocusBack) chipRef.current?.focus()
-  }, [])
+  const close = useCallback(
+    (giveFocusBack = true) => {
+      onOpenChange(false)
+      if (giveFocusBack) chipRef.current?.focus()
+    },
+    [onOpenChange]
+  )
   const closeSheet = useCallback(() => close(true), [close])
 
   // The panel goes when the focus leaves for something outside it: tabbing on to the gear
@@ -58,7 +70,7 @@ export function HeaderStreak({ surface, onOpenChange, ...details }: HeaderStreak
         ref={chipRef}
         streak={details.streak}
         todayDone={details.todayDone}
-        onOpen={() => setOpen((was) => !was)}
+        onOpen={() => onOpenChange(!open)}
         expanded={open}
       />
       {surface === 'panel' && open ? <StreakPanel {...details} onClose={close} /> : null}

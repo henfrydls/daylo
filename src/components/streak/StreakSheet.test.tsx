@@ -1,3 +1,4 @@
+import { useCallback, useState } from 'react'
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen, fireEvent, waitFor, within, act } from '@testing-library/react'
 import { HeaderStreak } from './HeaderStreak'
@@ -134,6 +135,10 @@ describe('what the streak sheet says', () => {
   })
 })
 
+/**
+ * The header as App has it: the open state is held above the chip, so something else (a
+ * tap on the daily reminder) can close what the chip opened.
+ */
 function Header({
   surface,
   streak = 4,
@@ -143,9 +148,22 @@ function Header({
   streak?: number
   onOpenChange?: (open: boolean) => void
 }) {
+  const [open, setOpen] = useState(false)
+  const change = useCallback(
+    (next: boolean) => {
+      setOpen(next)
+      onOpenChange?.(next)
+    },
+    [onOpenChange]
+  )
   return (
     <div>
       <button type="button">Somewhere else</button>
+      {/* Closes it the way App does when the reminder is tapped: from outside, with no
+          press or key on the page. */}
+      <button type="button" onClick={() => change(false)}>
+        Close from outside
+      </button>
       <HeaderStreak
         surface={surface}
         streak={streak}
@@ -153,7 +171,8 @@ function Header({
         todayDone={false}
         done={run(streak, 13)}
         now={NOW}
-        onOpenChange={onOpenChange}
+        open={open}
+        onOpenChange={change}
       />
     </div>
   )
@@ -197,6 +216,20 @@ describe('the streak sheet on a phone', () => {
 
     await waitFor(() => expect(screen.queryByTestId('streak-sheet')).not.toBeInTheDocument())
     expect(chip).toHaveFocus()
+  })
+
+  // A tap on the daily reminder opens today's sheet, and this one must not stay up over it.
+  it('goes when whoever holds it closes it', async () => {
+    render(<Header surface="sheet" />)
+    const chip = screen.getByTestId('streak-chip')
+    fireEvent.click(chip)
+    expect(screen.getByTestId('streak-sheet')).toBeInTheDocument()
+
+    fireEvent.click(screen.getByText('Close from outside'))
+
+    expect(chip).toHaveAttribute('aria-expanded', 'false')
+    expect(useOpenDialogs.getState().open).toBe(0)
+    await waitFor(() => expect(screen.queryByTestId('streak-sheet')).not.toBeInTheDocument())
   })
 
   // So the reminder's offer does not open over it.
@@ -270,6 +303,19 @@ describe('the streak panel on a wide screen', () => {
     act(() => screen.getByText('Somewhere else').focus())
 
     expect(screen.queryByTestId('streak-panel')).not.toBeInTheDocument()
+  })
+
+  it('goes when whoever holds it closes it', () => {
+    render(<Header surface="panel" />)
+    const chip = screen.getByTestId('streak-chip')
+    fireEvent.click(chip)
+    expect(screen.getByTestId('streak-panel')).toBeInTheDocument()
+
+    fireEvent.click(screen.getByText('Close from outside'))
+
+    expect(screen.queryByTestId('streak-panel')).not.toBeInTheDocument()
+    expect(chip).toHaveAttribute('aria-expanded', 'false')
+    expect(useOpenDialogs.getState().open).toBe(0)
   })
 
   it('goes when the chip is pressed again', () => {

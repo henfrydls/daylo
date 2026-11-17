@@ -438,6 +438,7 @@ describe('a re-arm overtaken on its way', () => {
 describe('whether the offer is owed', () => {
   const owed = {
     available: true,
+    enabled: false,
     offered: false,
     activityCount: 1,
     lastTickDay: '2026-10-09',
@@ -452,6 +453,11 @@ describe('whether the offer is owed', () => {
 
   it('is not owed where reminders do not exist', () => {
     expect(reminderOfferOwed({ ...owed, available: false })).toBe(false)
+  })
+
+  // Somebody who turned it on in Settings before the offer came has nothing to be offered.
+  it('is not owed while the reminder is already on', () => {
+    expect(reminderOfferOwed({ ...owed, enabled: true })).toBe(false)
   })
 
   it('is not owed without a habit', () => {

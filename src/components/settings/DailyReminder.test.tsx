@@ -135,6 +135,17 @@ describe('the one-time offer', () => {
     noOffer()
   })
 
+  // Turned on in Settings before the offer came: there is nothing left to offer.
+  it('is not made while the reminder is already on', async () => {
+    tickedOnAndroid()
+    useCalendarStore.setState({ reminderEnabled: true })
+
+    render(<DailyReminder canAsk />)
+
+    await settle()
+    noOffer()
+  })
+
   // Asking before there is a habit to be reminded about is asking about nothing.
   it('is not made before the first habit exists', async () => {
     tickedOnAndroid()

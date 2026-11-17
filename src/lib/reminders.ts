@@ -86,6 +86,8 @@ export const OFFERED_REMINDER_HOUR = 21
 /** What the offer's rule reads. */
 export interface ReminderOfferFacts {
   available: boolean
+  /** The reminder is already on: turned on in Settings before the offer came. */
+  enabled: boolean
   offered: boolean
   activityCount: number
   lastTickDay: string | null
@@ -98,6 +100,7 @@ export interface ReminderOfferFacts {
  * rule, read by DailyReminder to open it and by App to hold the invitation to write back
  * behind it, so the two cannot disagree.
  *
+ * - Not on already. Somebody who turned it on in Settings has nothing left to be offered.
  * - A habit. The first one is enough: the offer comes on the day it is made, once the
  *   sheet it was made in has closed (DailyReminder waits for that).
  * - Not answered: "Not now" and "Turn on" answer it, and so does a third close without
@@ -108,6 +111,7 @@ export interface ReminderOfferFacts {
  */
 export function reminderOfferOwed(facts: ReminderOfferFacts): boolean {
   if (!facts.available || facts.offered || facts.closedThisSession) return false
+  if (facts.enabled) return false
   if (facts.activityCount === 0) return false
   if (facts.dismissedOn === null) return true
   // YYYY-MM-DD compares as it reads.

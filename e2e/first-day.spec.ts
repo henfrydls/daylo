@@ -192,6 +192,27 @@ test.describe('the focus after the first day changes the page', () => {
     })
   }
 
+  // The same way in, and out again without making anything: there is no Today bar to go
+  // to, and the door on the month is what is there in its place.
+  for (const close of ['Escape', 'cross'] as const) {
+    test(`at 360 from the door in Year, closing the sheet with nothing made gives the focus to the door (${close})`, async ({
+      page,
+    }) => {
+      await page.setViewportSize({ width: 360, height: 800 })
+      await page.goto('/')
+      await page.getByRole('button', { name: 'Year', exact: true }).click()
+      await settle(page)
+      await page.locator(DOOR).click()
+      await expect(page.getByTestId('quicklog-new-activity-input')).toBeFocused()
+
+      if (close === 'Escape') await page.keyboard.press('Escape')
+      else await page.getByRole('button', { name: 'Close quick log' }).click()
+      await expect(page.locator(SHEET)).toHaveCount(0)
+
+      expect(await active(page)).toBe('first-day-door')
+    })
+  }
+
   test('closing the panel after deleting the last activity gives the focus to the door', async ({
     page,
   }) => {

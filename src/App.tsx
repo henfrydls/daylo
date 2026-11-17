@@ -191,10 +191,19 @@ function App() {
   // dialog does.
   const [askedFromMenu, setAskedFromMenu] = useState(false)
   const [questionClosed, setQuestionClosed] = useState(false)
-  // Whether the streak sheet (or its panel, on a wide screen) is up. The feedback question
-  // waits for it the way it waits for the day sheet. The reminder's offer does not need
-  // this: the sheet counts itself in useOpenDialogs, which is what the offer reads.
-  const [streakSheetOpen, setStreakSheetOpen] = useState(false)
+  // Which of the header's two streak surfaces is up, if either: the sheet on a phone, or
+  // the panel from 640px up. Held here and not in HeaderStreak so that a tap on the daily
+  // reminder can close it (#270). One value for both, each told only about its own, because
+  // the header mounts both and the hidden one must not open with the other. The feedback
+  // question waits for it the way it waits for the day sheet. The reminder's offer does not
+  // need this: the sheet counts itself in useOpenDialogs, which is what the offer reads.
+  const [streakOpenOn, setStreakOpenOn] = useState<'sheet' | 'panel' | null>(null)
+  const streakSheetOpen = streakOpenOn !== null
+  const streakOpenChange = useMemo(() => {
+    const on = (surface: 'sheet' | 'panel') => (open: boolean) =>
+      setStreakOpenOn((was) => (open ? surface : was === surface ? null : was))
+    return { sheet: on('sheet'), panel: on('panel') }
+  }, [])
   const appVersion = useAppVersion()
   // Android only: nowhere else can a notification arrive with the app closed, so nowhere
   // else is there a setting to show.
@@ -277,12 +286,17 @@ function App() {
     /* eslint-enable react-hooks/set-state-in-effect */
   }, [today, shownDay])
 
-  // A tap on the daily reminder opens today's sheet, over anything else App has open: the
-  // notification asks how today went, and the sheet is where that is answered (#192).
+  // A tap on the daily reminder opens today's sheet: the notification asks how today went,
+  // and the sheet is where that is answered (#192). What App has open above the calendar
+  // goes first, so the sheet is on top and the first back or Escape closes it and not
+  // something hiding it (#270): Settings, the activities panel, the streak sheet or panel.
+  // Not Export and Import, nor the activity form or the delete confirmation the sidebar
+  // opens: those hold something typed or a decision half made, and stay where they are.
+  // (On a phone the form and the confirmation live in the activities panel, which goes.)
   const clearTheWayForToday = useCallback(() => {
     setSettings('closed')
     setIsBottomSheetOpen(false)
-    setStreakSheetOpen(false)
+    setStreakOpenOn(null)
   }, [])
   useReminderOpensToday(shownDay, hasHydrated, clearTheWayForToday)
 
@@ -585,7 +599,8 @@ function App() {
                       <HeaderStreak
                         {...streakFacts}
                         surface="sheet"
-                        onOpenChange={setStreakSheetOpen}
+                        open={streakOpenOn === 'sheet'}
+                        onOpenChange={streakOpenChange.sheet}
                       />
                       {/* Menu button visible on mobile next to title */}
                       {headerControl('p-2.5')}
@@ -601,7 +616,8 @@ function App() {
                       <HeaderStreak
                         {...streakFacts}
                         surface="panel"
-                        onOpenChange={setStreakSheetOpen}
+                        open={streakOpenOn === 'panel'}
+                        onOpenChange={streakOpenChange.panel}
                       />
                       {/* Menu button hidden on mobile, visible on larger screens */}
                       {headerControl('p-2')}
