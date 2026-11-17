@@ -10,7 +10,7 @@
   </developer>
   <description>
     <p>Daylo is a habit tracker with a calendar you can read at a glance. Tick off what you did today and the year fills in with color, so you can see a streak forming or a month you let slip without reading a single number.</p>
-    <p>Your data stays on your device. Daylo has no account, and no server stores your habits or the days you marked. One thing leaves your device unless you turn it off: an anonymous daily check-in that tells us the app is still in use. It carries a random number, the app version, your system, how it was installed, whether you have started a habit, and the date, and nothing else. It is on from the start in a new installation, and you can turn it off at any time from the menu, under Anonymous check-in. You can export a backup whenever you want and import it on another machine.</p>
+    <p>Your data stays on your device. Daylo has no account, and no server stores your habits or the days you marked. One thing leaves your device unless you turn it off: an anonymous daily check-in that tells us the app is still in use. It carries a random number, the app version, your system, how it was installed, whether you have started a habit, and the date, and nothing else. It is on from the start in a new installation, and you can turn it off at any time in Settings, under Anonymous check-in. You can export a backup whenever you want and import it on another machine.</p>
     <ul>
       <li>Year view: the whole year as one strip of days, or one strip per habit</li>
       <li>Month view: a dot per habit on each day, one tap to mark it</li>
@@ -39,6 +39,12 @@
   </branding>
   <content_rating type="oars-1.1" />
   <releases>
+    <release version="1.6.0" date="2026-11-17">
+      <url>https://github.com/henfrydls/daylo/releases/tag/v1.6.0</url>
+      <description>
+        <p>Your run of days is now at the top of the screen, with a small flame that fills once you log today, and one tap opens a short summary: the run you are on, the longest you have had, and the last 14 days. The Today bar is there at every window size, not only on a phone. The morning after you miss a day, a row says that yesterday can still be saved and how many days in a row logging it will make. Today's circle is a dashed outline until you log something. Adding a habit no longer fades the days you already finished, and the month view shows the end of the month before when the 1st falls on a Sunday. A new installation starts with "Add your first activity" at the top. The anonymous check-in now also says, as a yes or a no, whether you have started a habit, and there is no longer a line about it on the first screen. If Daylo cannot read what it saved, it shows the screen that lets you keep a copy instead of starting empty on top of it.</p>
+      </description>
+    </release>
     <release version="1.4.2" date="2026-10-12">
       <url>https://github.com/henfrydls/daylo/releases/tag/v1.4.2</url>
       <description>

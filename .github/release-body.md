@@ -12,7 +12,7 @@ The list below also has files ending in `.sig` and `.app.tar.gz`. Those are for 
 
 ### First time opening Daylo
 
-Daylo is not yet registered with Apple, Microsoft or Google, so each system shows a warning the first time. It is the same warning any small independent app gets. Here is how to get past it once:
+These files are not yet registered with Apple, Microsoft or Google, so each system shows a warning the first time. It is the same warning any small independent app gets. Here is how to get past it once:
 
 **Windows.** If SmartScreen says "Windows protected your PC", click **More info**, then **Run anyway**.
 
@@ -22,4 +22,4 @@ Daylo is not yet registered with Apple, Microsoft or Google, so each system show
 
 **Linux.** The `.deb` installs with your package manager. The AppImage needs to be made executable first (right-click → Properties → allow executing, or `chmod +x`).
 
-Your data stays on your device. Daylo has no account, and no server stores your habits or the days you marked. One thing leaves your device unless you turn it off: an anonymous daily check-in that tells us the app is still in use. It carries a random number, the app version, your system, how it was installed, whether you have started a habit, and the date, and nothing else. It is on from the start in a new installation, and you can turn it off at any time from the menu, under Anonymous check-in.
+Your data stays on your device. Daylo has no account, and no server stores your habits or the days you marked. One thing leaves your device unless you turn it off: an anonymous daily check-in that tells us the app is still in use. It carries a random number, the app version, your system, how it was installed, whether you have started a habit, and the date, and nothing else. It is on from the start in a new installation, and you can turn it off at any time in Settings, under Anonymous check-in.

@@ -3,6 +3,114 @@
 What changed in each release, for the people who use Daylo. Earlier versions are not
 listed: this file starts at 1.1.2, when the first change worth warning about arrived.
 
+## 1.6.0
+
+**The month view now shows the end of the month before when the 1st falls on a Sunday.**
+Those months used to start flat against the edge of the grid, so on the 2nd almost
+everything you had done was on the previous screen. If you had turned up four days running,
+the calendar you opened looked empty.
+
+**Adding a habit no longer fades the days you already finished.** A day was shaded by how
+many of your habits you had done that day, counted against the habits you have now, so
+creating a new one turned the months behind you paler even though nothing about them had
+changed. Each day is now read against the habits that existed when you lived it.
+
+**Your run of days is now at the top of the screen, at every window size.** It says how
+many days in a row you have logged something, and a small flame says whether today is
+already one of them: hollow until you log something today, filled once you do. If you have
+no run going, there is nothing there.
+
+**Today's circle now shows whether you have logged today.** It used to be filled green from
+the moment the day started, so the one bright thing on the calendar said you had done
+something when you had not. Now it is a dashed outline until you log anything, and filled
+once you do.
+
+**Statistics now shows three figures: Active Days, This Month and Longest Streak.** Your
+current streak is no longer repeated there, or in the line under the year on a phone, and
+Longest Streak takes the full width of the panel.
+
+**On Android, tapping the daily reminder opens today, ready to log.**
+It used to open Daylo wherever you had left it, so you still had to find today and tap it.
+Now the tap opens today's list, whether Daylo was still open in the background or not, and
+puts it in front of Settings or the summary of your run, if either was open.
+
+**The reminder no longer asks on a day you already logged.**
+If you log before its time, it waits until tomorrow. Take back the day's last tick and it
+comes back for today, if its time has not passed yet. It still comes every day you do not
+open Daylo.
+
+**A no to notifications is no longer a dead end.**
+Android stops asking after you say no twice. The reminder's switch now says notifications
+are off for Daylo and takes you to the phone's notification settings. Allow them there,
+come back, and the reminder is on, without restarting Daylo. In the phone's settings, the
+reminder now shows as "Daily reminder" instead of "Default".
+
+**Daylo no longer closes by itself right after opening on slower Android phones.** When
+the phone was busy while Daylo started, the app could shut about ten seconds later, before
+you could do anything. Now it opens as usual, however long the phone takes.
+
+**If Daylo cannot make sense of what it saved, it no longer starts empty on top of it.** A
+saved file in a shape Daylo did not expect used to open as a brand new app, and that empty
+app was saved over your days straight away. Now it shows the screen that lets you keep a
+copy of that file instead, and leaves the file as it was.
+
+**The anonymous check-in now also says whether you have started a habit.** It is only a
+yes or a no: never how many habits you have, or what they are. Settings lists everything
+the check-in sends under What gets sent, and you can turn it off there at any time.
+
+**On Android 15, the buttons at the bottom are no longer under the navigation bar.**
+With the three navigation buttons, the bar covered the green button, the day's Done, and
+the buttons of messages and questions, and the clock and battery sat over the top of the
+screen. Everything now stays clear of both bars, with buttons or with gestures.
+
+**In the Year view, Today takes you to today.**
+It used to only move to this year, so on this year it did nothing. Now it always opens the
+month with today in it, where today can be logged.
+
+**Tap your run of days at the top of the screen to see more about it.** It opens a short
+summary: your run right now, the longest you have ever had, and which of the last 14 days
+you logged something on. When the run you are on is your longest, it says so.
+
+**The Today bar is now there at every window size.**
+It used to show only on a phone. On a window between a phone and a full desktop, which is
+where Daylo opens on many computers, nothing on screen said where to log today. Now the
+bar sits above the calendar at every width, one tap from today.
+
+**The morning after you miss a day, Daylo tells you that yesterday can still be saved.**
+When a run of three days or more stopped yesterday, a row joins Today above the calendar:
+"Yesterday is still open", with the number of days in a row that logging it will make.
+Tapping it opens yesterday, which says the same, and once you tick something it shows the
+run you kept. The row goes away by itself once yesterday is logged, or the next day.
+On the calendar, yesterday gets a thin grey dashed outline, lighter than today's, so the
+two are not mistaken for each other. On any other morning nothing changes.
+
+**Your first day now starts at the top of the screen.** With no activities yet, the Today
+bar says "Add your first activity", and tapping it opens today with the name field ready.
+The activity you add is marked for that day, and the sheet tells you once that today is
+in. The next morning the bar says what logging today will make: two days in a row. Before,
+the only hint was a grey line under the calendar, and most ways in left today empty with
+four zeros underneath. The Today square is now dashed until you log something and filled
+once you have, the same as the calendar, and the round button on phones waits until there
+is an activity to manage.
+
+**On Android, Daylo offers the daily reminder for nine in the evening, once your first day is in.**
+It still asks on the day you add your first activity, but only after you close that day, not
+over it while you are still logging, and it suggests nine in the evening instead of the next
+hour. Closing it without answering no longer counts as a no: it asks again on a later day,
+after you log something, and after the third time it stops. "Not now" still means no.
+
+**Daylo no longer puts a line about the anonymous check-in at the top of the screen.** It
+used to appear once on each installation: the first time a new installation opened, or
+the first time after updating from a version that did not have the check-in yet. The
+check-in works as before: on for new installations, off if you updated from a version
+without it. You can see what it sends, and turn it on or off, in Settings, under Anonymous
+check-in.
+
+**Daylo no longer offers the daily reminder to someone who has already turned it on.**
+If you turned the reminder on in Settings, the offer could still ask you about it, and it
+could ask again after you turned the reminder off. Now turning it on or off in Settings
+counts as your answer, and you are not asked.
+
 ## 1.5.5
 
 **Daylo from Google Play installs as an app of its own.** It is the same Daylo, but it does not update the copy you got from the website, and that copy does not update it. Daylo from the website keeps updating as before. To move your days from one to the other, use Export, then Import.
