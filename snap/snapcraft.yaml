@@ -18,7 +18,7 @@ summary: See your whole year at a glance
 description: |
   Daylo is a habit tracker with a calendar you can read at a glance. Tick off what you did today and the year fills in with colour, so you can see a streak forming or a month you let slip without reading a single number.
 
-  Your data stays on your device. Daylo has no account, and no server stores your habits or the days you marked. One thing leaves your device unless you turn it off: an anonymous daily check-in that tells us the app is still in use. It carries a random number, the app version, your system, how it was installed, whether you have started a habit, and the date, and nothing else. The app tells you the first time it opens, and you can turn it off from Settings at any time. You can export a backup whenever you want and import it on another machine.
+  Your data stays on your device. Daylo has no account, and no server stores your habits or the days you marked. One thing leaves your device unless you turn it off: an anonymous daily check-in that tells us the app is still in use. It carries a random number, the app version, your system, how it was installed, whether you have started a habit, and the date, and nothing else. It is on from the start in a new installation, and you can turn it off at any time from the menu, under Anonymous check-in. You can export a backup whenever you want and import it on another machine.
 
   Moving from the .deb or the AppImage? The snap keeps its data in a place of its own, so it opens empty at first. Use Export Data in the copy you had, then Import Data here.
 

@@ -323,8 +323,6 @@ interface CalendarState {
    * anybody updating from a version that promised the app sent nothing.
    */
   checkinEnabled: boolean
-  /** Whether the one-line notice about the check-in has been shown. Once per install. */
-  checkinNoticeSeen: boolean
   /**
    * The random number this installation uses, made here and tied to nothing. It exists
    * only while the check-in is on: turning it off deletes it, and turning it on again
@@ -357,10 +355,10 @@ interface CalendarState {
    */
   _openTodayAsked: boolean
   /**
-   * Which of the one-time offers has already been made in this session, if any.
-   * Not persisted. Several things want the same moment and none may talk over another.
+   * Whether the one-time reminder offer has been made in this session. Not persisted. The
+   * invitation to write wants the same moment and stands down once this is taken.
    */
-  _offerThisSession: 'reminder' | 'checkin' | null
+  _offerThisSession: 'reminder' | null
   /**
    * What the stored state says about the check-in, decided once while hydrating and not
    * persisted:
@@ -370,21 +368,15 @@ interface CalendarState {
    *   'decided'  something was stored and it carries a decision to respect
    *
    * The difference matters because the default is not the same for everybody. A new
-   * installation starts with the check-in on and is told so. Somebody updating installed
-   * Daylo under "it sends nothing anywhere", and that promise is not withdrawn behind
-   * their back: they stay off and are invited instead.
+   * installation starts with the check-in on. Somebody updating installed Daylo under "it
+   * sends nothing anywhere", and that promise is not withdrawn behind their back: they
+   * stay off. Either way the switch, and what it sends, are in the menu.
    */
   _checkinStart: 'new' | 'update' | 'decided'
   /**
-   * Whether the check-in notice has been shown in this session. Not persisted, and it
-   * exists because showing the line is what marks it seen: without this, the condition
-   * that put it there would answer no a moment later and take it off the screen.
-   */
-  _checkinNoticeShown: boolean
-  /**
-   * Whether the question has been put in this session. Not persisted, and it is here for
-   * the same reason as the flag above: putting the question is what spends it, so the
-   * condition that opened it answers no a moment later and would close it again.
+   * Whether the question has been put in this session. Not persisted, and it is here
+   * because putting the question is what spends it, so the condition that opened it
+   * answers no a moment later and would close it again.
    */
   _feedbackAsked: boolean
   /**
@@ -392,8 +384,8 @@ interface CalendarState {
    * version rather than as a flag: the card is put once per release, so dismissing 1.5.0
    * must not also dismiss 1.5.1.
    *
-   * Showing it is what spends it, the way the check-in's line works. The X means "later",
-   * and later is the dot on the menu, not the card coming back.
+   * Showing it is what spends it. The X means "later", and later is the dot on the menu,
+   * not the card coming back.
    */
   updateNoticeSeenFor: string | null
   /**
@@ -451,13 +443,12 @@ interface CalendarState {
   markUpdateNoticeSeen: (version: string) => void
   setUpdatesEnabled: (enabled: boolean) => void
   /** Takes this session's offer slot, if nobody has taken it. */
-  claimOffer: (kind: 'reminder' | 'checkin') => void
+  claimOffer: (kind: 'reminder') => void
 
   // Check-in
   /** The switch and the number together, because they are one fact. */
   setCheckin: (enabled: boolean, id: string | null) => void
   recordCheckinAttempt: (date: string, at: string, ok: boolean) => void
-  markCheckinNoticeSeen: () => void
 
   // Hydration
   setHasHydrated: (value: boolean) => void
@@ -522,7 +513,6 @@ export const useCalendarStore = create<CalendarState>()(
       feedbackInviteSeen: false,
       storeReviewOffered: false,
       checkinEnabled: false,
-      checkinNoticeSeen: false,
       checkinId: null,
       checkinLastAttempt: null,
       _loggedThisSession: false,
@@ -533,7 +523,6 @@ export const useCalendarStore = create<CalendarState>()(
       // Nothing stored is what a new installation looks like: merge is only called when
       // there is something to merge.
       _checkinStart: 'new',
-      _checkinNoticeShown: false,
       _feedbackAsked: false,
       updateNoticeSeenFor: null,
       updatesEnabled: true,
@@ -593,8 +582,6 @@ export const useCalendarStore = create<CalendarState>()(
         ),
 
       recordCheckinAttempt: (date, at, ok) => set({ checkinLastAttempt: { date, at, ok } }),
-
-      markCheckinNoticeSeen: () => set({ checkinNoticeSeen: true, _checkinNoticeShown: true }),
 
       setHasHydrated: (value: boolean) => set({ _hasHydrated: value }),
 
@@ -793,7 +780,6 @@ export const useCalendarStore = create<CalendarState>()(
         feedbackInviteSeen: state.feedbackInviteSeen,
         storeReviewOffered: state.storeReviewOffered,
         checkinEnabled: state.checkinEnabled,
-        checkinNoticeSeen: state.checkinNoticeSeen,
         checkinId: state.checkinId,
         checkinLastAttempt: state.checkinLastAttempt,
         updateNoticeSeenFor: state.updateNoticeSeenFor,
@@ -849,6 +835,10 @@ export const useCalendarStore = create<CalendarState>()(
         // The reminder offer's old count of days (see reminderLastTickDay). Nothing reads
         // it, and dropped here it is not written back either.
         delete (stored as Record<string, unknown>).reminderTickDays
+        // Whether the line about the check-in had been shown, from when there was one
+        // (1.3.0 to 1.5.x). Nothing reads it, and it never decided whether the check-in is on:
+        // that is the presence of checkinEnabled, read just below.
+        delete (stored as Record<string, unknown>).checkinNoticeSeen
         return {
           ...current,
           ...stored,

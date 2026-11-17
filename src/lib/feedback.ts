@@ -77,8 +77,8 @@ async function send(args: Record<string, unknown>): Promise<boolean> {
  *
  * It never carried the lasting number, because `lastingId` already read the switch. That
  * was not enough: a connection carries an address and the fact that Daylo is in use today,
- * and "Anonymous check-in is off. It would tell us the app is still in use" is on screen
- * saying that no longer happens. The sentence in checkin.rs is the policy, and it is now
+ * and with the switch off, "it tells us the app is still in use" is exactly what is no
+ * longer happening. The sentence in checkin.rs is the policy, and it is now
  * true of all three: of somebody who turned the check-in off we know only what they chose
  * to write to us.
  *

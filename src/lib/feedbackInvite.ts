@@ -35,9 +35,8 @@ export interface FeedbackInviteInput {
   logs: ActivityLog[]
   feedbackInviteSeen: boolean
   loggedThisSession: boolean
-  offerThisSession: 'reminder' | 'checkin' | null
+  offerThisSession: 'reminder' | null
   reminderOfferPending: boolean
-  checkinNoticePending: boolean
 }
 
 /** The day a record was made, which is a day the person opened the app. */
@@ -76,11 +75,11 @@ export function shouldInviteFeedback(input: FeedbackInviteInput): boolean {
   if (!input.loggedThisSession) return false
   if (input.firstOpenedAt === null || input.firstOpenedAt === input.today) return false
 
-  // Three things want this session and none may talk over another: the reminder offer
-  // goes first, then the check-in's one-line notice, then this. Owed counts as taken, so
-  // a person who has not yet met the other two does not meet this one first.
+  // Two things want this session and neither may talk over the other: the reminder offer
+  // goes first, then this. Owed counts as taken, so a person who has not yet met the
+  // offer does not meet this first.
   if (input.offerThisSession !== null) return false
-  if (input.reminderOfferPending || input.checkinNoticePending) return false
+  if (input.reminderOfferPending) return false
 
   if (input.logs.length === 0) return false
 

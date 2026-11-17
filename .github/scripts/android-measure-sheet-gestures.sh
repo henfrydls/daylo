@@ -163,7 +163,7 @@ js "(() => {
     reminderEnabled: false, reminderHour: 20, reminderMinute: 0,
     reminderTimeChosen: false, reminderOffered: true,
     firstOpenedAt: '$now', feedbackInviteSeen: true, storeReviewOffered: true,
-    checkinEnabled: false, checkinNoticeSeen: true, checkinId: null,
+    checkinEnabled: false, checkinId: null,
     checkinLastAttempt: null, updateNoticeSeenFor: null, updatesEnabled: false } }))
   Storage.prototype.setItem = () => {}
   setTimeout(() => location.reload(), 200)

@@ -336,3 +336,172 @@ test.describe('the reminder offer on the first day', () => {
     await expect(offer).toContainText(/\b9:00\sPM\b/)
   })
 })
+
+/**
+ * The anonymous check-in, on the first day and on the day of an update, with nothing on
+ * the screen about it. From 1.3.0 to 1.5.x a line under the header said whether it was on;
+ * it is gone, and the switch and what it sends are in the menu.
+ *
+ * The page is told it is the Android build, as above, and this time the check-in answers
+ * too, so the code that turns it on and sends runs for real. Every native call answers
+ * here, in the page, and is written down, so nothing leaves it and the test can see what
+ * would have been sent.
+ *
+ * Absence asserted once at the end would pass for a line that came and went. So the page
+ * watches itself from before the app loads, and keeps the first sign of the line: its
+ * test id, or the sentence it opened with. Not any mention of the check-in, which other
+ * things rightly make (the question with stars says its message carries the check-in's
+ * number when the check-in is on).
+ */
+async function asTheAndroidApp(page: Page) {
+  await page.addInitScript(() => {
+    const calls: string[] = []
+    Object.assign(window, {
+      isTauri: true,
+      __calls: calls,
+      __checkinSeen: null,
+      __TAURI_INTERNALS__: {
+        invoke: (command: string) => {
+          calls.push(command)
+          if (command === 'checkin_fields') {
+            return Promise.resolve({ version: '1.6.0', os: 'android', source: 'apk' })
+          }
+          if (command === 'exact_alarms') {
+            return Promise.resolve({ requested: false, allowed: false, sdk: 34 })
+          }
+          return Promise.resolve(
+            command === 'reminders_available' ||
+              command === 'plugin:notification|is_permission_granted'
+          )
+        },
+      },
+    })
+    Object.defineProperty(window, 'Notification', {
+      configurable: true,
+      value: { permission: 'granted' },
+    })
+    const observer = new MutationObserver(() => {
+      const body = document.body
+      if (!body) return
+      const found = body.querySelector('[data-testid="checkin-notice"]')
+        ? 'the line'
+        : /Anonymous check-in is (on|off)\./.test(body.textContent ?? '')
+          ? 'its sentence'
+          : null
+      if (found === null) return
+      Object.assign(window, { __checkinSeen: found })
+      observer.disconnect()
+    })
+    observer.observe(document, {
+      subtree: true,
+      childList: true,
+      characterData: true,
+    })
+  })
+}
+
+const calls = (page: Page) =>
+  page.evaluate(() => (window as unknown as { __calls: string[] }).__calls)
+const checkinSeen = (page: Page) =>
+  page.evaluate(() => (window as unknown as { __checkinSeen: string | null }).__checkinSeen)
+const stored = (page: Page) =>
+  page.evaluate(() => JSON.parse(localStorage.getItem('simple-calendar-storage') ?? '{}').state)
+
+test.describe('the check-in, with nothing on the screen about it', () => {
+  test.use({ locale: 'en-US' })
+
+  test('a new installation: on, and the reminder is offered after the first day', async ({
+    page,
+  }) => {
+    await asTheAndroidApp(page)
+    await page.clock.install({ time: new Date('2026-11-13T10:00:00') })
+    await page.goto('/')
+    const offer = page.getByTestId('reminder-offer')
+
+    // On by default, as before: turned on and sent through the native side, here the page.
+    await expect.poll(() => calls(page)).toContain('send_checkin')
+    await expect.poll(async () => (await stored(page))?.checkinEnabled).toBe(true)
+
+    await page.locator(DOOR).click()
+    await page.getByTestId('quicklog-new-activity-input').fill('Read')
+    await page.getByTestId('quicklog-add-activity').click()
+    await expect(page.getByTestId('first-day-line')).toHaveText(LINE)
+    await settle(page)
+    await expect(offer).toHaveCount(0)
+
+    await page.getByTestId('quicklog-done-button').click()
+    await expect(page.locator(SHEET)).toHaveCount(0)
+    await expect(offer).toBeVisible()
+    await expect(offer).toContainText('Remind me each evening?')
+
+    await page.getByRole('button', { name: 'Not now' }).click()
+    await expect(offer).toHaveCount(0)
+    await settle(page)
+
+    expect(await checkinSeen(page)).toBeNull()
+  })
+
+  test('an update: off, and the invitation to write still comes when it is due', async ({
+    page,
+  }) => {
+    await asTheAndroidApp(page)
+    // Somebody who has used Daylo for three weeks, from a version before the check-in:
+    // nothing stored about it at all. Past the invitation's week, and already asked about
+    // the reminder, so nothing else is owed ahead of it.
+    await page.addInitScript(() => {
+      if (sessionStorage.getItem('seeded')) return
+      sessionStorage.setItem('seeded', '1')
+      // Twenty days, from 2026-10-13 to 2026-11-01, one record each.
+      const logs = Array.from({ length: 20 }, (_, i) => {
+        const d = new Date(2026, 9, 13 + i)
+        const date = [
+          d.getFullYear(),
+          String(d.getMonth() + 1).padStart(2, '0'),
+          String(d.getDate()).padStart(2, '0'),
+        ].join('-')
+        return { id: `l${i}`, activityId: 'a1', date, completed: true, createdAt: date }
+      })
+      localStorage.setItem(
+        'simple-calendar-storage',
+        JSON.stringify({
+          state: {
+            activities: [
+              {
+                id: 'a1',
+                name: 'Read',
+                color: '#10B981',
+                createdAt: '2026-10-13T00:00:00.000Z',
+                updatedAt: '2026-10-13T00:00:00.000Z',
+              },
+            ],
+            logs,
+            yearMode: 'all',
+            reminderEnabled: false,
+            reminderHour: 21,
+            reminderMinute: 0,
+            reminderOffered: true,
+            firstOpenedAt: '2026-10-13',
+            feedbackInviteSeen: false,
+          },
+          version: 0,
+        })
+      )
+    })
+    await page.clock.install({ time: new Date('2026-11-13T10:00:00') })
+    await page.goto('/')
+    await expect(page.getByTestId('log-today-bar')).toBeVisible()
+
+    // Off, as before: asked what it would send, never sent, and written down as off.
+    await expect.poll(() => calls(page)).toContain('checkin_fields')
+    await expect.poll(async () => (await stored(page))?.checkinEnabled).toBe(false)
+
+    await page.getByTestId('log-today-bar').click()
+    await page.getByTestId('quicklog-activity-checkbox').check()
+    await page.getByTestId('quicklog-done-button').click()
+    await expect(page.locator(SHEET)).toHaveCount(0)
+
+    await expect(page.getByTestId('feedback-rating')).toBeVisible()
+    expect(await calls(page)).not.toContain('send_checkin')
+    expect(await checkinSeen(page)).toBeNull()
+  })
+})

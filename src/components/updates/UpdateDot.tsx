@@ -5,8 +5,7 @@
  * hold that "later", and a card that came back would be the app ignoring the answer it
  * was given.
  *
- * Only this has one. The check-in's line has nothing to come back to, and a dot on
- * everything is a dot that means nothing.
+ * Only this has one. A dot on everything is a dot that means nothing.
  *
  * emerald-600 and not emerald-500: 3.67:1 against white where 1.4.11 asks 3:1, while the
  * lighter one is 2.46:1. It is the only thing carrying this meaning, so it has to be

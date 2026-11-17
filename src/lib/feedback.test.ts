@@ -86,7 +86,7 @@ describe('what each answer carries', () => {
  *
  * It left nothing lasting behind, because `lastingId` already read the switch. But a
  * connection is not nothing: it carries an address and the fact that Daylo is in use, on
- * that day, which is word for word what `CheckinNotice` says is no longer happening.
+ * that day, which is word for word what the switch being off says is no longer happening.
  */
 describe('the message that reports the question was put', () => {
   const answer = '0a1b2c3d4e5f60718293a4b5c6d7e8f9'

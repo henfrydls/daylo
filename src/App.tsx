@@ -26,7 +26,7 @@ import { DIALOG_STAYS_FOR } from './components/ui'
 import { DayScope } from './components/DayScope'
 import type { DropdownMenuItem } from './components/ui'
 import { AppSkeleton } from './components/skeletons'
-import { CheckinNotice, DailyReminder, Settings } from './components/settings'
+import { DailyReminder, Settings } from './components/settings'
 import { useCalendarStore } from './store'
 import { useRescueStore } from './store/rescue'
 import { CouldNotOpen } from './components/data/CouldNotOpen'
@@ -218,8 +218,6 @@ function App() {
   const feedbackInviteSeen = useCalendarStore((state) => state.feedbackInviteSeen)
   const loggedThisSession = useCalendarStore((state) => state._loggedThisSession)
   const offerThisSession = useCalendarStore((state) => state._offerThisSession)
-  const checkinNoticeSeen = useCalendarStore((state) => state.checkinNoticeSeen)
-  const checkinNoticeShown = useCalendarStore((state) => state._checkinNoticeShown)
   const checkinEnabled = useCalendarStore((state) => state.checkinEnabled)
   const checkinStart = useCalendarStore((state) => state._checkinStart)
   const markOpened = useCalendarStore((state) => state.markOpened)
@@ -312,25 +310,6 @@ function App() {
     if (hasHydrated) markOpened()
   }, [hasHydrated, markOpened])
 
-  // The line about the check-in. Not for somebody who already decided in an earlier
-  // build, and not once it has been closed. It needs nothing to have been tapped first:
-  // a new installation is already sending by the time this renders, so being told is the
-  // only thing that makes that honest, and it cannot wait for a habit to be ticked.
-  const shouldTellAboutCheckin = canCheckIn && !checkinNoticeSeen && checkinStart !== 'decided'
-
-  // Showing the line is what marks it seen, so the condition that put it there answers no
-  // a moment later. The session flag is what keeps it on screen until this window is
-  // closed; the persisted one is what stops it coming back tomorrow.
-  //
-  // It waits for nothing and claims nothing, because it is not a question. The reminder's
-  // offer is a question and goes first among questions; this says what the app is already
-  // doing, and the one launch where it must appear is the first one, which on Android is
-  // exactly the launch where the reminder is owed and cannot be put yet, because there are
-  // no habits to be reminded about. Queuing there meant a new installation sent its first
-  // check-in and said nothing, which is the one thing this default may not do. The
-  // reminder's modal opens over it, and when that closes the line is still there.
-  const noticeIsOpen = shouldTellAboutCheckin || checkinNoticeShown
-
   const shouldInvite = useMemo(
     () =>
       shouldInviteFeedback({
@@ -341,12 +320,6 @@ function App() {
         loggedThisSession,
         offerThisSession,
         reminderOfferPending: reminderOfferOwed,
-        // The invitation waits for the line the way it waits for the reminder, and it
-        // keeps waiting for the rest of the session once the line has been shown: an
-        // installation that updates today could be due both, and two bands at once is two
-        // too many. Reading only the persisted flag would not do it, because that one is
-        // false again a moment after the line appears.
-        checkinNoticePending: shouldTellAboutCheckin || checkinNoticeShown,
       }),
     [
       shownDay,
@@ -356,15 +329,13 @@ function App() {
       loggedThisSession,
       offerThisSession,
       reminderOfferOwed,
-      shouldTellAboutCheckin,
-      checkinNoticeShown,
     ]
   )
 
   // Where there is a platform, the question opens itself. Derived and not set from an
   // effect, and the session flag is why it can be: putting the question spends it, so
   // `shouldInvite` answers no a moment later, and reading only that would close the dialog
-  // on the frame after it opened. The check-in's line learned this the hard way.
+  // on the frame after it opened.
   // Not while the day sheet is up. The gate opens on the tick, and the tick happens inside
   // that sheet, so without this the question arrives on top of it: two modals stacked, two
   // focus traps, and Escape closing both, in the one gesture the whole app is for.
@@ -649,22 +620,6 @@ function App() {
           >
             {/* Under the header and above the calendar: the only place visible on every
               screen without scrolling, and the same place on a phone and on a desktop. */}
-            {/* A new installation is on by the time anybody can read this: the effect that
-              turns it on runs in the same tick, but effects run after the first paint, and
-              a line that said "Anonymous check-in is off." for one frame and then
-              corrected itself would be the app contradicting itself in public. */}
-            {noticeIsOpen ? (
-              <CheckinNotice
-                on={checkinEnabled || checkinStart === 'new'}
-                onOpen={() => setSettings('open')}
-              />
-            ) : null}
-
-            {/* Under the check-in's line on the rare launch that has both, because that one
-              is about what the app is already doing and this one is about something it
-              could do. Neither waits for the other: they are lines to be read past, not
-              questions, and the rule against two at once is the invitation's, which does
-              ask something. */}
             {updates.notice === null ? null : (
               <UpdateNotice state={updates.notice} onAct={updates.act} onLater={updates.later} />
             )}

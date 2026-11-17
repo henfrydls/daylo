@@ -32,7 +32,6 @@ const ready = {
   loggedThisSession: true,
   offerThisSession: null,
   reminderOfferPending: false,
-  checkinNoticePending: false,
 } as const
 
 beforeEach(() => {
@@ -128,19 +127,14 @@ describe('how many days were used no longer counts', () => {
   })
 })
 
-// Three things want the same session and none of them may talk over another.
-describe('giving way to the other two offers', () => {
-  // The slot still has two possible holders in the type, because the store's field does:
-  // nothing claims it for the check-in any more, and a session it somehow held would
-  // still have to silence this.
-  it('stands down when one has already been made this session', () => {
+// Two things want the same session and neither may talk over the other.
+describe('giving way to the reminder offer', () => {
+  it('stands down when it has already been made this session', () => {
     expect(shouldInviteFeedback({ ...ready, offerThisSession: 'reminder' })).toBe(false)
-    expect(shouldInviteFeedback({ ...ready, offerThisSession: 'checkin' })).toBe(false)
   })
 
-  it('stands down while either of the other two is still owed', () => {
+  it('stands down while it is still owed', () => {
     expect(shouldInviteFeedback({ ...ready, reminderOfferPending: true })).toBe(false)
-    expect(shouldInviteFeedback({ ...ready, checkinNoticePending: true })).toBe(false)
   })
 })
 

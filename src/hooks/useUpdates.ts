@@ -127,8 +127,7 @@ export function useUpdates(): Updates {
           setFound({ version: result.version, update: result.update, canInstall })
           // Read now rather than while rendering. Showing the card is what marks the
           // version seen, so a condition that read the store on every render would take
-          // the card away on the frame after it appeared. The check-in's line learned
-          // this the hard way.
+          // the card away on the frame after it appeared.
           setShowCard(useCalendarStore.getState().updateNoticeSeenFor !== result.version)
         } else if (result.kind === 'none') {
           setFound(null)
