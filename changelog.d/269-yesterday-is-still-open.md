@@ -3,5 +3,5 @@ When a run of three days or more stopped yesterday, a row joins Today above the 
 "Yesterday is still open", with the number of days in a row that logging it will make.
 Tapping it opens yesterday, which says the same, and once you tick something it shows the
 run you kept. The row goes away by itself once yesterday is logged, or the next day.
-Yesterday's circle on the calendar is now a thin grey outline, so it no longer looks like
-today. On any other morning nothing changes.
+On the calendar, yesterday gets a thin grey dashed outline, lighter than today's, so the
+two are not mistaken for each other. On any other morning nothing changes.

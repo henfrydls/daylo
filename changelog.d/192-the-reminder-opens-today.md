@@ -1,6 +1,7 @@
 **On Android, tapping the daily reminder opens today, ready to log.**
 It used to open Daylo wherever you had left it, so you still had to find today and tap it.
-Now the tap opens today's list, whether Daylo was still open in the background or not.
+Now the tap opens today's list, whether Daylo was still open in the background or not, and
+puts it in front of Settings or the summary of your run, if either was open.
 
 **The reminder no longer asks on a day you already logged.**
 If you log before its time, it waits until tomorrow. Take back the day's last tick and it
