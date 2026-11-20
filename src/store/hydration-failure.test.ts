@@ -316,7 +316,34 @@ describe('a stored value that will not open', () => {
         'a last check-in that is a string',
         { activities: [whole], logs: [], checkinLastAttempt: 'today' },
       ],
+      // The right type and nothing a date can be made of. new Date('garbage') is Invalid
+      // Date, and date-fns throws a RangeError formatting it: the same blank screen.
+      [
+        'an activity created on a day that is not a date',
+        { activities: [{ ...whole, createdAt: 'garbage' }], logs: [] },
+      ],
+      [
+        'an activity updated on a day that is not a date',
+        { activities: [{ ...whole, updatedAt: 'garbage' }], logs: [] },
+      ],
+      ['a log on an empty date', { activities: [whole], logs: [{ ...log, date: '' }] }],
+      ['a log on a date that is a word', { activities: [whole], logs: [{ ...log, date: 'x' }] }],
+      [
+        'a log on a day no calendar has',
+        { activities: [whole], logs: [{ ...log, date: '2026-02-30' }] },
+      ],
+      [
+        'a log created on a day that is not a date',
+        { activities: [whole], logs: [{ ...log, createdAt: 'garbage' }] },
+      ],
+      // Numbers, and handed as they are to the notification plugin.
+      ['a reminder hour of 99', { activities: [whole], logs: [], reminderHour: 99 }],
+      ['a reminder hour of -5', { activities: [whole], logs: [], reminderHour: -5 }],
+      ['a reminder hour of 20.5', { activities: [whole], logs: [], reminderHour: 20.5 }],
+      ['a reminder minute of 60', { activities: [whole], logs: [], reminderMinute: 60 }],
+      ['a reminder minute of -1', { activities: [whole], logs: [], reminderMinute: -1 }],
     ])('treats a state with %s as unreadable, and leaves it as it was', async (_, state) => {
+      vi.spyOn(console, 'warn').mockImplementation(() => {})
       const stored = JSON.stringify({ state, version: 0 })
       localStorage.setItem(STORAGE_KEY, stored)
 
@@ -359,6 +386,127 @@ describe('a stored value that will not open', () => {
       expect(useCalendarStore.getState()._hasHydrated).toBe(true)
       expect(useCalendarStore.getState().activities).toHaveLength(1)
       expect(useCalendarStore.getState().logs).toHaveLength(2)
+    })
+
+    /**
+     * Every field this build writes is checked, so a field added later cannot be left out
+     * of the rule by accident: each one, given a value no field of the store can hold,
+     * has to send the state to the rescue screen.
+     */
+    it('checks every field it writes', async () => {
+      vi.spyOn(console, 'warn').mockImplementation(() => {})
+      const { partialize } = useCalendarStore.persist.getOptions()
+      const fields = Object.keys(partialize!(useCalendarStore.getState()) as object)
+      expect(fields.length).toBeGreaterThan(2)
+
+      const unchecked: string[] = []
+      for (const field of fields) {
+        useRescueStore.setState({ failure: null })
+        localStorage.setItem(
+          STORAGE_KEY,
+          JSON.stringify({ state: { [field]: { not: 'this' } }, version: 0 })
+        )
+        await useCalendarStore.persist.rehydrate()
+        if (useRescueStore.getState().failure === null) unchecked.push(field)
+      }
+
+      expect(unchecked).toEqual([])
+    })
+
+    /** So that somebody who reached the rescue screen can be told why. */
+    it('says which field it could not read', async () => {
+      const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+      localStorage.setItem(
+        STORAGE_KEY,
+        JSON.stringify({
+          state: { activities: [whole], logs: [log, { ...log, id: 'm', date: 'x' }] },
+          version: 0,
+        })
+      )
+
+      await useCalendarStore.persist.rehydrate()
+
+      expect(warn).toHaveBeenCalledTimes(1)
+      expect(warn.mock.calls[0].join(' ')).toContain('logs[1].date')
+    })
+
+    /**
+     * What real copies hold, reconstructed from the store at those tags. 1.0.1 had no
+     * partialize, so the whole state went to disk, places included; it wrote ids with
+     * generateId, timestamps with toISOString, days with formatDate, and a note could be
+     * empty. 1.5.3 wrote the fields its partialize listed, checkinNoticeSeen among them.
+     */
+    const written = (date: string, n: number) => ({
+      id: `1731500000000-${n}abc9xyz`,
+      activityId: '1731400000000-k3j9a8d7f',
+      date,
+      completed: n % 3 !== 0,
+      createdAt: `${date}T21:14:05.123Z`,
+    })
+    const writtenActivity = {
+      id: '1731400000000-k3j9a8d7f',
+      name: 'Read <10 pages> & stretch',
+      color: '#10B981',
+      createdAt: '2024-11-12T08:26:40.000Z',
+      updatedAt: '2024-11-20T19:02:11.456Z',
+    }
+
+    it('opens what 1.0.1 wrote', async () => {
+      const stored = JSON.stringify({
+        state: {
+          activities: [writtenActivity],
+          logs: [
+            written('2024-11-12', 1),
+            { ...written('2024-11-13', 2), notes: '' },
+            { ...written('2024-11-14', 3), notes: 'Twenty pages, then the park' },
+          ],
+          selectedYear: 2024,
+          selectedDate: '2024-11-14',
+          currentView: 'year',
+          selectedMonth: 10,
+        },
+        version: 0,
+      })
+      localStorage.setItem(STORAGE_KEY, stored)
+
+      await useCalendarStore.persist.rehydrate()
+
+      expect(useRescueStore.getState().failure).toBeNull()
+      expect(useCalendarStore.getState()._hasHydrated).toBe(true)
+      expect(useCalendarStore.getState().logs).toHaveLength(3)
+    })
+
+    it('opens what 1.5.3 wrote', async () => {
+      const stored = JSON.stringify({
+        state: {
+          activities: [writtenActivity, { ...writtenActivity, id: '1762000000000-q1w2e3r4t' }],
+          logs: [written('2026-10-30', 1), written('2026-10-31', 2)],
+          yearMode: 'byActivity',
+          reminderEnabled: true,
+          reminderHour: 0,
+          reminderTimeChosen: true,
+          reminderMinute: 59,
+          reminderOffered: true,
+          firstOpenedAt: '2026-09-02',
+          feedbackInviteSeen: true,
+          storeReviewOffered: false,
+          checkinEnabled: true,
+          checkinNoticeSeen: true,
+          checkinId: '6f1c2d3e-4b5a-4c6d-8e7f-9a0b1c2d3e4f',
+          checkinLastAttempt: { date: '2026-10-31', at: '2026-10-31T09:00:01.000Z', ok: false },
+          updateNoticeSeenFor: '1.5.3',
+          updatesEnabled: false,
+        },
+        version: 0,
+      })
+      localStorage.setItem(STORAGE_KEY, stored)
+
+      await useCalendarStore.persist.rehydrate()
+
+      expect(useRescueStore.getState().failure).toBeNull()
+      expect(useCalendarStore.getState()._hasHydrated).toBe(true)
+      expect(useCalendarStore.getState().reminderHour).toBe(0)
+      expect(useCalendarStore.getState().reminderMinute).toBe(59)
     })
 
     it('still opens an empty storage as a new installation', async () => {

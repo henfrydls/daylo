@@ -3,6 +3,7 @@ import { persist, createJSONStorage, type StateStorage } from 'zustand/middlewar
 import type { Activity, ActivityLog } from '../types'
 import { formatDate, generateId, parseDateString } from '../lib/dates'
 import { firstFreeColor } from '../lib/colors'
+import { activityFault, isPlainObject, logFault } from '../lib/recordShape'
 // Import estatico a proposito: Toast.tsx ya importa este modulo de forma estatica,
 // asi que un import() dinamico aqui no partiria el bundle -- solo retrasaria el aviso.
 import { useToastStore } from './toast'
@@ -56,71 +57,56 @@ export function worthRescuing(raw: string | null): boolean {
 }
 
 /**
- * The first field of a stored state that does not hold what this build reads, or null
- * when every field it reads does (#276).
+ * The first field of a stored state that this build cannot draw, as a path such as
+ * `logs[3].date`, or null when every field it reads is fine (#276).
  *
- * Valid JSON with the right keys and the wrong types used to be spread into the store as
+ * Valid JSON with the right keys and the wrong values used to be spread into the store as
  * it was, and the first component to read it drew a blank screen. It is the same case as
  * bytes that will not parse: Daylo cannot open it, so it goes to the rescue screen and the
  * only copy is left alone.
  *
- * The rule is about types, not about content, and it reads only what the app reads:
+ * It reads only what the app reads, and only what would break it:
  *
- * - `activities` and `logs`, when present, are arrays of objects. Every activity has a
- *   string `id`, `name`, `color` and `createdAt`, and `updatedAt` is a string when it is
- *   there. Every log has a string `id`, `activityId`, `date` and `createdAt`, a boolean
- *   `completed`, and `notes` that are a string, null or absent.
+ * - `activities` and `logs`, when present, are arrays, and every row passes activityFault
+ *   or logFault (src/lib/recordShape.ts), the rules an import shares. Not the import's
+ *   extra limits: a copy may hold what Daylo itself wrote and an import would refuse.
+ * - `reminderHour` is a whole hour, 0 to 23, and `reminderMinute` 0 to 59: they go to the
+ *   notification plugin as they are.
  * - Every other field this build writes holds the type of its default, or null where
- *   null is what it holds before it is first set, and `yearMode` is one of its two modes.
+ *   null is what it holds before it is first set; `yearMode` is one of its two modes, and
+ *   `checkinLastAttempt` is null or the attempt it records.
  *
  * A field that is missing is not wrong: the default fills it, which is how every older
  * version opens. Fields this build no longer reads (`reminderTickDays`,
- * `checkinNoticeSeen`, the four places) are not looked at; merge drops them.
+ * `checkinNoticeSeen`, the four places) are not looked at; merge drops them. The list
+ * below is written out rather than derived from the defaults, because a default of null
+ * says nothing about what the field holds once set; hydration-failure.test.ts fails for
+ * any field partialize writes that this does not check.
  */
-export function wrongField(stored: Record<string, unknown>): string | null {
-  const isObject = (value: unknown): value is Record<string, unknown> =>
-    typeof value === 'object' && value !== null && !Array.isArray(value)
-  const strings = (value: Record<string, unknown>, fields: string[]) =>
-    fields.find((field) => typeof value[field] !== 'string')
-
-  const rows = (
-    name: string,
-    wrongInRow: (row: Record<string, unknown>) => string | undefined
-  ): string | null => {
+function wrongField(stored: Record<string, unknown>): string | null {
+  const rows = (name: string, fault: (row: unknown) => string | null): string | null => {
     const list = stored[name]
     if (list === undefined) return null
     if (!Array.isArray(list)) return name
     for (const [index, row] of list.entries()) {
-      if (!isObject(row)) return `${name}[${index}]`
-      const field = wrongInRow(row)
-      if (field !== undefined) return `${name}[${index}].${field}`
+      const field = fault(row)
+      if (field !== null) return field === '' ? `${name}[${index}]` : `${name}[${index}].${field}`
     }
     return null
   }
 
-  const inActivities = rows('activities', (activity) => {
-    const field = strings(activity, ['id', 'name', 'color', 'createdAt'])
-    if (field !== undefined) return field
-    if (activity.updatedAt !== undefined && typeof activity.updatedAt !== 'string') {
-      return 'updatedAt'
-    }
-    return undefined
-  })
-  if (inActivities !== null) return inActivities
+  const inRows = rows('activities', activityFault) ?? rows('logs', logFault)
+  if (inRows !== null) return inRows
 
-  const inLogs = rows('logs', (log) => {
-    const field = strings(log, ['id', 'activityId', 'date', 'createdAt'])
-    if (field !== undefined) return field
-    if (typeof log.completed !== 'boolean') return 'completed'
-    if (log.notes != null && typeof log.notes !== 'string') return 'notes'
-    return undefined
-  })
-  if (inLogs !== null) return inLogs
+  const within = (value: unknown, highest: number) =>
+    Number.isInteger(value) && (value as number) >= 0 && (value as number) <= highest
+  if (stored.reminderHour !== undefined && !within(stored.reminderHour, 23)) return 'reminderHour'
+  if (stored.reminderMinute !== undefined && !within(stored.reminderMinute, 59)) {
+    return 'reminderMinute'
+  }
 
-  const kinds: Record<string, 'boolean' | 'number' | 'string' | 'string or null'> = {
+  const kinds: Record<string, 'boolean' | 'number' | 'string or null'> = {
     reminderEnabled: 'boolean',
-    reminderHour: 'number',
-    reminderMinute: 'number',
     reminderOffered: 'boolean',
     reminderTimeChosen: 'boolean',
     reminderLastTickDay: 'string or null',
@@ -154,8 +140,12 @@ export function wrongField(stored: Record<string, unknown>): string | null {
 
   const attempt = stored.checkinLastAttempt
   if (attempt !== undefined && attempt !== null) {
-    if (!isObject(attempt)) return 'checkinLastAttempt'
-    if (strings(attempt, ['date', 'at']) !== undefined || typeof attempt.ok !== 'boolean') {
+    if (
+      !isPlainObject(attempt) ||
+      typeof attempt.date !== 'string' ||
+      typeof attempt.at !== 'string' ||
+      typeof attempt.ok !== 'boolean'
+    ) {
       return 'checkinLastAttempt'
     }
   }
@@ -921,9 +911,7 @@ export const useCalendarStore = create<CalendarState>()(
       // the rescue screen comes up with the bytes untouched, and nothing is written,
       // because merge throwing means zustand never sets the state it would have saved.
       merge: (persisted, current) => {
-        const notAState =
-          persisted == null || typeof persisted !== 'object' || Array.isArray(persisted)
-        const empty = notAState || Object.keys(persisted as object).length === 0
+        const empty = !isPlainObject(persisted) || Object.keys(persisted).length === 0
         if (empty) {
           const onDisk = whatIsOnDisk(() => localStorage.getItem(STORAGE_KEY))
           if (worthRescuing(onDisk.raw)) {
@@ -947,11 +935,13 @@ export const useCalendarStore = create<CalendarState>()(
         // (1.3.0 to 1.5.x). Nothing reads it, and it never decided whether the check-in is on:
         // that is the presence of checkinEnabled, read just below.
         delete (stored as Record<string, unknown>).checkinNoticeSeen
-        // The right keys holding the wrong types (#276). Thrown for the same reason as
+        // The right keys holding values this build cannot draw (#276). Thrown for the same reason as
         // above: the rescue screen comes up, and nothing is set, so nothing is written.
         const wrong = wrongField(stored as Record<string, unknown>)
         if (wrong !== null) {
-          throw new Error(`What is stored under ${STORAGE_KEY} has the wrong type at ${wrong}`)
+          // The one line that says why somebody is looking at the rescue screen.
+          console.warn(`[Daylo] could not open the stored data: ${wrong} is not what it should be`)
+          throw new Error(`What is stored under ${STORAGE_KEY} cannot be read at ${wrong}`)
         }
         return {
           ...current,
