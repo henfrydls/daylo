@@ -239,6 +239,16 @@ body {
   overscroll-behavior-x: none;
 }
 
+/* The scrollbar's room is kept whether or not there is anything to scroll. Month is a few
+ * pixels taller than an 800 px window and Year is not, so with a scrollbar that takes room
+ * (Windows, and Linux with overlay scrolling off) the page was 15 to 21 px narrower in
+ * Month, and the toggle and the gear jumped sideways each time the view changed. Where
+ * scrollbars float over the page (Android, iOS, macOS, most of GTK) this does nothing:
+ * an overlay scrollbar has no room to keep. */
+html {
+  scrollbar-gutter: stable;
+}
+
 body {
   margin: 0;
   min-height: 100dvh;
