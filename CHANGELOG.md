@@ -54,6 +54,11 @@ saved file in a shape Daylo did not expect used to open as a brand new app, and 
 app was saved over your days straight away. Now it shows the screen that lets you keep a
 copy of that file instead, and leaves the file as it was.
 
+**A saved file with something of the wrong kind in it no longer opens to a blank screen.**
+If part of what Daylo saved was not the kind of thing Daylo expects there, such as a word
+where a number belongs, the app showed nothing at all. Now it shows that same screen, so
+you can keep a copy, and the file stays as it was.
+
 **The anonymous check-in now also says whether you have started a habit.** It is only a
 yes or a no: never how many habits you have, or what they are. Settings lists everything
 the check-in sends under What gets sent, and you can turn it off there at any time.

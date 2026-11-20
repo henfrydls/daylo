@@ -56,6 +56,114 @@ export function worthRescuing(raw: string | null): boolean {
 }
 
 /**
+ * The first field of a stored state that does not hold what this build reads, or null
+ * when every field it reads does (#276).
+ *
+ * Valid JSON with the right keys and the wrong types used to be spread into the store as
+ * it was, and the first component to read it drew a blank screen. It is the same case as
+ * bytes that will not parse: Daylo cannot open it, so it goes to the rescue screen and the
+ * only copy is left alone.
+ *
+ * The rule is about types, not about content, and it reads only what the app reads:
+ *
+ * - `activities` and `logs`, when present, are arrays of objects. Every activity has a
+ *   string `id`, `name`, `color` and `createdAt`, and `updatedAt` is a string when it is
+ *   there. Every log has a string `id`, `activityId`, `date` and `createdAt`, a boolean
+ *   `completed`, and `notes` that are a string, null or absent.
+ * - Every other field this build writes holds the type of its default, or null where
+ *   null is what it holds before it is first set, and `yearMode` is one of its two modes.
+ *
+ * A field that is missing is not wrong: the default fills it, which is how every older
+ * version opens. Fields this build no longer reads (`reminderTickDays`,
+ * `checkinNoticeSeen`, the four places) are not looked at; merge drops them.
+ */
+export function wrongField(stored: Record<string, unknown>): string | null {
+  const isObject = (value: unknown): value is Record<string, unknown> =>
+    typeof value === 'object' && value !== null && !Array.isArray(value)
+  const strings = (value: Record<string, unknown>, fields: string[]) =>
+    fields.find((field) => typeof value[field] !== 'string')
+
+  const rows = (
+    name: string,
+    wrongInRow: (row: Record<string, unknown>) => string | undefined
+  ): string | null => {
+    const list = stored[name]
+    if (list === undefined) return null
+    if (!Array.isArray(list)) return name
+    for (const [index, row] of list.entries()) {
+      if (!isObject(row)) return `${name}[${index}]`
+      const field = wrongInRow(row)
+      if (field !== undefined) return `${name}[${index}].${field}`
+    }
+    return null
+  }
+
+  const inActivities = rows('activities', (activity) => {
+    const field = strings(activity, ['id', 'name', 'color', 'createdAt'])
+    if (field !== undefined) return field
+    if (activity.updatedAt !== undefined && typeof activity.updatedAt !== 'string') {
+      return 'updatedAt'
+    }
+    return undefined
+  })
+  if (inActivities !== null) return inActivities
+
+  const inLogs = rows('logs', (log) => {
+    const field = strings(log, ['id', 'activityId', 'date', 'createdAt'])
+    if (field !== undefined) return field
+    if (typeof log.completed !== 'boolean') return 'completed'
+    if (log.notes != null && typeof log.notes !== 'string') return 'notes'
+    return undefined
+  })
+  if (inLogs !== null) return inLogs
+
+  const kinds: Record<string, 'boolean' | 'number' | 'string' | 'string or null'> = {
+    reminderEnabled: 'boolean',
+    reminderHour: 'number',
+    reminderMinute: 'number',
+    reminderOffered: 'boolean',
+    reminderTimeChosen: 'boolean',
+    reminderLastTickDay: 'string or null',
+    reminderOfferDismissals: 'number',
+    reminderOfferDismissedOn: 'string or null',
+    firstOpenedAt: 'string or null',
+    feedbackInviteSeen: 'boolean',
+    storeReviewOffered: 'boolean',
+    checkinEnabled: 'boolean',
+    checkinId: 'string or null',
+    updateNoticeSeenFor: 'string or null',
+    updatesEnabled: 'boolean',
+  }
+  for (const [field, kind] of Object.entries(kinds)) {
+    const value = stored[field]
+    if (value === undefined) continue
+    if (kind === 'string or null') {
+      if (value !== null && typeof value !== 'string') return field
+    } else if (typeof value !== kind) {
+      return field
+    }
+  }
+
+  if (
+    stored.yearMode !== undefined &&
+    stored.yearMode !== 'all' &&
+    stored.yearMode !== 'byActivity'
+  ) {
+    return 'yearMode'
+  }
+
+  const attempt = stored.checkinLastAttempt
+  if (attempt !== undefined && attempt !== null) {
+    if (!isObject(attempt)) return 'checkinLastAttempt'
+    if (strings(attempt, ['date', 'at']) !== undefined || typeof attempt.ok !== 'boolean') {
+      return 'checkinLastAttempt'
+    }
+  }
+
+  return null
+}
+
+/**
  * What Daylo says when the disk refuses a write. Agreed word for word: it is the one
  * moment Daylo knows it is about to lose something and can still prevent it, because what
  * was not written is still in memory and Export still works.
@@ -839,6 +947,12 @@ export const useCalendarStore = create<CalendarState>()(
         // (1.3.0 to 1.5.x). Nothing reads it, and it never decided whether the check-in is on:
         // that is the presence of checkinEnabled, read just below.
         delete (stored as Record<string, unknown>).checkinNoticeSeen
+        // The right keys holding the wrong types (#276). Thrown for the same reason as
+        // above: the rescue screen comes up, and nothing is set, so nothing is written.
+        const wrong = wrongField(stored as Record<string, unknown>)
+        if (wrong !== null) {
+          throw new Error(`What is stored under ${STORAGE_KEY} has the wrong type at ${wrong}`)
+        }
         return {
           ...current,
           ...stored,

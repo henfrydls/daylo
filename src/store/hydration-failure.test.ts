@@ -270,6 +270,97 @@ describe('a stored value that will not open', () => {
       }
     )
 
+    /**
+     * #276. Valid JSON under the right version, with the right keys holding the wrong
+     * types. Merged as it was, the app drew a blank screen on the first thing that read
+     * it. It is the same case as bytes that will not parse: Daylo cannot open it, and the
+     * only copy stays exactly as it is.
+     */
+    const log = {
+      id: 'l',
+      activityId: 'a',
+      date: '2026-11-01',
+      completed: true,
+      createdAt: '2026-11-01T10:00:00.000Z',
+    }
+    const whole = {
+      ...activity,
+      createdAt: '2026-10-01T10:00:00.000Z',
+      updatedAt: '2026-10-01T10:00:00.000Z',
+    }
+    it.each([
+      ['activities that are null', { activities: null, logs: [log] }],
+      ['logs that are null', { activities: [whole], logs: null }],
+      ['activities that are an object', { activities: { a: whole }, logs: [] }],
+      ['an activity that is a string', { activities: ['Walk'], logs: [] }],
+      ['an activity with no id', { activities: [{ ...whole, id: undefined }], logs: [] }],
+      ['an activity whose name is a number', { activities: [{ ...whole, name: 7 }], logs: [] }],
+      [
+        'an activity with no createdAt',
+        { activities: [{ ...whole, createdAt: undefined }], logs: [] },
+      ],
+      ['a log that is null', { activities: [whole], logs: [null] }],
+      [
+        'a log whose completed is a string',
+        { activities: [whole], logs: [{ ...log, completed: 'yes' }] },
+      ],
+      ['a log whose date is a number', { activities: [whole], logs: [{ ...log, date: 20261101 }] }],
+      ['a log whose note is a number', { activities: [whole], logs: [{ ...log, notes: 7 }] }],
+      ['a reminder hour that is a string', { activities: [whole], logs: [], reminderHour: '21' }],
+      ['a year mode it does not know', { activities: [whole], logs: [], yearMode: 'grid' }],
+      [
+        'a check-in switch that is a string',
+        { activities: [whole], logs: [], checkinEnabled: 'no' },
+      ],
+      [
+        'a last check-in that is a string',
+        { activities: [whole], logs: [], checkinLastAttempt: 'today' },
+      ],
+    ])('treats a state with %s as unreadable, and leaves it as it was', async (_, state) => {
+      const stored = JSON.stringify({ state, version: 0 })
+      localStorage.setItem(STORAGE_KEY, stored)
+
+      await useCalendarStore.persist.rehydrate()
+
+      expect(useRescueStore.getState().failure).toEqual({ reason: 'unreadable', raw: stored })
+      expect(useCalendarStore.getState()._hasHydrated).toBe(false)
+      await settle()
+      expect(localStorage.getItem(STORAGE_KEY)).toBe(stored)
+    })
+
+    /**
+     * The other side of #276: what older versions wrote, and what they left out, is not a
+     * wrong type. Missing fields are filled by the defaults; fields that are gone are
+     * dropped in merge; null is what the nullable ones hold before they are first set.
+     */
+    it('still opens what an older version left, with fields missing and fields gone', async () => {
+      const stored = JSON.stringify({
+        state: {
+          activities: [{ ...whole, updatedAt: undefined }],
+          logs: [
+            { ...log, notes: 'rain' },
+            { ...log, id: 'm', notes: null },
+          ],
+          yearMode: 'byActivity',
+          reminderTickDays: 2,
+          checkinNoticeSeen: true,
+          selectedDate: '2026-03-01',
+          currentView: 'year',
+          firstOpenedAt: null,
+          checkinLastAttempt: { date: '2026-11-01', at: '2026-11-01T10:00:00.000Z', ok: true },
+        },
+        version: 0,
+      })
+      localStorage.setItem(STORAGE_KEY, stored)
+
+      await useCalendarStore.persist.rehydrate()
+
+      expect(useRescueStore.getState().failure).toBeNull()
+      expect(useCalendarStore.getState()._hasHydrated).toBe(true)
+      expect(useCalendarStore.getState().activities).toHaveLength(1)
+      expect(useCalendarStore.getState().logs).toHaveLength(2)
+    })
+
     it('still opens an empty storage as a new installation', async () => {
       await useCalendarStore.persist.rehydrate()
 
