@@ -1,6 +1,8 @@
 import { useMemo, memo } from 'react'
 import { formatDate } from '../../lib/dates'
 import { calculateHeatmapLevel, getHeatmapColor } from '../../lib/colors'
+import { monthCompletion } from '../../lib/monthCompletion'
+import { useTodayDate } from '../../lib/today'
 
 const MONTHS = [
   'January',
@@ -48,7 +50,9 @@ export const MonthCard = memo(function MonthCard({
   logsByDate,
   onSelect,
 }: MonthCardProps) {
-  const { cells, daysInMonth, daysCompleted, percentage } = useMemo(() => {
+  // The app's day, not the clock's: see useTodayDate.
+  const today = useTodayDate()
+  const { cells, daysCounted, daysCompleted, percentage } = useMemo(() => {
     const firstDay = new Date(year, month, 1)
     const lastDay = new Date(year, month + 1, 0)
     const days = lastDay.getDate()
@@ -60,13 +64,8 @@ export const MonthCard = memo(function MonthCard({
       gridCells.push(null)
     }
 
-    let completed = 0
     for (let d = 1; d <= days; d++) {
-      const date = new Date(year, month, d)
-      gridCells.push(date)
-      const dateStr = formatDate(date)
-      const count = logsByDate.get(dateStr) || 0
-      if (count > 0) completed++
+      gridCells.push(new Date(year, month, d))
     }
 
     // Trailing empty cells
@@ -77,17 +76,24 @@ export const MonthCard = memo(function MonthCard({
       }
     }
 
-    const pct = days > 0 ? Math.round((completed / days) * 100) : 0
+    // The same figure as the year's row of months and the statistics: see monthCompletion.
+    // A month that has not begun keeps the card's old reading, none of its days and 0%.
+    const figure = monthCompletion(year, month, (date) => (logsByDate.get(date) ?? 0) > 0, today)
 
-    return { cells: gridCells, daysInMonth: days, daysCompleted: completed, percentage: pct }
-  }, [year, month, logsByDate])
+    return {
+      cells: gridCells,
+      daysCounted: figure?.daysCounted ?? days,
+      daysCompleted: figure?.daysDone ?? 0,
+      percentage: figure?.percentage ?? 0,
+    }
+  }, [year, month, logsByDate, today])
 
   return (
     <button
       type="button"
       onClick={() => onSelect(month)}
       className="flex flex-col p-3 rounded-xl bg-white border border-gray-200 hover:border-emerald-300 hover:shadow-sm transition-all active:scale-[0.98] min-h-[44px] text-left w-full"
-      aria-label={`${MONTHS[month]} ${year}: ${daysCompleted} of ${daysInMonth} days active, ${percentage}%. Tap to view month.`}
+      aria-label={`${MONTHS[month]} ${year}: ${daysCompleted} of ${daysCounted} days active, ${percentage}%. Tap to view month.`}
       data-testid="month-card"
     >
       {/* Header: Month name + stats */}
@@ -105,7 +111,7 @@ export const MonthCard = memo(function MonthCard({
             to a screen reader, which gets the full figures from the card's aria-label. */}
         <span className="text-xs text-gray-500 whitespace-nowrap" data-testid="month-card-stats">
           <span className="hidden sm:inline">
-            {daysCompleted}/{daysInMonth} &middot;{' '}
+            {daysCompleted}/{daysCounted} &middot;{' '}
           </span>
           {percentage}%
         </span>

@@ -4,6 +4,7 @@ import { formatDate } from '../../lib/dates'
 import { longestStreak } from '../../lib/streaks'
 import { completedDates } from '../../lib/activityYear'
 import { useTodayDate } from '../../lib/today'
+import { monthCompletion } from '../../lib/monthCompletion'
 
 export function StatsPanel() {
   const { selectedYear, activities, logs } = useCalendarStore()
@@ -26,21 +27,16 @@ export function StatsPanel() {
       )
     )
 
-    // Completion rate for the current month of the year on screen: its days up to today,
-    // which in an older year is all of them and in a year still to come is none.
-    const currentMonth = today.getMonth()
-    const daysInMonth = new Date(selectedYear, currentMonth + 1, 0).getDate()
-    const currentMonthDays = Array.from(
-      { length: daysInMonth },
-      (_, day) => new Date(selectedYear, currentMonth, day + 1)
-    ).filter((d) => d <= today)
-    const currentMonthCompleted = currentMonthDays.filter((d) =>
-      daysWithActivity.has(formatDate(d))
-    ).length
+    // The current month of the year on screen, by the rule every month figure follows (see
+    // monthCompletion): its days up to today, which in an older year is all of them. In a
+    // year still to come the month has not begun, and the card says 0%.
     const completionRate =
-      currentMonthDays.length > 0
-        ? Math.round((currentMonthCompleted / currentMonthDays.length) * 100)
-        : 0
+      monthCompletion(
+        selectedYear,
+        today.getMonth(),
+        (date) => everyDayWithActivity.has(date),
+        today
+      )?.percentage ?? 0
 
     return {
       activeDays: daysWithActivity.size,

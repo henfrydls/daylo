@@ -1034,4 +1034,73 @@ describe('YearView', () => {
       expect(screen.queryByTestId('month-completion')).not.toBeInTheDocument()
     })
   })
+
+  // The month we are in is counted over its days up to today, the same rule as "This
+  // Month" in the statistics (lib/monthCompletion). Four days marked by 20 November used
+  // to read 13% here, four of thirty, and 20% there, four of twenty.
+  describe('the month completion figure', () => {
+    const ACTIVITY: Activity = {
+      id: '1',
+      name: 'Exercise',
+      color: '#22c55e',
+      createdAt: '2026-01-01',
+      updatedAt: '2026-01-01',
+    }
+    const marked = (...dates: string[]): ActivityLog[] =>
+      dates.map((date) => ({ id: date, activityId: '1', date, completed: true, createdAt: date }))
+
+    beforeEach(() => {
+      vi.setSystemTime(new Date(2026, 10, 20, 12))
+      useCalendarStore.setState({
+        activities: [ACTIVITY],
+        logs: marked(
+          '2026-10-01',
+          '2026-10-31',
+          '2026-11-02',
+          '2026-11-05',
+          '2026-11-11',
+          '2026-11-20'
+        ),
+        selectedYear: 2026,
+      })
+    })
+
+    it('counts the current month over its days so far, and a past one over all of them', () => {
+      render(<YearView />)
+
+      const row = within(screen.getByTestId('month-completion'))
+      expect(row.getByRole('button', { name: 'View Nov 2026, 20% complete' })).toBeInTheDocument()
+      expect(row.getByRole('button', { name: 'View Oct 2026, 6% complete' })).toBeInTheDocument()
+      expect(
+        row.getByRole('button', { name: 'View Dec 2026, not started yet' })
+      ).toBeInTheDocument()
+    })
+
+    it('gives the phone the same figure on the month card', () => {
+      Object.defineProperty(window, 'matchMedia', {
+        writable: true,
+        configurable: true,
+        value: vi.fn().mockImplementation((query: string) => ({
+          matches: false, // < 640px → mobile
+          media: query,
+          onchange: null,
+          addListener: vi.fn(),
+          removeListener: vi.fn(),
+          addEventListener: vi.fn(),
+          removeEventListener: vi.fn(),
+          dispatchEvent: vi.fn(),
+        })),
+      })
+      render(<YearView />)
+
+      const cards = screen.getAllByTestId('month-card')
+      expect(cards[10]).toHaveAccessibleName(
+        'November 2026: 4 of 20 days active, 20%. Tap to view month.'
+      )
+      expect(within(cards[10]).getByTestId('month-card-stats')).toHaveTextContent('4/20 · 20%')
+      expect(cards[9]).toHaveAccessibleName(
+        'October 2026: 2 of 31 days active, 6%. Tap to view month.'
+      )
+    })
+  })
 })

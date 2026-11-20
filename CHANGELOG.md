@@ -29,6 +29,12 @@ once you do.
 current streak is no longer repeated there, or in the line under the year on a phone, and
 Longest Streak takes the full width of the panel.
 
+**The month you are in now shows the same percentage everywhere.** The Year view counted
+it over all of its days, including the ones still to come, while Statistics counted only
+the days so far, so four days logged by the 20th of November read 13% in one place and 20%
+in the other. Now every place counts the current month up to today, and a month that is
+over across all of its days.
+
 **On Android, tapping the daily reminder opens today, ready to log.**
 It used to open Daylo wherever you had left it, so you still had to find today and tap it.
 Now the tap opens today's list, whether Daylo was still open in the background or not, and

@@ -158,3 +158,14 @@ describe('what period each figure covers', () => {
     expect(under('Longest Streak')).toBe('all time')
   })
 })
+
+// The year's row of months and the phone's month cards read the same rule
+// (lib/monthCompletion), so this is the number they show for the month too.
+describe('this month, on the day the views disagreed', () => {
+  it('is four days of the twenty gone by', () => {
+    vi.setSystemTime(new Date(2026, 10, 20, 12))
+    show(['2026-11-02', '2026-11-05', '2026-11-11', '2026-11-20'])
+
+    expect(figure('This Month')).toBe('20%')
+  })
+})
