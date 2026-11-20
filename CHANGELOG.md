@@ -33,7 +33,8 @@ Longest Streak takes the full width of the panel.
 it over all of its days, including the ones still to come, while Statistics counted only
 the days so far, so four days logged by the 20th of November read 13% in one place and 20%
 in the other. Now every place counts the current month up to today, and a month that is
-over across all of its days.
+over across all of its days. A month that has not started yet shows a dash everywhere,
+instead of 0%.
 
 **On Android, tapping the daily reminder opens today, ready to log.**
 It used to open Daylo wherever you had left it, so you still had to find today and tap it.

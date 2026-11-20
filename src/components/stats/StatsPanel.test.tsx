@@ -112,10 +112,15 @@ describe('this month', () => {
     expect(figure('This Month')).toBe('3%')
   })
 
-  it('is nothing in a year that has not come', () => {
+  // The same as the year's row of months: nothing was missed yet, and 0% reads as a
+  // failure. The dash is for the eye; a screen reader is told the month has not started.
+  it('has no figure in a year that has not come', () => {
     show(['2026-03-04'], 2027)
 
-    expect(figure('This Month')).toBe('0%')
+    const value = screen.getByText('This Month').previousElementSibling!
+    expect(value.querySelector('[aria-hidden="true"]')?.textContent).toBe('–')
+    expect(value.querySelector('.sr-only')?.textContent).toBe('Not started yet')
+    expect(value.textContent).not.toContain('%')
   })
 })
 

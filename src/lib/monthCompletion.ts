@@ -30,11 +30,13 @@ export function monthCompletion(
 ): MonthCompletion | null {
   const limit = formatDate(today)
   const daysInMonth = new Date(year, month + 1, 0).getDate()
+  // The month's days as the logs spell them, without a Date and a format call for each.
+  const prefix = `${year}-${String(month + 1).padStart(2, '0')}-`
 
   let daysCounted = 0
   let daysDone = 0
   for (let day = 1; day <= daysInMonth; day++) {
-    const date = formatDate(new Date(year, month, day))
+    const date = prefix + String(day).padStart(2, '0')
     if (date > limit) break
     daysCounted += 1
     if (isDone(date)) daysDone += 1

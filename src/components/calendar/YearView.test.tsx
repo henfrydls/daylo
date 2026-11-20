@@ -1101,6 +1101,9 @@ describe('YearView', () => {
       expect(cards[9]).toHaveAccessibleName(
         'October 2026: 2 of 31 days active, 6%. Tap to view month.'
       )
+      // A month that has not begun says so, as the row does, and not "0 of 31".
+      expect(cards[11]).toHaveAccessibleName('December 2026: not started yet. Tap to view month.')
+      expect(within(cards[11]).getByTestId('month-card-stats')).toHaveTextContent(/^–$/)
     })
   })
 })

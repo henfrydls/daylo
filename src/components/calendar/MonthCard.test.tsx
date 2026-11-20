@@ -1,6 +1,12 @@
 import { describe, it, expect, vi } from 'vitest'
 import { render, screen, fireEvent } from '@testing-library/react'
 import { MonthCard } from './MonthCard'
+import { monthCompletion } from '../../lib/monthCompletion'
+
+// The card shows the figure the year hands it. These are months of 2024, long over, so
+// their figure is over all of their days.
+const figureOf = (year: number, month: number, logsByDate = new Map<string, number>()) =>
+  monthCompletion(year, month, (date) => (logsByDate.get(date) ?? 0) > 0, new Date(2026, 10, 20))
 
 describe('MonthCard', () => {
   const defaultProps = {
@@ -8,6 +14,7 @@ describe('MonthCard', () => {
     month: 0, // January
     habitsOn: () => 2,
     logsByDate: new Map<string, number>(),
+    figure: figureOf(2024, 0),
     onSelect: vi.fn(),
   }
 
@@ -24,7 +31,9 @@ describe('MonthCard', () => {
       ['2024-01-10', 1],
     ])
 
-    render(<MonthCard {...defaultProps} logsByDate={logsByDate} />)
+    render(
+      <MonthCard {...defaultProps} logsByDate={logsByDate} figure={figureOf(2024, 0, logsByDate)} />
+    )
 
     // 3 days with activity out of 31 days in January
     expect(screen.getByText(/3\/31/)).toBeInTheDocument()
@@ -53,7 +62,9 @@ describe('MonthCard', () => {
       ['2024-01-02', 2],
     ])
 
-    render(<MonthCard {...defaultProps} logsByDate={logsByDate} />)
+    render(
+      <MonthCard {...defaultProps} logsByDate={logsByDate} figure={figureOf(2024, 0, logsByDate)} />
+    )
 
     const card = screen.getByTestId('month-card')
     expect(card).toHaveAttribute('aria-label', expect.stringContaining('January 2024'))
@@ -71,7 +82,7 @@ describe('MonthCard', () => {
   })
 
   it('should handle February in a leap year', () => {
-    render(<MonthCard {...defaultProps} month={1} year={2024} />)
+    render(<MonthCard {...defaultProps} month={1} year={2024} figure={figureOf(2024, 1)} />)
 
     // Feb 2024 has 29 days
     expect(screen.getByText(/0\/29/)).toBeInTheDocument()
@@ -79,9 +90,20 @@ describe('MonthCard', () => {
 
   it('should handle different months correctly', () => {
     // June has 30 days
-    render(<MonthCard {...defaultProps} month={5} />)
+    render(<MonthCard {...defaultProps} month={5} figure={figureOf(2024, 5)} />)
 
     expect(screen.getByText('Jun')).toBeInTheDocument()
     expect(screen.getByText(/0\/30/)).toBeInTheDocument()
+  })
+
+  // Nothing was missed yet in a month that has not begun: the same dash as the year's row,
+  // and no "0 of 31" for a screen reader either.
+  it('shows a dash for a month that has not begun', () => {
+    render(<MonthCard {...defaultProps} figure={null} />)
+
+    expect(screen.getByTestId('month-card-stats')).toHaveTextContent(/^–$/)
+    expect(screen.getByTestId('month-card')).toHaveAccessibleName(
+      'January 2024: not started yet. Tap to view month.'
+    )
   })
 })
