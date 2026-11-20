@@ -70,12 +70,11 @@ export const StreakChip = forwardRef<HTMLButtonElement, StreakChipProps>(functio
       aria-label={`${said}. Show your streak`}
       aria-haspopup="dialog"
       aria-expanded={expanded}
-      // min-h-12 is the 48px Henfry asked for, around a drawing of 36: easy to press. The
-      // -my-0.5 is what lets the header keep the height it had: the row is 44px, the gear's
-      // height, and a 48px button made it 48 the moment a run began. Two pixels of negative
-      // margin on each side take the button out of that sum without taking them from the
-      // press: the area that answers a finger is still 48.
-      className="group -my-0.5 inline-flex min-h-12 cursor-pointer items-center focus:outline-none"
+      // 44px tall, the gear's height, so the header keeps the height it has without a run:
+      // a 48px button made the row 4px taller the moment a run began. The 48px Henfry asked
+      // for, around a drawing of 36, is the ::before, which reaches 2px above and below and
+      // answers a press as the button does, without taking any room in the row.
+      className="group relative inline-flex h-11 cursor-pointer items-center focus:outline-none before:absolute before:inset-x-0 before:-inset-y-0.5"
     >
       {/* The ring goes on the drawing and not on the button, so it goes round what is
           seen. emerald-700 and not the emerald-500 the rest of the app uses: 5.36:1 on

@@ -114,6 +114,9 @@ export function Modal({
         className={`absolute inset-0 bg-black/50 transition-opacity duration-[250ms] ${arrived ? 'opacity-100' : 'opacity-0'}`}
         onClick={onClose}
         aria-hidden="true"
+        // Read by index.css, which dims the scrollbar's strip along with the page.
+        data-backdrop="dim"
+        data-shown={arrived}
       />
       <div
         ref={modalRef}

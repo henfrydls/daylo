@@ -133,6 +133,9 @@ export function ConfirmDialog({
         onClick={onClose}
         aria-hidden="true"
         data-testid="confirm-dialog-backdrop"
+        // Read by index.css, which dims the scrollbar's strip along with the page.
+        data-backdrop="dim"
+        data-shown={arrived}
       />
       <div
         ref={dialogRef}

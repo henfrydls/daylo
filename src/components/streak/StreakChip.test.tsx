@@ -100,14 +100,16 @@ describe('the streak chip', () => {
   })
 
   // Henfry's pick, D: the soft green it always had, no border, a pill. The drawing is 36px
-  // and the button around it the 48px he asked for, so it is easy to press and the header
-  // does not move.
+  // and the area that takes a press the 48px he asked for, so it is easy to press; the
+  // button itself is the gear's 44px, so the header does not move. jsdom has no layout, so
+  // the sizes are measured in e2e/header-steady.spec.ts; this keeps the classes honest.
   it('is the soft green pill with no border, pressable over 48px', () => {
     render(<StreakChip streak={9} todayDone />)
     const button = screen.getByRole('button')
     const pill = screen.getByTestId('streak-pill')
 
-    expect(button.className).toContain('min-h-12')
+    expect(button.className).toContain('h-11')
+    expect(button.className).toContain('before:-inset-y-0.5')
     expect(pill.className).toContain('bg-emerald-50')
     expect(pill.className).toContain('rounded-full')
     expect(pill.className).toContain('h-9')
