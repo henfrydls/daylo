@@ -14,6 +14,7 @@ import { useMediaQuery } from '../../hooks/useMediaQuery'
 import { useTodayDate } from '../../lib/today'
 import { useShallow } from 'zustand/react/shallow'
 import { plural } from '../../lib/plural'
+import { monthCompletion } from '../../lib/monthCompletion'
 import { FirstDayDoor } from './FirstDayDoor'
 
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
@@ -89,27 +90,17 @@ export const YearView = memo(function YearView({ onImport }: YearViewProps) {
   )
 
   /**
-   * A percentage per month, on the same footing as the phone's month cards: days with
-   * something done over days in the month. A month that has not begun gets null rather
-   * than a zero, because nothing was missed yet and 0% reads as a failure.
+   * Each month's figure, by the rule every month figure follows: see monthCompletion. The
+   * row under the calendar and the phone's month cards both read these, so there is one
+   * number per month. A month that has not begun gets null rather than a zero, because
+   * nothing was missed yet and 0% reads as a failure.
    */
-  const monthCompletion = useMemo(() => {
-    return Array.from({ length: 12 }, (_, month) => {
-      if (
-        selectedYear > today.getFullYear() ||
-        (selectedYear === today.getFullYear() && month > today.getMonth())
-      ) {
-        return { month, percentage: null }
-      }
-      const daysInMonth = new Date(selectedYear, month + 1, 0).getDate()
-      let done = 0
-      for (let day = 1; day <= daysInMonth; day++) {
-        const key = formatDate(new Date(selectedYear, month, day))
-        if ((dayDataMap.get(key)?.completedCount ?? 0) > 0) done += 1
-      }
-      return { month, percentage: Math.round((done / daysInMonth) * 100) }
-    })
-  }, [dayDataMap, selectedYear, today])
+  const monthFigures = useMemo(() => {
+    const isDone = (date: string) => (logsByDate.get(date) ?? 0) > 0
+    return Array.from({ length: 12 }, (_, month) =>
+      monthCompletion(selectedYear, month, isDone, today)
+    )
+  }, [logsByDate, selectedYear, today])
 
   /**
    * The phone's strips end on the week we are in, or on the last week of a year already
@@ -323,6 +314,7 @@ export const YearView = memo(function YearView({ onImport }: YearViewProps) {
                   month={month}
                   habitsOn={habitsOn}
                   logsByDate={logsByDate}
+                  figure={monthFigures[month]}
                   onSelect={(m) =>
                     travel
                       ? travel.toMonth({ year: selectedYear, month: m })
@@ -482,7 +474,7 @@ export const YearView = memo(function YearView({ onImport }: YearViewProps) {
                 Month completion
               </div>
               <div className="grid grid-cols-12 gap-2" data-testid="month-completion">
-                {monthCompletion.map(({ month, percentage }) => (
+                {monthFigures.map((figure, month) => (
                   <button
                     key={month}
                     type="button"
@@ -493,14 +485,14 @@ export const YearView = memo(function YearView({ onImport }: YearViewProps) {
                     }
                     className="rounded-lg px-1 py-1 text-center hover:bg-gray-50 focus-visible:ring-2 focus-visible:ring-emerald-500 focus:outline-none"
                     aria-label={
-                      percentage === null
+                      figure === null
                         ? `View ${MONTHS[month]} ${selectedYear}, not started yet`
-                        : `View ${MONTHS[month]} ${selectedYear}, ${percentage}% complete`
+                        : `View ${MONTHS[month]} ${selectedYear}, ${figure.percentage}% complete`
                     }
                   >
                     <div className="text-xs text-gray-400">{MONTHS[month]}</div>
                     <div className="text-sm font-semibold text-gray-700">
-                      {percentage === null ? '–' : `${percentage}%`}
+                      {figure === null ? '–' : `${figure.percentage}%`}
                     </div>
                   </button>
                 ))}

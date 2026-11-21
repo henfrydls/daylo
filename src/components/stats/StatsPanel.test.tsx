@@ -112,10 +112,15 @@ describe('this month', () => {
     expect(figure('This Month')).toBe('3%')
   })
 
-  it('is nothing in a year that has not come', () => {
+  // The same as the year's row of months: nothing was missed yet, and 0% reads as a
+  // failure. The dash is for the eye; a screen reader is told the month has not started.
+  it('has no figure in a year that has not come', () => {
     show(['2026-03-04'], 2027)
 
-    expect(figure('This Month')).toBe('0%')
+    const value = screen.getByText('This Month').previousElementSibling!
+    expect(value.querySelector('[aria-hidden="true"]')?.textContent).toBe('–')
+    expect(value.querySelector('.sr-only')?.textContent).toBe('Not started yet')
+    expect(value.textContent).not.toContain('%')
   })
 })
 
@@ -156,5 +161,16 @@ describe('what period each figure covers', () => {
     expect(under('Active Days')).toBe('this year')
     expect(under('This Month')).toBe('completion')
     expect(under('Longest Streak')).toBe('all time')
+  })
+})
+
+// The year's row of months and the phone's month cards read the same rule
+// (lib/monthCompletion), so this is the number they show for the month too.
+describe('this month, on the day the views disagreed', () => {
+  it('is four days of the twenty gone by', () => {
+    vi.setSystemTime(new Date(2026, 10, 20, 12))
+    show(['2026-11-02', '2026-11-05', '2026-11-11', '2026-11-20'])
+
+    expect(figure('This Month')).toBe('20%')
   })
 })

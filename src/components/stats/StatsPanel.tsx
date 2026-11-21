@@ -1,9 +1,10 @@
-import { useMemo } from 'react'
+import { useMemo, type ReactNode } from 'react'
 import { useCalendarStore } from '../../store'
 import { formatDate } from '../../lib/dates'
 import { longestStreak } from '../../lib/streaks'
 import { completedDates } from '../../lib/activityYear'
 import { useTodayDate } from '../../lib/today'
+import { monthCompletion } from '../../lib/monthCompletion'
 
 export function StatsPanel() {
   const { selectedYear, activities, logs } = useCalendarStore()
@@ -26,21 +27,17 @@ export function StatsPanel() {
       )
     )
 
-    // Completion rate for the current month of the year on screen: its days up to today,
-    // which in an older year is all of them and in a year still to come is none.
-    const currentMonth = today.getMonth()
-    const daysInMonth = new Date(selectedYear, currentMonth + 1, 0).getDate()
-    const currentMonthDays = Array.from(
-      { length: daysInMonth },
-      (_, day) => new Date(selectedYear, currentMonth, day + 1)
-    ).filter((d) => d <= today)
-    const currentMonthCompleted = currentMonthDays.filter((d) =>
-      daysWithActivity.has(formatDate(d))
-    ).length
+    // The current month of the year on screen, by the rule every month figure follows (see
+    // monthCompletion): its days up to today, which in an older year is all of them. In a
+    // year still to come the month has not begun and there is no figure, as on the year's
+    // row of months.
     const completionRate =
-      currentMonthDays.length > 0
-        ? Math.round((currentMonthCompleted / currentMonthDays.length) * 100)
-        : 0
+      monthCompletion(
+        selectedYear,
+        today.getMonth(),
+        (date) => everyDayWithActivity.has(date),
+        today
+      )?.percentage ?? null
 
     return {
       activeDays: daysWithActivity.size,
@@ -66,7 +63,22 @@ export function StatsPanel() {
             1.6, where it is on every screen and at every width rather than in the corner of
             a panel the month view does not show on a phone. */}
         <StatCard label="Active Days" value={stats.activeDays} subtitle="this year" />
-        <StatCard label="This Month" value={`${stats.completionRate}%`} subtitle="completion" />
+        <StatCard
+          label="This Month"
+          value={
+            stats.completionRate === null ? (
+              // The dash is for the eye, the words for a screen reader, which would read
+              // a lone dash as nothing or as "en dash".
+              <>
+                <span aria-hidden="true">–</span>
+                <span className="sr-only">Not started yet</span>
+              </>
+            ) : (
+              `${stats.completionRate}%`
+            )
+          }
+          subtitle="completion"
+        />
         <StatCard
           label="Longest Streak"
           value={stats.longestStreak}
@@ -85,7 +97,7 @@ function StatCard({
   className = '',
 }: {
   label: string
-  value: number | string
+  value: ReactNode
   subtitle: string
   className?: string
 }) {
