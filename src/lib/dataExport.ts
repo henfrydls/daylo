@@ -1,5 +1,6 @@
 import type { Activity, ActivityLog } from '../types'
 import { LONGEST_NAME } from './limits'
+import { isValidDateFormat, isValidISODate } from './recordShape'
 
 export interface ExportData {
   activities: Activity[]
@@ -496,32 +497,6 @@ function validateId(id: string, field: string, index?: number): ValidationError[
 function isValidHexColor(color: string): boolean {
   const hexColorPattern = /^#([A-Fa-f0-9]{6}|[A-Fa-f0-9]{3})$/
   return hexColorPattern.test(color)
-}
-
-/**
- * Validate date format (YYYY-MM-DD)
- */
-function isValidDateFormat(date: string): boolean {
-  const datePattern = /^\d{4}-\d{2}-\d{2}$/
-  if (!datePattern.test(date)) {
-    return false
-  }
-
-  // Additional validation: check if it's a real date
-  const [year, month, day] = date.split('-').map(Number)
-  const dateObj = new Date(year, month - 1, day)
-
-  return (
-    dateObj.getFullYear() === year && dateObj.getMonth() === month - 1 && dateObj.getDate() === day
-  )
-}
-
-/**
- * Validate ISO date string format
- */
-function isValidISODate(dateString: string): boolean {
-  const date = new Date(dateString)
-  return !isNaN(date.getTime())
 }
 
 /**
