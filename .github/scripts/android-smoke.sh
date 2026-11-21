@@ -78,6 +78,85 @@ fail() {
   exit 1
 }
 
+# Wait for Android to finish starting before anything else happens on it.
+#
+# The emulator action hands over as soon as sys.boot_completed is 1, and that is not the
+# end of booting: user 0 is not unlocked yet, BOOT_COMPLETED has not been posted, and
+# WebViewUpdateService has not had its onUnlockedUser. Measured in the logcats of seven
+# smoke runs, Start proc com.daylo.app against "Posting BOOT_COMPLETED user #0":
+#
+#   run 44913059310, painted                       unlocked before the start
+#   run 44827727373 attempt 3, painted             unlocked before the start
+#   run 44827731906, painted                       started 1.2 s before the unlock
+#   run 44827727373 attempt 1, blank               started 3.9 s before
+#   run 44827727373 attempt 2, FORTIFY abort       started 3.4 s before
+#   run 44957853399, blank                         started 5.9 s before
+#   run 44913787883, blank                         started 7.2 s before
+#
+# In the three blank runs Daylo's process never logs WebViewFactory at all: started that
+# early it never gets a WebView, and no amount of waiting for the paint fixes it. So the
+# app is started only once the user is unlocked, and after the broadcasts of the unlock,
+# BOOT_COMPLETED among them, have drained.
+READY_TIMEOUT="${SMOKE_READY_TIMEOUT:-120}"
+echo "::group::Wait for Android to finish starting"
+ready_from=$SECONDS
+boot_state=""
+user_state=""
+while :; do
+  waited=$((SECONDS - ready_from))
+  now_boot=$(adb shell getprop sys.boot_completed 2>/dev/null | tr -d '\r' || true)
+  # am get-started-user-state answers RUNNING_LOCKED, RUNNING_UNLOCKING or
+  # RUNNING_UNLOCKED. If an image does not know the command, the same word is in the
+  # user list of dumpsys activity.
+  now_user=$(adb shell am get-started-user-state 0 2>/dev/null | tr -d '\r' \
+    | grep -oE "RUNNING_[A-Z_]+" | head -1 || true)
+  if [ -z "$now_user" ]; then
+    now_user=$(adb shell dumpsys activity users 2>/dev/null | tr -d '\r' \
+      | grep -oE "RUNNING_[A-Z_]+" | head -1 || true)
+  fi
+  # Printed when either one changes, so the run shows when each became true.
+  if [ "$now_boot" != "$boot_state" ] || [ "$now_user" != "$user_state" ]; then
+    echo "${waited}s: sys.boot_completed=${now_boot:-(empty)}, user 0 ${now_user:-(state unknown)}"
+    boot_state="$now_boot"
+    user_state="$now_user"
+  fi
+  if [ "$boot_state" = 1 ] && [ "$user_state" = RUNNING_UNLOCKED ]; then
+    break
+  fi
+  if [ "$waited" -ge "$READY_TIMEOUT" ]; then
+    echo "::endgroup::"
+    echo "::error::The emulator never finished starting: after $READY_TIMEOUT s sys.boot_completed was"
+    echo "::error::${boot_state:-(empty)} and user 0 was ${user_state:-(state unknown)}. Daylo was not started,"
+    echo "::error::because an app started before the user is unlocked gets no WebView. This says"
+    echo "::error::nothing about the app."
+    exit 1
+  fi
+  sleep 2
+done
+
+# The unlock posts BOOT_COMPLETED to about a hundred receivers, and they take another ten
+# seconds or so to run. Not a condition for starting, which is the unlock; waited for so
+# that the app does not start in the middle of them. Absent or stuck, it costs nothing
+# but a warning.
+idle_left=$((READY_TIMEOUT - (SECONDS - ready_from)))
+if [ "$idle_left" -lt 30 ]; then idle_left=30; fi
+if timeout "$idle_left" adb shell am wait-for-broadcast-idle > /dev/null 2>&1; then
+  echo "$((SECONDS - ready_from))s: broadcast queues idle"
+else
+  echo "::warning::am wait-for-broadcast-idle did not finish in ${idle_left}s or is not on this image."
+  echo "::warning::Going ahead: user 0 is unlocked, and that is the condition that matters."
+fi
+
+# What the phone's own log says about the same moments, while the boot log is still in
+# the buffer (it is cleared before the start). These are the lines the table above was
+# read from, so a run that goes wrong can be put in it.
+adb logcat -d -b main,system 2>/dev/null \
+  | grep -E "Posting BOOT_COMPLETED|onUnlockedUser.*WebViewUpdateService|Finished processing BOOT_COMPLETED" \
+  | head -5 || true
+echo "WebView after the unlock: $(adb shell dumpsys webviewupdate 2>/dev/null \
+  | grep -m1 "Current WebView package" | tr -d '\r' || true)"
+echo "::endgroup::"
+
 # No network for the emulator, before the app is ever started.
 #
 # Since 1.3 a fresh profile is a new installation: the app turns the check-in on and sends
@@ -107,6 +186,10 @@ adb logcat -c
 started_at=$(adb shell date "+%Y-%m-%d %H:%M:%S" | tr -d '\r')
 # The runner's clock, for how long the paint is given. Only ever compared with itself.
 launched=$SECONDS
+# A line of its own in the phone's log, so that the order is there to read: the boot
+# lines above, then this, then Start proc com.daylo.app.
+adb shell log -t DayloSmoke "starting com.daylo.app now" || true
+echo "starting $PKG at $started_at (phone clock)"
 adb shell am start -W -n "$ACTIVITY"
 
 # Thirty seconds to reach the foreground. A Tauri app on a cold emulator takes a few
