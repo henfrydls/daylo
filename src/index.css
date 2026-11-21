@@ -239,6 +239,47 @@ body {
   overscroll-behavior-x: none;
 }
 
+/* The scrollbar's room is kept whether or not there is anything to scroll. Month is a few
+ * pixels taller than an 800 px window and Year is not, so with a scrollbar that takes room
+ * (Windows, Linux with overlay scrolling off, macOS set to always show scroll bars) the
+ * page was 15 to 21 px narrower in Month, and the toggle and the gear jumped sideways each
+ * time the view changed. Where scrollbars float over the page (Android, iOS, and macOS
+ * and GTK as they come) this does nothing: an overlay scrollbar has no room to keep.
+ *
+ * Where nothing scrolls, that room is an empty strip down the right edge, and nothing on
+ * the page can paint there: it is outside the viewport, so a fixed backdrop stops at its
+ * edge however wide it is made (measured in Chromium, a backdrop 40 px wider still left
+ * it bare). What shows there is the canvas, which takes the root's background. So the
+ * root gets the page's grey, and while a backdrop is up the root takes on the colour of
+ * that backdrop over the grey, with the same fade. Without this the strip was white beside
+ * a grey page, and stayed white beside a dimmed one with a dialog open.
+ *
+ * The body keeps its own white, and so does everything drawn on top of it. */
+html {
+  scrollbar-gutter: stable;
+  background-color: var(--bg-secondary);
+  transition: background-color 250ms cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* The two backdrops there are: black at 50% behind a dialog or the day sheet, and at 10%
+   behind Settings, which has one only from 640 px up. Both up at once is a dialog opened
+   from Settings. */
+html:has([data-backdrop='dim'][data-shown='true']) {
+  background-color: color-mix(in srgb, black 50%, var(--bg-secondary));
+}
+
+@media (min-width: 640px) {
+  html:has([data-backdrop='faint'][data-shown='true']) {
+    background-color: color-mix(in srgb, black 10%, var(--bg-secondary));
+  }
+
+  html:has([data-backdrop='faint'][data-shown='true']):has(
+      [data-backdrop='dim'][data-shown='true']
+    ) {
+    background-color: color-mix(in srgb, black 55%, var(--bg-secondary));
+  }
+}
+
 body {
   margin: 0;
   min-height: 100dvh;

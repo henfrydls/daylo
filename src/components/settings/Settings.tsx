@@ -211,6 +211,9 @@ export function Settings({
         }`}
         onClick={onClose}
         aria-hidden="true"
+        // Read by index.css, which dims the scrollbar's strip along with the page.
+        data-backdrop="faint"
+        data-shown={arrived}
       />
       <div
         ref={surfaceRef}
