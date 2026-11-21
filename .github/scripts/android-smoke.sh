@@ -105,6 +105,8 @@ adb logcat -c
 # phone, and on an emulator the two drift. Read before the start so that nothing this run
 # does can land before it.
 started_at=$(adb shell date "+%Y-%m-%d %H:%M:%S" | tr -d '\r')
+# The runner's clock, for how long the paint is given. Only ever compared with itself.
+launched=$SECONDS
 adb shell am start -W -n "$ACTIVITY"
 
 # Thirty seconds to reach the foreground. A Tauri app on a cold emulator takes a few
@@ -119,105 +121,128 @@ for _ in $(seq 1 30); do
   fi
 done
 
-# Ten seconds more before looking. A process that aborts on its first frame can still be
-# caught mid-start by the loop above, and a panic inside run() takes a moment to land.
-sleep 10
+# The log and the picture, taken again on every attempt below so that the artifact holds
+# the last of each.
+#
 # The default buffer set already includes crash on these images, and the abort that cost
 # us an evening was in this file. It is named anyway, so that the file does not depend on
 # a default: a log without the crash buffer would look exactly like an app that died
 # quietly.
-adb logcat -d -b main,system,crash > "$LOG" || true
-
-# The picture first, before anything can fail. It is the cheapest evidence there is and a
+#
+# The picture comes before anything can fail. It is the cheapest evidence there is and a
 # failing run is exactly when it is wanted: the first time this job suspended, it did so
-# before this line and the artifact arrived with a log and no screen. If the process is
+# before the capture and the artifact arrived with a log and no screen. If the process is
 # already gone this captures whatever is behind it, which is itself worth seeing.
-adb shell screencap -p /data/local/tmp/smoke.png || true
-adb pull /data/local/tmp/smoke.png "$SHOT" || true
+capture() {
+  adb logcat -d -b main,system,crash > "$LOG" || true
+  adb shell screencap -p /data/local/tmp/smoke.png || true
+  adb pull /data/local/tmp/smoke.png "$SHOT" > /dev/null || true
+}
 
-echo "::group::Android's own account of why anything died"
-exits=""
-asked_ok=""
-if exits=$(adb shell dumpsys activity exit-info "$PKG" 2>&1); then
-  asked_ok=yes
-  echo "${exits:-(nothing recorded)}"
-else
-  # Said out loud rather than swallowed: without this one of the checks below would be
-  # skipped and the job would still go green.
-  echo "::warning::dumpsys activity exit-info is not available on this image."
-  echo "::warning::Falling back on the process and logcat checks alone."
-fi
-echo "::endgroup::"
-
-# What Android calls the exit and what actually happened are not always the same word. A
-# process that aborts inside libc during teardown has been recorded here as EXIT_SELF,
-# with the abort itself only in logcat — so this reports the reason rather than deciding
-# on it, and the logcat check below is what rules.
+# Did the app die? Asked on every attempt, and answered with a failure on the spot: a
+# crash is not something to wait out. Each signature keeps its own message, and none of
+# them is the message for a screen that has not painted yet.
 #
-# Taken from the start of the field to the next one rather than by shape: the name has
-# parentheses of its own — "APP CRASH(NATIVE)" — and a pattern that stopped at the first
-# closing bracket read the subreason instead and reported an exit as UNKNOWN while Android
-# was calling it a native crash.
-#
-# Judged on this run's records for this process, though the whole dump is printed above.
-# The dump answers "how has anything under this package ended, lately", and the question
-# here is "did THIS app die just now". Two differences, and each one has already made this
-# job say something false.
-#
-# Time: the records go back about sixteen entries. Greping the whole dump for CRASH asks
-# whether the package has ever crashed on this device. In the slow start job one real
-# abort was re-reported in the eight runs after it, and stopped only when the record aged
-# out of the buffer; one of those runs was failed for a crash stamped three seconds before
-# it started.
-#
-# Process: the WebView runs isolated and its records are filed under the app, so the
-# newest record is routinely the helper's. The EXIT_SELF abort this job exists to explain
-# was headlined "reason=13 (OTHER KILLS BY SYSTEM)", which was the helper being reclaimed
-# 82ms later. The app's own record, one line below it, said reason=1 (EXIT_SELF).
-# Through bash, like every other script in this directory: none of them carries the
-# executable bit in the index, and a bit set in a working tree does not travel.
-mine=$(bash .github/scripts/exits-since.sh "$started_at" "$PKG" <<< "${exits:-}")
-exit_reason=$(sed -n 's/.* \(reason=[0-9]\+ .*\) subreason=.*/\1/p' <<< "$mine" | head -1)
-if [ -n "$exit_reason" ]; then
-  echo "Android's word for the last exit: $exit_reason"
-elif [ -n "$asked_ok" ]; then
-  # Only when the question was actually asked. Without this guard an image that cannot
-  # answer would be reported as an image that answered "nothing died", which is the
-  # difference between knowing and not asking.
-  echo "Android recorded no exit for $PKG since this run started it."
-fi
+# The first time it is asked it prints Android's whole account. After that only when
+# there is something in it to fail on, so that a slow paint does not print the same dump
+# a dozen times.
+crash_checks() {
+  local verbose="$1" exits="" asked_ok="" mine exit_reason
+  if exits=$(adb shell dumpsys activity exit-info "$PKG" 2>&1); then
+    asked_ok=yes
+  elif [ -n "$verbose" ]; then
+    # Said out loud rather than swallowed: without this one of the checks below would be
+    # skipped and the job would still go green.
+    echo "::warning::dumpsys activity exit-info is not available on this image."
+    echo "::warning::Falling back on the process and logcat checks alone."
+  fi
 
-if grep -q "CRASH" <<< "$mine"; then
-  # Android's own record says a crash, and `fail` now digs the lines out of logcat rather
-  # than printing the end of it. Those lines are the whole difference between "it died"
-  # and knowing what killed it: exit-info records `trace=null` for a native abort, so
-  # without them this check reports a crash and no cause.
-  fail "Android recorded a crash for $PKG ($exit_reason). Its own words are in the group above."
-fi
+  # What Android calls the exit and what actually happened are not always the same word.
+  # A process that aborts inside libc during teardown has been recorded here as
+  # EXIT_SELF, with the abort itself only in logcat. So this reports the reason rather
+  # than deciding on it, and the logcat check below is what rules.
+  #
+  # Taken from the start of the field to the next one rather than by shape: the name has
+  # parentheses of its own, "APP CRASH(NATIVE)", and a pattern that stopped at the first
+  # closing bracket read the subreason instead and reported an exit as UNKNOWN while
+  # Android was calling it a native crash.
+  #
+  # Judged on this run's records for this process, though the whole dump is printed. The
+  # dump answers "how has anything under this package ended, lately", and the question
+  # here is "did THIS app die just now". Two differences, and each one has already made
+  # this job say something false.
+  #
+  # Time: the records go back about sixteen entries. Greping the whole dump for CRASH
+  # asks whether the package has ever crashed on this device. In the slow start job one
+  # real abort was re-reported in the eight runs after it, and stopped only when the
+  # record aged out of the buffer; one of those runs was failed for a crash stamped three
+  # seconds before it started.
+  #
+  # Process: the WebView runs isolated and its records are filed under the app, so the
+  # newest record is routinely the helper's. The EXIT_SELF abort this job exists to
+  # explain was headlined "reason=13 (OTHER KILLS BY SYSTEM)", which was the helper being
+  # reclaimed 82ms later. The app's own record, one line below it, said reason=1
+  # (EXIT_SELF).
+  # Through bash, like every other script in this directory: none of them carries the
+  # executable bit in the index, and a bit set in a working tree does not travel.
+  mine=$(bash .github/scripts/exits-since.sh "$started_at" "$PKG" <<< "${exits:-}")
+  exit_reason=$(sed -n 's/.* \(reason=[0-9]\+ .*\) subreason=.*/\1/p' <<< "$mine" | head -1)
 
-# A native abort is not a Java exception and not a Rust panic, and until a run produced
-# one this looked only for those two. libc writes its own epitaph and logcat marks the
-# spot: "--------- beginning of crash", then an F line. FORTIFY aborts land here, and so
-# does any signal.
-if [ -n "$(fatal_lines)" ]; then
-  echo "::group::What logcat says went wrong"
-  fatal_lines
-  echo "::endgroup::"
-  fail "The app logged a fatal error. The lines are in the group above and the whole log is in the artifact."
-fi
+  if [ -n "$verbose" ] || grep -q "CRASH" <<< "$mine"; then
+    echo "::group::Android's own account of why anything died"
+    if [ -n "$asked_ok" ]; then echo "${exits:-(nothing recorded)}"; fi
+    echo "::endgroup::"
+    if [ -n "$exit_reason" ]; then
+      echo "Android's word for the last exit: $exit_reason"
+    elif [ -n "$asked_ok" ]; then
+      # Only when the question was actually asked. Without this guard an image that
+      # cannot answer would be reported as an image that answered "nothing died", which
+      # is the difference between knowing and not asking.
+      echo "Android recorded no exit for $PKG since this run started it."
+    fi
+  fi
 
-if [ -z "$resumed" ]; then
-  fail "$ACTIVITY never reached the foreground: 30 seconds of dumpsys and it was never the resumed activity."
-fi
+  if grep -q "CRASH" <<< "$mine"; then
+    # Android's own record says a crash, and `fail` digs the lines out of logcat rather
+    # than printing the end of it. Those lines are the whole difference between "it died"
+    # and knowing what killed it: exit-info records `trace=null` for a native abort, so
+    # without them this check reports a crash and no cause.
+    fail "Android recorded a crash for $PKG ($exit_reason). Its own words are in the group above."
+  fi
 
-if pid=$(adb shell pidof "$PKG" 2>/dev/null) && [ -n "$pid" ]; then
-  echo "still running as pid $pid"
-else
-  fail "$PKG started and was gone again: pidof returned nothing. Android's word for the last exit was ${exit_reason:-(nothing recorded)}."
-fi
+  # A native abort is not a Java exception and not a Rust panic, and until a run produced
+  # one this looked only for those two. libc writes its own epitaph and logcat marks the
+  # spot: "--------- beginning of crash", then an F line. FORTIFY aborts land here, and
+  # so does any signal.
+  if [ -n "$(fatal_lines)" ]; then
+    echo "::group::What logcat says went wrong"
+    fatal_lines
+    echo "::endgroup::"
+    fail "The app logged a fatal error. The lines are in the group above and the whole log is in the artifact."
+  fi
+
+  if [ -z "$resumed" ]; then
+    fail "$ACTIVITY never reached the foreground: 30 seconds of dumpsys and it was never the resumed activity."
+  fi
+
+  local pid
+  if pid=$(adb shell pidof "$PKG" 2>/dev/null) && [ -n "$pid" ]; then
+    if [ -n "$verbose" ]; then echo "still running as pid $pid"; fi
+  else
+    fail "$PKG started and was gone again: pidof returned nothing. Android's word for the last exit was ${exit_reason:-(nothing recorded)}."
+  fi
+}
+
+# Ten seconds more before the first look. A process that aborts on its first frame can
+# still be caught mid-start by the loop above, and a panic inside run() takes a moment to
+# land. This is also the least the app is asked to stay up, and the attempts below only
+# ever add to it: the first one is taken here, as the single screenshot always was.
+sleep 10
+capture
+crash_checks verbose
 
 # But first, whose browser is this? An emulator image carries a WebView baked in and has
-# no Play Store to update it, so the image decides the engine — and on a real phone
+# no Play Store to update it, so the image decides the engine, and on a real phone
 # WebView comes from the Play Store and is current. The first run of this job was on an
 # image with WebView 83, from 2020, and Daylo's stylesheet opens with `@layer`, which
 # Chromium learned in 99: every rule was skipped and the app painted an unstyled page
@@ -246,12 +271,41 @@ elif [ "${engine%%.*}" -lt "$MIN_CHROMIUM" ]; then
 fi
 
 # The screenshot is scored by a script rather than here, because what it has to tell
-# apart — a page with Daylo's stylesheet and a page without it — cannot be read off a
+# apart, a page with Daylo's stylesheet and a page without it, cannot be read off a
 # colour count, and the script is the part that can be run against known-good and
-# known-bad images on a laptop. Its own message says which of the two failed.
-if ! python3 .github/scripts/screen-check.py "$SHOT"; then
-  echo "::error::The screenshot is in the android-smoke-evidence artifact. Look at it."
-  exit 1
-fi
+# known-bad images on a laptop.
+#
+# Scored again every few seconds until one passes, because one picture at a fixed moment
+# judged the emulator's speed as much as the app. On ec12baa (run 44913787883) a slow
+# emulator showed a white page under the status bar sixteen seconds in, with nothing
+# fatal in logcat, and the same code painted in run 44913059310. The crash checks run
+# before every score, so an app that dies while being waited for fails at once with its
+# own message, not with this one.
+PAINT_WINDOW="${SMOKE_PAINT_WINDOW:-60}"
+PAINT_EVERY="${SMOKE_PAINT_EVERY:-5}"
+attempt=1
+while :; do
+  elapsed=$((SECONDS - launched))
+  # Captured, not printed, because its verdict lines are ::error:: annotations and an
+  # attempt that has not painted yet is not an error. Only the last one's are shown.
+  if verdict=$(python3 .github/scripts/screen-check.py "$SHOT" 2>&1); then
+    echo "attempt $attempt, ${elapsed}s after launch: $(head -1 <<< "$verdict")"
+    break
+  fi
+  echo "attempt $attempt, ${elapsed}s after launch: $(head -1 <<< "$verdict")"
+  if [ "$elapsed" -ge "$PAINT_WINDOW" ]; then
+    echo "::error::The app is running and did not crash, but no screenshot passed in $PAINT_WINDOW s"
+    echo "::error::($attempt attempts). The last one, ${elapsed}s after launch: $(head -1 <<< "$verdict")"
+    # The screen check's own words for the last attempt: blank, or painted without the
+    # stylesheet. Those two are different findings and it is the one that can tell.
+    tail -n +2 <<< "$verdict"
+    echo "::error::The last screenshot is in the android-smoke-evidence artifact. Look at it."
+    exit 1
+  fi
+  sleep "$PAINT_EVERY"
+  attempt=$((attempt + 1))
+  capture
+  crash_checks ""
+done
 
 echo "Daylo installed, started, stayed up, and painted its own colours."
