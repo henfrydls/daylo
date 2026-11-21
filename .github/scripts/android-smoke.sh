@@ -95,13 +95,22 @@ fail() {
 #
 # In the three blank runs Daylo's process never logs WebViewFactory at all: started that
 # early it never gets a WebView, and no amount of waiting for the paint fixes it. So the
-# app is started only once the user is unlocked, and after the broadcasts of the unlock,
-# BOOT_COMPLETED among them, have drained.
+# app is started only once BOOT_COMPLETED has been posted, and after the broadcasts of
+# the unlock have drained.
+#
+# Not on the user state alone. The first runs with this wait (44959079043, 44959162256)
+# read user 0 as RUNNING_UNLOCKED 4.7 and 12.4 seconds before the phone logged "Posting
+# BOOT_COMPLETED user #0", which is the line every bad start came before. The state is
+# kept as a condition and printed, but the line itself is what ends the wait. It is read
+# from the phone's log, which at this point still holds the boot: the log is cleared only
+# after the install.
 READY_TIMEOUT="${SMOKE_READY_TIMEOUT:-120}"
 echo "::group::Wait for Android to finish starting"
 ready_from=$SECONDS
 boot_state=""
 user_state=""
+posted=""
+shown_posted=""
 while :; do
   waited=$((SECONDS - ready_from))
   now_boot=$(adb shell getprop sys.boot_completed 2>/dev/null | tr -d '\r' || true)
@@ -114,29 +123,35 @@ while :; do
     now_user=$(adb shell dumpsys activity users 2>/dev/null | tr -d '\r' \
       | grep -oE "RUNNING_[A-Z_]+" | head -1 || true)
   fi
-  # Printed when either one changes, so the run shows when each became true.
-  if [ "$now_boot" != "$boot_state" ] || [ "$now_user" != "$user_state" ]; then
-    echo "${waited}s: sys.boot_completed=${now_boot:-(empty)}, user 0 ${now_user:-(state unknown)}"
+  if [ -z "$posted" ] && adb logcat -d -b main,system 2>/dev/null \
+      | grep -q "Posting BOOT_COMPLETED user #0"; then
+    posted=yes
+  fi
+  # Printed when any of them changes, so the run shows when each became true.
+  if [ "$now_boot" != "$boot_state" ] || [ "$now_user" != "$user_state" ] \
+      || [ "${posted:-no}" != "${shown_posted:-}" ]; then
+    echo "${waited}s: sys.boot_completed=${now_boot:-(empty)}, user 0 ${now_user:-(state unknown)}, BOOT_COMPLETED posted: ${posted:-no}"
     boot_state="$now_boot"
     user_state="$now_user"
+    shown_posted="${posted:-no}"
   fi
-  if [ "$boot_state" = 1 ] && [ "$user_state" = RUNNING_UNLOCKED ]; then
+  if [ "$boot_state" = 1 ] && [ "$user_state" = RUNNING_UNLOCKED ] && [ -n "$posted" ]; then
     break
   fi
   if [ "$waited" -ge "$READY_TIMEOUT" ]; then
     echo "::endgroup::"
     echo "::error::The emulator never finished starting: after $READY_TIMEOUT s sys.boot_completed was"
-    echo "::error::${boot_state:-(empty)} and user 0 was ${user_state:-(state unknown)}. Daylo was not started,"
-    echo "::error::because an app started before the user is unlocked gets no WebView. This says"
-    echo "::error::nothing about the app."
+    echo "::error::${boot_state:-(empty)}, user 0 was ${user_state:-(state unknown)}, and BOOT_COMPLETED posted:"
+    echo "::error::${posted:-no}. Daylo was not started, because an app started before the unlock"
+    echo "::error::gets no WebView. This says nothing about the app."
     exit 1
   fi
   sleep 2
 done
 
 # The unlock posts BOOT_COMPLETED to about a hundred receivers, and they take another ten
-# seconds or so to run. Not a condition for starting, which is the unlock; waited for so
-# that the app does not start in the middle of them. Absent or stuck, it costs nothing
+# seconds or so to run. Not a condition for starting, which is the line above; waited for
+# so that the app does not start in the middle of them. Absent or stuck, it costs nothing
 # but a warning.
 idle_left=$((READY_TIMEOUT - (SECONDS - ready_from)))
 if [ "$idle_left" -lt 30 ]; then idle_left=30; fi
@@ -144,7 +159,7 @@ if timeout "$idle_left" adb shell am wait-for-broadcast-idle > /dev/null 2>&1; t
   echo "$((SECONDS - ready_from))s: broadcast queues idle"
 else
   echo "::warning::am wait-for-broadcast-idle did not finish in ${idle_left}s or is not on this image."
-  echo "::warning::Going ahead: user 0 is unlocked, and that is the condition that matters."
+  echo "::warning::Going ahead: BOOT_COMPLETED is posted, and that is the condition that matters."
 fi
 
 # What the phone's own log says about the same moments, while the boot log is still in
@@ -189,7 +204,7 @@ launched=$SECONDS
 # A line of its own in the phone's log, so that the order is there to read: the boot
 # lines above, then this, then Start proc com.daylo.app.
 adb shell log -t DayloSmoke "starting com.daylo.app now" || true
-echo "starting $PKG at $started_at (phone clock)"
+echo "starting $PKG"
 adb shell am start -W -n "$ACTIVITY"
 
 # Thirty seconds to reach the foreground. A Tauri app on a cold emulator takes a few
