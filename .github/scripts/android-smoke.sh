@@ -198,7 +198,18 @@ adb logcat -c
 # The phone's own clock, not the runner's: the exit records below are stamped by the
 # phone, and on an emulator the two drift. Read before the start so that nothing this run
 # does can land before it.
-started_at=$(adb shell date "+%Y-%m-%d %H:%M:%S" | tr -d '\r')
+#
+# The whole command in one string. adb shell joins its arguments with spaces and hands the
+# line to the phone's shell, which splits it again, so the quotes around a format written
+# as a separate argument never reach the phone: date got "+%Y-%m-%d" and "%H:%M:%S" as two
+# words and printed only the day. exits-since.sh compares as many characters as it is
+# given, so every exit record from earlier that day counted as this run's.
+started_at=$(adb shell 'date "+%Y-%m-%d %H:%M:%S"' | tr -d '\r')
+case "$started_at" in
+  [0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]\ [0-9][0-9]:[0-9][0-9]:[0-9][0-9]) ;;
+  *) echo "::warning::The phone's clock read as '$started_at', not a date and a time, so exit records from before this run may count as its own." ;;
+esac
+echo "start time on the phone's clock: $started_at"
 # The runner's clock, for how long the paint is given. Only ever compared with itself.
 launched=$SECONDS
 # A line of its own in the phone's log, so that the order is there to read: the boot
