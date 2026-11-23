@@ -88,7 +88,7 @@ It used to show only on a phone. On a window between a phone and a full desktop,
 where Daylo opens on many computers, nothing on screen said where to log today. Now the
 bar sits above the calendar at every width, one tap from today.
 
-**The morning after you miss a day, Daylo tells you that yesterday can still be saved.**
+**After a run of three days or more, the morning after you miss a day, Daylo tells you that yesterday can still be saved.**
 When a run of three days or more stopped yesterday, a row joins Today above the calendar:
 "Yesterday is still open", with the number of days in a row that logging it will make.
 Tapping it opens yesterday, which says the same, and once you tick something it shows the
