@@ -28,7 +28,9 @@ export function YesterdayRow({ day, wouldBe, onOpen }: YesterdayRowProps) {
       // Under Today on the phone, a little lower than it (48px, still what a finger needs)
       // so that the grid is pushed down as little as possible. From 640px the bar has room
       // to spare across, so the row goes beside Today and the grid does not move for it.
-      className="flex min-h-12 w-full cursor-pointer items-center justify-between border-t border-emerald-200 bg-white px-3 py-2 text-left transition-colors hover:bg-gray-50 active:bg-gray-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-emerald-700 sm:w-auto sm:flex-1 sm:border-t-0 sm:border-l sm:py-3"
+      // It draws its own edge and outer corners, leaning on Today's edge where they meet,
+      // and takes the same outside keyboard ring as Today.
+      className="relative flex min-h-12 w-full cursor-pointer items-center justify-between rounded-b-xl border border-t-0 border-emerald-200 bg-white px-3 py-2 text-left transition-colors hover:bg-gray-50 active:bg-gray-50 focus:outline-none focus-visible:z-10 focus-visible:ring-2 focus-visible:ring-emerald-700 focus-visible:ring-offset-2 focus-visible:ring-offset-white sm:w-auto sm:flex-1 sm:rounded-bl-none sm:rounded-tr-xl sm:border-t sm:border-l-0 sm:py-3"
       data-testid="log-yesterday-row"
     >
       <span className="flex items-center gap-3">

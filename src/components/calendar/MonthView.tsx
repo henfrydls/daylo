@@ -308,16 +308,22 @@ export const MonthView = memo(function MonthView({ onImport }: MonthViewProps) {
         <div
           className={
             yesterdayIsOpen
-              ? 'mb-4 overflow-hidden rounded-xl border border-emerald-200 sm:flex'
+              ? // No border and no clipping of its own: each row draws its own edge and
+                // its own outer corners, so nothing drawn on a row is cut by the box.
+                'mb-4 sm:flex'
               : 'contents'
           }
         >
           <button
             onClick={() => handleDayClick(todayStr)}
-            // The ring for the keyboard is emerald-700, 5.36:1 on white, inset so the bar's
-            // own rounded border does not cut it. On the desktop the bar is reached by Tab.
-            className={`w-full flex items-center justify-between p-3 bg-emerald-50 min-h-[44px] transition-colors hover:bg-emerald-100 active:bg-emerald-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-emerald-700 ${
-              yesterdayIsOpen ? 'sm:w-auto sm:flex-1' : 'mb-4 border border-emerald-200 rounded-xl'
+            // A permanent 2px edge in emerald-700, 5.36:1 on white, drawn on the bar's own
+            // rounded shape; p-[11px] is p-3 less the extra pixel, so the bar is as large as
+            // it was. The keyboard ring is outside it, a white gap and then emerald-700, and
+            // the focused row rises above its neighbour. On the desktop it is reached by Tab.
+            className={`relative w-full flex items-center justify-between p-[11px] bg-emerald-50 border-2 border-emerald-700 min-h-[44px] transition-colors hover:bg-emerald-100 active:bg-emerald-100 focus:outline-none focus-visible:z-10 focus-visible:ring-2 focus-visible:ring-emerald-700 focus-visible:ring-offset-2 focus-visible:ring-offset-white ${
+              yesterdayIsOpen
+                ? 'rounded-t-xl sm:w-auto sm:flex-1 sm:rounded-tr-none sm:rounded-bl-xl'
+                : 'mb-4 rounded-xl'
             }`}
             data-testid="log-today-bar"
             aria-label={`Log today: ${todayCompletedCount} of ${count(activities.length, 'activity', 'activities')} completed`}

@@ -370,6 +370,33 @@ describe('MonthView', () => {
       expect(screen.getByTestId('log-today-bar')).toBeInTheDocument()
     })
 
+    // A permanent 2px emerald-700 edge (5.36:1 on white) on its own rounded shape, and 1px
+    // less padding so the bar is exactly as large as it was with the 1px soft edge.
+    it('draws its edge on its own rounded shape, the same size as before', () => {
+      atWidth(390)
+      useCalendarStore.setState({
+        activities: [activity],
+        selectedYear: currentYear,
+        selectedMonth: currentMonth,
+      })
+
+      render(<MonthView />)
+
+      const classes = screen.getByTestId('log-today-bar').className.split(' ')
+      expect(classes).toEqual(
+        expect.arrayContaining([
+          'border-2',
+          'border-emerald-700',
+          'rounded-xl',
+          'p-[11px]',
+          'focus-visible:ring-offset-2',
+        ])
+      )
+      expect(classes).not.toContain('border-emerald-200')
+      expect(classes).not.toContain('p-3')
+      expect(classes).not.toContain('focus-visible:ring-inset')
+    })
+
     it('should not render Log Today bar when not viewing current month', () => {
       Object.defineProperty(window, 'matchMedia', {
         writable: true,
@@ -791,8 +818,11 @@ describe('MonthView', () => {
       const box = row()!.parentElement!
       expect(box).toContainElement(screen.getByTestId('log-today-bar'))
       expect(box.className.split(' ')).toContain('sm:flex')
-      expect(row()!.className).toContain('sm:border-l')
-      expect(row()!.className).toContain('sm:border-t-0')
+      // Beside Today the row has its own top and right edges and leans on Today's left.
+      expect(row()!.className.split(' ')).toContain('sm:border-t')
+      expect(row()!.className.split(' ')).toContain('sm:border-l-0')
+      expect(row()!.className.split(' ')).toContain('sm:rounded-tr-xl')
+      expect(screen.getByTestId('log-today-bar').className.split(' ')).toContain('sm:rounded-bl-xl')
       expect(box.firstElementChild).toBe(screen.getByTestId('log-today-bar'))
       expect(box.lastElementChild).toBe(row())
     })
@@ -804,8 +834,50 @@ describe('MonthView', () => {
       const box = row()!.parentElement!
       expect(box.firstElementChild).toBe(screen.getByTestId('log-today-bar'))
       expect(box.lastElementChild).toBe(row())
-      expect(row()!.className.split(' ')).toContain('border-t')
+      // Under Today the row leans on Today's bottom edge and carries the bottom corners.
+      expect(row()!.className.split(' ')).toContain('border-t-0')
+      expect(row()!.className.split(' ')).toContain('rounded-b-xl')
       expect(row()!.className.split(' ')).toContain('w-full')
+    })
+
+    // Each row draws its own edge and its own outer corners, and the box around them
+    // draws and clips nothing: a parent that clipped cut the corners of Today's edge and
+    // the keyboard ring, and they came out uneven.
+    it.each([360, 1280])('lets each row draw its own corners at %ipx', (width) => {
+      atWidth(width)
+      render(<MonthView />)
+
+      const box = row()!.parentElement!.className.split(' ')
+      expect(box).not.toContain('overflow-hidden')
+      expect(box).not.toContain('border')
+      expect(box).not.toContain('rounded-xl')
+      const today = screen.getByTestId('log-today-bar').className.split(' ')
+      expect(today).toEqual(
+        expect.arrayContaining(['border-2', 'border-emerald-700', 'rounded-t-xl'])
+      )
+      expect(row()!.className.split(' ')).toEqual(
+        expect.arrayContaining(['border', 'border-emerald-200'])
+      )
+    })
+
+    // The keyboard ring is outside the row, white gap then emerald-700, and the row with it
+    // rises above its neighbour so the neighbour cannot cover it.
+    it.each(['log-today-bar', 'log-yesterday-row'])('rings %s from the outside', (id) => {
+      phone()
+      render(<MonthView />)
+
+      const classes = screen.getByTestId(id).className.split(' ')
+      expect(classes).toEqual(
+        expect.arrayContaining([
+          'relative',
+          'focus-visible:z-10',
+          'focus-visible:ring-2',
+          'focus-visible:ring-emerald-700',
+          'focus-visible:ring-offset-2',
+          'focus-visible:ring-offset-white',
+        ])
+      )
+      expect(classes).not.toContain('focus-visible:ring-inset')
     })
 
     it('keeps the bar on the desktop without a rescue, with no row', () => {
