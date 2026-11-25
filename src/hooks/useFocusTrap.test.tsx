@@ -2,6 +2,7 @@ import { describe, it, expect, afterEach, vi } from 'vitest'
 import { act, fireEvent, render } from '@testing-library/react'
 import { useRef } from 'react'
 import { useFocusTrap } from './useFocusTrap'
+import { followInputModality } from '../lib/quietFocus'
 
 /**
  * Where the focus goes when a trap lets go.
@@ -192,7 +193,46 @@ describe('giving the focus back', () => {
 
     rerender(<Page open={false} />)
 
+    expect(focus).toHaveBeenCalledWith(expect.objectContaining({ preventScroll: true }))
+  })
+
+  // Closed by a tap (the backdrop, Android's back): back without the keyboard ring, and
+  // marked for an engine that would draw one anyway.
+  it('gives it back without a ring after a pointer', () => {
+    const stop = followInputModality(window)
+    const { rerender } = render(<Page open={false} />)
+    byId('opener').focus()
+    rerender(<Page open />)
+    act(() => byId('inside').focus())
+    fireEvent.pointerDown(byId('inside'))
+    const focus = vi.spyOn(byId('opener'), 'focus')
+    vi.spyOn(byId('opener'), 'matches').mockImplementation((s) => s === ':focus-visible')
+
+    rerender(<Page open={false} />)
+
+    expect(focus).toHaveBeenCalledWith({ preventScroll: true, focusVisible: false })
+    expect(byId('opener')).toHaveFocus()
+    expect(byId('opener')).toHaveAttribute('data-focus-quiet')
+    stop()
+  })
+
+  // Closed with Escape on a real keyboard: the ring is owed, and nothing holds it back.
+  it('gives it back with the ring after a key', () => {
+    const stop = followInputModality(window)
+    const { rerender } = render(<Page open={false} />)
+    byId('opener').focus()
+    rerender(<Page open />)
+    act(() => byId('inside').focus())
+    fireEvent.keyDown(byId('inside'), { key: 'Escape' })
+    const focus = vi.spyOn(byId('opener'), 'focus')
+    vi.spyOn(byId('opener'), 'matches').mockImplementation((s) => s === ':focus-visible')
+
+    rerender(<Page open={false} />)
+
     expect(focus).toHaveBeenCalledWith({ preventScroll: true })
+    expect(byId('opener')).toHaveFocus()
+    expect(byId('opener')).not.toHaveAttribute('data-focus-quiet')
+    stop()
   })
 })
 

@@ -1,6 +1,7 @@
 import { useEffect, useRef, type RefObject } from 'react'
 import { onAndroidBack } from '../lib/androidBack'
 import { reachable } from '../lib/onScreen'
+import { giveFocusBack } from '../lib/quietFocus'
 
 /**
  * Everything on screen that answers Escape, oldest first. Only the last one does.
@@ -144,7 +145,7 @@ export function useFocusTrap(
         // Only from inside. Focus dropped on the page by a tap on the backdrop, with the
         // opener still there, stays where it fell: sending it back scrolled the page to
         // the opener and lit a ring after a tap.
-        if (inside) before.focus({ preventScroll: true })
+        if (inside) giveFocusBack(before)
         return
       }
       // Nowhere to go back to. From inside, or lost to the page when what held it went
@@ -153,7 +154,7 @@ export function useFocusTrap(
       if (!inside && !lost) return
       const underneath = openTraps[openTraps.length - 1]?.current ?? null
       const target = underneath !== null ? firstReachable(underneath) : fallback.current?.()
-      target?.focus({ preventScroll: true })
+      if (target) giveFocusBack(target)
     }
   }, [isActive, restoreFocus, autoFocus, containerRef])
 

@@ -1,5 +1,10 @@
 @import 'tailwindcss';
 
+/* Every focus-visible: utility leaves its ring off an element that lib/quietFocus.ts has
+   marked: focus given back by script after a pointer, in an engine that does not read
+   focus({ focusVisible: false }). */
+@custom-variant focus-visible (&:focus-visible:not([data-focus-quiet]));
+
 /* Tailwind 4 stopped giving buttons a pointer, so on a computer the arrow stayed an arrow
    over every day and every button, and nothing looked pressable. In the base layer so a
    cursor utility on an element still wins over it; a disabled button is left out, so it
