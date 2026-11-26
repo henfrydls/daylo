@@ -179,7 +179,8 @@ export const YearView = memo(function YearView({ onImport }: YearViewProps) {
   }
 
   // With no activities the year has the same door as the month: to today, in Month, with
-  // its sheet open on the form.
+  // its sheet open on the form. The door says Today and goes to today, so while it is there
+  // the row's Today button is hidden rather than said a second time.
   const door =
     activities.length === 0 ? <FirstDayDoor onOpenToday={openToday} onImport={onImport} /> : null
 
@@ -280,6 +281,7 @@ export const YearView = memo(function YearView({ onImport }: YearViewProps) {
             onClick={handleToday}
             className="min-h-[44px] px-4 text-sm font-medium text-gray-600 hover:bg-gray-100 hover:text-gray-800 rounded-lg transition-colors border border-gray-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 focus-visible:ring-offset-1"
             aria-label="Go to today"
+            hidden={door !== null}
           >
             Today
           </button>
@@ -414,6 +416,7 @@ export const YearView = memo(function YearView({ onImport }: YearViewProps) {
               onClick={handleToday}
               className="ml-2 px-4 py-1.5 text-sm font-medium text-gray-600 hover:bg-gray-100 hover:text-gray-800 rounded-lg transition-colors border border-gray-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 focus-visible:ring-offset-1 min-h-[44px] sm:min-h-0"
               aria-label="Go to today"
+              hidden={door !== null}
             >
               Today
             </button>

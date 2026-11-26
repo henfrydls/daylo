@@ -11,6 +11,16 @@ const initialStoreState = useCalendarStore.getState()
 // Mock the current date
 const MOCK_DATE = new Date(2024, 5, 15) // June 15, 2024
 
+// Year's Today button waits for the first activity (see 'the first day'), so the tests of
+// that button start with one.
+const AN_ACTIVITY: Activity = {
+  id: 'a1',
+  name: 'Exercise',
+  color: '#10B981',
+  createdAt: '2024-01-01',
+  updatedAt: '2024-01-01',
+}
+
 describe('YearView', () => {
   beforeEach(() => {
     // Reset store to initial state and clear mocks
@@ -140,6 +150,31 @@ describe('YearView', () => {
       expect(screen.getByTestId('month-empty-import').textContent).toBe(
         'Used Daylo before? Import your backup'
       )
+    })
+
+    // The door says Today and goes to today, so the row's Today would be the same thing a
+    // second time. It waits for the first activity, and comes with it.
+    it.each([
+      ['desktop', () => {}],
+      ['phone', phone],
+    ])('hides Today with no activities, on %s, and the rest of the row stays', (_, size) => {
+      size()
+      render(<YearView onImport={vi.fn()} />)
+
+      expect(screen.queryByRole('button', { name: 'Go to today' })).not.toBeInTheDocument()
+      expect(screen.getByLabelText('Previous year')).toBeVisible()
+      expect(screen.getByLabelText('Next year')).toBeVisible()
+    })
+
+    it.each([
+      ['desktop', () => {}],
+      ['phone', phone],
+    ])('shows Today once there is an activity, on %s', (_, size) => {
+      size()
+      useCalendarStore.setState({ activities: [AN_ACTIVITY] })
+      render(<YearView onImport={vi.fn()} />)
+
+      expect(screen.getByRole('button', { name: 'Go to today' })).toBeVisible()
     })
 
     it('takes the door to today, in Month, and opens it', () => {
@@ -340,7 +375,12 @@ describe('YearView', () => {
 
     // Today goes to today, in Month, from another year...
     it('goes to the month of today in Month view from another year', () => {
-      useCalendarStore.setState({ selectedYear: 2020, selectedMonth: 0, currentView: 'year' })
+      useCalendarStore.setState({
+        activities: [AN_ACTIVITY],
+        selectedYear: 2020,
+        selectedMonth: 0,
+        currentView: 'year',
+      })
       render(<YearView />)
 
       fireEvent.click(screen.getByRole('button', { name: 'Go to today' }))
@@ -353,7 +393,12 @@ describe('YearView', () => {
 
     // ...and from this year, where it used to do nothing.
     it('goes to the month of today in Month view from this year too', () => {
-      useCalendarStore.setState({ selectedYear: 2024, selectedMonth: 0, currentView: 'year' })
+      useCalendarStore.setState({
+        activities: [AN_ACTIVITY],
+        selectedYear: 2024,
+        selectedMonth: 0,
+        currentView: 'year',
+      })
       render(<YearView />)
 
       fireEvent.click(screen.getByRole('button', { name: 'Go to today' }))
@@ -366,9 +411,9 @@ describe('YearView', () => {
       expect(state.selectedDate).toBeNull()
     })
 
-    // Never hidden, whichever year is shown.
+    // Never hidden, whichever year is shown, once there is an activity.
     it.each([2020, 2024])('shows Today on %i', (year) => {
-      useCalendarStore.setState({ selectedYear: year })
+      useCalendarStore.setState({ activities: [AN_ACTIVITY], selectedYear: year })
       render(<YearView />)
 
       expect(screen.getByRole('button', { name: 'Go to today' })).toBeVisible()
@@ -498,11 +543,12 @@ describe('YearView', () => {
     })
 
     it('should have accessible navigation buttons', () => {
+      useCalendarStore.setState({ activities: [AN_ACTIVITY] })
       render(<YearView />)
 
       expect(screen.getByLabelText('Previous year')).toBeInTheDocument()
       expect(screen.getByLabelText('Next year')).toBeInTheDocument()
-      expect(screen.getByLabelText('Go to today')).toBeInTheDocument()
+      expect(screen.getByRole('button', { name: 'Go to today' })).toBeInTheDocument()
     })
 
     it('should have accessible month buttons', () => {
@@ -538,6 +584,7 @@ describe('YearView', () => {
     })
 
     it('should have focusable navigation elements', () => {
+      useCalendarStore.setState({ activities: [AN_ACTIVITY] })
       render(<YearView />)
 
       const prevButton = screen.getByLabelText('Previous year')
@@ -841,6 +888,7 @@ describe('YearView', () => {
     })
 
     it('should show year navigation on mobile', () => {
+      useCalendarStore.setState({ activities: [AN_ACTIVITY] })
       render(<YearView />)
 
       expect(screen.getByLabelText('Previous year')).toBeInTheDocument()

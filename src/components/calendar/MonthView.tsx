@@ -1,17 +1,18 @@
-import { useMemo, useCallback, memo, useState } from 'react'
+import { useMemo, useCallback, memo, useState, useRef, useEffect } from 'react'
 import { useCalendarStore } from '../../store'
 import { useTravel } from '../../lib/travel'
 import { formatDate, formatMonthYear } from '../../lib/dates'
 import { useTodayDate } from '../../lib/today'
 import { completedDates } from '../../lib/activityYear'
 import { isSecondDay, yesterdayStillOpen } from '../../lib/streaks'
-import { subDays } from 'date-fns'
+import { format, subDays } from 'date-fns'
 import type { Activity, ActivityLog } from '../../types'
 import { useShallow } from 'zustand/react/shallow'
 import { count } from '../../lib/plural'
 import { TODAY_RING, YESTERDAY_RING } from './rings'
 import { YesterdayRow } from './YesterdayRow'
 import { FirstDayDoor, TodayTile } from './FirstDayDoor'
+import { giveFocusBack } from '../../lib/quietFocus'
 
 const DAYS_OF_WEEK = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
 const DAYS_OF_WEEK_SHORT = ['S', 'M', 'T', 'W', 'T', 'F', 'S']
@@ -208,6 +209,22 @@ export const MonthView = memo(function MonthView({ onImport }: MonthViewProps) {
   const isCurrentMonth = selectedYear === today.getFullYear() && selectedMonth === today.getMonth()
   const todayCompletedCount = logsMap.get(todayStr)?.length ?? 0
 
+  // The quiet bar that brings today's month back goes away with the arrival, and the focus
+  // would fall to the page. It is handed to the Today bar that takes its place, in the same
+  // box: with its ring after a key, without one after a tap (see `giveFocusBack`).
+  const rootRef = useRef<HTMLDivElement>(null)
+  const focusOwed = useRef(false)
+  const backToToday = (): void => {
+    focusOwed.current = true
+    handleToday()
+  }
+  useEffect(() => {
+    if (!isCurrentMonth || !focusOwed.current) return
+    focusOwed.current = false
+    const bar = rootRef.current?.querySelector<HTMLElement>('[data-testid="log-today-bar"]')
+    if (bar) giveFocusBack(bar)
+  }, [isCurrentMonth])
+
   /**
    * What logging yesterday would make, on a morning when yesterday is still open, and
    * `null` on every other morning. The rule and why it has two halves are in
@@ -224,17 +241,29 @@ export const MonthView = memo(function MonthView({ onImport }: MonthViewProps) {
   const secondDay = useMemo(() => isSecondDay(completedDates(logs), today), [logs, today])
 
   return (
-    <div className="p-3 sm:p-4 md:p-6">
-      {/* Month Navigation */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 sm:gap-4 mb-4 sm:mb-6">
-        <button
-          onClick={() => (travel ? travel.toYear() : setCurrentView('year', 'drill-up'))}
-          className="text-xl sm:text-2xl font-bold text-gray-900 hover:text-emerald-600 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 focus-visible:ring-offset-1 rounded-lg px-1 -mx-1"
-          aria-label={`Switch to year view for ${selectedYear}`}
-          data-testid="month-title-button"
+    <div className="p-3 sm:p-4 md:p-6" ref={rootRef}>
+      {/* Month Navigation. There is no Today button here: in the month of today it did
+          nothing, and in another month the way back is the bar below. So the arrows sit
+          beside the title at every width. */}
+      <div
+        className="flex flex-row items-center justify-between gap-3 sm:gap-4 mb-4 sm:mb-6"
+        data-testid="month-nav"
+      >
+        {/* The title's box is a column of its own, so a short line can go under the title
+            on the phone, and beside it from 640px, without moving the arrows. */}
+        <div
+          className="flex min-w-0 flex-col items-start sm:flex-row sm:items-baseline sm:gap-4"
+          data-testid="month-title-box"
         >
-          {formatMonthYear(displayDate)}
-        </button>
+          <button
+            onClick={() => (travel ? travel.toYear() : setCurrentView('year', 'drill-up'))}
+            className="text-xl sm:text-2xl font-bold text-gray-900 hover:text-emerald-600 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 focus-visible:ring-offset-1 rounded-lg px-1 -mx-1"
+            aria-label={`Switch to year view for ${selectedYear}`}
+            data-testid="month-title-button"
+          >
+            {formatMonthYear(displayDate)}
+          </button>
+        </div>
         <div className="flex items-center gap-1">
           <button
             onClick={handlePrevMonth}
@@ -271,17 +300,11 @@ export const MonthView = memo(function MonthView({ onImport }: MonthViewProps) {
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
             </svg>
           </button>
-          <button
-            onClick={handleToday}
-            className="ml-2 px-3 py-2 sm:py-1 text-sm font-medium text-gray-600 hover:bg-gray-100 rounded-lg transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 focus-visible:ring-offset-1 min-h-[44px] sm:min-h-0"
-            aria-label="Go to current month"
-          >
-            Today
-          </button>
         </div>
       </div>
 
-      {/* Log Today Bar - current month only, at every width.
+      {/* Log Today Bar - current month only, at every width. In any other month a quiet bar
+          that brings it back stands in its place.
 
           It used to be on the phone only, below 640px, and the sidebar only arrives at
           1024px, so between the two there was nothing on the screen that said where today
@@ -302,6 +325,43 @@ export const MonthView = memo(function MonthView({ onImport }: MonthViewProps) {
           }}
           onImport={onImport}
         />
+      )}
+
+      {/* In another month the bar stays where it is and turns quiet: white, a grey edge,
+          the date in words and an arrow that turns back. It brings today's month back and
+          opens nothing. The same box as the Today bar, so the calendar does not move
+          between months. */}
+      {!isCurrentMonth && activities.length > 0 && (
+        <button
+          type="button"
+          onClick={backToToday}
+          className="relative mb-4 w-full flex items-center justify-between p-[11px] bg-white border-2 border-gray-200 rounded-xl min-h-[44px] transition-colors hover:bg-gray-50 active:bg-gray-50 focus:outline-none focus-visible:z-10 focus-visible:ring-2 focus-visible:ring-emerald-700 focus-visible:ring-offset-2 focus-visible:ring-offset-white"
+          data-testid="back-to-today-bar"
+          aria-label={`Go to today, ${format(today, 'EEEE, MMMM d')}`}
+        >
+          <div className="flex items-center gap-3">
+            <TodayTile day={today.getDate()} done={todayCompletedCount > 0} />
+            <div className="text-left">
+              <div className="text-sm font-semibold text-gray-900">Today</div>
+              {/* gray-600 on white, 7.56:1. */}
+              <div className="text-xs text-gray-600">{format(today, 'EEEE, MMMM d')}</div>
+            </div>
+          </div>
+          <svg
+            className="w-5 h-5 text-gray-400"
+            fill="none"
+            viewBox="0 0 24 24"
+            stroke="currentColor"
+            aria-hidden="true"
+          >
+            <path
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              strokeWidth={2}
+              d="M9 15 3 9m0 0 6-6M3 9h12a6 6 0 0 1 0 12h-3"
+            />
+          </svg>
+        </button>
       )}
 
       {isCurrentMonth && activities.length > 0 && (
