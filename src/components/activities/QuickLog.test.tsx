@@ -1332,6 +1332,27 @@ describe('Tab with the sheet open', () => {
     expect(document.activeElement).toBe(controls[controls.length - 1])
   })
 
+  // WKWebView on a Mac with "Keyboard navigation" off moves Tab between fields only, so
+  // every Tab, not just the ones at either end, has to be the sheet's own.
+  it.each([
+    ['Tab', false],
+    ['Shift+Tab', true],
+  ])('moves every %s itself, from a control in the middle of the sheet', async (_, shiftKey) => {
+    const { sheet } = await openFromTheOpener(today)
+    const controls = tabbable(sheet)
+    const middle = Math.floor(controls.length / 2)
+    act(() => controls[middle].focus())
+
+    for (let press = 1; press <= controls.length + 2; press++) {
+      const went = fireEvent.keyDown(document.activeElement!, { key: 'Tab', shiftKey })
+      const want =
+        (((middle + (shiftKey ? -press : press)) % controls.length) + controls.length) %
+        controls.length
+      expect(went).toBe(false)
+      expect(document.activeElement).toBe(controls[want])
+    }
+  })
+
   it('gives the focus back to the opener after Escape from inside', async () => {
     const { opener } = await openFromTheOpener(today)
     fireEvent.keyDown(opener, { key: 'Tab' })

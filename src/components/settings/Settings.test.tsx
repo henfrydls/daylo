@@ -882,6 +882,25 @@ describe('Tab with Settings open', () => {
     expect(surface).toContainElement(document.activeElement as HTMLElement)
   })
 
+  it.each([
+    ['Tab', false],
+    ['Shift+Tab', true],
+  ])('moves every %s itself, from a control in the middle', (_, shiftKey) => {
+    const { surface } = openFromTheGear()
+    const controls = tabbable(surface)
+    const middle = Math.floor(controls.length / 2)
+    act(() => controls[middle].focus())
+
+    for (let press = 1; press <= controls.length + 2; press++) {
+      const went = fireEvent.keyDown(document.activeElement!, { key: 'Tab', shiftKey })
+      const want =
+        (((middle + (shiftKey ? -press : press)) % controls.length) + controls.length) %
+        controls.length
+      expect(went).toBe(false)
+      expect(document.activeElement).toBe(controls[want])
+    }
+  })
+
   it('asks to close on Escape and gives the focus back to the gear', () => {
     const { gear, onClose, close } = openFromTheGear()
     fireEvent.keyDown(gear, { key: 'Tab' })
