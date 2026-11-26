@@ -1107,4 +1107,155 @@ describe('MonthView', () => {
       expect(next).toHaveFocus()
     })
   })
+
+  // Point 6 of 1.6.1: a short line in the title's box saying how the month on screen
+  // stands, "17 of 25 days so far", under the title on the phone and beside it from 640px.
+  // The days with something done over the days gone by, counted from the person's first
+  // day in the month they started (lib/monthCompletion). Never a zero: the empty grid has
+  // already said it, and "0 of 20" is the one form of it that scolds.
+  describe('the month so far, in the title box', () => {
+    const ACTIVITY = {
+      id: 'a1',
+      name: 'Run',
+      color: '#22c55e',
+      createdAt: '2026-01-01',
+      updatedAt: '2026-01-01',
+    }
+    const marked = (...dates: string[]) =>
+      dates.map((date) => ({ id: date, activityId: 'a1', date, completed: true, createdAt: date }))
+    const days = (from: number, to: number, month = 11) =>
+      Array.from(
+        { length: to - from + 1 },
+        (_, i) => `2026-${String(month).padStart(2, '0')}-${String(from + i).padStart(2, '0')}`
+      )
+    const line = () => screen.queryByTestId('month-progress')
+
+    beforeEach(() => {
+      vi.useFakeTimers({ toFake: ['Date'] })
+      vi.setSystemTime(new Date(2026, 10, 25, 12))
+      useCalendarStore.setState({
+        activities: [ACTIVITY],
+        selectedYear: 2026,
+        selectedMonth: 10,
+        firstOpenedAt: '2026-01-10',
+        logs: [],
+      })
+    })
+
+    afterEach(() => {
+      vi.useRealTimers()
+      // In act: this runs before the shared cleanup, with the component still on screen.
+      act(() => useCalendarStore.setState({ firstOpenedAt: null }))
+    })
+
+    it('says how the month we are in stands so far, inside the title box', () => {
+      // Seventeen of the twenty-five days gone by: the 1st to the 17th.
+      useCalendarStore.setState({ logs: marked('2026-01-10', ...days(1, 17)) })
+      render(<MonthView />)
+
+      expect(line()).toHaveTextContent(/^17 of 25 days so far$/)
+      expect(screen.getByTestId('month-title-box')).toContainElement(line())
+    })
+
+    it('follows the arrows: a month over says its days without "so far", one to come says nothing', () => {
+      useCalendarStore.setState({
+        logs: marked('2026-01-10', ...days(1, 20, 10), ...days(1, 17)),
+      })
+      render(<MonthView />)
+      expect(line()).toHaveTextContent(/^17 of 25 days so far$/)
+
+      fireEvent.click(screen.getByLabelText('Previous month'))
+      expect(line()).toHaveTextContent(/^20 of 31 days$/)
+
+      fireEvent.click(screen.getByLabelText('Previous month'))
+      // September, with nothing in it: no zero.
+      expect(line()).not.toBeInTheDocument()
+
+      fireEvent.click(screen.getByLabelText('Next month'))
+      fireEvent.click(screen.getByLabelText('Next month'))
+      fireEvent.click(screen.getByLabelText('Next month'))
+      // December has not begun.
+      expect(useCalendarStore.getState().selectedMonth).toBe(11)
+      expect(line()).not.toBeInTheDocument()
+    })
+
+    it('says 1 of 1 on the first day, with that day done', () => {
+      useCalendarStore.setState({ firstOpenedAt: '2026-11-25', logs: marked('2026-11-25') })
+      render(<MonthView />)
+
+      expect(line()).toHaveTextContent(/^1 of 1 day so far$/)
+    })
+
+    it('says nothing on the first day before anything is done', () => {
+      useCalendarStore.setState({ firstOpenedAt: '2026-11-25', logs: [] })
+      render(<MonthView />)
+
+      expect(line()).not.toBeInTheDocument()
+    })
+
+    it('says 6 of 7 a week after starting, and nothing in the month before', () => {
+      useCalendarStore.setState({
+        firstOpenedAt: '2026-11-19',
+        logs: marked(
+          '2026-11-19',
+          '2026-11-20',
+          '2026-11-21',
+          '2026-11-23',
+          '2026-11-24',
+          '2026-11-25'
+        ),
+      })
+      render(<MonthView />)
+      expect(line()).toHaveTextContent(/^6 of 7 days so far$/)
+
+      fireEvent.click(screen.getByLabelText('Previous month'))
+      expect(line()).not.toBeInTheDocument()
+    })
+
+    it('says nothing in a month with no day done, even with days gone by', () => {
+      useCalendarStore.setState({ logs: marked('2026-01-10') })
+      render(<MonthView />)
+
+      expect(line()).not.toBeInTheDocument()
+    })
+
+    // The fault of #175 is reading a day off a moment in UTC. A first use near midnight is
+    // on one day where the person is and on another in UTC, and the line has to count from
+    // the first. Each zone is set inside the test, after which the clock is set again.
+    describe('with a first use near midnight', () => {
+      const env = (
+        globalThis as unknown as { process: { env: Record<string, string | undefined> } }
+      ).process.env
+      const ZONE = env.TZ
+      afterEach(() => {
+        env.TZ = ZONE
+      })
+
+      it('west of UTC, counts from the evening it was, not the UTC day after', () => {
+        env.TZ = 'America/Santo_Domingo'
+        expect(new Date(2026, 10, 20, 12).getTimezoneOffset()).toBe(240)
+        vi.setSystemTime(new Date(2026, 10, 25, 12))
+        // 23:30 on the 19th here, 03:30 on the 20th in UTC.
+        const firstUse = new Date(2026, 10, 19, 23, 30).toISOString()
+        expect(firstUse.slice(0, 10)).toBe('2026-11-20')
+        useCalendarStore.setState({ firstOpenedAt: firstUse, logs: marked(...days(20, 25)) })
+        render(<MonthView />)
+
+        expect(line()).toHaveTextContent(/^6 of 7 days so far$/)
+      })
+
+      it('east of UTC, counts from the morning it was, not the UTC day before', () => {
+        env.TZ = 'Pacific/Auckland'
+        expect(new Date(2026, 10, 20, 12).getTimezoneOffset()).toBe(-780)
+        vi.setSystemTime(new Date(2026, 10, 25, 12))
+        // 00:30 on the 20th here, 11:30 on the 19th in UTC.
+        const firstUse = new Date(2026, 10, 20, 0, 30).toISOString()
+        expect(firstUse.slice(0, 10)).toBe('2026-11-19')
+        useCalendarStore.setState({ firstOpenedAt: firstUse, logs: marked(...days(20, 25)) })
+        render(<MonthView />)
+
+        expect(line()).toHaveTextContent(/^6 of 6 days so far$/)
+      })
+    })
+  })
 })
