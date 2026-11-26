@@ -103,21 +103,23 @@ export const YearProgressBar = memo(function YearProgressBar({
             second number was: Henfry read 20/277 on his phone and took the 277 for a
             mistake, when it was the days of the year that had gone by. "So far" only while
             the year is running; once it has ended every day of it has gone by, and the
-            words would be promising days that are never coming. */}
+            words would be promising days that are never coming.
+            The percentage is those two numbers divided, so it sits with them. It used to sit
+            on the right after "Best: Oct", and Henfry read "Best: Oct 16%" as October's share,
+            when October's own card said 68%. */}
         <span>
           <span className="font-semibold text-gray-700">{activeDays}</span> of {totalDaysElapsed}{' '}
           days{isThisYear ? ' so far' : ''}
+          <span aria-hidden="true"> · </span>
+          <span className="font-semibold text-emerald-600">{percentage}%</span>
         </span>
         {/* The run that is still going is not here. It is in the header, on every screen,
             and this row sat under it saying the same number a second time. */}
-        <div className="flex items-center gap-3">
-          {bestMonth && (
-            <span>
-              Best: <span className="font-semibold text-gray-700">{bestMonth}</span>
-            </span>
-          )}
-          <span className="font-semibold text-emerald-600">{percentage}%</span>
-        </div>
+        {bestMonth && (
+          <span>
+            Best: <span className="font-semibold text-gray-700">{bestMonth}</span>
+          </span>
+        )}
       </div>
     </div>
   )
