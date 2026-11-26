@@ -915,11 +915,12 @@ describe('putting the reminder offer off', () => {
 })
 
 // The month the person started in is counted from their first day, and so is the year
-// they started in (lib/firstDay). That day may only move back. Records that go when an
-// activity is deleted, or when an import replaces everything, are history that has not
-// changed: without what the store keeps of them, an old month became a partial one and
-// its figure jumped. Records that come in, by an import, can move it back.
-describe('the first day, which only moves back', () => {
+// they started in (lib/firstDay). Records that go when an activity is deleted, or when an
+// import replaces everything, are history that has not changed, and must not move it
+// forward: without what the store keeps of them, an old month became a partial one and its
+// figure jumped. Records that come in, by an import, can move it back. Unticking the
+// oldest day done moves it forward, on purpose (the last test here).
+describe('the first day, which records going do not move forward', () => {
   const NOW = '2026-11-25T12:00:00.000Z'
   const act = (id: string) => ({ id, name: id, color: '#10B981', createdAt: NOW, updatedAt: NOW })
   const done = (activityId: string, date: string) => ({
@@ -931,7 +932,7 @@ describe('the first day, which only moves back', () => {
   })
   const firstDay = () => {
     const state = useCalendarStore.getState()
-    return personFirstDay(state.firstOpenedAt, state.logs, state.firstDayKept)
+    return personFirstDay(state.firstOpenedAt, state.logs, state.firstDayKept, '2026-11-30')
   }
 
   beforeEach(() => {
@@ -967,10 +968,33 @@ describe('the first day, which only moves back', () => {
     useCalendarStore.getState().replaceRecords([act('c')], [done('c', '2025-03-01')])
     expect(firstDay()).toBe('2025-03-01')
 
-    useCalendarStore.setState({
-      logs: [...useCalendarStore.getState().logs, done('c', '2024-06-01')],
-    })
+    useCalendarStore.getState().mergeRecords([act('d')], [done('d', '2024-06-01')])
     expect(firstDay()).toBe('2024-06-01')
+  })
+
+  // Merging is the import's other way in, through the store like replacing, and with the
+  // same rule as before: a day already there for that activity is not added twice.
+  it('merges an import, skipping what is already there', () => {
+    useCalendarStore
+      .getState()
+      .mergeRecords([act('a'), act('d')], [done('a', '2026-10-01'), done('d', '2026-11-02')])
+
+    const { activities, logs } = useCalendarStore.getState()
+    expect(activities.map((a) => a.id)).toEqual(['a', 'b', 'd'])
+    expect(logs.filter((l) => l.activityId === 'a' && l.date === '2026-10-01')).toHaveLength(1)
+    expect(logs.some((l) => l.activityId === 'd' && l.date === '2026-11-02')).toBe(true)
+  })
+
+  // The other side, written down so nobody reads "it never moves forward" into it: unticking the
+  // oldest day done is the person saying it was not done, and the first day moves forward.
+  it('moves forward when the oldest day done is unticked', () => {
+    useCalendarStore.setState({ firstOpenedAt: '2026-11-25', activities: [act('a')], logs: [] })
+    useCalendarStore.getState().toggleLog('a', '2026-11-10')
+    useCalendarStore.getState().toggleLog('a', '2026-11-20')
+    expect(firstDay()).toBe('2026-11-10')
+
+    useCalendarStore.getState().toggleLog('a', '2026-11-10')
+    expect(firstDay()).toBe('2026-11-20')
   })
 
   // Unticking is not history going: it is the person saying the day was not done. A day
