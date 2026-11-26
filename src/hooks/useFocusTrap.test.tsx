@@ -1,4 +1,4 @@
-import { describe, it, expect, afterEach, vi } from 'vitest'
+import { describe, it, expect, afterEach, onTestFinished, vi } from 'vitest'
 import { act, fireEvent, render, waitFor } from '@testing-library/react'
 import { useRef } from 'react'
 import { useFocusTrap } from './useFocusTrap'
@@ -663,6 +663,52 @@ describe('every Tab inside the sheet', () => {
 
     expect(went).toBe(false)
     expect(document.activeElement).toBe(byId(to))
+  })
+
+  // The Linux app showed no ring anywhere inside a sheet: WebKit gives focus moved by script
+  // no ring once the last focus it moved itself came from a click, and the trap moves every
+  // Tab itself. jsdom guesses at :focus-visible from the events it saw, so here it is told
+  // to answer as that engine does.
+  const asWebKitAfterAClick = () => {
+    const matches = Element.prototype.matches
+    const engine = vi.spyOn(Element.prototype, 'matches').mockImplementation(function (
+      this: Element,
+      selector: string
+    ) {
+      return selector !== ':focus-visible' && matches.call(this, selector)
+    })
+    onTestFinished(() => engine.mockRestore())
+  }
+
+  it.each([
+    ['Tab', 'first', 'middle', false],
+    ['Shift+Tab', 'first', 'add', true],
+  ] as const)('lights the ring where %s lands, from %s to %s', (_, from, to, shiftKey) => {
+    asWebKitAfterAClick()
+    render(<Sheet open />)
+    act(() => byId(from).focus())
+    const focus = vi.spyOn(byId(to), 'focus')
+
+    fireEvent.keyDown(byId(from), { key: 'Tab', shiftKey })
+
+    expect(focus).toHaveBeenCalledWith({ focusVisible: true })
+    expect(byId(to)).toHaveAttribute('data-focus-keyboard')
+    expect(byId(from)).not.toHaveAttribute('data-focus-keyboard')
+  })
+
+  it('puts the ring out when the focus moves on', () => {
+    asWebKitAfterAClick()
+    render(<Sheet open />)
+    act(() => byId('first').focus())
+
+    fireEvent.keyDown(byId('first'), { key: 'Tab' })
+    fireEvent.keyDown(byId('middle'), { key: 'Tab' })
+    expect(byId('middle')).not.toHaveAttribute('data-focus-keyboard')
+    expect(byId('last')).toHaveAttribute('data-focus-keyboard')
+
+    act(() => byId('first').focus())
+    expect(byId('last')).not.toHaveAttribute('data-focus-keyboard')
+    expect(byId('first')).not.toHaveAttribute('data-focus-keyboard')
   })
 
   it('lets go of Tab once it is closed', () => {

@@ -85,7 +85,7 @@ export const ActivityList = memo(function ActivityList() {
           {(showAll ? activities : activities.slice(0, maxVisible)).map((activity, index) => (
             <li
               key={activity.id}
-              className="flex items-center justify-between p-2 sm:p-3 rounded-lg hover:bg-gray-50 has-[:focus-visible]:bg-gray-50 transition-colors group"
+              className="flex items-center justify-between p-2 sm:p-3 rounded-lg hover:bg-gray-50 has-focus-visible:bg-gray-50 transition-colors group"
               style={{
                 animation: 'view-fade 200ms var(--ease-emphasized-decel) both',
                 animationDelay: `${index * 30}ms`,

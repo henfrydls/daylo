@@ -3,7 +3,7 @@ import { onAndroidBack } from '../lib/androidBack'
 import { reachable } from '../lib/onScreen'
 import { isTab } from '../lib/keys'
 import { nextTabbable } from '../lib/tabbable'
-import { giveFocusBack } from '../lib/quietFocus'
+import { focusFromKeyboard, giveFocusBack } from '../lib/quietFocus'
 
 /**
  * Everything on screen that answers Escape, oldest first. Only the last one does.
@@ -247,7 +247,8 @@ export function useFocusTrap(
       // not behind the sheet.
       const next =
         nextTabbable(container, document.activeElement, e.shiftKey) ?? firstReachable(container)
-      next.focus()
+      // With the ring: a Tab is the keyboard, however the focus got here (see quietFocus).
+      focusFromKeyboard(next)
     }
 
     document.addEventListener('keydown', handleKeyDown)

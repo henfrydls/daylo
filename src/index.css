@@ -1,9 +1,17 @@
 @import 'tailwindcss';
 
-/* Every focus-visible: utility leaves its ring off an element that lib/quietFocus.ts has
-   marked: focus given back by script after a pointer, in an engine that does not read
-   focus({ focusVisible: false }). */
-@custom-variant focus-visible (&:focus-visible:not([data-focus-quiet]));
+/* Every focus-visible: utility follows the two marks lib/quietFocus.ts puts on an element
+   for an engine that does not read focus({ focusVisible }): no ring on data-focus-quiet
+   (focus given back by script after a pointer), and a ring on data-focus-keyboard (focus
+   moved by script for a Tab, which WebKit leaves without one after any click). */
+@custom-variant focus-visible {
+  &:focus-visible:not([data-focus-quiet]) {
+    @slot;
+  }
+  &[data-focus-keyboard] {
+    @slot;
+  }
+}
 
 /* Tailwind 4 stopped giving buttons a pointer, so on a computer the arrow stayed an arrow
    over every day and every button, and nothing looked pressable. In the base layer so a
@@ -202,7 +210,8 @@
 
 /* Keyboard only: a pointer user clicking the row should not light up a ring. outline
    rather than a box-shadow ring so nothing can clip it. */
-.app-checkbox:focus-visible {
+.app-checkbox:focus-visible:not([data-focus-quiet]),
+.app-checkbox[data-focus-keyboard] {
   outline: 2px solid var(--color-emerald-600);
   outline-offset: 2px;
 }
