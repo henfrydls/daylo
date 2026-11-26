@@ -232,3 +232,27 @@ describe('this month, in the month the person started', () => {
     expect(figure('This Month')).toBe('8%')
   })
 })
+
+// firstOpenedAt written in Auckland and read here while it is still the day before, or a
+// clock set back: a first day after today left the month we are in with no figure, and
+// "This Month" blank. The first day is today at the latest.
+describe('this month, with a first day after today', () => {
+  afterEach(() => {
+    act(() => useCalendarStore.setState({ firstOpenedAt: null }))
+  })
+
+  // Nothing logged yet, so only firstOpenedAt says when this person began. The first day
+  // is today: nothing done of one day, which is a figure, not a blank.
+  it('still has a figure', () => {
+    vi.setSystemTime(new Date(2026, 10, 25, 12))
+    useCalendarStore.setState({
+      activities: [ACTIVITY],
+      logs: [],
+      selectedYear: 2026,
+      firstOpenedAt: '2026-11-26',
+    })
+    render(<StatsPanel />)
+
+    expect(figure('This Month')).toBe('0%')
+  })
+})

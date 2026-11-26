@@ -31,6 +31,9 @@ function inZone(zone: string, offsetMinutes: number, check: () => void) {
   check()
 }
 
+/** A today after every day in these tests, so the cap below is not what they are about. */
+const T = '2026-11-30'
+
 describe('a stored day', () => {
   it('is left as it is when it is a day', () => {
     expect(localDay('2026-11-20')).toBe('2026-11-20')
@@ -44,6 +47,22 @@ describe('a stored day', () => {
     expect(localDay('nonsense')).toBeNull()
     expect(localDay('soon')).toBeNull()
   })
+
+  // Only the two shapes the app writes: a day, as firstOpenedAt is written (formatDate),
+  // and a whole moment, as createdAt is (toISOString). parseISO alone takes "2026" and
+  // "2026-11" as the 1st of something, and "2026-13-45" must not pass as a day.
+  it('is none for a day that is not on the calendar, or for part of one', () => {
+    expect(localDay('2026-13-45')).toBeNull()
+    expect(localDay('2026-02-30')).toBeNull()
+    expect(localDay('2026')).toBeNull()
+    expect(localDay('2026-11')).toBeNull()
+    expect(localDay('2026-11-20T03')).toBeNull()
+  })
+
+  it('reads a moment the app wrote as the local day it fell on', () => {
+    const written = new Date(2026, 10, 20, 9, 15).toISOString()
+    expect(localDay(written)).toBe('2026-11-20')
+  })
 })
 
 describe('the person first day', () => {
@@ -53,30 +72,41 @@ describe('the person first day', () => {
   })
 
   it('is the earliest of the day Daylo was first opened and the days done', () => {
-    expect(personFirstDay('2026-11-20', [log('2026-11-22')], null)).toBe('2026-11-20')
-    expect(personFirstDay('2026-11-20', [log('2025-03-01')], null)).toBe('2025-03-01')
-    expect(personFirstDay(null, [log('2026-11-22'), log('2026-11-21')], null)).toBe('2026-11-21')
-    expect(personFirstDay(null, [], null)).toBeNull()
+    expect(personFirstDay('2026-11-20', [log('2026-11-22')], null, T)).toBe('2026-11-20')
+    expect(personFirstDay('2026-11-20', [log('2025-03-01')], null, T)).toBe('2025-03-01')
+    expect(personFirstDay(null, [log('2026-11-22'), log('2026-11-21')], null, T)).toBe('2026-11-21')
+    expect(personFirstDay(null, [], null, T)).toBeNull()
   })
 
   // Somebody who opens Daylo today and marks the six days before it made every record
   // today: the day a record is for is what counts, so no marked day is left out.
   it('counts the day a record is for, not the day it was made', () => {
     const today = '2026-11-25T12:00:00.000Z'
-    expect(personFirstDay('2026-11-25', [log('2026-11-19', true, today)], null)).toBe('2026-11-19')
+    expect(personFirstDay('2026-11-25', [log('2026-11-19', true, today)], null, T)).toBe(
+      '2026-11-19'
+    )
   })
 
   // A day unticked is kept as a record only when it has a note. It is not a day done and
   // does not say the person was here: the figures do not count it, and neither does this.
   it('passes over a record that is not done', () => {
     expect(oldestDone([log('2026-11-01', false), log('2026-11-25')])).toBe('2026-11-25')
-    expect(personFirstDay('2026-11-25', [log('2026-11-01', false)], null)).toBe('2026-11-25')
+    expect(personFirstDay('2026-11-25', [log('2026-11-01', false)], null, T)).toBe('2026-11-25')
+  })
+
+  // A first day after today: firstOpenedAt written in Auckland and read while it is still
+  // the day before here, or a clock set back. The month we are in had no figure at all and
+  // "This Month" went blank. No first day is later than today.
+  it('is today at the latest', () => {
+    expect(personFirstDay('2026-11-26', [], null, '2026-11-25')).toBe('2026-11-25')
+    expect(personFirstDay('2026-11-20', [], null, '2026-11-25')).toBe('2026-11-20')
+    expect(personFirstDay(null, [], null, '2026-11-25')).toBeNull()
   })
 
   // What the store kept from records that have gone (see firstDayKept in the store).
   it('takes what was kept from records that have gone', () => {
-    expect(personFirstDay('2026-11-20', [log('2026-11-22')], '2026-10-01')).toBe('2026-10-01')
-    expect(personFirstDay('2026-11-20', [log('2026-11-22')], 'nonsense')).toBe('2026-11-20')
+    expect(personFirstDay('2026-11-20', [log('2026-11-22')], '2026-10-01', T)).toBe('2026-10-01')
+    expect(personFirstDay('2026-11-20', [log('2026-11-22')], 'nonsense', T)).toBe('2026-11-20')
   })
 })
 
@@ -90,7 +120,7 @@ describe('the person first day, where the person is', () => {
       expect(moment.slice(0, 10)).toBe('2026-11-20')
 
       expect(localDay(moment)).toBe('2026-11-19')
-      expect(personFirstDay(moment, [log('2026-11-20')], null)).toBe('2026-11-19')
+      expect(personFirstDay(moment, [log('2026-11-20')], null, T)).toBe('2026-11-19')
     })
   })
 
@@ -101,7 +131,7 @@ describe('the person first day, where the person is', () => {
       expect(moment.slice(0, 10)).toBe('2026-10-31')
 
       expect(localDay(moment)).toBe('2026-11-01')
-      expect(personFirstDay(moment, [log('2026-11-01')], null)).toBe('2026-11-01')
+      expect(personFirstDay(moment, [log('2026-11-01')], null, T)).toBe('2026-11-01')
     })
   })
 })
