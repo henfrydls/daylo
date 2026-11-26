@@ -1,5 +1,5 @@
 import { describe, it, expect, afterEach, vi } from 'vitest'
-import { act, fireEvent, render } from '@testing-library/react'
+import { act, fireEvent, render, waitFor } from '@testing-library/react'
 import { useRef } from 'react'
 import { useFocusTrap } from './useFocusTrap'
 import { followInputModality } from '../lib/quietFocus'
@@ -155,6 +155,32 @@ describe('giving the focus back', () => {
     expect(document.activeElement).toBe(byId('opener'))
     expect(focus).toHaveBeenCalledWith({ preventScroll: true, focusVisible: false })
     stop()
+  })
+
+  // Back from <body> only when it fell there from the sheet or from the opener: a tap on
+  // the backdrop does one or the other. Focus that fell from somewhere else on the page is
+  // not the sheet's to move.
+  it('gives it back after a tap on the backdrop with the focus still on the opener', () => {
+    const { rerender } = render(<Page open={false} />)
+    byId('opener').focus()
+    rerender(<Page open />)
+    act(() => byId('opener').blur())
+
+    rerender(<Page open={false} />)
+
+    expect(document.activeElement).toBe(byId('opener'))
+  })
+
+  it('leaves it on the page when it fell there from somewhere else', () => {
+    const { rerender } = render(<Page open={false} />)
+    byId('opener').focus()
+    rerender(<Page open />)
+    act(() => byId('other').focus())
+    act(() => byId('other').blur())
+
+    rerender(<Page open={false} />)
+
+    expect(document.activeElement).toBe(document.body)
   })
 
   it.each([
@@ -353,6 +379,10 @@ describe('a trap over a trap', () => {
 
     expect(document.activeElement).toBe(byId('outer'))
     expect(byId('outer').tabIndex).toBe(-1)
+
+    // Only for as long as it holds the focus: the panel was not focusable before.
+    act(() => byId('outer').blur())
+    expect(byId('outer')).not.toHaveAttribute('tabindex')
   })
 })
 
@@ -371,6 +401,10 @@ function Sheet({ open, lastDisabled = false }: { open: boolean; lastDisabled?: b
         <div ref={ref} tabIndex={-1} data-testid="sheet">
           <button data-testid="first">First</button>
           <button data-testid="middle">Middle</button>
+          {/* Focusable by script or a click, not by Tab: a roving grid's cell, a menu item. */}
+          <div data-testid="region" tabIndex={-1}>
+            Region
+          </div>
           <button data-testid="hidden" style={{ display: 'none' }}>
             Hidden
           </button>
@@ -468,13 +502,74 @@ describe('Tab from outside the sheet', () => {
     expect(went).toBe(false)
     expect(document.activeElement).toBe(byId('sheet'))
   })
+})
 
-  it('leaves Tab inside the sheet to the browser', () => {
+/**
+ * Every Tab moved by the trap, not only the one at either end. In WKWebView on a Mac with
+ * "Keyboard navigation" off, which is how a Mac comes, the browser's own Tab visits fields
+ * and selects only: from a button in the middle of the sheet it went to the page behind.
+ * That was the failure on Henfry's Mac. The fixture's events have no default action at all,
+ * which is that engine at its worst.
+ */
+describe('every Tab inside the sheet', () => {
+  it.each([
+    ['Tab', 'first', 'middle', false],
+    ['Tab', 'middle', 'last', false],
+    ['Tab', 'last', 'add', false],
+    ['Tab', 'add', 'first', false],
+    ['Shift+Tab', 'add', 'last', true],
+    ['Shift+Tab', 'last', 'middle', true],
+    ['Shift+Tab', 'middle', 'first', true],
+    ['Shift+Tab', 'first', 'add', true],
+  ] as const)('moves %s itself, from %s to %s', (_, from, to, shiftKey) => {
     render(<Sheet open />)
-    act(() => byId('first').focus())
+    act(() => byId(from).focus())
 
-    expect(fireEvent.keyDown(byId('first'), { key: 'Tab' })).toBe(true)
-    expect(fireEvent.keyDown(byId('first'), { key: 'Tab', shiftKey: true })).toBe(false)
+    const went = fireEvent.keyDown(byId(from), { key: 'Tab', shiftKey })
+
+    expect(went).toBe(false)
+    expect(document.activeElement).toBe(byId(to))
+  })
+
+  // Inside the sheet on something Tab does not stop at (a list that scrolls, a roving
+  // grid, a menu item with tabIndex -1): the next control after it on the page, not the
+  // first one in the sheet. Sent back to the first, the footer could never be reached.
+  it.each([
+    ['Tab', false, 'last'],
+    ['Shift+Tab', true, 'middle'],
+  ])('takes %s from inside the sheet off the list to its neighbour', (_, shiftKey, to) => {
+    render(<Sheet open />)
+    act(() => byId('region').focus())
+
+    const went = fireEvent.keyDown(byId('region'), { key: 'Tab', shiftKey })
+
+    expect(went).toBe(false)
+    expect(document.activeElement).toBe(byId(to))
+  })
+
+  // A group of radio buttons is one stop, at the one that is chosen, as the browser has it.
+  it('stops once in a group of radio buttons, at the chosen one', () => {
+    function Radios() {
+      const ref = useRef<HTMLDivElement>(null)
+      useFocusTrap(ref, true, { autoFocus: false })
+      return (
+        <div ref={ref}>
+          <button data-testid="close">Close</button>
+          <input type="radio" name="format" value="json" data-testid="json" readOnly />
+          <input type="radio" name="format" value="csv" data-testid="csv" defaultChecked />
+          <button data-testid="go">Export</button>
+        </div>
+      )
+    }
+    render(<Radios />)
+    act(() => byId('close').focus())
+
+    fireEvent.keyDown(byId('close'), { key: 'Tab' })
+    expect(document.activeElement).toBe(byId('csv'))
+    fireEvent.keyDown(byId('csv'), { key: 'Tab' })
+    expect(document.activeElement).toBe(byId('go'))
+    fireEvent.keyDown(byId('go'), { key: 'Tab', shiftKey: true })
+    expect(document.activeElement).toBe(byId('csv'))
   })
 
   // The first day's form: with nothing typed, Add is disabled and is the last button in the
@@ -523,6 +618,27 @@ describe('Tab from outside the sheet', () => {
     byId('opener').focus()
 
     expect(fireEvent.keyDown(byId('opener'), { key: 'Tab' })).toBe(true)
+  })
+})
+
+describe('the first focus, when a trap takes it', () => {
+  // One meaning of "can have the focus" for the first focus, the wrap and the fallback.
+  // The first focus took the first thing the selector matched, disabled or not drawn.
+  it('skips a first control that is disabled or not drawn', async () => {
+    function Auto() {
+      const ref = useRef<HTMLDivElement>(null)
+      useFocusTrap(ref, true)
+      return (
+        <div ref={ref}>
+          <button disabled>Disabled</button>
+          <button style={{ display: 'none' }}>Hidden</button>
+          <button data-testid="ok">OK</button>
+        </div>
+      )
+    }
+    render(<Auto />)
+
+    await waitFor(() => expect(document.activeElement).toBe(byId('ok')))
   })
 })
 

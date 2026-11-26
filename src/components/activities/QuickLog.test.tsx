@@ -4,6 +4,7 @@ import userEvent from '@testing-library/user-event'
 import { QuickLog } from './QuickLog'
 import { useCalendarStore } from '../../store'
 import { formatDate } from '../../lib/dates'
+import { tabbable } from '../../lib/tabbable'
 
 // Helper to reset store state before each test
 const resetStore = () => {
@@ -1327,9 +1328,7 @@ describe('Tab with the sheet open', () => {
 
     fireEvent.keyDown(opener, { key: 'Tab', shiftKey: true })
 
-    const controls = [...sheet.querySelectorAll<HTMLElement>('button, input')].filter(
-      (node) => !node.matches(':disabled')
-    )
+    const controls = tabbable(sheet)
     expect(document.activeElement).toBe(controls[controls.length - 1])
   })
 

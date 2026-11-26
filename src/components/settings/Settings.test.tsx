@@ -4,6 +4,7 @@ import userEvent from '@testing-library/user-event'
 import { Settings } from './Settings'
 import { useCalendarStore } from '../../store'
 import type { UpdateStatus } from '../../hooks/useUpdates'
+import { tabbable } from '../../lib/tabbable'
 
 vi.mock('../../lib/checkin', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../../lib/checkin')>()),
@@ -866,11 +867,7 @@ describe('Tab with Settings open', () => {
 
     fireEvent.keyDown(gear, { key: 'Tab', shiftKey: true })
 
-    const controls = [
-      ...surface.querySelectorAll<HTMLElement>(
-        'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])'
-      ),
-    ].filter((node) => !node.matches(':disabled') && node.tabIndex >= 0)
+    const controls = tabbable(surface)
     expect(document.activeElement).toBe(controls[controls.length - 1])
     expect(surface).toContainElement(document.activeElement as HTMLElement)
   })

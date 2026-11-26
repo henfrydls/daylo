@@ -1,6 +1,8 @@
 import { useEffect, useRef, type RefObject } from 'react'
 import { onAndroidBack } from '../lib/androidBack'
 import { reachable } from '../lib/onScreen'
+import { isTab } from '../lib/keys'
+import { nextTabbable } from '../lib/tabbable'
 import { giveFocusBack } from '../lib/quietFocus'
 
 /**
@@ -24,30 +26,21 @@ const answeringEscape: Array<{ fire: () => void }> = []
  */
 const openTraps: Array<RefObject<HTMLElement | null>> = []
 
-const FOCUSABLE_SELECTOR =
-  'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])'
-
 /**
- * The first control in a trap that the focus can land on: not disabled, and drawn. With
- * none, the trap itself, made focusable by script only, so the focus is at least inside it.
+ * The first control in a trap that the focus can land on (see lib/tabbable). With none, the
+ * trap itself, made focusable by script only for as long as it holds the focus, so the
+ * focus is at least inside it.
  */
 function firstReachable(container: HTMLElement): HTMLElement {
-  for (const node of container.querySelectorAll<HTMLElement>(FOCUSABLE_SELECTOR)) {
-    if (!node.matches(':disabled') && reachable(node)) return node
+  const first = nextTabbable(container, null, false)
+  if (first !== null) return first
+  if (!container.hasAttribute('tabindex')) {
+    container.tabIndex = -1
+    container.addEventListener('blur', () => container.removeAttribute('tabindex'), {
+      once: true,
+    })
   }
-  if (!container.hasAttribute('tabindex')) container.tabIndex = -1
   return container
-}
-
-/**
- * Tab, by its name or, where the engine has none for it, by the key it was pressed on.
- * WebKitGTK, the engine of the Linux app, names Shift+Tab "Unidentified": the toolkit turns
- * Shift+Tab into ISO_Left_Tab before the page sees it. Measured with real X key events in
- * WebKitGTK 2.52: key "Unidentified", code "Tab". Read by its name alone, Shift+Tab never
- * wrapped on Linux and walked out of every sheet.
- */
-function isTab(e: KeyboardEvent): boolean {
-  return e.key === 'Tab' || (e.key === 'Unidentified' && e.code === 'Tab')
 }
 
 interface UseFocusTrapOptions {
@@ -123,15 +116,22 @@ export function useFocusTrap(
     // Lock body scroll
     document.body.style.overflow = 'hidden'
 
-    // Auto-focus the first focusable element
+    // Auto-focus the first control that can have the focus
     if (autoFocus && container) {
-      setTimeout(() => {
-        const firstFocusable = container?.querySelector<HTMLElement>(FOCUSABLE_SELECTOR)
-        firstFocusable?.focus()
-      }, 0)
+      setTimeout(() => nextTabbable(container, null, false)?.focus(), 0)
     }
 
+    // The last thing that had the focus, so that focus found on <body> at the end can be
+    // told apart: dropped there from the sheet or from its opener (a tap on the backdrop),
+    // or from somewhere else on the page. <body> never gets a focusin of its own.
+    let lastFocused: Element | null = document.activeElement
+    const onFocusIn = (e: FocusEvent) => {
+      lastFocused = e.target as Element
+    }
+    document.addEventListener('focusin', onFocusIn)
+
     return () => {
+      document.removeEventListener('focusin', onFocusIn)
       // Restore body scroll
       document.body.style.overflow = 'unset'
 
@@ -147,17 +147,23 @@ export function useFocusTrap(
       const active = document.activeElement
       const inside = holder?.contains(active) ?? false
       const lost = active === null || active === document.body
+      // Dropped on <body> from the sheet or from what opened it, and nowhere else.
+      const fellFromHere =
+        lost &&
+        lastFocused !== null &&
+        ((holder?.contains(lastFocused) ?? false) || lastFocused === previousActiveElement.current)
 
       // Back to what opened it, when somebody could still be there. <body> is not
       // somewhere to go back to: the door in Year has gone into the hidden view by the time
       // the day sheet opens, and the focus went with it.
       const before = previousActiveElement.current
       if (before !== null && before !== document.body && reachable(before)) {
-        // From inside, or from <body>, where a tap on the backdrop drops it. That one was
-        // left where it fell while giving it back scrolled the page to the opener and lit
-        // a ring after a tap; giveFocusBack does neither, and <body> is where Tab starts
-        // again from the top of the page. Focus taken by something else on the page stays.
-        if (inside || lost) giveFocusBack(before)
+        // From inside, or from <body> when it fell there from the sheet or the opener,
+        // which is what a tap on the backdrop does. That one was left where it fell while
+        // giving it back scrolled the page to the opener and lit a ring after a tap;
+        // giveFocusBack does neither, and <body> is where Tab starts again from the top of
+        // the page. Focus taken by something else on the page, or dropped from it, stays.
+        if (inside || fellFromHere) giveFocusBack(before)
         return
       }
       // Nowhere to go back to. From inside, or lost to the page when what held it went
@@ -212,43 +218,19 @@ export function useFocusTrap(
       const container = containerRef.current
       if (container === null) return
 
-      // Only what Tab can land on. A disabled control or one that is not drawn can never
-      // hold the focus, so taking it for the first or the last left the wrap waiting for a
-      // focus that never came: the first day's Add, disabled until a name is typed, is the
-      // last button in the day sheet, and Tab walked out past it.
-      const controls = [...container.querySelectorAll<HTMLElement>(FOCUSABLE_SELECTOR)].filter(
-        (node) => node.tabIndex >= 0 && !node.matches(':disabled') && reachable(node)
-      )
-      const active = document.activeElement
-      const at = controls.findIndex((node) => node === active)
-
-      // Nothing inside can have it: the sheet itself holds it, so it is at least not
-      // behind the sheet.
-      if (controls.length === 0) {
-        e.preventDefault()
-        firstReachable(container).focus()
-        return
-      }
-
-      // From anywhere that is not one of its controls: the opener behind it, <body> after
-      // a tap on nothing, the sheet itself. Settings, Modal, BottomSheet and the day sheet
-      // leave the focus on what opened them, on purpose, and Tab from there walked the page
-      // behind an aria-modal sheet. It comes in at the end the key is going towards.
-      if (at === -1) {
-        e.preventDefault()
-        controls[e.shiftKey ? controls.length - 1 : 0]?.focus()
-        return
-      }
-
-      // From the last to the first, from the first to the last. In between it is the
-      // browser's own Tab.
-      if (e.shiftKey && at === 0) {
-        e.preventDefault()
-        controls[controls.length - 1]?.focus()
-      } else if (!e.shiftKey && at === controls.length - 1) {
-        e.preventDefault()
-        controls[0]?.focus()
-      }
+      // Every Tab, moved here and never left to the browser. In WKWebView on a Mac with
+      // "Keyboard navigation" off, which is how a Mac comes, the browser's own Tab visits
+      // fields and selects only, so from a button in the middle of a sheet it went to the
+      // page behind. Leaving the middle to the browser and wrapping at the ends was not
+      // enough there. From outside the trap (the opener the sheets leave the focus on,
+      // <body> after a tap on nothing) it comes in at the end the key is going towards;
+      // from something inside that Tab does not stop at, to its neighbour on the page.
+      e.preventDefault()
+      // With nothing inside that can have it, the sheet itself holds it, so it is at least
+      // not behind the sheet.
+      const next =
+        nextTabbable(container, document.activeElement, e.shiftKey) ?? firstReachable(container)
+      next.focus()
     }
 
     document.addEventListener('keydown', handleKeyDown)
