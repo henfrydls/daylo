@@ -3,7 +3,7 @@ import { persist, createJSONStorage, type StateStorage } from 'zustand/middlewar
 import type { Activity, ActivityLog } from '../types'
 import { formatDate, generateId, parseDateString } from '../lib/dates'
 import { firstFreeColor } from '../lib/colors'
-import { activityFault, isPlainObject, logFault } from '../lib/recordShape'
+import { activityFault, isPlainObject, logFault, withReadableCreatedAt } from '../lib/recordShape'
 // Import estatico a proposito: Toast.tsx ya importa este modulo de forma estatica,
 // asi que un import() dinamico aqui no partiria el bundle -- solo retrasaria el aviso.
 import { useToastStore } from './toast'
@@ -935,6 +935,13 @@ export const useCalendarStore = create<CalendarState>()(
         // (1.3.0 to 1.5.x). Nothing reads it, and it never decided whether the check-in is on:
         // that is the presence of checkinEnabled, read just below.
         delete (stored as Record<string, unknown>).checkinNoticeSeen
+        // A log's createdAt that `new Date` reads and parseISO does not, which an import let
+        // in until 1.6.1, is written the way Daylo writes it rather than refused: the record
+        // is kept, and the rescue screen stays for what cannot be read at all. The new form
+        // reaches the disk with the write that follows hydration, record and all.
+        if (Array.isArray(stored.logs)) {
+          stored.logs = stored.logs.map(withReadableCreatedAt) as typeof stored.logs
+        }
         // The right keys holding values this build cannot draw (#276). Thrown for the same reason as
         // above: the rescue screen comes up, and nothing is set, so nothing is written.
         const wrong = wrongField(stored as Record<string, unknown>)

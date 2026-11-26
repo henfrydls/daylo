@@ -14,6 +14,8 @@
  * day that is not `YYYY-MM-DD` is the same through parseISO.
  */
 
+import { isValid, parseISO } from 'date-fns'
+
 /** A timestamp a Date can be made of, such as what toISOString writes. */
 export function isValidISODate(dateString: string): boolean {
   const date = new Date(dateString)
@@ -43,6 +45,32 @@ export function isPlainObject(value: unknown): value is Record<string, unknown> 
 const isTimestamp = (value: unknown) => typeof value === 'string' && isValidISODate(value)
 
 /**
+ * A timestamp as parseISO reads it, which is how a log's createdAt is read
+ * (feedbackInvite). Stricter than isValidISODate on purpose: `new Date` also takes
+ * "2026/11/01" or "Sun Nov 01 2026", parseISO does not, and what one let in the other
+ * threw on. toISOString, which is what Daylo writes, passes; so does a bare `YYYY-MM-DD`.
+ */
+export function isISOTimestamp(value: unknown): boolean {
+  return typeof value === 'string' && isValid(parseISO(value))
+}
+
+/**
+ * A log whose createdAt `new Date` reads and parseISO does not, given back with that date
+ * written as Daylo writes it: the same moment, through toISOString. Anything else, the
+ * same object, untouched.
+ *
+ * For what is already on a disk. Daylo never wrote such a date, but an import accepted
+ * one until 1.6.1, so a copy may hold it. The record is the person's; refusing it would
+ * send them to the rescue screen over a field the app only uses to count a week. A date
+ * neither reads is left alone, and logFault sends it to the rescue screen as before.
+ */
+export function withReadableCreatedAt(value: unknown): unknown {
+  if (!isPlainObject(value) || typeof value.createdAt !== 'string') return value
+  if (isISOTimestamp(value.createdAt) || !isValidISODate(value.createdAt)) return value
+  return { ...value, createdAt: new Date(value.createdAt).toISOString() }
+}
+
+/**
  * The first field of an activity that cannot be drawn, `''` when the activity itself is
  * not an object, or null when it can be.
  */
@@ -68,6 +96,6 @@ export function logFault(value: unknown): string | null {
   if (typeof value.date !== 'string' || !isValidDateFormat(value.date)) return 'date'
   if (typeof value.completed !== 'boolean') return 'completed'
   if (value.notes != null && typeof value.notes !== 'string') return 'notes'
-  if (!isTimestamp(value.createdAt)) return 'createdAt'
+  if (!isISOTimestamp(value.createdAt)) return 'createdAt'
   return null
 }

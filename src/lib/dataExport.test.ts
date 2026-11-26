@@ -799,6 +799,35 @@ describe('dataExport utility functions', () => {
         expect(result.valid).toBe(false)
         expect(result.errors.some((e) => e.message.includes('invalid createdAt format'))).toBe(true)
       })
+
+      // new Date reads these and parseISO does not; a log carrying one used to be let in,
+      // and the app threw the first time somebody ticked a day afterwards.
+      it.each(['2026/11/01', 'Sun Nov 01 2026'])(
+        'refuses a backup with a log created on %j',
+        (createdAt) => {
+          const content = JSON.stringify({
+            version: '1.0',
+            exportedAt: '2026-11-20T10:00:00.000Z',
+            activities: [createValidActivity()],
+            logs: [createValidLog({ createdAt })],
+          })
+
+          const result = parseImportFileWithValidation(content)
+
+          expect(result.valid).toBe(false)
+          expect(result.errors.some((e) => e.field === 'logs[0].createdAt')).toBe(true)
+        }
+      )
+
+      it('takes back a backup the app wrote today', () => {
+        const now = new Date().toISOString()
+        const content = exportToJSON(
+          [createValidActivity({ createdAt: now, updatedAt: now })],
+          [createValidLog({ createdAt: now })]
+        )
+
+        expect(parseImportFileWithValidation(content).valid).toBe(true)
+      })
     })
 
     describe('multiple errors', () => {

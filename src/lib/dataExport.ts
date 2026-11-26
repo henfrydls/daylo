@@ -1,6 +1,6 @@
 import type { Activity, ActivityLog } from '../types'
 import { LONGEST_NAME } from './limits'
-import { isValidDateFormat, isValidISODate } from './recordShape'
+import { isISOTimestamp, isValidDateFormat, isValidISODate } from './recordShape'
 
 export interface ExportData {
   activities: Activity[]
@@ -440,7 +440,7 @@ function validateActivityLog(obj: unknown, index: number): ValidationError[] {
       message: `Log at index ${index} must have a valid createdAt timestamp.`,
       index,
     })
-  } else if (!isValidISODate(log.createdAt)) {
+  } else if (!isISOTimestamp(log.createdAt)) {
     errors.push({
       field: `${prefix}.createdAt`,
       message: `Log at index ${index} has invalid createdAt format. Must be a valid ISO date string.`,

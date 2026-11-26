@@ -9,7 +9,7 @@ import {
 } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import App from './App'
-import { useCalendarStore } from './store'
+import { STORAGE_KEY, useCalendarStore } from './store'
 import { useRescueStore } from './store/rescue'
 import { formatDate } from './lib/dates'
 
@@ -1155,5 +1155,90 @@ describe('the streak in the header', () => {
 
     await userEvent.keyboard('{Escape}')
     expect(await screen.findByTestId('feedback-rating')).toBeInTheDocument()
+  })
+})
+
+/**
+ * Somebody whose stored logs carry a createdAt that `new Date` reads and parseISO does
+ * not, such as "2026/11/01". Until 1.6.1 an import let that in, the app opened as usual,
+ * and the first tick threw a RangeError from the invitation's gate: "Something went
+ * wrong", on the gesture the app is for. Driven from the disk, through hydration, because
+ * that is where the repair happens.
+ */
+describe('a log stored with a date the app did not write', () => {
+  const day = (back: number) => {
+    const d = new Date()
+    d.setDate(d.getDate() - back)
+    return d
+  }
+  const slashed = (d: Date) =>
+    `${d.getFullYear()}/${String(d.getMonth() + 1).padStart(2, '0')}/${String(d.getDate()).padStart(2, '0')}`
+
+  beforeEach(async () => {
+    inTheApp.yes = true
+    checkinFields.mockResolvedValue({ version: '1.3.0', os: 'linux', source: 'deb' })
+    openMailto.mockReset().mockResolvedValue('opened')
+    vi.spyOn(console, 'error').mockImplementation(() => {})
+    useRescueStore.setState({ failure: null })
+    useCalendarStore.setState({
+      _loggedThisSession: false,
+      _feedbackAsked: false,
+      _offerThisSession: null,
+      selectedDate: null,
+    })
+    // Let the deferred write from the setState above land before the disk is seeded.
+    await new Promise((done) => setTimeout(done, 20))
+    localStorage.setItem(
+      STORAGE_KEY,
+      JSON.stringify({
+        state: {
+          activities: [
+            { id: 'a1', name: 'Read', color: '#10B981', createdAt: NOW, updatedAt: NOW },
+          ],
+          logs: [
+            {
+              id: 'old',
+              activityId: 'a1',
+              date: formatDate(day(7)),
+              completed: true,
+              createdAt: slashed(day(7)),
+            },
+          ],
+          firstOpenedAt: formatDate(day(7)),
+          feedbackInviteSeen: false,
+          reminderOffered: true,
+          checkinEnabled: false,
+          checkinId: null,
+        },
+        version: 0,
+      })
+    )
+    await useCalendarStore.persist.rehydrate()
+  })
+
+  afterEach(() => {
+    localStorage.clear()
+  })
+
+  it('opens the calendar, not the rescue screen, with the record kept', async () => {
+    render(<App />)
+    await act(async () => {})
+
+    expect(screen.queryByTestId('could-not-open')).not.toBeInTheDocument()
+    expect(screen.queryByText('Something went wrong')).not.toBeInTheDocument()
+    expect(useCalendarStore.getState().logs.map((l) => l.id)).toEqual(['old'])
+  })
+
+  it('takes a tick, and goes on as it would for anybody past the week', async () => {
+    render(<App />)
+    await act(async () => {})
+
+    await act(async () => {
+      useCalendarStore.getState().toggleLog('a1', formatDate(day(0)))
+    })
+
+    expect(screen.queryByText('Something went wrong')).not.toBeInTheDocument()
+    expect(await screen.findByTestId('feedback-rating')).toBeInTheDocument()
+    expect(useCalendarStore.getState().logs).toHaveLength(2)
   })
 })

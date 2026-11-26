@@ -389,6 +389,46 @@ describe('a stored value that will not open', () => {
     })
 
     /**
+     * A log whose createdAt `new Date` reads and parseISO does not. Daylo never wrote one,
+     * but an import let it in until 1.6.1, and the app threw the first time the person
+     * ticked a day. Whoever holds one opens as before, keeps every record, and the date is
+     * written back the way Daylo writes it: the same moment, as toISOString gives it.
+     */
+    it.each(['2026/11/01', 'Sun Nov 01 2026'])(
+      'opens a log created on %j, keeps it, and writes its date as Daylo would',
+      async (createdAt) => {
+        const stored = JSON.stringify({
+          state: {
+            activities: [whole],
+            logs: [
+              { ...log, createdAt },
+              { ...log, id: 'm', date: '2026-11-02' },
+            ],
+          },
+          version: 0,
+        })
+        localStorage.setItem(STORAGE_KEY, stored)
+
+        await useCalendarStore.persist.rehydrate()
+
+        expect(useRescueStore.getState().failure).toBeNull()
+        expect(useCalendarStore.getState()._hasHydrated).toBe(true)
+        const logs = useCalendarStore.getState().logs
+        expect(logs).toHaveLength(2)
+        expect(logs[0]).toEqual({ ...log, createdAt: new Date(createdAt).toISOString() })
+        expect(logs[1]).toEqual({ ...log, id: 'm', date: '2026-11-02' })
+        // What reaches the disk is both records, the first with its date as Daylo writes
+        // it: nothing is dropped on the way back.
+        await settle()
+        const onDisk = JSON.parse(localStorage.getItem(STORAGE_KEY)!).state.logs
+        expect(onDisk).toEqual([
+          { ...log, createdAt: new Date(createdAt).toISOString() },
+          { ...log, id: 'm', date: '2026-11-02' },
+        ])
+      }
+    )
+
+    /**
      * Every field this build writes is checked, so a field added later cannot be left out
      * of the rule by accident: each one, given a value no field of the store can hold,
      * has to send the state to the rescue screen.
