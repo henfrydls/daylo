@@ -1,7 +1,31 @@
 import { reachable } from './onScreen'
 
-/** Everything that can take the focus at all, before asking whether Tab stops there. */
-const FOCUSABLE = 'button, [href], input, select, textarea, [tabindex]'
+/**
+ * Everything that can take the focus at all, before asking whether Tab stops there. The
+ * trap moves every Tab itself, so whatever is missing here can no longer be reached by Tab
+ * inside a sheet at all.
+ */
+const FOCUSABLE = [
+  'button',
+  '[href]',
+  'input',
+  'select',
+  'textarea',
+  'audio[controls]',
+  'video[controls]',
+  '[contenteditable]:not([contenteditable="false"])',
+  '[tabindex]',
+].join(', ')
+
+/**
+ * Its place in the tab order. An editable region and a player with controls are in it
+ * without a tabindex of their own; the engines say so, jsdom says -1.
+ */
+function order(node: HTMLElement): number {
+  if (node.hasAttribute('tabindex')) return node.tabIndex
+  if (node.matches('audio, video, [contenteditable]')) return 0
+  return node.tabIndex
+}
 
 /**
  * Whether Tab stops here, short of being drawn: in the tab order, not disabled, and for a
@@ -10,7 +34,7 @@ const FOCUSABLE = 'button, [href], input, select, textarea, [tabindex]'
  * group.
  */
 function inTheOrder(node: HTMLElement, within: ParentNode): boolean {
-  if (node.tabIndex < 0 || node.matches(':disabled')) return false
+  if (order(node) < 0 || node.matches(':disabled')) return false
   if (
     node instanceof HTMLInputElement &&
     node.type === 'radio' &&
@@ -32,8 +56,10 @@ function candidates(container: HTMLElement): HTMLElement[] {
 
 /**
  * The controls in `container` that Tab stops at, in page order: in the tab order, not
- * disabled, drawn and not inert. The one meaning of "can have the focus" for a trap's first
- * focus, its Tab and the focus it gives to a trap underneath.
+ * disabled, drawn and not inert. The whole list, by the same rule nextTabbable follows, for
+ * whoever needs all of it at once: the tests check the trap's Tab against it. The trap
+ * itself asks nextTabbable, which applies the rule without asking whether every control is
+ * drawn.
  */
 export function tabbable(container: HTMLElement): HTMLElement[] {
   return candidates(container).filter(reachable)

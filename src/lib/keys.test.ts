@@ -21,4 +21,15 @@ describe('isTab', () => {
     // A layout that puts another key where Tab is says so by name.
     expect(isTab(press({ key: 'a', code: 'Tab' }))).toBe(false)
   })
+
+  // Ctrl+Tab changes the browser's tab on the web, Alt+Tab and Cmd+Tab change the app:
+  // none of them is moving around the page.
+  it('is not Tab with Ctrl, Alt or Meta held', () => {
+    expect(isTab(press({ key: 'Tab', code: 'Tab', ctrlKey: true }))).toBe(false)
+    expect(isTab(press({ key: 'Tab', code: 'Tab', altKey: true }))).toBe(false)
+    expect(isTab(press({ key: 'Tab', code: 'Tab', metaKey: true }))).toBe(false)
+    expect(isTab(press({ key: 'Unidentified', code: 'Tab', shiftKey: true, ctrlKey: true }))).toBe(
+      false
+    )
+  })
 })

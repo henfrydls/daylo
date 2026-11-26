@@ -8,8 +8,11 @@
  * not close the menu, and did not count as the keyboard driving.
  *
  * Only an unnamed key is read by where it was pressed: a layout that puts another key there
- * says what it is.
+ * says what it is. Shift is the only modifier that leaves it Tab.
  */
 export function isTab(event: KeyboardEvent): boolean {
+  // With Ctrl, Alt or Meta it is not moving around the page: Ctrl+Tab changes the browser's
+  // tab on the web, Alt+Tab and Cmd+Tab change the app.
+  if (event.ctrlKey || event.altKey || event.metaKey) return false
   return event.key === 'Tab' || (event.key === 'Unidentified' && event.code === 'Tab')
 }

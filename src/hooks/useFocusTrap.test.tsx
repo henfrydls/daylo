@@ -3,6 +3,7 @@ import { act, fireEvent, render, waitFor } from '@testing-library/react'
 import { useRef } from 'react'
 import { useFocusTrap } from './useFocusTrap'
 import { followInputModality } from '../lib/quietFocus'
+import { tabbable } from '../lib/tabbable'
 
 /**
  * Where the focus goes when a trap lets go.
@@ -380,9 +381,61 @@ describe('a trap over a trap', () => {
     expect(document.activeElement).toBe(byId('outer'))
     expect(byId('outer').tabIndex).toBe(-1)
 
+    // The window losing the focus (another app, the system's own dialog) is not the panel
+    // giving it up: it keeps the attribute, and the focus comes back to it.
+    act(() => {
+      byId('outer').dispatchEvent(new FocusEvent('blur', { relatedTarget: null }))
+      byId('outer').dispatchEvent(
+        new FocusEvent('focusout', { bubbles: true, relatedTarget: null })
+      )
+    })
+    expect(byId('outer')).toHaveAttribute('tabindex', '-1')
+
     // Only for as long as it holds the focus: the panel was not focusable before.
-    act(() => byId('outer').blur())
+    const away = document.createElement('button')
+    document.body.append(away)
+    act(() => away.focus())
     expect(byId('outer')).not.toHaveAttribute('tabindex')
+    away.remove()
+  })
+
+  // Import over Settings: confirming closes the confirmation and the Import dialog in the
+  // same commit. The confirmation is drawn through a portal, so it is not inside the Import
+  // dialog on the page, and it is that dialog's sibling in the tree, so its trap lets go
+  // after the dialog's. The dialog saw the focus outside itself and kept it; then the
+  // confirmation sent it to the Import button inside the dialog that had just closed.
+  it('gives the focus back to the first opener when a dialog and the confirmation drawn over it close together', () => {
+    function Pair({ open, confirm }: { open: boolean; confirm: boolean }) {
+      const dialog = useRef<HTMLDivElement>(null)
+      const confirmation = useRef<HTMLDivElement>(null)
+      useFocusTrap(dialog, open, { autoFocus: false })
+      useFocusTrap(confirmation, confirm, { autoFocus: false })
+      return (
+        <>
+          <button data-testid="settings-import">Import…</button>
+          <div ref={dialog}>
+            <button data-testid="import">Import</button>
+          </div>
+          <div ref={confirmation}>
+            <button data-testid="yes">Yes</button>
+          </div>
+        </>
+      )
+    }
+    function Page({ open, confirm }: { open: boolean; confirm: boolean }) {
+      // The dialog's trap first and the confirmation's after it, as siblings in the tree.
+      return <Pair open={open} confirm={confirm} />
+    }
+    const { rerender } = render(<Page open={false} confirm={false} />)
+    byId('settings-import').focus()
+    rerender(<Page open confirm={false} />)
+    act(() => byId('import').focus())
+    rerender(<Page open confirm />)
+    act(() => byId('yes').focus())
+
+    rerender(<Page open={false} confirm={false} />)
+
+    expect(document.activeElement).toBe(byId('settings-import'))
   })
 })
 
@@ -639,6 +692,116 @@ describe('the first focus, when a trap takes it', () => {
     render(<Auto />)
 
     await waitFor(() => expect(document.activeElement).toBe(byId('ok')))
+  })
+})
+
+describe('keys the trap leaves alone', () => {
+  // Ctrl+Tab changes the browser's tab on the web, Alt+Tab and Cmd+Tab change the app.
+  it.each([
+    ['Ctrl+Tab', { ctrlKey: true }],
+    ['Alt+Tab', { altKey: true }],
+    ['Meta+Tab', { metaKey: true }],
+    ['Ctrl+Shift+Tab', { ctrlKey: true, shiftKey: true }],
+  ])('leaves %s to the browser', (_, mods) => {
+    render(<Sheet open />)
+    act(() => byId('first').focus())
+
+    const went = fireEvent.keyDown(byId('first'), { key: 'Tab', code: 'Tab', ...mods })
+
+    expect(went).toBe(true)
+    expect(document.activeElement).toBe(byId('first'))
+  })
+
+  // A control that answers Tab itself and says so: the trap does not take it away from it.
+  it('leaves a Tab that a control inside has already handled', () => {
+    function Own() {
+      const ref = useRef<HTMLDivElement>(null)
+      useFocusTrap(ref, true, { autoFocus: false })
+      return (
+        <div ref={ref}>
+          <button data-testid="a">A</button>
+          <input
+            data-testid="own"
+            onKeyDown={(e) => {
+              if (e.key === 'Tab') e.preventDefault()
+            }}
+          />
+          <button data-testid="b">B</button>
+        </div>
+      )
+    }
+    render(<Own />)
+    act(() => byId('own').focus())
+
+    fireEvent.keyDown(byId('own'), { key: 'Tab' })
+
+    expect(document.activeElement).toBe(byId('own'))
+  })
+})
+
+describe('a first focus for a trap that has already let go', () => {
+  // Opened and closed before the first focus fired (a double activation, StrictMode): the
+  // timer went on and put the focus inside a sheet that was closed.
+  it('does not take the focus once it is switched off', () => {
+    vi.useFakeTimers()
+    try {
+      function Auto({ open }: { open: boolean }) {
+        const ref = useRef<HTMLDivElement>(null)
+        useFocusTrap(ref, open)
+        return (
+          <>
+            <button data-testid="opener">Opener</button>
+            <div ref={ref}>
+              <button data-testid="inside">Inside</button>
+            </div>
+          </>
+        )
+      }
+      const { rerender } = render(<Auto open={false} />)
+      byId('opener').focus()
+      rerender(<Auto open />)
+      rerender(<Auto open={false} />)
+
+      act(() => vi.runAllTimers())
+
+      expect(document.activeElement).toBe(byId('opener'))
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+})
+
+describe('what Tab can stop at', () => {
+  // The trap moves every Tab, so anything it does not know about can no longer be reached.
+  it('stops at an editable region and at a player with controls', () => {
+    function Rich() {
+      const ref = useRef<HTMLDivElement>(null)
+      useFocusTrap(ref, true, { autoFocus: false })
+      return (
+        <div ref={ref}>
+          <button data-testid="a">A</button>
+          <div contentEditable suppressContentEditableWarning data-testid="note">
+            Note
+          </div>
+          <div contentEditable={false} data-testid="fixed">
+            Fixed
+          </div>
+          <audio controls data-testid="audio" />
+          <video controls data-testid="video" />
+          <video data-testid="bare" />
+          <button data-testid="b">B</button>
+        </div>
+      )
+    }
+    render(<Rich />)
+    act(() => byId('a').focus())
+
+    // jsdom cannot put the focus on a player, so the list is read from the rule the trap
+    // follows, and one real Tab goes into the editable region.
+    const ids = tabbable(byId('a').parentElement!).map((node) => node.dataset.testid)
+    expect(ids).toEqual(['a', 'note', 'audio', 'video', 'b'])
+    fireEvent.keyDown(byId('a'), { key: 'Tab' })
+    expect(document.activeElement).toBe(byId('note'))
   })
 })
 

@@ -36,9 +36,14 @@ function firstReachable(container: HTMLElement): HTMLElement {
   if (first !== null) return first
   if (!container.hasAttribute('tabindex')) {
     container.tabIndex = -1
-    container.addEventListener('blur', () => container.removeAttribute('tabindex'), {
-      once: true,
-    })
+    // Taken away when the focus goes somewhere else on the page, and not when the window
+    // loses it (another app, the system's own dialog): that comes back to the panel.
+    const onFocusOut = (e: FocusEvent) => {
+      if (e.target !== container || e.relatedTarget === null) return
+      container.removeAttribute('tabindex')
+      container.removeEventListener('focusout', onFocusOut)
+    }
+    container.addEventListener('focusout', onFocusOut)
   }
   return container
 }
@@ -117,9 +122,12 @@ export function useFocusTrap(
     document.body.style.overflow = 'hidden'
 
     // Auto-focus the first control that can have the focus
-    if (autoFocus && container) {
-      setTimeout(() => nextTabbable(container, null, false)?.focus(), 0)
-    }
+    // Cancelled if the trap lets go first: opened and closed in one go (a double activation,
+    // StrictMode), the timer put the focus inside a sheet that was already closed.
+    const firstFocus =
+      autoFocus && container
+        ? setTimeout(() => nextTabbable(container, null, false)?.focus(), 0)
+        : undefined
 
     // The last thing that had the focus, so that focus found on <body> at the end can be
     // told apart: dropped there from the sheet or from its opener (a tap on the backdrop),
@@ -131,11 +139,18 @@ export function useFocusTrap(
     document.addEventListener('focusin', onFocusIn)
 
     return () => {
+      clearTimeout(firstFocus)
       document.removeEventListener('focusin', onFocusIn)
       // Restore body scroll
       document.body.style.overflow = 'unset'
 
       const at = openTraps.lastIndexOf(containerRef)
+      // The traps opened over this one and still switched on. Import's confirmation and the
+      // Import dialog close in one commit; the confirmation is drawn through a portal, so it
+      // is not inside the dialog on the page, and as the dialog's sibling its trap lets go
+      // after the dialog's. Focus on it is focus in front of this trap, and this trap's to
+      // give back to what opened it.
+      const above = at === -1 ? [] : openTraps.slice(at + 1)
       if (at !== -1) openTraps.splice(at, 1)
       if (!restoreFocus) return
 
@@ -145,13 +160,14 @@ export function useFocusTrap(
       // eslint-disable-next-line react-hooks/exhaustive-deps -- the node now, on purpose
       const holder = containerRef.current ?? container
       const active = document.activeElement
-      const inside = holder?.contains(active) ?? false
+      const within = (node: Element | null) =>
+        node !== null &&
+        ((holder?.contains(node) ?? false) || above.some((trap) => trap.current?.contains(node)))
+      const inside = within(active)
       const lost = active === null || active === document.body
       // Dropped on <body> from the sheet or from what opened it, and nowhere else.
       const fellFromHere =
-        lost &&
-        lastFocused !== null &&
-        ((holder?.contains(lastFocused) ?? false) || lastFocused === previousActiveElement.current)
+        lost && (within(lastFocused) || lastFocused === previousActiveElement.current)
 
       // Back to what opened it, when somebody could still be there. <body> is not
       // somewhere to go back to: the door in Year has gone into the hidden view by the time
@@ -210,7 +226,8 @@ export function useFocusTrap(
     if (!isActive) return
 
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (!isTab(e)) return
+      // A control that answers Tab itself, and said so, keeps it.
+      if (!isTab(e) || e.defaultPrevented) return
       // The highest one that is on the page: a trap switched on a render before its
       // container arrives leaves Tab to the one underneath until then, rather than to nobody.
       const front = [...openTraps].reverse().find((trap) => trap.current !== null)

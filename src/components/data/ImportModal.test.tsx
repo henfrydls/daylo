@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { useState } from 'react'
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { ImportModal } from './ImportModal'
@@ -169,5 +170,40 @@ describe('the counts it speaks of', () => {
     await userEvent.click(screen.getByRole('button', { name: /Import Data/ }))
 
     expect(await screen.findByText(/current data \(2 activities, 2 logs\)/)).toBeInTheDocument()
+  })
+})
+
+// Confirming closes the confirmation and the Import dialog in the same commit. The
+// confirmation is drawn through a portal and is the dialog's sibling, so the dialog let go
+// first, saw the focus outside itself and kept it, and the confirmation then sent it to the
+// Import Data button of the dialog that had just closed.
+describe('the focus after confirming an import', () => {
+  it('goes back to what opened Import', async () => {
+    function Page() {
+      const [open, setOpen] = useState(false)
+      return (
+        <>
+          <button data-testid="opener" onClick={() => setOpen(true)}>
+            Import…
+          </button>
+          <ImportModal isOpen={open} onClose={() => setOpen(false)} />
+        </>
+      )
+    }
+    render(<Page />)
+    const opener = screen.getByTestId('opener')
+    opener.focus()
+    fireEvent.click(opener)
+    await load(backup())
+    const importData = screen.getByRole('button', { name: /Import Data/ })
+    importData.focus()
+    fireEvent.click(importData)
+    const yes = await screen.findByRole('button', { name: 'Import' })
+    yes.focus()
+
+    fireEvent.click(yes)
+
+    await waitFor(() => expect(useCalendarStore.getState().activities).toHaveLength(2))
+    await waitFor(() => expect(opener).toHaveFocus())
   })
 })
