@@ -1,5 +1,5 @@
 import { useMemo, memo } from 'react'
-import { formatDate, getYearDays } from '../../lib/dates'
+import { formatDate, getYearDays, parseDateString } from '../../lib/dates'
 import { useTodayDate } from '../../lib/today'
 import { plural } from '../../lib/plural'
 
@@ -44,10 +44,9 @@ export const YearProgressBar = memo(function YearProgressBar({
     const yearDays = getYearDays(year)
 
     // Count days elapsed up to today, from the person's first day in the year they began.
-    const from = firstDay !== null && firstDay.startsWith(`${year}-`) ? firstDay : null
-    const elapsed = yearDays.filter(
-      (d) => d <= today && (from === null || formatDate(d) >= from)
-    ).length
+    const from =
+      firstDay !== null && firstDay.startsWith(`${year}-`) ? parseDateString(firstDay) : null
+    const elapsed = yearDays.filter((d) => d <= today && (from === null || d >= from)).length
 
     // Count days with at least one completion
     // Days gone by only: the bar reads "N of M days", and M stops at today, so a day still
