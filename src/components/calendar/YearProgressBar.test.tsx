@@ -164,6 +164,14 @@ describe('YearProgressBar', () => {
       expect(screen.getByRole('progressbar')).toHaveAttribute('aria-valuenow', '86')
     })
 
+    // The first day itself, with something done: one day, and the word agrees with it.
+    it('says 1 of 1 day on the first day', () => {
+      const logsByDate = new Map([['2024-06-15', 1]])
+      render(<YearProgressBar {...defaultProps} logsByDate={logsByDate} firstDay="2024-06-15" />)
+
+      expect(screen.getByText(/so far/).textContent).toBe('1 of 1 day so far · 100%')
+    })
+
     it('counts a year already over from the first day to its end', () => {
       render(<YearProgressBar {...defaultProps} year={2023} firstDay="2023-12-01" />)
 

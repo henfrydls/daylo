@@ -1,6 +1,7 @@
 import { useMemo, memo } from 'react'
 import { formatDate, getYearDays } from '../../lib/dates'
 import { useTodayDate } from '../../lib/today'
+import { plural } from '../../lib/plural'
 
 const MONTHS_SHORT = [
   'Jan',
@@ -119,7 +120,8 @@ export const YearProgressBar = memo(function YearProgressBar({
             when October's own card said 68%. */}
         <span>
           <span className="font-semibold text-gray-700">{activeDays}</span> of {totalDaysElapsed}{' '}
-          days{isThisYear ? ' so far' : ''}
+          {plural(totalDaysElapsed, 'day', 'days')}
+          {isThisYear ? ' so far' : ''}
           <span aria-hidden="true"> · </span>
           <span className="font-semibold text-emerald-600">{percentage}%</span>
         </span>
