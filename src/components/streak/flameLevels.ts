@@ -7,9 +7,10 @@
  * about it, and the steps are not explained anywhere: the number already says how long the
  * run is, and the flame only says it again without words.
  *
- * Nothing is ever taken away on the way up. The heart is lit at 7 and grows at 14, the
- * whole flame is fire at 30, then there are more of them, then a bonfire, embers over it, a
- * blue bonfire at a year and two of them at two years. The wait for each step is never
+ * Each step adds to the one before, with one exception. The heart is lit at 7 and grows at
+ * 14, the whole flame is fire at 30, then there are two and three of them. At 180 the three
+ * flames give way to a single bonfire, wider and taller than any one of them; after that come
+ * embers over it, a blue bonfire at a year and two of them at two years. The wait for each step is never
  * shorter than the one before: 2, 4, 7, 16, 30, 40, 80, 90, 95 and 365 days.
  */
 
@@ -46,9 +47,12 @@ export const FLAME_LEVELS: readonly FlameLevel[] = [
   { from: 730, name: 'double-bonfire', shape: 'bonfire-embers', heat: 'blue', count: 2 },
 ]
 
-/** The step for a run of so many days, or null with no run at all (there is no chip then). */
-export function flameLevelFor(days: number): FlameLevel | null {
-  let level: FlameLevel | null = null
+/**
+ * The step for a run of so many days. Below one day it is the first step: there is no chip
+ * with no run, but whoever asks always gets a step back.
+ */
+export function flameLevelFor(days: number): FlameLevel {
+  let level = FLAME_LEVELS[0]
   for (const step of FLAME_LEVELS) if (days >= step.from) level = step
   return level
 }

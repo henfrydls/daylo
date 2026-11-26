@@ -1,5 +1,5 @@
 import { forwardRef, useEffect, useRef, useState } from 'react'
-import { FLAME_LEVELS, flameLevelFor } from './flameLevels'
+import { flameLevelFor } from './flameLevels'
 import { StreakFlame } from './StreakFlame'
 
 /** How long one digit waits before the next, when the number walks. */
@@ -59,9 +59,8 @@ export const StreakChip = forwardRef<HTMLButtonElement, StreakChipProps>(functio
 ) {
   const shown = useWalkingNumber(streak)
   // The flame follows the number on screen, not the one it is walking to, so the two change
-  // in the same frame and never disagree during the walk. The first step stands in for the
-  // moment the digits leave 0 on their way up.
-  const level = flameLevelFor(shown) ?? FLAME_LEVELS[0]
+  // in the same frame and never disagree during the walk.
+  const level = flameLevelFor(shown)
 
   if (streak === 0) return null
 

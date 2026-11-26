@@ -233,6 +233,18 @@ describe('the streak chip', () => {
     expect(flame()).toHaveAttribute('data-level', is)
   })
 
+  // The embers belong to the bonfire: drawn inside the group that places and scales the one
+  // in front, so they follow it if its size or its place ever changes.
+  it.each([270, 365, 730])('draws the embers of %i days inside the bonfire in front', (streak) => {
+    render(<StreakChip streak={streak} todayDone />)
+    const embers = screen.getByTestId('streak-flame').querySelector('[data-part="embers"]')
+    const front = [...screen.getByTestId('streak-flame').querySelectorAll(':scope > g')].at(-1)
+
+    expect(embers).not.toBeNull()
+    expect(embers!.parentElement).toHaveAttribute('transform', expect.stringContaining('scale('))
+    expect(front!.contains(embers)).toBe(true)
+  })
+
   // A broken run goes back to the first step, at once and without a word.
   it('goes back to the ember when the run breaks', () => {
     const { rerender } = render(<StreakChip streak={730} todayDone />)

@@ -12,9 +12,10 @@ const BONFIRE_OUT =
 const BONFIRE_IN =
   'M12 18.2a3.6 3.6 0 0 0 .48-7.17 5.75 5.75 0 0 0-1.85 3.4 5.74 5.74 0 0 1-2.05-.96A3.6 3.6 0 0 0 12 18.2Z'
 /** Two embers going up, over the bonfire's tongues. Dots, and always solid: too small to be
- *  hollow. */
+ *  hollow. In the bonfire's own coordinates, so they are scaled and placed with it; at the
+ *  bonfire's size (1.12) they land where the design drew them. */
 const EMBERS =
-  'M17.6 -0.6a1.5 1.5 0 1 0 0 3a1.5 1.5 0 1 0 0-3Z M6.6 -0.2a1.25 1.25 0 1 0 0 2.5a1.25 1.25 0 1 0 0-2.5Z'
+  'M17 1.714a1.339 1.339 0 1 0 0 2.679a1.339 1.339 0 1 0 0-2.679Z M7.179 2.071a1.116 1.116 0 1 0 0 2.232a1.116 1.116 0 1 0 0-2.232Z'
 
 /**
  * The colour of the flame and of its heart, at each heat.
@@ -46,9 +47,11 @@ const STROKE = 1.75
  * Hollow against filled is a difference of shape, not of colour, and it holds at every step:
  * the hollow one is drawn in the colour of its step and without its heart.
  *
- * Every step is drawn inside the 20px the flame has always had, so the pill is never wider
- * than the number makes it. Three flames and the double bonfire reach a little past that
- * box, always to the left, into the pill's own padding, and never towards the number.
+ * The box is still the 20px the flame has always had, so the pill is never wider than the
+ * number makes it. Some steps draw a little past it, and only where there is room: the
+ * bonfire (drawn at 1.12) and its embers reach above the top, and three flames and the
+ * double bonfire reach to the left, into the pill's own padding. Nothing reaches towards the
+ * number.
  */
 export function StreakFlame({ level, lit }: { level: FlameLevel; lit: boolean }) {
   // An id for the masks that is safe inside url(#...).
@@ -82,7 +85,8 @@ export function StreakFlame({ level, lit }: { level: FlameLevel; lit: boolean })
               <path
                 d={inner}
                 fill={core}
-                // Grown from its own foot, so it stays sitting where it sat.
+                // Grown from its own foot and set 0.3 lower, so the grown heart still sits
+                // inside the bottom of the flame.
                 transform={
                   bigCore ? 'translate(12 18.3) scale(1.34) translate(-12 -18)' : undefined
                 }
@@ -99,6 +103,11 @@ export function StreakFlame({ level, lit }: { level: FlameLevel; lit: boolean })
             strokeLinejoin="round"
           />
         )}
+        {/* The embers go with the one in front, inside its group, so they follow its size and
+            its place. */}
+        {index === 0 && shape === 'bonfire-embers' ? (
+          <path data-part="embers" d={EMBERS} fill="currentColor" />
+        ) : null}
       </g>
     </g>
   )
@@ -142,15 +151,6 @@ export function StreakFlame({ level, lit }: { level: FlameLevel; lit: boolean })
       {masks.length ? <defs>{masks}</defs> : null}
       {/* Drawn from the back, so the one in front is painted last. */}
       {Array.from({ length: count }, (_, i) => one(count - 1 - i))}
-      {shape === 'bonfire-embers' ? (
-        <path
-          data-part="embers"
-          d={EMBERS}
-          fill="currentColor"
-          // Over the one in front, wherever that one stands.
-          transform={`translate(${lean + spread / 2} 0)`}
-        />
-      ) : null}
     </svg>
   )
 }

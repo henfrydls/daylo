@@ -8,9 +8,10 @@ describe('the flame for a run', () => {
     ])
   })
 
-  // No run, no pill, and so no flame to choose.
-  it('has nothing for no run', () => {
-    expect(flameLevelFor(0)).toBeNull()
+  // Below one day there is no pill (the chip says nothing with no run), but the function
+  // still answers with a step rather than nothing, so whoever asks never has to make one up.
+  it.each([0, -1, -365])('gives the first step for %i days', (days) => {
+    expect(flameLevelFor(days)).toBe(FLAME_LEVELS[0])
   })
 
   it('starts as an ember on the first day', () => {
