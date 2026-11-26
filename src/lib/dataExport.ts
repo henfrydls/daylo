@@ -1,12 +1,6 @@
 import type { Activity, ActivityLog } from '../types'
 import { LONGEST_NAME } from './limits'
-import {
-  isISOTimestamp,
-  isPlainObject,
-  isValidDateFormat,
-  isValidISODate,
-  withReadableCreatedAt,
-} from './recordShape'
+import { isTimestamp, isValidDateFormat } from './recordShape'
 
 export interface ExportData {
   activities: Activity[]
@@ -145,14 +139,6 @@ export function parseImportFileWithValidation(content: string): ValidationResult
       valid: false,
       errors: [{ field: 'file', message: 'Invalid JSON format. The file could not be parsed.' }],
     }
-  }
-
-  // A log's createdAt that `new Date` reads and parseISO does not is repaired here exactly
-  // as it is when the store opens the disk: a backup exported from 1.6.0 or earlier carries
-  // such a date as it was stored, and the person's own backup has to come back in. What
-  // neither reads is still refused below, on logs[i].createdAt.
-  if (isPlainObject(data) && Array.isArray(data.logs)) {
-    data = { ...data, logs: data.logs.map(withReadableCreatedAt) }
   }
 
   // Validate structure
@@ -339,7 +325,7 @@ function validateActivity(obj: unknown, index: number): ValidationError[] {
       message: `Activity at index ${index} must have a valid createdAt timestamp.`,
       index,
     })
-  } else if (!isValidISODate(activity.createdAt)) {
+  } else if (!isTimestamp(activity.createdAt)) {
     errors.push({
       field: `${prefix}.createdAt`,
       message: `Activity at index ${index} has invalid createdAt format. Must be a valid ISO date string.`,
@@ -355,7 +341,7 @@ function validateActivity(obj: unknown, index: number): ValidationError[] {
         message: `Activity at index ${index} updatedAt must be a valid string if provided.`,
         index,
       })
-    } else if (!isValidISODate(activity.updatedAt)) {
+    } else if (!isTimestamp(activity.updatedAt)) {
       errors.push({
         field: `${prefix}.updatedAt`,
         message: `Activity at index ${index} has invalid updatedAt format. Must be a valid ISO date string.`,
@@ -454,7 +440,7 @@ function validateActivityLog(obj: unknown, index: number): ValidationError[] {
       message: `Log at index ${index} must have a valid createdAt timestamp.`,
       index,
     })
-  } else if (!isISOTimestamp(log.createdAt)) {
+  } else if (!isTimestamp(log.createdAt)) {
     errors.push({
       field: `${prefix}.createdAt`,
       message: `Log at index ${index} has invalid createdAt format. Must be a valid ISO date string.`,

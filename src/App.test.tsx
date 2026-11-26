@@ -91,10 +91,20 @@ vi.mock('./lib/checkin', async (importOriginal) => ({
   startCheckinOnNewInstall,
 }))
 
-vi.mock('./lib/feedbackInvite', async (importOriginal) => ({
-  ...(await importOriginal<typeof import('./lib/feedbackInvite')>()),
-  openMailto,
-}))
+// Real, except where a test makes the gate throw: App has to survive anything it throws.
+const inviteThrows = vi.hoisted(() => ({ yes: false }))
+
+vi.mock('./lib/feedbackInvite', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('./lib/feedbackInvite')>()
+  return {
+    ...actual,
+    openMailto,
+    shouldInviteFeedback: (input: Parameters<typeof actual.shouldInviteFeedback>[0]) => {
+      if (inviteThrows.yes) throw new RangeError('Invalid time value')
+      return actual.shouldInviteFeedback(input)
+    },
+  }
+})
 
 // The platform side of reminders is stubbed: this is about what the menu offers, not
 // about what Android does with it.
@@ -1159,11 +1169,11 @@ describe('the streak in the header', () => {
 })
 
 /**
- * Somebody whose stored logs carry a createdAt that `new Date` reads and parseISO does
- * not, such as "2026/11/01". Until 1.6.1 an import let that in, the app opened as usual,
- * and the first tick threw a RangeError from the invitation's gate: "Something went
- * wrong", on the gesture the app is for. Driven from the disk, through hydration, because
- * that is where the repair happens.
+ * Somebody whose stored logs carry a createdAt that `new Date` reads and parseISO does not,
+ * or reads as another day. Every import let that in, the app opened as usual, and the first
+ * tick threw a RangeError from the invitation's gate. App's own render is outside the
+ * ErrorBoundary, so the whole window went white, on the gesture the app is for. Driven from
+ * the disk, through hydration, as somebody with that data opens the app.
  */
 describe('a log stored with a date the app did not write', () => {
   const day = (back: number) => {
@@ -1171,23 +1181,11 @@ describe('a log stored with a date the app did not write', () => {
     d.setDate(d.getDate() - back)
     return d
   }
-  const slashed = (d: Date) =>
-    `${d.getFullYear()}/${String(d.getMonth() + 1).padStart(2, '0')}/${String(d.getDate()).padStart(2, '0')}`
 
-  beforeEach(async () => {
-    inTheApp.yes = true
-    checkinFields.mockResolvedValue({ version: '1.3.0', os: 'linux', source: 'deb' })
-    openMailto.mockReset().mockResolvedValue('opened')
-    vi.spyOn(console, 'error').mockImplementation(() => {})
-    useRescueStore.setState({ failure: null })
-    useCalendarStore.setState({
-      _loggedThisSession: false,
-      _feedbackAsked: false,
-      _offerThisSession: null,
-      selectedDate: null,
-    })
-    // Let the deferred write from the setState above land before the disk is seeded.
-    await new Promise((done) => setTimeout(done, 20))
+  const openWith = async (createdAt: string) => {
+    // Whatever the store still has waiting to write goes to the disk now, through the
+    // flush the app itself has for pagehide, so the seed below is what hydration reads.
+    window.dispatchEvent(new Event('pagehide'))
     localStorage.setItem(
       STORAGE_KEY,
       JSON.stringify({
@@ -1196,13 +1194,7 @@ describe('a log stored with a date the app did not write', () => {
             { id: 'a1', name: 'Read', color: '#10B981', createdAt: NOW, updatedAt: NOW },
           ],
           logs: [
-            {
-              id: 'old',
-              activityId: 'a1',
-              date: formatDate(day(7)),
-              completed: true,
-              createdAt: slashed(day(7)),
-            },
+            { id: 'old', activityId: 'a1', date: formatDate(day(7)), completed: true, createdAt },
           ],
           firstOpenedAt: formatDate(day(7)),
           feedbackInviteSeen: false,
@@ -1214,31 +1206,71 @@ describe('a log stored with a date the app did not write', () => {
       })
     )
     await useCalendarStore.persist.rehydrate()
-  })
-
-  afterEach(() => {
-    localStorage.clear()
-  })
-
-  it('opens the calendar, not the rescue screen, with the record kept', async () => {
     render(<App />)
     await act(async () => {})
+  }
 
-    expect(screen.queryByTestId('could-not-open')).not.toBeInTheDocument()
-    expect(screen.queryByText('Something went wrong')).not.toBeInTheDocument()
-    expect(useCalendarStore.getState().logs.map((l) => l.id)).toEqual(['old'])
-  })
-
-  it('takes a tick, and goes on as it would for anybody past the week', async () => {
-    render(<App />)
-    await act(async () => {})
-
-    await act(async () => {
+  const tick = () =>
+    act(async () => {
       useCalendarStore.getState().toggleLog('a1', formatDate(day(0)))
     })
 
-    expect(screen.queryByText('Something went wrong')).not.toBeInTheDocument()
-    expect(await screen.findByTestId('feedback-rating')).toBeInTheDocument()
-    expect(useCalendarStore.getState().logs).toHaveLength(2)
+  const storedCreatedAt = async () => {
+    await waitFor(() => {
+      const logs = JSON.parse(localStorage.getItem(STORAGE_KEY)!).state.logs
+      expect(logs).toHaveLength(2)
+    })
+    return JSON.parse(localStorage.getItem(STORAGE_KEY)!).state.logs[0].createdAt
+  }
+
+  beforeEach(() => {
+    inTheApp.yes = true
+    checkinFields.mockResolvedValue({ version: '1.3.0', os: 'linux', source: 'deb' })
+    openMailto.mockReset().mockResolvedValue('opened')
+    inviteThrows.yes = false
+    useRescueStore.setState({ failure: null })
+    useCalendarStore.setState({
+      _loggedThisSession: false,
+      _feedbackAsked: false,
+      _offerThisSession: null,
+      selectedDate: null,
+    })
+  })
+
+  afterEach(() => {
+    window.dispatchEvent(new Event('pagehide'))
+    localStorage.clear()
+  })
+
+  it.each(['2026/11/01', 'Sun Nov 01 2026', '1', '12', '2026-02-30'])(
+    'with %j, opens, takes a tick, and leaves the value on the disk as it was',
+    async (createdAt) => {
+      await openWith(createdAt)
+
+      expect(screen.queryByTestId('could-not-open')).not.toBeInTheDocument()
+      expect(screen.getAllByTestId('month-title-button').length).toBeGreaterThan(0)
+
+      await tick()
+
+      expect(screen.getAllByTestId('month-title-button').length).toBeGreaterThan(0)
+      // Past the week by firstOpenedAt alone, so the question comes as it would for
+      // anybody; the record whose date does not read simply does not count.
+      expect(await screen.findByTestId('feedback-rating')).toBeInTheDocument()
+      expect(useCalendarStore.getState().logs[0]).toMatchObject({ id: 'old', createdAt })
+      expect(await storedCreatedAt()).toBe(createdAt)
+    }
+  )
+
+  // The guard that closes the whole class, not only the dates above: whatever the gate
+  // throws, the app stays on the screen and the question is simply not asked.
+  it('stays on the screen when the gate itself throws', async () => {
+    vi.spyOn(console, 'error').mockImplementation(() => {})
+    await openWith(new Date().toISOString())
+    inviteThrows.yes = true
+
+    await tick()
+
+    expect(screen.getAllByTestId('month-title-button').length).toBeGreaterThan(0)
+    expect(screen.queryByTestId('feedback-rating')).not.toBeInTheDocument()
   })
 })

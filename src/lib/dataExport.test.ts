@@ -800,9 +800,9 @@ describe('dataExport utility functions', () => {
         expect(result.errors.some((e) => e.message.includes('invalid createdAt format'))).toBe(true)
       })
 
-      // new Date reads these and parseISO does not. A backup exported from 1.6.0 or earlier
-      // may carry one, written as it was on disk; the app opens that disk by repairing the
-      // date, and the import does the same rather than refusing the person's own backup.
+      // new Date reads these and parseISO does not (or reads them as another day). Every
+      // version took them, and Export writes them back out as stored, so a backup holding
+      // one is the person's own. It comes in, and the value comes in as it was.
       const backupWith = (createdAt: string) =>
         JSON.stringify({
           version: '1.0',
@@ -814,15 +814,15 @@ describe('dataExport utility functions', () => {
           ],
         })
 
-      it.each(['2026/11/01', 'Sun Nov 01 2026'])(
-        'takes a backup with a log created on %j, with the date written as ISO',
+      it.each(['2026/11/01', 'Sun Nov 01 2026', '1', '12', '2026-02-30'])(
+        'takes a backup with a log created on %j, and leaves the value as it is',
         (createdAt) => {
           const result = parseImportFileWithValidation(backupWith(createdAt))
 
           expect(result.errors).toEqual([])
           expect(result.valid).toBe(true)
           expect(result.sanitizedData!.logs).toEqual([
-            createValidLog({ createdAt: new Date(createdAt).toISOString() }),
+            createValidLog({ createdAt }),
             createValidLog({ id: 'log-2', date: '2024-01-16' }),
           ])
         }

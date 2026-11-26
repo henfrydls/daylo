@@ -182,9 +182,12 @@ describe('a record whose creation date does not read', () => {
     createdAt,
   })
 
-  it.each(['2026/11/01', 'Sun Nov 01 2026', 'garbage', ''])('does not throw on %j', (bad) => {
-    expect(() => shouldInviteFeedback({ ...ready, logs: [with_(bad)] })).not.toThrow()
-  })
+  it.each(['2026/11/01', 'Sun Nov 01 2026', '1', '12', '2026-02-30', 'garbage', ''])(
+    'does not throw on %j',
+    (bad) => {
+      expect(() => shouldInviteFeedback({ ...ready, logs: [with_(bad)] })).not.toThrow()
+    }
+  )
 
   it('does not count, so it cannot make somebody older than they are', () => {
     // firstOpenedAt alone is three days ago; the unreadable record is the only thing

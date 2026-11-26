@@ -389,40 +389,40 @@ describe('a stored value that will not open', () => {
     })
 
     /**
-     * A log whose createdAt `new Date` reads and parseISO does not. Daylo never wrote one,
-     * but an import let it in until 1.6.1, and the app threw the first time the person
-     * ticked a day. Whoever holds one opens as before, keeps every record, and the date is
-     * written back the way Daylo writes it: the same moment, as toISOString gives it.
+     * A log whose createdAt `new Date` reads and parseISO does not, or reads as another
+     * day. Daylo never wrote one, but every import let it in. Whoever holds one opens as
+     * before, keeps every record, and the value stays on the disk exactly as it was:
+     * nothing here decides what date it was meant to be.
      */
-    it.each(['2026/11/01', 'Sun Nov 01 2026'])(
-      'opens a log created on %j, keeps it, and writes its date as Daylo would',
+    it.each(['2026/11/01', 'Sun Nov 01 2026', '1', '12', '2026-02-30'])(
+      'opens a log created on %j, keeps it, and leaves the value as it was',
       async (createdAt) => {
-        const stored = JSON.stringify({
-          state: {
-            activities: [whole],
-            logs: [
-              { ...log, createdAt },
-              { ...log, id: 'm', date: '2026-11-02' },
-            ],
-          },
-          version: 0,
-        })
-        localStorage.setItem(STORAGE_KEY, stored)
+        localStorage.setItem(
+          STORAGE_KEY,
+          JSON.stringify({
+            state: {
+              activities: [whole],
+              logs: [
+                { ...log, createdAt },
+                { ...log, id: 'm', date: '2026-11-02' },
+              ],
+            },
+            version: 0,
+          })
+        )
 
         await useCalendarStore.persist.rehydrate()
 
         expect(useRescueStore.getState().failure).toBeNull()
         expect(useCalendarStore.getState()._hasHydrated).toBe(true)
-        const logs = useCalendarStore.getState().logs
-        expect(logs).toHaveLength(2)
-        expect(logs[0]).toEqual({ ...log, createdAt: new Date(createdAt).toISOString() })
-        expect(logs[1]).toEqual({ ...log, id: 'm', date: '2026-11-02' })
-        // What reaches the disk is both records, the first with its date as Daylo writes
-        // it: nothing is dropped on the way back.
+        expect(useCalendarStore.getState().logs).toEqual([
+          { ...log, createdAt },
+          { ...log, id: 'm', date: '2026-11-02' },
+        ])
         await settle()
         const onDisk = JSON.parse(localStorage.getItem(STORAGE_KEY)!).state.logs
         expect(onDisk).toEqual([
-          { ...log, createdAt: new Date(createdAt).toISOString() },
+          { ...log, createdAt },
           { ...log, id: 'm', date: '2026-11-02' },
         ])
       }
