@@ -167,3 +167,50 @@ describe('the letter it opens', () => {
     expect(invoke).not.toHaveBeenCalled()
   })
 })
+
+/**
+ * A log whose createdAt parseISO cannot read used to throw a RangeError from here, and
+ * App renders this on every tick. Such a record does not count towards the week; it is
+ * not a reason to stop the app.
+ */
+describe('a record whose creation date does not read', () => {
+  const with_ = (createdAt: string): ActivityLog => ({
+    id: createdAt,
+    activityId: 'a1',
+    date: '2026-02-22',
+    completed: true,
+    createdAt,
+  })
+
+  it.each(['2026/11/01', 'Sun Nov 01 2026', '1', '12', '2026-02-30', 'garbage', ''])(
+    'does not throw on %j',
+    (bad) => {
+      expect(() => shouldInviteFeedback({ ...ready, logs: [with_(bad)] })).not.toThrow()
+    }
+  )
+
+  it('does not count, so it cannot make somebody older than they are', () => {
+    // firstOpenedAt alone is three days ago; the unreadable record is the only thing
+    // that could have said a week, and it does not.
+    expect(
+      shouldInviteFeedback({
+        ...ready,
+        firstOpenedAt: '2026-02-26',
+        logs: [with_('2020/01/01'), ...on(['2026-02-27'])],
+      })
+    ).toBe(false)
+  })
+
+  it('leaves the others to count as before', () => {
+    expect(
+      shouldInviteFeedback({ ...ready, logs: [with_('garbage'), ...on(['2026-02-22'])] })
+    ).toBe(true)
+  })
+
+  it('falls back to the first day the app was opened when no record reads', () => {
+    expect(shouldInviteFeedback({ ...ready, logs: [with_('garbage')] })).toBe(true)
+    expect(
+      shouldInviteFeedback({ ...ready, firstOpenedAt: '2026-02-26', logs: [with_('garbage')] })
+    ).toBe(false)
+  })
+})

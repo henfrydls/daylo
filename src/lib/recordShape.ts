@@ -40,7 +40,14 @@ export function isPlainObject(value: unknown): value is Record<string, unknown> 
   return typeof value === 'object' && value !== null && !Array.isArray(value)
 }
 
-const isTimestamp = (value: unknown) => typeof value === 'string' && isValidISODate(value)
+/**
+ * The one rule for a stored or imported timestamp: a string a Date can be made of. Loose on
+ * purpose, and the same as every version before: `new Date` also takes "2026/11/01", and a
+ * copy or a backup holding one opens and comes in. Whatever reads such a field with parseISO
+ * has to cope with what it cannot read (feedbackInvite's dayOf does).
+ */
+export const isTimestamp = (value: unknown): value is string =>
+  typeof value === 'string' && isValidISODate(value)
 
 /**
  * The first field of an activity that cannot be drawn, `''` when the activity itself is
