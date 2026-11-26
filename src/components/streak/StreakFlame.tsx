@@ -65,7 +65,8 @@ export function StreakFlame({ level, lit }: { level: FlameLevel; lit: boolean })
 
   // Several: the same drawing again, behind and to the left, a step apart. The one in front
   // is whole; of the ones behind, only what it leaves uncovered is drawn, with a gap.
-  const scale = count === 1 ? size : size * (count === 2 ? 0.92 : 0.84)
+  const crowd = count === 1 ? 1 : count === 2 ? 0.92 : 0.84
+  const scale = size * crowd
   const step = count === 2 ? 7.4 : 6.5
   const spread = (count - 1) * step
   // What does not fit in the 20px goes to the left, never towards the number.
@@ -103,10 +104,18 @@ export function StreakFlame({ level, lit }: { level: FlameLevel; lit: boolean })
             strokeLinejoin="round"
           />
         )}
-        {/* The embers go with the one in front, inside its group, so they follow its size and
-            its place. */}
+        {/* The embers go with the one in front, inside its group, so they follow its place
+            and the bonfire's size. Not the shrink of sharing the box with a second one: two
+            bonfires keep the embers of one, the size and place the design gave them. */}
         {index === 0 && shape === 'bonfire-embers' ? (
-          <path data-part="embers" d={EMBERS} fill="currentColor" />
+          <path
+            data-part="embers"
+            d={EMBERS}
+            fill="currentColor"
+            transform={
+              crowd === 1 ? undefined : `translate(12 21) scale(${1 / crowd}) translate(-12 -21)`
+            }
+          />
         ) : null}
       </g>
     </g>
