@@ -1022,12 +1022,35 @@ describe('MonthView', () => {
       expect(screen.getByRole('button', { name: 'Go to today, Friday, November 13' })).toBe(back())
     })
 
-    it('is not there on the first day: the door is the way to today', () => {
+    // The door goes to today too, but it opens the sheet. The quiet bar is the way back to
+    // the month alone, on the first day as on any other.
+    it('is there on the first day too, in another month, with the door', () => {
       useCalendarStore.setState({ activities: [], selectedMonth: 9 })
+      render(<MonthView />)
+
+      expect(back()).toBeInTheDocument()
+      expect(screen.getByTestId('first-day-door')).toBeInTheDocument()
+    })
+
+    it('is not there on the first day in the month of today, where the door is', () => {
+      useCalendarStore.setState({ activities: [] })
       render(<MonthView />)
 
       expect(back()).not.toBeInTheDocument()
       expect(screen.getByTestId('first-day-door')).toBeInTheDocument()
+    })
+
+    it('brings the month back on the first day without opening anything, focus on the door', () => {
+      useCalendarStore.setState({ activities: [], selectedMonth: 9 })
+      render(<MonthView />)
+
+      fireEvent.click(back()!)
+
+      const state = useCalendarStore.getState()
+      expect(state.selectedMonth).toBe(10)
+      expect(state.selectedDate).toBeNull()
+      expect(back()).not.toBeInTheDocument()
+      expect(screen.getByTestId('first-day-door')).toHaveFocus()
     })
 
     it('is not there with yesterday still open in another month, and nor is the row', () => {
@@ -1093,6 +1116,27 @@ describe('MonthView', () => {
       expect(useCalendarStore.getState().selectedMonth).toBe(10)
       expect(useCalendarStore.getState().selectedDate).toBeNull()
       expect(screen.getByTestId('log-today-bar')).toHaveFocus()
+    })
+
+    // A press that does not arrive must not leave a debt behind: before, the focus was owed
+    // until the month of today next came, and then taken from whatever had it.
+    it('does not take the focus later when a press did not bring the month back', () => {
+      const { setSelectedMonth, setSelectedYear } = useCalendarStore.getState()
+      useCalendarStore.setState({ selectedMonth: 9 })
+      // A press that changes nothing, as if the store had refused it.
+      useCalendarStore.setState({ setSelectedMonth: () => {}, setSelectedYear: () => {} })
+      render(<MonthView />)
+
+      fireEvent.click(back()!)
+      expect(useCalendarStore.getState().selectedMonth).toBe(9)
+
+      act(() => useCalendarStore.setState({ setSelectedMonth, setSelectedYear }))
+      const next = screen.getByLabelText('Next month')
+      next.focus()
+      fireEvent.click(next)
+
+      expect(useCalendarStore.getState().selectedMonth).toBe(10)
+      expect(next).toHaveFocus()
     })
 
     it('leaves the focus alone when the month of today comes back by the arrows', () => {

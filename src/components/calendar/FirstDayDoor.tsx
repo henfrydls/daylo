@@ -1,4 +1,4 @@
-import { useContext } from 'react'
+import { useContext, type Ref } from 'react'
 import { useTodayDate } from '../../lib/today'
 import { BesideContext } from '../../lib/beside'
 
@@ -28,6 +28,8 @@ interface FirstDayDoorProps {
   onOpenToday: () => void
   /** Opens Import, given the link that asked, so focus can go back to it. */
   onImport?: (opener: HTMLElement) => void
+  /** The door itself, for whoever has to give it the focus. */
+  ref?: Ref<HTMLButtonElement>
 }
 
 /**
@@ -39,7 +41,7 @@ interface FirstDayDoorProps {
  *
  * Month and Year both show it. It leads to today and not to the month on screen.
  */
-export function FirstDayDoor({ onOpenToday, onImport }: FirstDayDoorProps) {
+export function FirstDayDoor({ onOpenToday, onImport, ref }: FirstDayDoorProps) {
   const today = useTodayDate()
   // The copy drawn in the hidden view beside this one keeps its shape and drops its ids,
   // so each of them is on the page once: the one that works.
@@ -50,6 +52,7 @@ export function FirstDayDoor({ onOpenToday, onImport }: FirstDayDoorProps) {
     <div className="mb-4" data-testid={id('month-empty-state')}>
       <button
         type="button"
+        ref={ref}
         onClick={onOpenToday}
         className="w-full flex items-center justify-between p-3 bg-emerald-50 border border-emerald-200 rounded-xl min-h-[44px] cursor-pointer transition-colors hover:bg-emerald-100 active:bg-emerald-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-emerald-700"
         data-testid={id('first-day-door')}
