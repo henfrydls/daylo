@@ -604,12 +604,15 @@ jobs:
       # browser builds belong to an exact version, and a bump must not restore the old
       # ones. The packages are also keyed by the runner image, which is rebuilt about
       # weekly with newer libraries; a new image starts from the previous image's files
-      # and apt fetches only what changed.
+      # and apt fetches only what changed. Only the date part of ImageVersion: the rest
+      # differs from one runner to the next on the same image (20261116.376.1 and
+      # 20261116.133.1 in two consecutive runs), and with it every run missed the exact
+      # key and uploaded another 120 MB.
       - name: Read the cache keys
         id: keys
         run: |
           echo "playwright=$(node -p "require('./package-lock.json').packages['node_modules/playwright-core'].version")" >> "$GITHUB_OUTPUT"
-          echo "image=$ImageOS-$ImageVersion" >> "$GITHUB_OUTPUT"
+          echo "image=$ImageOS-${ImageVersion%%.*}" >> "$GITHUB_OUTPUT"
           echo "os=$ImageOS" >> "$GITHUB_OUTPUT"
           cat "$GITHUB_OUTPUT"
 
