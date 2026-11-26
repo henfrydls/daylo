@@ -166,6 +166,24 @@ describe('YearView', () => {
       expect(screen.getByLabelText('Next year')).toBeVisible()
     })
 
+    // The door is in every year, but only this one holds today: from another year the
+    // row's Today is the way back to it without opening the sheet.
+    it.each([
+      ['desktop', () => {}],
+      ['phone', phone],
+    ])('keeps Today with no activities in another year, on %s', (_, size) => {
+      size()
+      useCalendarStore.setState({ selectedYear: 2023, currentView: 'year' })
+      render(<YearView onImport={vi.fn()} />)
+
+      fireEvent.click(screen.getByRole('button', { name: 'Go to today' }))
+
+      const state = useCalendarStore.getState()
+      expect(state.selectedYear).toBe(2024)
+      expect(state.selectedMonth).toBe(5)
+      expect(state.selectedDate).toBeNull()
+    })
+
     it.each([
       ['desktop', () => {}],
       ['phone', phone],

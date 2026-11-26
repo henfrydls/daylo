@@ -1,4 +1,5 @@
-import { useMemo, useCallback, memo, useState, useRef, useEffect } from 'react'
+import { useMemo, useCallback, memo, useState, useRef } from 'react'
+import { flushSync } from 'react-dom'
 import { useCalendarStore } from '../../store'
 import { useTravel } from '../../lib/travel'
 import { formatDate, formatMonthYear } from '../../lib/dates'
@@ -11,7 +12,8 @@ import { useShallow } from 'zustand/react/shallow'
 import { count } from '../../lib/plural'
 import { TODAY_RING, YESTERDAY_RING } from './rings'
 import { YesterdayRow } from './YesterdayRow'
-import { FirstDayDoor, TodayTile } from './FirstDayDoor'
+import { FirstDayDoor } from './FirstDayDoor'
+import { TodayBarShell } from './TodayBarShell'
 import { giveFocusBack } from '../../lib/quietFocus'
 
 const DAYS_OF_WEEK = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
@@ -209,21 +211,21 @@ export const MonthView = memo(function MonthView({ onImport }: MonthViewProps) {
   const isCurrentMonth = selectedYear === today.getFullYear() && selectedMonth === today.getMonth()
   const todayCompletedCount = logsMap.get(todayStr)?.length ?? 0
 
+  const todayInWords = format(today, 'EEEE, MMMM d')
+
   // The quiet bar that brings today's month back goes away with the arrival, and the focus
-  // would fall to the page. It is handed to the Today bar that takes its place, in the same
-  // box: with its ring after a key, without one after a tap (see `giveFocusBack`).
-  const rootRef = useRef<HTMLDivElement>(null)
-  const focusOwed = useRef(false)
-  const backToToday = (): void => {
-    focusOwed.current = true
-    handleToday()
-  }
-  useEffect(() => {
-    if (!isCurrentMonth || !focusOwed.current) return
-    focusOwed.current = false
-    const bar = rootRef.current?.querySelector<HTMLElement>('[data-testid="log-today-bar"]')
-    if (bar) giveFocusBack(bar)
-  }, [isCurrentMonth])
+  // would fall to the page. It is handed to what takes its place, in the same spot: the
+  // Today bar, or the first day's door. With its ring after a key, without one after a tap
+  // (see `giveFocusBack`). The month is changed and drawn right here, inside the press, so
+  // nothing is left owed: a press that does not arrive gives the focus to nobody, now or
+  // later.
+  const todayBarRef = useRef<HTMLButtonElement>(null)
+  const doorRef = useRef<HTMLButtonElement>(null)
+  const backToToday = useCallback((): void => {
+    flushSync(handleToday)
+    const arrived = todayBarRef.current ?? doorRef.current
+    if (arrived) giveFocusBack(arrived)
+  }, [handleToday])
 
   /**
    * What logging yesterday would make, on a morning when yesterday is still open, and
@@ -241,7 +243,7 @@ export const MonthView = memo(function MonthView({ onImport }: MonthViewProps) {
   const secondDay = useMemo(() => isSecondDay(completedDates(logs), today), [logs, today])
 
   return (
-    <div className="p-3 sm:p-4 md:p-6" ref={rootRef}>
+    <div className="p-3 sm:p-4 md:p-6">
       {/* Month Navigation. There is no Today button here: in the month of today it did
           nothing, and in another month the way back is the bar below. So the arrows sit
           beside the title at every width. */}
@@ -315,53 +317,37 @@ export const MonthView = memo(function MonthView({ onImport }: MonthViewProps) {
           On a morning when yesterday is still open the bar carries a second row: under
           Today on the phone, beside it from 640px. Without a rescue it is the bar of any
           other morning. */}
+      {/* In another month the bar stays where it is and turns quiet: white, a grey edge,
+          the date in words and an arrow that turns back. It brings today's month back and
+          opens nothing. The same box as the Today bar, so the calendar keeps its place
+          between months, except by the height of the row about yesterday when that row is
+          open in the month of today. On the first day it is there too, above the door:
+          the door goes to today as well, but it opens the sheet. */}
+      {!isCurrentMonth && (
+        <TodayBarShell
+          tone="quiet"
+          day={today.getDate()}
+          done={todayCompletedCount > 0}
+          // gray-600 on white, 7.56:1.
+          line={<div className="text-xs text-gray-600">{todayInWords}</div>}
+          className="mb-4 rounded-xl"
+          onClick={backToToday}
+          data-testid="back-to-today-bar"
+          aria-label={`Go to today, ${todayInWords}`}
+        />
+      )}
+
       {/* With no activities the door takes the bar's place, in any month: it leads to
           today, not to the month on screen. */}
       {activities.length === 0 && (
         <FirstDayDoor
+          ref={doorRef}
           onOpenToday={() => {
             handleToday()
             handleDayClick(todayStr)
           }}
           onImport={onImport}
         />
-      )}
-
-      {/* In another month the bar stays where it is and turns quiet: white, a grey edge,
-          the date in words and an arrow that turns back. It brings today's month back and
-          opens nothing. The same box as the Today bar, so the calendar does not move
-          between months. */}
-      {!isCurrentMonth && activities.length > 0 && (
-        <button
-          type="button"
-          onClick={backToToday}
-          className="relative mb-4 w-full flex items-center justify-between p-[11px] bg-white border-2 border-gray-200 rounded-xl min-h-[44px] transition-colors hover:bg-gray-50 active:bg-gray-50 focus:outline-none focus-visible:z-10 focus-visible:ring-2 focus-visible:ring-emerald-700 focus-visible:ring-offset-2 focus-visible:ring-offset-white"
-          data-testid="back-to-today-bar"
-          aria-label={`Go to today, ${format(today, 'EEEE, MMMM d')}`}
-        >
-          <div className="flex items-center gap-3">
-            <TodayTile day={today.getDate()} done={todayCompletedCount > 0} />
-            <div className="text-left">
-              <div className="text-sm font-semibold text-gray-900">Today</div>
-              {/* gray-600 on white, 7.56:1. */}
-              <div className="text-xs text-gray-600">{format(today, 'EEEE, MMMM d')}</div>
-            </div>
-          </div>
-          <svg
-            className="w-5 h-5 text-gray-400"
-            fill="none"
-            viewBox="0 0 24 24"
-            stroke="currentColor"
-            aria-hidden="true"
-          >
-            <path
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              strokeWidth={2}
-              d="M9 15 3 9m0 0 6-6M3 9h12a6 6 0 0 1 0 12h-3"
-            />
-          </svg>
-        </button>
       )}
 
       {isCurrentMonth && activities.length > 0 && (
@@ -374,44 +360,30 @@ export const MonthView = memo(function MonthView({ onImport }: MonthViewProps) {
               : 'contents'
           }
         >
-          <button
-            onClick={() => handleDayClick(todayStr)}
-            // A permanent 2px edge in emerald-700, 5.36:1 on white, drawn on the bar's own
-            // rounded shape; p-[11px] is p-3 less the extra pixel, so the bar is as large as
-            // it was. The keyboard ring is outside it, a white gap and then emerald-700, and
-            // the focused row rises above its neighbour. On the desktop it is reached by Tab.
-            className={`relative w-full flex items-center justify-between p-[11px] bg-emerald-50 border-2 border-emerald-700 min-h-[44px] transition-colors hover:bg-emerald-100 active:bg-emerald-100 focus:outline-none focus-visible:z-10 focus-visible:ring-2 focus-visible:ring-emerald-700 focus-visible:ring-offset-2 focus-visible:ring-offset-white ${
+          <TodayBarShell
+            tone="today"
+            ref={todayBarRef}
+            day={today.getDate()}
+            done={todayCompletedCount > 0}
+            line={
+              <div
+                className={`text-xs ${secondDay ? 'text-gray-600' : 'text-gray-500'}`}
+                data-testid="today-bar-line"
+              >
+                {secondDay
+                  ? 'Log today to make 2 days in a row'
+                  : `${todayCompletedCount}/${count(activities.length, 'activity', 'activities')}`}
+              </div>
+            }
+            className={
               yesterdayIsOpen
                 ? 'rounded-t-xl sm:w-auto sm:flex-1 sm:rounded-tr-none sm:rounded-bl-xl'
                 : 'mb-4 rounded-xl'
-            }`}
+            }
+            onClick={() => handleDayClick(todayStr)}
             data-testid="log-today-bar"
             aria-label={`Log today: ${todayCompletedCount} of ${count(activities.length, 'activity', 'activities')} completed`}
-          >
-            <div className="flex items-center gap-3">
-              <TodayTile day={today.getDate()} done={todayCompletedCount > 0} />
-              <div className="text-left">
-                <div className="text-sm font-semibold text-gray-900">Today</div>
-                <div
-                  className={`text-xs ${secondDay ? 'text-gray-600' : 'text-gray-500'}`}
-                  data-testid="today-bar-line"
-                >
-                  {secondDay
-                    ? 'Log today to make 2 days in a row'
-                    : `${todayCompletedCount}/${count(activities.length, 'activity', 'activities')}`}
-                </div>
-              </div>
-            </div>
-            <svg
-              className="w-5 h-5 text-gray-400"
-              fill="none"
-              viewBox="0 0 24 24"
-              stroke="currentColor"
-              aria-hidden="true"
-            >
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-            </svg>
-          </button>
+          />
           {rescue !== null && (
             <YesterdayRow
               day={subDays(today, 1).getDate()}
