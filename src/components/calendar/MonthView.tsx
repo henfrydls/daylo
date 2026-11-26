@@ -9,12 +9,14 @@ import { isSecondDay, yesterdayStillOpen } from '../../lib/streaks'
 import { format, subDays } from 'date-fns'
 import type { Activity, ActivityLog } from '../../types'
 import { useShallow } from 'zustand/react/shallow'
-import { count } from '../../lib/plural'
+import { count, plural } from '../../lib/plural'
 import { TODAY_RING, YESTERDAY_RING } from './rings'
 import { YesterdayRow } from './YesterdayRow'
 import { FirstDayDoor } from './FirstDayDoor'
 import { TodayBarShell } from './TodayBarShell'
 import { giveFocusBack } from '../../lib/quietFocus'
+import { monthCompletion, type MonthCompletion } from '../../lib/monthCompletion'
+import { useFirstDay } from '../../hooks/useFirstDay'
 
 const DAYS_OF_WEEK = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
 const DAYS_OF_WEEK_SHORT = ['S', 'M', 'T', 'W', 'T', 'F', 'S']
@@ -107,6 +109,24 @@ function tone(day: DayInfo, yesterdayStr: string, yesterdayIsOpen: boolean): str
   return day.isCurrentMonth ? 'text-gray-900' : 'text-gray-400'
 }
 
+/**
+ * The month's figure in words: "17 of 25 days so far" in the month we are in, "20 of 31
+ * days" in one already over. The days of the month gone by, and no percentage: the two
+ * numbers already say it. Small, like "1/4 activities" in the Today bar.
+ */
+function MonthSoFar({ figure, running }: { figure: MonthCompletion; running: boolean }) {
+  return (
+    <span
+      className="whitespace-nowrap text-xs text-gray-500 sm:text-sm"
+      data-testid="month-progress"
+    >
+      <span className="font-semibold text-gray-700">{figure.daysDone}</span> of {figure.daysCounted}{' '}
+      {plural(figure.daysCounted, 'day', 'days')}
+      {running ? ' so far' : ''}
+    </span>
+  )
+}
+
 interface MonthViewProps {
   /**
    * Opens Import, given the link that asked, so focus can go back to it. Without it the
@@ -128,6 +148,7 @@ export const MonthView = memo(function MonthView({ onImport }: MonthViewProps) {
   const travel = useTravel()
   const activities = useCalendarStore(useShallow((state) => state.activities))
   const logs = useCalendarStore(useShallow((state) => state.logs))
+  const firstDay = useFirstDay()
 
   const [slideDirection, setSlideDirection] = useState<'left' | 'right' | null>(null)
 
@@ -242,6 +263,25 @@ export const MonthView = memo(function MonthView({ onImport }: MonthViewProps) {
   // would make rather than "0/1 activity". See `isSecondDay`: logging today ends it.
   const secondDay = useMemo(() => isSecondDay(completedDates(logs), today), [logs, today])
 
+  /**
+   * How the month on screen stands, by the rule every month figure follows (see
+   * monthCompletion), so it agrees with "This Month" and the month cards in Year. Said only
+   * once the month has a day done in it: "0 of 20 days so far" is the one form of it that
+   * scolds, and the empty grid has already said it. That also keeps it off a month still to
+   * come, a month before the person started and the first day before anything is done.
+   */
+  const soFar = useMemo((): MonthCompletion | null => {
+    if (activities.length === 0) return null
+    const figure = monthCompletion(
+      selectedYear,
+      selectedMonth,
+      (date) => logsMap.has(date),
+      today,
+      firstDay
+    )
+    return figure !== null && figure.daysDone > 0 ? figure : null
+  }, [activities.length, selectedYear, selectedMonth, logsMap, today, firstDay])
+
   return (
     <div className="p-3 sm:p-4 md:p-6">
       {/* Month Navigation. There is no Today button here: in the month of today it did
@@ -265,6 +305,7 @@ export const MonthView = memo(function MonthView({ onImport }: MonthViewProps) {
           >
             {formatMonthYear(displayDate)}
           </button>
+          {soFar && <MonthSoFar figure={soFar} running={isCurrentMonth} />}
         </div>
         <div className="flex items-center gap-1">
           <button

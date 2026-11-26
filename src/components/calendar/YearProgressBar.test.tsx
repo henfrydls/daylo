@@ -145,4 +145,49 @@ describe('YearProgressBar', () => {
     expect(progressbar).toHaveAttribute('aria-valuemin', '0')
     expect(progressbar).toHaveAttribute('aria-valuemax', '100')
   })
+
+  // The year the person started in is counted from their first day, as the month is (lib/
+  // monthCompletion): on 15 June, somebody who began on the 9th with six of seven days done
+  // read "6 of 167 days so far · 4%" beside a month card saying 6 of 7.
+  describe('in the year the person started', () => {
+    const week = () => {
+      const logsByDate = new Map<string, number>()
+      for (const d of [9, 10, 11, 13, 14, 15])
+        logsByDate.set(`2024-06-${String(d).padStart(2, '0')}`, 1)
+      return logsByDate
+    }
+
+    it('counts from the first day, with "so far" while the year runs', () => {
+      render(<YearProgressBar {...defaultProps} logsByDate={week()} firstDay="2024-06-09" />)
+
+      expect(screen.getByText(/days so far/).textContent).toBe('6 of 7 days so far · 86%')
+      expect(screen.getByRole('progressbar')).toHaveAttribute('aria-valuenow', '86')
+    })
+
+    // The first day itself, with something done: one day, and the word agrees with it.
+    it('says 1 of 1 day on the first day', () => {
+      const logsByDate = new Map([['2024-06-15', 1]])
+      render(<YearProgressBar {...defaultProps} logsByDate={logsByDate} firstDay="2024-06-15" />)
+
+      expect(screen.getByText(/so far/).textContent).toBe('1 of 1 day so far · 100%')
+    })
+
+    it('counts a year already over from the first day to its end', () => {
+      render(<YearProgressBar {...defaultProps} year={2023} firstDay="2023-12-01" />)
+
+      expect(screen.getByText(/of 31 days/).textContent).toBe('0 of 31 days · 0%')
+    })
+
+    it('leaves the years after it as they were', () => {
+      render(<YearProgressBar {...defaultProps} firstDay="2023-12-01" />)
+
+      expect(screen.getByText(/days so far/).textContent).toBe('0 of 167 days so far · 0%')
+    })
+
+    it('leaves the years before it as they were', () => {
+      render(<YearProgressBar {...defaultProps} year={2023} firstDay="2024-06-09" />)
+
+      expect(screen.getByText(/of 365 days/).textContent).toBe('0 of 365 days · 0%')
+    })
+  })
 })

@@ -879,7 +879,14 @@ describe('YearView', () => {
         completed: true,
         createdAt: date,
       }))
-      useCalendarStore.setState({ activities, logs, selectedYear: 2024 })
+      // Here since the activity was made, on 1 January: without it the first of the
+      // three days would be the person's first day, and the bar would count from it.
+      useCalendarStore.setState({
+        activities,
+        logs,
+        selectedYear: 2024,
+        firstOpenedAt: '2024-01-01',
+      })
       render(<YearView />)
 
       const bar = screen.getByTestId('year-progress-bar')
@@ -1170,6 +1177,87 @@ describe('YearView', () => {
       // A month that has not begun says so, as the row does, and not "0 of 31".
       expect(cards[11]).toHaveAccessibleName('December 2026: not started yet. Tap to view month.')
       expect(within(cards[11]).getByTestId('month-card-stats')).toHaveTextContent(/^–$/)
+    })
+
+    // The month a person started in counts from their first day, as "This Month" does
+    // (lib/monthCompletion). Somebody who began on 19 November with six of seven days done
+    // read 6 of 25, 24%, on 25 November. The month before keeps its 31 days: only the
+    // month of the first day changes.
+    describe('in the month the person started', () => {
+      beforeEach(() => {
+        vi.setSystemTime(new Date(2026, 10, 25, 12))
+        useCalendarStore.setState({
+          firstOpenedAt: '2026-11-19',
+          firstDayKept: null,
+          logs: marked(
+            '2026-11-19',
+            '2026-11-20',
+            '2026-11-21',
+            '2026-11-23',
+            '2026-11-24',
+            '2026-11-25'
+          ),
+        })
+      })
+      afterEach(() => {
+        // In act: this runs before the shared cleanup, with the component still on screen.
+        act(() => useCalendarStore.setState({ firstOpenedAt: null }))
+      })
+
+      it('counts it from the first day in the row of months', () => {
+        render(<YearView />)
+
+        const row = within(screen.getByTestId('month-completion'))
+        expect(row.getByRole('button', { name: 'View Nov 2026, 86% complete' })).toBeInTheDocument()
+        // October is wholly before the first day: no figure, as a month still to come.
+        expect(
+          row.getByRole('button', { name: 'View Oct 2026, not started yet' })
+        ).toBeInTheDocument()
+      })
+
+      // The year bar too, and only in the year the person started (YearProgressBar). It is
+      // drawn on the phone.
+      it('counts the year bar from the first day', () => {
+        window.matchMedia = ((query: string) => ({
+          matches: false,
+          media: query,
+          onchange: null,
+          addListener: vi.fn(),
+          removeListener: vi.fn(),
+          addEventListener: vi.fn(),
+          removeEventListener: vi.fn(),
+          dispatchEvent: vi.fn(),
+        })) as unknown as typeof window.matchMedia
+        render(<YearView />)
+
+        expect(screen.getByTestId('year-progress-bar')).toHaveTextContent(
+          /^6 of 7 days so far · 86%/
+        )
+      })
+
+      it('counts it from the first day on the phone month card', () => {
+        window.matchMedia = ((query: string) => ({
+          matches: false,
+          media: query,
+          onchange: null,
+          addListener: vi.fn(),
+          removeListener: vi.fn(),
+          addEventListener: vi.fn(),
+          removeEventListener: vi.fn(),
+          dispatchEvent: vi.fn(),
+        })) as unknown as typeof window.matchMedia
+        render(<YearView />)
+
+        const cards = screen.getAllByTestId('month-card')
+        expect(cards[10]).toHaveAccessibleName(
+          'November 2026: 6 of 7 days active, 86%. Tap to view month.'
+        )
+        expect(within(cards[10]).getByTestId('month-card-stats')).toHaveTextContent('6/7 · 86%')
+        // October and every month before it in the year: the dash of a month still to come.
+        expect(cards[9]).toHaveAccessibleName('October 2026: not started yet. Tap to view month.')
+        expect(within(cards[9]).getByTestId('month-card-stats')).toHaveTextContent(/^–$/)
+        expect(within(cards[0]).getByTestId('month-card-stats')).toHaveTextContent(/^–$/)
+      })
     })
   })
 })

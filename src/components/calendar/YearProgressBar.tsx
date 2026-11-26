@@ -1,6 +1,7 @@
 import { useMemo, memo } from 'react'
-import { formatDate, getYearDays } from '../../lib/dates'
+import { formatDate, getYearDays, parseDateString } from '../../lib/dates'
 import { useTodayDate } from '../../lib/today'
+import { plural } from '../../lib/plural'
 
 const MONTHS_SHORT = [
   'Jan',
@@ -21,12 +22,19 @@ interface YearProgressBarProps {
   year: number
   logsByDate: Map<string, number>
   totalActivities: number
+  /**
+   * The person's first day (lib/firstDay). The year it falls in is counted from it, as the
+   * month is: somebody a week in read "6 of 329 days so far" beside a November of 6 of 7.
+   * Every other year is counted whole.
+   */
+  firstDay?: string | null
 }
 
 export const YearProgressBar = memo(function YearProgressBar({
   year,
   logsByDate,
   totalActivities,
+  firstDay = null,
 }: YearProgressBarProps) {
   // The app's day, not the clock's: see useTodayDate.
   const today = useTodayDate()
@@ -35,8 +43,10 @@ export const YearProgressBar = memo(function YearProgressBar({
   const { activeDays, totalDaysElapsed, percentage, bestMonth } = useMemo(() => {
     const yearDays = getYearDays(year)
 
-    // Count days elapsed up to today
-    const elapsed = yearDays.filter((d) => d <= today).length
+    // Count days elapsed up to today, from the person's first day in the year they began.
+    const from =
+      firstDay !== null && firstDay.startsWith(`${year}-`) ? parseDateString(firstDay) : null
+    const elapsed = yearDays.filter((d) => d <= today && (from === null || d >= from)).length
 
     // Count days with at least one completion
     // Days gone by only: the bar reads "N of M days", and M stops at today, so a day still
@@ -74,7 +84,7 @@ export const YearProgressBar = memo(function YearProgressBar({
       percentage: pct,
       bestMonth: bestMonthCount > 0 ? MONTHS_SHORT[bestMonthIdx] : null,
     }
-  }, [year, logsByDate, today])
+  }, [year, logsByDate, today, firstDay])
 
   if (totalActivities === 0) {
     return null
@@ -109,7 +119,8 @@ export const YearProgressBar = memo(function YearProgressBar({
             when October's own card said 68%. */}
         <span>
           <span className="font-semibold text-gray-700">{activeDays}</span> of {totalDaysElapsed}{' '}
-          days{isThisYear ? ' so far' : ''}
+          {plural(totalDaysElapsed, 'day', 'days')}
+          {isThisYear ? ' so far' : ''}
           <span aria-hidden="true"> · </span>
           <span className="font-semibold text-emerald-600">{percentage}%</span>
         </span>

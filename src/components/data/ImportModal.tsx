@@ -1,7 +1,7 @@
 import { useState, useCallback, useRef } from 'react'
 import { Modal, Button, ConfirmDialog } from '../ui'
 import { useCalendarStore } from '../../store'
-import { parseImportFileWithValidation, mergeData } from '../../lib/dataExport'
+import { parseImportFileWithValidation } from '../../lib/dataExport'
 import type { Activity, ActivityLog } from '../../types'
 import type { ValidationError } from '../../lib/dataExport'
 import { count } from '../../lib/plural'
@@ -142,23 +142,11 @@ export function ImportModal({ isOpen, onClose }: ImportModalProps) {
       const store = useCalendarStore.getState()
 
       if (importMode === 'replace') {
-        // Replace all data
-        useCalendarStore.setState({
-          activities: parsedData.activities,
-          logs: parsedData.logs,
-        })
+        // Replace all data. Through the store, which keeps the first day of what goes.
+        store.replaceRecords(parsedData.activities, parsedData.logs)
       } else {
-        // Merge with existing data
-        const merged = mergeData(
-          store.activities,
-          store.logs,
-          parsedData.activities,
-          parsedData.logs
-        )
-        useCalendarStore.setState({
-          activities: merged.activities,
-          logs: merged.logs,
-        })
+        // Merge with existing data, through the store like replacing.
+        store.mergeRecords(parsedData.activities, parsedData.logs)
       }
 
       handleClose()

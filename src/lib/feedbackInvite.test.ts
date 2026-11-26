@@ -96,6 +96,17 @@ describe('the week it asks about', () => {
 
     expect(shouldInviteFeedback(restored)).toBe(true)
   })
+
+  // Pinned as it behaves, not as it should: firstOpenedAt is compared with the oldest
+  // record as text. A value that is not a day and sorts after the digits ("not a day")
+  // loses to the record, and the week counts from the record. One that sorts before them
+  // ("1 day") wins, the week is counted from something that is not a date, and the answer
+  // is no. The month's figure reads the same field differently (lib/firstDay), and that
+  // must not leak in here.
+  it('compares a firstOpenedAt that is not a day as text, against the oldest record', () => {
+    expect(shouldInviteFeedback({ ...ready, firstOpenedAt: 'not a day' })).toBe(true)
+    expect(shouldInviteFeedback({ ...ready, firstOpenedAt: '1 day' })).toBe(false)
+  })
 })
 
 describe('how many days were used no longer counts', () => {
