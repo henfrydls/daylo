@@ -88,6 +88,25 @@ describe('giving the focus back', () => {
     field.remove()
   })
 
+  // WebKitGTK names Shift+Tab "Unidentified" (code "Tab"). Out of a field it is still the
+  // keyboard driving, and the ring is owed.
+  it('counts the Shift+Tab WebKitGTK sends in a field', () => {
+    const field = document.createElement('input')
+    document.body.append(field)
+    field.dispatchEvent(
+      new KeyboardEvent('keydown', {
+        key: 'Unidentified',
+        code: 'Tab',
+        shiftKey: true,
+        bubbles: true,
+      })
+    )
+    oldEngine()
+    giveFocusBack(target)
+    expect(target).not.toHaveAttribute('data-focus-quiet')
+    field.remove()
+  })
+
   it('takes the mark off at the next key, so the ring the keyboard is owed shows', () => {
     oldEngine()
     giveFocusBack(target)

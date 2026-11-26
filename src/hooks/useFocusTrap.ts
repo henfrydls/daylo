@@ -1,6 +1,8 @@
 import { useEffect, useRef, type RefObject } from 'react'
 import { onAndroidBack } from '../lib/androidBack'
 import { reachable } from '../lib/onScreen'
+import { isTab } from '../lib/keys'
+import { nextTabbable } from '../lib/tabbable'
 import { giveFocusBack } from '../lib/quietFocus'
 
 /**
@@ -24,18 +26,25 @@ const answeringEscape: Array<{ fire: () => void }> = []
  */
 const openTraps: Array<RefObject<HTMLElement | null>> = []
 
-const FOCUSABLE_SELECTOR =
-  'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])'
-
 /**
- * The first control in a trap that the focus can land on: not disabled, and drawn. With
- * none, the trap itself, made focusable by script only, so the focus is at least inside it.
+ * The first control in a trap that the focus can land on (see lib/tabbable). With none, the
+ * trap itself, made focusable by script only for as long as it holds the focus, so the
+ * focus is at least inside it.
  */
 function firstReachable(container: HTMLElement): HTMLElement {
-  for (const node of container.querySelectorAll<HTMLElement>(FOCUSABLE_SELECTOR)) {
-    if (!node.matches(':disabled') && reachable(node)) return node
+  const first = nextTabbable(container, null, false)
+  if (first !== null) return first
+  if (!container.hasAttribute('tabindex')) {
+    container.tabIndex = -1
+    // Taken away when the focus goes somewhere else on the page, and not when the window
+    // loses it (another app, the system's own dialog): that comes back to the panel.
+    const onFocusOut = (e: FocusEvent) => {
+      if (e.target !== container || e.relatedTarget === null) return
+      container.removeAttribute('tabindex')
+      container.removeEventListener('focusout', onFocusOut)
+    }
+    container.addEventListener('focusout', onFocusOut)
   }
-  if (!container.hasAttribute('tabindex')) container.tabIndex = -1
   return container
 }
 
@@ -112,19 +121,36 @@ export function useFocusTrap(
     // Lock body scroll
     document.body.style.overflow = 'hidden'
 
-    // Auto-focus the first focusable element
-    if (autoFocus && container) {
-      setTimeout(() => {
-        const firstFocusable = container?.querySelector<HTMLElement>(FOCUSABLE_SELECTOR)
-        firstFocusable?.focus()
-      }, 0)
+    // Auto-focus the first control that can have the focus
+    // Cancelled if the trap lets go first: opened and closed in one go (a double activation,
+    // StrictMode), the timer put the focus inside a sheet that was already closed.
+    const firstFocus =
+      autoFocus && container
+        ? setTimeout(() => nextTabbable(container, null, false)?.focus(), 0)
+        : undefined
+
+    // The last thing that had the focus, so that focus found on <body> at the end can be
+    // told apart: dropped there from the sheet or from its opener (a tap on the backdrop),
+    // or from somewhere else on the page. <body> never gets a focusin of its own.
+    let lastFocused: Element | null = document.activeElement
+    const onFocusIn = (e: FocusEvent) => {
+      lastFocused = e.target as Element
     }
+    document.addEventListener('focusin', onFocusIn)
 
     return () => {
+      clearTimeout(firstFocus)
+      document.removeEventListener('focusin', onFocusIn)
       // Restore body scroll
       document.body.style.overflow = 'unset'
 
       const at = openTraps.lastIndexOf(containerRef)
+      // The traps opened over this one and still switched on. Import's confirmation and the
+      // Import dialog close in one commit; the confirmation is drawn through a portal, so it
+      // is not inside the dialog on the page, and as the dialog's sibling its trap lets go
+      // after the dialog's. Focus on it is focus in front of this trap, and this trap's to
+      // give back to what opened it.
+      const above = at === -1 ? [] : openTraps.slice(at + 1)
       if (at !== -1) openTraps.splice(at, 1)
       if (!restoreFocus) return
 
@@ -134,18 +160,26 @@ export function useFocusTrap(
       // eslint-disable-next-line react-hooks/exhaustive-deps -- the node now, on purpose
       const holder = containerRef.current ?? container
       const active = document.activeElement
-      const inside = holder?.contains(active) ?? false
+      const within = (node: Element | null) =>
+        node !== null &&
+        ((holder?.contains(node) ?? false) || above.some((trap) => trap.current?.contains(node)))
+      const inside = within(active)
       const lost = active === null || active === document.body
+      // Dropped on <body> from the sheet or from what opened it, and nowhere else.
+      const fellFromHere =
+        lost && (within(lastFocused) || lastFocused === previousActiveElement.current)
 
       // Back to what opened it, when somebody could still be there. <body> is not
       // somewhere to go back to: the door in Year has gone into the hidden view by the time
       // the day sheet opens, and the focus went with it.
       const before = previousActiveElement.current
       if (before !== null && before !== document.body && reachable(before)) {
-        // Only from inside. Focus dropped on the page by a tap on the backdrop, with the
-        // opener still there, stays where it fell: sending it back scrolled the page to
-        // the opener and lit a ring after a tap.
-        if (inside) giveFocusBack(before)
+        // From inside, or from <body> when it fell there from the sheet or the opener,
+        // which is what a tap on the backdrop does. That one was left where it fell while
+        // giving it back scrolled the page to the opener and lit a ring after a tap;
+        // giveFocusBack does neither, and <body> is where Tab starts again from the top of
+        // the page. Focus taken by something else on the page, or dropped from it, stays.
+        if (inside || fellFromHere) giveFocusBack(before)
         return
       }
       // Nowhere to go back to. From inside, or lost to the page when what held it went
@@ -192,7 +226,8 @@ export function useFocusTrap(
     if (!isActive) return
 
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key !== 'Tab') return
+      // A control that answers Tab itself, and said so, keeps it.
+      if (!isTab(e) || e.defaultPrevented) return
       // The highest one that is on the page: a trap switched on a render before its
       // container arrives leaves Tab to the one underneath until then, rather than to nobody.
       const front = [...openTraps].reverse().find((trap) => trap.current !== null)
@@ -200,25 +235,19 @@ export function useFocusTrap(
       const container = containerRef.current
       if (container === null) return
 
-      const focusableElements = container.querySelectorAll<HTMLElement>(FOCUSABLE_SELECTOR)
-      if (focusableElements.length === 0) return
-
-      const firstElement = focusableElements[0]
-      const lastElement = focusableElements[focusableElements.length - 1]
-
-      if (e.shiftKey) {
-        // Shift+Tab: if on first element, go to last
-        if (document.activeElement === firstElement) {
-          e.preventDefault()
-          lastElement?.focus()
-        }
-      } else {
-        // Tab: if on last element, go to first
-        if (document.activeElement === lastElement) {
-          e.preventDefault()
-          firstElement?.focus()
-        }
-      }
+      // Every Tab, moved here and never left to the browser. In WKWebView on a Mac with
+      // "Keyboard navigation" off, which is how a Mac comes, the browser's own Tab visits
+      // fields and selects only, so from a button in the middle of a sheet it went to the
+      // page behind. Leaving the middle to the browser and wrapping at the ends was not
+      // enough there. From outside the trap (the opener the sheets leave the focus on,
+      // <body> after a tap on nothing) it comes in at the end the key is going towards;
+      // from something inside that Tab does not stop at, to its neighbour on the page.
+      e.preventDefault()
+      // With nothing inside that can have it, the sheet itself holds it, so it is at least
+      // not behind the sheet.
+      const next =
+        nextTabbable(container, document.activeElement, e.shiftKey) ?? firstReachable(container)
+      next.focus()
     }
 
     document.addEventListener('keydown', handleKeyDown)

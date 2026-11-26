@@ -4,6 +4,7 @@ import userEvent from '@testing-library/user-event'
 import { QuickLog } from './QuickLog'
 import { useCalendarStore } from '../../store'
 import { formatDate } from '../../lib/dates'
+import { tabbable } from '../../lib/tabbable'
 
 // Helper to reset store state before each test
 const resetStore = () => {
@@ -1258,5 +1259,128 @@ describe('the focus when what opened the sheet is gone', () => {
     closeWithTheFocusInside()
 
     await waitFor(() => expect(screen.getByTestId('first-day-door')).toHaveFocus())
+  })
+})
+
+/**
+ * Tab with the sheet open, from the button that opened it. The sheet does not take the
+ * focus as it opens, so the focus is still on the Today bar (or yesterday's row) behind it,
+ * and Tab from there walked the page behind the sheet (#272).
+ */
+describe('Tab with the sheet open', () => {
+  const setSelectedDate = useCalendarStore.getState().setSelectedDate
+  const today = formatDate(new Date())
+  const yesterday = formatDate(new Date(Date.now() - 24 * 60 * 60 * 1000))
+
+  beforeEach(() => {
+    setupStoreWithActivities()
+    useCalendarStore.setState({ selectedDate: null, setSelectedDate })
+  })
+
+  function Page({ date }: { date: string }) {
+    return (
+      <>
+        <button type="button" data-testid="before">
+          Before
+        </button>
+        <button
+          type="button"
+          data-testid="opener"
+          onClick={() => useCalendarStore.getState().setSelectedDate(date)}
+        >
+          Open
+        </button>
+        <button type="button" data-testid="after">
+          After
+        </button>
+        <QuickLog />
+      </>
+    )
+  }
+
+  async function openFromTheOpener(date: string) {
+    render(<Page date={date} />)
+    const opener = screen.getByTestId('opener')
+    opener.focus()
+    fireEvent.click(opener)
+    const sheet = await screen.findByTestId('quicklog-modal')
+    expect(opener).toHaveFocus()
+    return { opener, sheet }
+  }
+
+  it.each([
+    ['today', today],
+    ['yesterday', yesterday],
+  ])("takes Tab from the opener into %s's sheet, at its first control", async (_, date) => {
+    const { opener, sheet } = await openFromTheOpener(date)
+
+    fireEvent.keyDown(opener, { key: 'Tab' })
+
+    expect(screen.getByRole('button', { name: 'Close quick log' })).toHaveFocus()
+    expect(sheet).toContainElement(document.activeElement as HTMLElement)
+  })
+
+  it.each([
+    ['today', today],
+    ['yesterday', yesterday],
+  ])("takes Shift+Tab from the opener into %s's sheet, at its last control", async (_, date) => {
+    const { opener, sheet } = await openFromTheOpener(date)
+
+    fireEvent.keyDown(opener, { key: 'Tab', shiftKey: true })
+
+    const controls = tabbable(sheet)
+    expect(document.activeElement).toBe(controls[controls.length - 1])
+  })
+
+  // WKWebView on a Mac with "Keyboard navigation" off moves Tab between fields only, so
+  // every Tab, not just the ones at either end, has to be the sheet's own.
+  it.each([
+    ['Tab', false],
+    ['Shift+Tab', true],
+  ])('moves every %s itself, from a control in the middle of the sheet', async (_, shiftKey) => {
+    const { sheet } = await openFromTheOpener(today)
+    const controls = tabbable(sheet)
+    const middle = Math.floor(controls.length / 2)
+    act(() => controls[middle].focus())
+
+    for (let press = 1; press <= controls.length + 2; press++) {
+      const went = fireEvent.keyDown(document.activeElement!, { key: 'Tab', shiftKey })
+      const want =
+        (((middle + (shiftKey ? -press : press)) % controls.length) + controls.length) %
+        controls.length
+      expect(went).toBe(false)
+      expect(document.activeElement).toBe(controls[want])
+    }
+  })
+
+  it('gives the focus back to the opener after Escape from inside', async () => {
+    const { opener } = await openFromTheOpener(today)
+    fireEvent.keyDown(opener, { key: 'Tab' })
+
+    fireEvent.keyDown(document.activeElement!, { key: 'Escape' })
+
+    await waitFor(() => expect(screen.queryByTestId('quicklog-modal')).not.toBeInTheDocument())
+    expect(opener).toHaveFocus()
+  })
+
+  it('gives the focus back to the opener after Done', async () => {
+    const { opener } = await openFromTheOpener(today)
+    const done = screen.getByTestId('quicklog-done-button')
+    done.focus()
+
+    fireEvent.click(done)
+
+    await waitFor(() => expect(opener).toHaveFocus())
+  })
+
+  // A tap on the backdrop takes the focus off the opener and drops it on the page.
+  it('gives the focus back to the opener after a tap on the backdrop', async () => {
+    const { opener, sheet } = await openFromTheOpener(today)
+    act(() => opener.blur())
+    const backdrop = sheet.parentElement!.querySelector<HTMLElement>('[data-backdrop]')!
+
+    fireEvent.click(backdrop)
+
+    await waitFor(() => expect(opener).toHaveFocus())
   })
 })

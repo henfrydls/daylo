@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect, useCallback, useMemo } from 'react'
 import type { ReactNode } from 'react'
 import { useAnimatedPresence } from '../../hooks'
+import { isTab } from '../../lib/keys'
 
 export interface DropdownMenuActionItem {
   type?: 'action'
@@ -81,6 +82,11 @@ export function DropdownMenu({ trigger, items, 'data-testid': testId }: Dropdown
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
       if (!isOpen) return
+      // Tab first, and not in the switch: on Linux Shift+Tab has no name (see isTab).
+      if (isTab(event)) {
+        setIsOpen(false)
+        return
+      }
 
       switch (event.key) {
         case 'Escape':
@@ -126,9 +132,6 @@ export function DropdownMenu({ trigger, items, 'data-testid': testId }: Dropdown
           ) {
             handleItemClick(actionItems[focusedIndex])
           }
-          break
-        case 'Tab':
-          setIsOpen(false)
           break
       }
     }

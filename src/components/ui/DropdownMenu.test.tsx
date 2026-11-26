@@ -128,6 +128,31 @@ describe('DropdownMenu', () => {
       await user.keyboard('{Tab}')
       await waitFor(() => expect(screen.queryByRole('menu')).not.toBeInTheDocument())
     })
+
+    it('should stay open on Ctrl+Tab, which changes the browser tab and not the menu', async () => {
+      const user = userEvent.setup()
+      render(<DropdownMenu trigger={<span>Open Menu</span>} items={createItems()} />)
+      await user.click(screen.getByText('Open Menu'))
+
+      fireEvent.keyDown(document, { key: 'Tab', code: 'Tab', ctrlKey: true })
+
+      expect(screen.getByRole('button', { name: 'Open Menu' })).toHaveAttribute(
+        'aria-expanded',
+        'true'
+      )
+    })
+
+    // WebKitGTK, the Linux app's engine, names Shift+Tab "Unidentified" (code "Tab").
+    it('should close menu on the Shift+Tab WebKitGTK sends', async () => {
+      const user = userEvent.setup()
+      render(<DropdownMenu trigger={<span>Open Menu</span>} items={createItems()} />)
+      await user.click(screen.getByText('Open Menu'))
+      expect(screen.getByRole('menu')).toBeInTheDocument()
+
+      fireEvent.keyDown(document, { key: 'Unidentified', code: 'Tab', shiftKey: true })
+
+      await waitFor(() => expect(screen.queryByRole('menu')).not.toBeInTheDocument())
+    })
   })
 
   describe('Item Interaction', () => {

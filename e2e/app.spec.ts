@@ -996,9 +996,8 @@ test.describe('the reminder sheet on a phone', () => {
     const resting = await ringOf(page)
 
     // Tabbed to, not focused by script: a focus() call would show the ring under any
-    // implementation, including the one that was wrong. The count is high because the
-    // sheet does not take focus when it opens, so Tab starts at the top of the page
-    // behind it and walks the whole month before reaching the dialog.
+    // implementation, including the one that was wrong. The sheet does not take focus
+    // when it opens; the first Tab brings the focus into it, and the rest walk it.
     const time = page.getByTestId('reminder-time')
     for (
       let press = 0;

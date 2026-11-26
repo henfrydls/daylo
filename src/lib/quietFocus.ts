@@ -15,6 +15,8 @@
  * ring off an element that carries the mark.
  */
 
+import { isTab } from './keys'
+
 let keyboard = false
 
 const MODIFIERS = new Set(['Shift', 'Control', 'Alt', 'Meta', 'AltGraph', 'CapsLock'])
@@ -29,7 +31,7 @@ export function followInputModality(target: Window): () => void {
     const field =
       event.target instanceof HTMLElement &&
       (event.target.isContentEditable || event.target.matches('input, textarea, select'))
-    if (field && event.key !== 'Tab' && event.key !== 'Escape') return
+    if (field && !isTab(event) && event.key !== 'Escape') return
     keyboard = true
     // A key means the keyboard is in charge again, and its ring is owed.
     for (const quiet of target.document.querySelectorAll('[data-focus-quiet]')) {
