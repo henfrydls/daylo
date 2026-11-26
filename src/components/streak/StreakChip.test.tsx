@@ -180,6 +180,68 @@ describe('the streak chip', () => {
     expect(screen.getByTestId('streak-chip')).toHaveTextContent('3 days')
   })
 
+  // The flame grows with the run, and says whether today is in at every size: filled once it
+  // is, hollow in the same colour while it is not.
+  it.each([
+    [1, 'ember'],
+    [3, 'flame'],
+    [7, 'heart'],
+    [14, 'big-heart'],
+    [30, 'fire'],
+    [60, 'two-flames'],
+    [100, 'three-flames'],
+    [180, 'bonfire'],
+    [270, 'bonfire-embers'],
+    [365, 'blue-bonfire'],
+    [730, 'double-bonfire'],
+    [5000, 'double-bonfire'],
+  ])('draws the flame of %i days as %s, hollow or filled', (streak, level) => {
+    const { rerender } = render(<StreakChip streak={streak} todayDone />)
+    const flame = () => screen.getByTestId('streak-flame')
+    expect(flame()).toHaveAttribute('data-level', level)
+    expect(flame()).toHaveAttribute('data-lit', 'true')
+
+    rerender(<StreakChip streak={streak} todayDone={false} />)
+    expect(flame()).toHaveAttribute('data-level', level)
+    expect(flame()).toHaveAttribute('data-lit', 'false')
+    // Hollow: nothing outside the masks is filled, apart from the embers, which are too small
+    // to be drawn as an outline.
+    const drawn = [...flame().querySelectorAll('path')].filter(
+      (path) => !path.closest('mask') && path.getAttribute('data-part') !== 'embers'
+    )
+    expect(drawn.length).toBeGreaterThan(0)
+    drawn.forEach((path) => expect(path).toHaveAttribute('fill', 'none'))
+  })
+
+  // The flame follows the number on screen, not the one it is walking to, so the two change
+  // together and never disagree during the walk.
+  it.each([
+    [5, 7, 'flame', 'heart'],
+    [28, 30, 'big-heart', 'fire'],
+    [98, 100, 'two-flames', 'three-flames'],
+    [728, 730, 'blue-bonfire', 'double-bonfire'],
+  ])('changes the flame in the same frame as the number, %i to %i', (from, to, was, is) => {
+    const { rerender } = render(<StreakChip streak={from} todayDone />)
+    rerender(<StreakChip streak={to} todayDone />)
+    const flame = () => screen.getByTestId('streak-flame')
+
+    act(() => void vi.advanceTimersByTime(100))
+    expect(screen.getByTestId('streak-chip')).toHaveTextContent(`${to - 1} days`)
+    expect(flame()).toHaveAttribute('data-level', was)
+    act(() => void vi.advanceTimersByTime(100))
+    expect(screen.getByTestId('streak-chip')).toHaveTextContent(`${to} days`)
+    expect(flame()).toHaveAttribute('data-level', is)
+  })
+
+  // A broken run goes back to the first step, at once and without a word.
+  it('goes back to the ember when the run breaks', () => {
+    const { rerender } = render(<StreakChip streak={730} todayDone />)
+    rerender(<StreakChip streak={1} todayDone />)
+
+    expect(screen.getByTestId('streak-chip')).toHaveTextContent(/^1 day$/)
+    expect(screen.getByTestId('streak-flame')).toHaveAttribute('data-level', 'ember')
+  })
+
   // The movement is JavaScript, so the CSS rule that turns animation off does not reach it
   // and it has to ask for itself.
   it('does not walk at all for somebody who asked for less movement', () => {
