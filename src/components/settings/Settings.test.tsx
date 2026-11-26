@@ -810,3 +810,100 @@ describe('a reminder in a build without exact alarms', () => {
     )
   })
 })
+
+/**
+ * Tab with Settings open, from the gear that opened it. Settings does not take the focus as
+ * it opens, so it stays on the gear behind the panel, and Tab from there walked the page
+ * behind it (#272).
+ */
+describe('Tab with Settings open', () => {
+  function Page({ open, onClose }: { open: boolean; onClose: () => void }) {
+    return (
+      <>
+        <button type="button" data-testid="gear">
+          Gear
+        </button>
+        <button type="button" data-testid="after">
+          After
+        </button>
+        <Settings
+          isOpen={open}
+          onClose={onClose}
+          onExport={vi.fn()}
+          onImport={vi.fn()}
+          onFeedback={vi.fn()}
+          hasReminders={false}
+          canCheckIn
+          version="1.4.2"
+          updates={{ supported: true, status: { kind: 'idle' }, waiting: null, check, install }}
+        />
+      </>
+    )
+  }
+
+  function openFromTheGear() {
+    const onClose = vi.fn()
+    const view = render(<Page open={false} onClose={onClose} />)
+    const gear = screen.getByTestId('gear')
+    gear.focus()
+    view.rerender(<Page open onClose={onClose} />)
+    const surface = screen.getByTestId('settings-surface')
+    expect(gear).toHaveFocus()
+    const close = () => view.rerender(<Page open={false} onClose={onClose} />)
+    return { gear, surface, onClose, close }
+  }
+
+  it('takes Tab from the gear to the first control in Settings', () => {
+    const { gear } = openFromTheGear()
+
+    fireEvent.keyDown(gear, { key: 'Tab' })
+
+    expect(screen.getByTestId('settings-close')).toHaveFocus()
+  })
+
+  it('takes Shift+Tab from the gear to the last control in Settings', () => {
+    const { gear, surface } = openFromTheGear()
+
+    fireEvent.keyDown(gear, { key: 'Tab', shiftKey: true })
+
+    const controls = [
+      ...surface.querySelectorAll<HTMLElement>(
+        'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])'
+      ),
+    ].filter((node) => !node.matches(':disabled') && node.tabIndex >= 0)
+    expect(document.activeElement).toBe(controls[controls.length - 1])
+    expect(surface).toContainElement(document.activeElement as HTMLElement)
+  })
+
+  it('wraps from its last control to its first', () => {
+    const { gear, surface } = openFromTheGear()
+    fireEvent.keyDown(gear, { key: 'Tab', shiftKey: true })
+
+    fireEvent.keyDown(document.activeElement!, { key: 'Tab' })
+
+    expect(screen.getByTestId('settings-close')).toHaveFocus()
+    expect(surface).toContainElement(document.activeElement as HTMLElement)
+  })
+
+  it('asks to close on Escape and gives the focus back to the gear', () => {
+    const { gear, onClose, close } = openFromTheGear()
+    fireEvent.keyDown(gear, { key: 'Tab' })
+
+    fireEvent.keyDown(document.activeElement!, { key: 'Escape' })
+    expect(onClose).toHaveBeenCalled()
+    close()
+
+    expect(gear).toHaveFocus()
+  })
+
+  it('gives the focus back to the gear after a tap on the dimmed page beside it', () => {
+    const { gear, onClose, close } = openFromTheGear()
+    act(() => gear.blur())
+
+    fireEvent.click(screen.getByTestId('settings').querySelector('[data-backdrop]')!)
+    expect(onClose).toHaveBeenCalled()
+    close()
+
+    expect(gear).toHaveFocus()
+  })
+})

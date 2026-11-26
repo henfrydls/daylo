@@ -135,19 +135,26 @@ describe('giving the focus back', () => {
     expect(document.activeElement).toBe(byId('other'))
   })
 
-  // A tap on the backdrop drops the focus on <body> with the opener still there. Sending
-  // it back then scrolled the page towards the opener and lit a ring after a tap.
-  it('leaves a tap on the backdrop alone while what opened it is still there', () => {
+  // A tap on the backdrop drops the focus on <body> with the opener still there. It used
+  // to stay there, because sending it back scrolled the page to the opener and lit a ring
+  // after a tap. giveFocusBack does neither now, and <body> is where Tab walks the page
+  // from the top: back to the opener, quietly.
+  it('gives it back, without a ring, after a tap on the backdrop dropped it to the page', () => {
+    const stop = followInputModality(window)
     const fallback = () => byId('other')
     const { rerender } = render(<Page open={false} fallback={fallback} />)
     byId('opener').focus()
     rerender(<Page open fallback={fallback} />)
     act(() => byId('inside').focus())
+    fireEvent.pointerDown(document.body)
     act(() => byId('inside').blur())
+    const focus = vi.spyOn(byId('opener'), 'focus')
 
     rerender(<Page open={false} fallback={fallback} />)
 
-    expect(document.activeElement).toBe(document.body)
+    expect(document.activeElement).toBe(byId('opener'))
+    expect(focus).toHaveBeenCalledWith({ preventScroll: true, focusVisible: false })
+    stop()
   })
 
   it.each([
@@ -346,6 +353,157 @@ describe('a trap over a trap', () => {
 
     expect(document.activeElement).toBe(byId('outer'))
     expect(byId('outer').tabIndex).toBe(-1)
+  })
+})
+
+/**
+ * A sheet with three controls, the way the day sheet and Settings are: opened from a button
+ * on the page behind, which keeps the focus because they do not take it as they open.
+ */
+function Sheet({ open, lastDisabled = false }: { open: boolean; lastDisabled?: boolean }) {
+  const ref = useRef<HTMLDivElement>(null)
+  useFocusTrap(ref, open, { autoFocus: false })
+  return (
+    <>
+      <button data-testid="before">Before</button>
+      <button data-testid="opener">Opener</button>
+      {open ? (
+        <div ref={ref} tabIndex={-1} data-testid="sheet">
+          <button data-testid="first">First</button>
+          <button data-testid="middle">Middle</button>
+          <button data-testid="hidden" style={{ display: 'none' }}>
+            Hidden
+          </button>
+          <button data-testid="last">Last</button>
+          <button data-testid="add" disabled={lastDisabled}>
+            Add
+          </button>
+        </div>
+      ) : null}
+      <button data-testid="after">After</button>
+    </>
+  )
+}
+
+describe('Tab from outside the sheet', () => {
+  // Settings, Modal, BottomSheet and the day sheet leave the focus on the button that
+  // opened them, on purpose. From there Tab walked the page behind an aria-modal sheet:
+  // the trap only wrapped at its own first and last control.
+  it('takes Tab from the opener behind it to the first control in it', () => {
+    const { rerender } = render(<Sheet open={false} />)
+    byId('opener').focus()
+    rerender(<Sheet open />)
+
+    const went = fireEvent.keyDown(byId('opener'), { key: 'Tab' })
+
+    expect(went).toBe(false)
+    expect(document.activeElement).toBe(byId('first'))
+  })
+
+  it('takes Shift+Tab from the opener behind it to the last control in it', () => {
+    const { rerender } = render(<Sheet open={false} />)
+    byId('opener').focus()
+    rerender(<Sheet open />)
+
+    const went = fireEvent.keyDown(byId('opener'), { key: 'Tab', shiftKey: true })
+
+    expect(went).toBe(false)
+    expect(document.activeElement).toBe(byId('add'))
+  })
+
+  // A tap on nothing inside the sheet drops the focus on <body>, and Tab from there starts
+  // at the top of the page.
+  it.each([
+    ['Tab', false, 'first'],
+    ['Shift+Tab', true, 'add'],
+  ])('takes %s from the page itself into the sheet', (_, shiftKey, to) => {
+    render(<Sheet open />)
+    expect(document.activeElement).toBe(document.body)
+
+    const went = fireEvent.keyDown(document.body, { key: 'Tab', shiftKey })
+
+    expect(went).toBe(false)
+    expect(document.activeElement).toBe(byId(to))
+  })
+
+  // The sheet itself can hold the focus (the trap gives it there when nothing inside can
+  // take it). Shift+Tab from it would go to whatever is before it on the page.
+  it('takes Shift+Tab from the sheet itself to its last control', () => {
+    render(<Sheet open />)
+    act(() => byId('sheet').focus())
+
+    const went = fireEvent.keyDown(byId('sheet'), { key: 'Tab', shiftKey: true })
+
+    expect(went).toBe(false)
+    expect(document.activeElement).toBe(byId('add'))
+  })
+
+  it('takes Tab from the sheet itself to its first control', () => {
+    render(<Sheet open />)
+    act(() => byId('sheet').focus())
+
+    fireEvent.keyDown(byId('sheet'), { key: 'Tab' })
+
+    expect(document.activeElement).toBe(byId('first'))
+  })
+
+  it('keeps Tab on the sheet itself when nothing in it can have the focus', () => {
+    function Empty() {
+      const ref = useRef<HTMLDivElement>(null)
+      useFocusTrap(ref, true, { autoFocus: false })
+      return (
+        <>
+          <button data-testid="opener">Opener</button>
+          <div ref={ref} data-testid="sheet">
+            <button disabled>Nothing</button>
+          </div>
+        </>
+      )
+    }
+    render(<Empty />)
+    byId('opener').focus()
+
+    const went = fireEvent.keyDown(byId('opener'), { key: 'Tab' })
+
+    expect(went).toBe(false)
+    expect(document.activeElement).toBe(byId('sheet'))
+  })
+
+  it('leaves Tab inside the sheet to the browser', () => {
+    render(<Sheet open />)
+    act(() => byId('first').focus())
+
+    expect(fireEvent.keyDown(byId('first'), { key: 'Tab' })).toBe(true)
+    expect(fireEvent.keyDown(byId('first'), { key: 'Tab', shiftKey: true })).toBe(false)
+  })
+
+  // The first day's form: with nothing typed, Add is disabled and is the last button in the
+  // sheet. The focus can never be on it, so the wrap never fired and Tab left the sheet.
+  it('wraps from the last control that can have the focus, past a disabled one', () => {
+    render(<Sheet open lastDisabled />)
+    act(() => byId('last').focus())
+
+    const went = fireEvent.keyDown(byId('last'), { key: 'Tab' })
+
+    expect(went).toBe(false)
+    expect(document.activeElement).toBe(byId('first'))
+  })
+
+  it('wraps backwards to the last control that can have the focus', () => {
+    render(<Sheet open lastDisabled />)
+    act(() => byId('first').focus())
+
+    fireEvent.keyDown(byId('first'), { key: 'Tab', shiftKey: true })
+
+    expect(document.activeElement).toBe(byId('last'))
+  })
+
+  it('lets go of Tab once it is closed', () => {
+    const { rerender } = render(<Sheet open />)
+    rerender(<Sheet open={false} />)
+    byId('opener').focus()
+
+    expect(fireEvent.keyDown(byId('opener'), { key: 'Tab' })).toBe(true)
   })
 })
 

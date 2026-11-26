@@ -142,10 +142,11 @@ export function useFocusTrap(
       // the day sheet opens, and the focus went with it.
       const before = previousActiveElement.current
       if (before !== null && before !== document.body && reachable(before)) {
-        // Only from inside. Focus dropped on the page by a tap on the backdrop, with the
-        // opener still there, stays where it fell: sending it back scrolled the page to
-        // the opener and lit a ring after a tap.
-        if (inside) giveFocusBack(before)
+        // From inside, or from <body>, where a tap on the backdrop drops it. That one was
+        // left where it fell while giving it back scrolled the page to the opener and lit
+        // a ring after a tap; giveFocusBack does neither, and <body> is where Tab starts
+        // again from the top of the page. Focus taken by something else on the page stays.
+        if (inside || lost) giveFocusBack(before)
         return
       }
       // Nowhere to go back to. From inside, or lost to the page when what held it went
@@ -200,24 +201,42 @@ export function useFocusTrap(
       const container = containerRef.current
       if (container === null) return
 
-      const focusableElements = container.querySelectorAll<HTMLElement>(FOCUSABLE_SELECTOR)
-      if (focusableElements.length === 0) return
+      // Only what Tab can land on. A disabled control or one that is not drawn can never
+      // hold the focus, so taking it for the first or the last left the wrap waiting for a
+      // focus that never came: the first day's Add, disabled until a name is typed, is the
+      // last button in the day sheet, and Tab walked out past it.
+      const controls = [...container.querySelectorAll<HTMLElement>(FOCUSABLE_SELECTOR)].filter(
+        (node) => node.tabIndex >= 0 && !node.matches(':disabled') && reachable(node)
+      )
+      const active = document.activeElement
+      const at = controls.findIndex((node) => node === active)
 
-      const firstElement = focusableElements[0]
-      const lastElement = focusableElements[focusableElements.length - 1]
+      // Nothing inside can have it: the sheet itself holds it, so it is at least not
+      // behind the sheet.
+      if (controls.length === 0) {
+        e.preventDefault()
+        firstReachable(container).focus()
+        return
+      }
 
-      if (e.shiftKey) {
-        // Shift+Tab: if on first element, go to last
-        if (document.activeElement === firstElement) {
-          e.preventDefault()
-          lastElement?.focus()
-        }
-      } else {
-        // Tab: if on last element, go to first
-        if (document.activeElement === lastElement) {
-          e.preventDefault()
-          firstElement?.focus()
-        }
+      // From anywhere that is not one of its controls: the opener behind it, <body> after
+      // a tap on nothing, the sheet itself. Settings, Modal, BottomSheet and the day sheet
+      // leave the focus on what opened them, on purpose, and Tab from there walked the page
+      // behind an aria-modal sheet. It comes in at the end the key is going towards.
+      if (at === -1) {
+        e.preventDefault()
+        controls[e.shiftKey ? controls.length - 1 : 0]?.focus()
+        return
+      }
+
+      // From the last to the first, from the first to the last. In between it is the
+      // browser's own Tab.
+      if (e.shiftKey && at === 0) {
+        e.preventDefault()
+        controls[controls.length - 1]?.focus()
+      } else if (!e.shiftKey && at === controls.length - 1) {
+        e.preventDefault()
+        controls[0]?.focus()
       }
     }
 

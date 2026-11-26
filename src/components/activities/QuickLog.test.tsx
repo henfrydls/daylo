@@ -1260,3 +1260,107 @@ describe('the focus when what opened the sheet is gone', () => {
     await waitFor(() => expect(screen.getByTestId('first-day-door')).toHaveFocus())
   })
 })
+
+/**
+ * Tab with the sheet open, from the button that opened it. The sheet does not take the
+ * focus as it opens, so the focus is still on the Today bar (or yesterday's row) behind it,
+ * and Tab from there walked the page behind the sheet (#272).
+ */
+describe('Tab with the sheet open', () => {
+  const setSelectedDate = useCalendarStore.getState().setSelectedDate
+  const today = formatDate(new Date())
+  const yesterday = formatDate(new Date(Date.now() - 24 * 60 * 60 * 1000))
+
+  beforeEach(() => {
+    setupStoreWithActivities()
+    useCalendarStore.setState({ selectedDate: null, setSelectedDate })
+  })
+
+  function Page({ date }: { date: string }) {
+    return (
+      <>
+        <button type="button" data-testid="before">
+          Before
+        </button>
+        <button
+          type="button"
+          data-testid="opener"
+          onClick={() => useCalendarStore.getState().setSelectedDate(date)}
+        >
+          Open
+        </button>
+        <button type="button" data-testid="after">
+          After
+        </button>
+        <QuickLog />
+      </>
+    )
+  }
+
+  async function openFromTheOpener(date: string) {
+    render(<Page date={date} />)
+    const opener = screen.getByTestId('opener')
+    opener.focus()
+    fireEvent.click(opener)
+    const sheet = await screen.findByTestId('quicklog-modal')
+    expect(opener).toHaveFocus()
+    return { opener, sheet }
+  }
+
+  it.each([
+    ['today', today],
+    ['yesterday', yesterday],
+  ])("takes Tab from the opener into %s's sheet, at its first control", async (_, date) => {
+    const { opener, sheet } = await openFromTheOpener(date)
+
+    fireEvent.keyDown(opener, { key: 'Tab' })
+
+    expect(screen.getByRole('button', { name: 'Close quick log' })).toHaveFocus()
+    expect(sheet).toContainElement(document.activeElement as HTMLElement)
+  })
+
+  it.each([
+    ['today', today],
+    ['yesterday', yesterday],
+  ])("takes Shift+Tab from the opener into %s's sheet, at its last control", async (_, date) => {
+    const { opener, sheet } = await openFromTheOpener(date)
+
+    fireEvent.keyDown(opener, { key: 'Tab', shiftKey: true })
+
+    const controls = [...sheet.querySelectorAll<HTMLElement>('button, input')].filter(
+      (node) => !node.matches(':disabled')
+    )
+    expect(document.activeElement).toBe(controls[controls.length - 1])
+  })
+
+  it('gives the focus back to the opener after Escape from inside', async () => {
+    const { opener } = await openFromTheOpener(today)
+    fireEvent.keyDown(opener, { key: 'Tab' })
+
+    fireEvent.keyDown(document.activeElement!, { key: 'Escape' })
+
+    await waitFor(() => expect(screen.queryByTestId('quicklog-modal')).not.toBeInTheDocument())
+    expect(opener).toHaveFocus()
+  })
+
+  it('gives the focus back to the opener after Done', async () => {
+    const { opener } = await openFromTheOpener(today)
+    const done = screen.getByTestId('quicklog-done-button')
+    done.focus()
+
+    fireEvent.click(done)
+
+    await waitFor(() => expect(opener).toHaveFocus())
+  })
+
+  // A tap on the backdrop takes the focus off the opener and drops it on the page.
+  it('gives the focus back to the opener after a tap on the backdrop', async () => {
+    const { opener, sheet } = await openFromTheOpener(today)
+    act(() => opener.blur())
+    const backdrop = sheet.parentElement!.querySelector<HTMLElement>('[data-backdrop]')!
+
+    fireEvent.click(backdrop)
+
+    await waitFor(() => expect(opener).toHaveFocus())
+  })
+})
