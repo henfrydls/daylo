@@ -16,7 +16,7 @@ import { FirstDayDoor } from './FirstDayDoor'
 import { TodayBarShell } from './TodayBarShell'
 import { giveFocusBack } from '../../lib/quietFocus'
 import { monthCompletion, type MonthCompletion } from '../../lib/monthCompletion'
-import { monthStart } from '../../lib/firstDay'
+import { useFirstDay } from '../../hooks/useFirstDay'
 
 const DAYS_OF_WEEK = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
 const DAYS_OF_WEEK_SHORT = ['S', 'M', 'T', 'W', 'T', 'F', 'S']
@@ -148,7 +148,7 @@ export const MonthView = memo(function MonthView({ onImport }: MonthViewProps) {
   const travel = useTravel()
   const activities = useCalendarStore(useShallow((state) => state.activities))
   const logs = useCalendarStore(useShallow((state) => state.logs))
-  const firstOpenedAt = useCalendarStore((state) => state.firstOpenedAt)
+  const firstDay = useFirstDay()
 
   const [slideDirection, setSlideDirection] = useState<'left' | 'right' | null>(null)
 
@@ -277,10 +277,10 @@ export const MonthView = memo(function MonthView({ onImport }: MonthViewProps) {
       selectedMonth,
       (date) => logsMap.has(date),
       today,
-      monthStart(firstOpenedAt, logs)
+      firstDay
     )
     return figure !== null && figure.daysDone > 0 ? figure : null
-  }, [activities.length, selectedYear, selectedMonth, logsMap, today, firstOpenedAt, logs])
+  }, [activities.length, selectedYear, selectedMonth, logsMap, today, firstDay])
 
   return (
     <div className="p-3 sm:p-4 md:p-6">

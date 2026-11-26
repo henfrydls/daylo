@@ -142,11 +142,8 @@ export function ImportModal({ isOpen, onClose }: ImportModalProps) {
       const store = useCalendarStore.getState()
 
       if (importMode === 'replace') {
-        // Replace all data
-        useCalendarStore.setState({
-          activities: parsedData.activities,
-          logs: parsedData.logs,
-        })
+        // Replace all data. Through the store, which keeps the first day of what goes.
+        store.replaceRecords(parsedData.activities, parsedData.logs)
       } else {
         // Merge with existing data
         const merged = mergeData(

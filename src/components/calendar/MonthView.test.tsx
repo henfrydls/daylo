@@ -1182,6 +1182,7 @@ describe('MonthView', () => {
         selectedYear: 2026,
         selectedMonth: 10,
         firstOpenedAt: '2026-01-10',
+        firstDayKept: null,
         logs: [],
       })
     })
@@ -1263,6 +1264,38 @@ describe('MonthView', () => {
       expect(line()).not.toBeInTheDocument()
     })
 
+    // A day ticked by mistake, given a note and unticked stays as a record that is not
+    // done. It does not make the person's first day the 1st.
+    it('says 1 of 1 on the first day after a day was ticked, given a note and unticked', () => {
+      useCalendarStore.setState({ firstOpenedAt: '2026-11-25', logs: [] })
+      const { toggleLog, updateLogNotes } = useCalendarStore.getState()
+      toggleLog('a1', '2026-11-01')
+      updateLogNotes(useCalendarStore.getState().logs[0].id, 'wrong day')
+      toggleLog('a1', '2026-11-01')
+      toggleLog('a1', '2026-11-25')
+      render(<MonthView />)
+
+      expect(line()).toHaveTextContent(/^1 of 1 day so far$/)
+    })
+
+    // Somebody who updated in November, with records back to October in two activities.
+    // Deleting the one that held 1 October does not make October a partial month.
+    it('keeps a past month whole when the activity that started it is deleted', () => {
+      useCalendarStore.setState({
+        firstOpenedAt: '2026-11-20',
+        activities: [ACTIVITY, { ...ACTIVITY, id: 'a2', name: 'Read' }],
+        logs: [
+          ...marked('2026-10-01'),
+          ...marked(...days(10, 20, 10)).map((l) => ({ ...l, id: `b${l.id}`, activityId: 'a2' })),
+        ],
+        selectedMonth: 9,
+      })
+      useCalendarStore.getState().deleteActivity('a1')
+      render(<MonthView />)
+
+      expect(line()).toHaveTextContent(/^11 of 31 days$/)
+    })
+
     // The fault of #175 is reading a day off a moment in UTC. A first use near midnight is
     // on one day where the person is and on another in UTC, and the line has to count from
     // the first. Each zone is set inside the test, after which the clock is set again.
@@ -1272,7 +1305,9 @@ describe('MonthView', () => {
       ).process.env
       const ZONE = env.TZ
       afterEach(() => {
-        env.TZ = ZONE
+        // Put back exactly what was there: assigning undefined leaves the text "undefined".
+        if (ZONE === undefined) delete env.TZ
+        else env.TZ = ZONE
       })
 
       it('west of UTC, counts from the evening it was, not the UTC day after', () => {

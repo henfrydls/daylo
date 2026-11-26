@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import { useCalendarStore, STORAGE_KEY } from './index'
+import { personFirstDay } from '../lib/firstDay'
 
 describe('useCalendarStore', () => {
   beforeEach(() => {
@@ -910,5 +911,105 @@ describe('putting the reminder offer off', () => {
     dismissReminderOffer('2026-10-11')
 
     expect(useCalendarStore.getState().reminderOffered).toBe(true)
+  })
+})
+
+// The month the person started in is counted from their first day, and so is the year
+// they started in (lib/firstDay). That day may only move back. Records that go when an
+// activity is deleted, or when an import replaces everything, are history that has not
+// changed: without what the store keeps of them, an old month became a partial one and
+// its figure jumped. Records that come in, by an import, can move it back.
+describe('the first day, which only moves back', () => {
+  const NOW = '2026-11-25T12:00:00.000Z'
+  const act = (id: string) => ({ id, name: id, color: '#10B981', createdAt: NOW, updatedAt: NOW })
+  const done = (activityId: string, date: string) => ({
+    id: `${activityId}-${date}`,
+    activityId,
+    date,
+    completed: true,
+    createdAt: NOW,
+  })
+  const firstDay = () => {
+    const state = useCalendarStore.getState()
+    return personFirstDay(state.firstOpenedAt, state.logs, state.firstDayKept)
+  }
+
+  beforeEach(() => {
+    // Somebody who updated in November: firstOpenedAt is the day they updated, and their
+    // records go back to October.
+    useCalendarStore.setState({
+      firstOpenedAt: '2026-11-20',
+      firstDayKept: null,
+      activities: [act('a'), act('b')],
+      logs: [done('a', '2026-10-01'), done('b', '2026-10-15'), done('b', '2026-11-21')],
+    })
+  })
+
+  it('stays where it was when an activity and its records are deleted', () => {
+    expect(firstDay()).toBe('2026-10-01')
+
+    useCalendarStore.getState().deleteActivity('a')
+
+    expect(useCalendarStore.getState().logs.map((l) => l.date)).toEqual([
+      '2026-10-15',
+      '2026-11-21',
+    ])
+    expect(firstDay()).toBe('2026-10-01')
+  })
+
+  it('stays where it was when an import replaces everything with something newer', () => {
+    useCalendarStore.getState().replaceRecords([act('c')], [done('c', '2026-11-22')])
+
+    expect(firstDay()).toBe('2026-10-01')
+  })
+
+  it('moves back when an import brings older records, replacing or merging', () => {
+    useCalendarStore.getState().replaceRecords([act('c')], [done('c', '2025-03-01')])
+    expect(firstDay()).toBe('2025-03-01')
+
+    useCalendarStore.setState({
+      logs: [...useCalendarStore.getState().logs, done('c', '2024-06-01')],
+    })
+    expect(firstDay()).toBe('2024-06-01')
+  })
+
+  // Unticking is not history going: it is the person saying the day was not done. A day
+  // ticked by mistake and unticked, kept only because it has a note, says nothing.
+  it('does not keep a day that was ticked, given a note and unticked', () => {
+    useCalendarStore.setState({ firstOpenedAt: '2026-11-25', activities: [act('a')], logs: [] })
+    const { toggleLog, updateLogNotes } = useCalendarStore.getState()
+
+    toggleLog('a', '2026-11-01')
+    updateLogNotes(useCalendarStore.getState().logs[0].id, 'by mistake')
+    toggleLog('a', '2026-11-01')
+    toggleLog('a', '2026-11-25')
+
+    expect(useCalendarStore.getState().logs.find((l) => l.date === '2026-11-01')).toMatchObject({
+      completed: false,
+      notes: 'by mistake',
+    })
+    expect(firstDay()).toBe('2026-11-25')
+  })
+
+  it('is written to disk, and a copy from before it opens without it', async () => {
+    const persisted = useCalendarStore.persist.getOptions().partialize!(useCalendarStore.getState())
+    expect(persisted).toHaveProperty('firstDayKept')
+
+    window.dispatchEvent(new Event('pagehide'))
+    localStorage.setItem(
+      STORAGE_KEY,
+      JSON.stringify({
+        state: {
+          activities: [act('a')],
+          logs: [done('a', '2026-10-01')],
+          firstOpenedAt: '2026-11-20',
+        },
+        version: 0,
+      })
+    )
+    await useCalendarStore.persist.rehydrate()
+
+    expect(useCalendarStore.getState().firstDayKept).toBeNull()
+    expect(firstDay()).toBe('2026-10-01')
   })
 })

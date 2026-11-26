@@ -4,6 +4,7 @@ import type { Activity, ActivityLog } from '../types'
 import { formatDate, generateId, parseDateString } from '../lib/dates'
 import { firstFreeColor } from '../lib/colors'
 import { activityFault, isPlainObject, logFault } from '../lib/recordShape'
+import { earliest, oldestDone } from '../lib/firstDay'
 // Import estatico a proposito: Toast.tsx ya importa este modulo de forma estatica,
 // asi que un import() dinamico aqui no partiria el bundle -- solo retrasaria el aviso.
 import { useToastStore } from './toast'
@@ -113,6 +114,7 @@ function wrongField(stored: Record<string, unknown>): string | null {
     reminderOfferDismissals: 'number',
     reminderOfferDismissedOn: 'string or null',
     firstOpenedAt: 'string or null',
+    firstDayKept: 'string or null',
     feedbackInviteSeen: 'boolean',
     storeReviewOffered: 'boolean',
     checkinEnabled: 'boolean',
@@ -407,6 +409,25 @@ interface CalendarState {
    * lived with Daylo", the other half being the oldest record they hold.
    */
   firstOpenedAt: string | null
+  /**
+   * The earliest day done, `YYYY-MM-DD`, among records this installation has let go of:
+   * those of a deleted activity, and everything an import replaced. Null until that has
+   * happened.
+   *
+   * It is what makes the person's first day (lib/firstDay, personFirstDay) only move
+   * back. That day is the earliest of firstOpenedAt, the days done in the records held,
+   * and this. Without it, deleting the activity that held the oldest record moved the
+   * first day forward, and a month that history had not touched became a partial one, its
+   * figure jumping. Records coming in, ticked or imported, are read where they are, so
+   * this is only ever lowered when records go.
+   *
+   * Unticking is not records going: it is the person saying the day was not done, and a
+   * day ticked by mistake must not stay their first day.
+   *
+   * Not in a backup, like firstOpenedAt: it describes this installation. Not read by the
+   * check-in or the invitation either, so neither changes.
+   */
+  firstDayKept: string | null
   /** Whether the invitation to write has been put. One invitation, not one drawing. */
   feedbackInviteSeen: boolean
   /**
@@ -501,6 +522,11 @@ interface CalendarState {
   addActivity: (name: string, color?: string) => void
   updateActivity: (id: string, updates: Partial<Pick<Activity, 'name' | 'color'>>) => void
   deleteActivity: (id: string) => void
+  /**
+   * Import's "replace": these activities and records instead of all of them. Keeps the
+   * earliest day done of what it replaces in firstDayKept.
+   */
+  replaceRecords: (activities: Activity[], logs: ActivityLog[]) => void
 
   // Log actions
   toggleLog: (activityId: string, date: string) => void
@@ -608,6 +634,7 @@ export const useCalendarStore = create<CalendarState>()(
       reminderOfferDismissedOn: null,
 
       firstOpenedAt: null,
+      firstDayKept: null,
       feedbackInviteSeen: false,
       storeReviewOffered: false,
       checkinEnabled: false,
@@ -711,6 +738,19 @@ export const useCalendarStore = create<CalendarState>()(
         set((state) => ({
           activities: state.activities.filter((a) => a.id !== id),
           logs: state.logs.filter((l) => l.activityId !== id),
+          // Before they go: see firstDayKept.
+          firstDayKept: earliest(
+            state.firstDayKept,
+            oldestDone(state.logs.filter((l) => l.activityId === id))
+          ),
+        }))
+      },
+
+      replaceRecords: (activities, logs) => {
+        set((state) => ({
+          activities,
+          logs,
+          firstDayKept: earliest(state.firstDayKept, oldestDone(state.logs)),
         }))
       },
 
@@ -875,6 +915,7 @@ export const useCalendarStore = create<CalendarState>()(
         reminderOfferDismissals: state.reminderOfferDismissals,
         reminderOfferDismissedOn: state.reminderOfferDismissedOn,
         firstOpenedAt: state.firstOpenedAt,
+        firstDayKept: state.firstDayKept,
         feedbackInviteSeen: state.feedbackInviteSeen,
         storeReviewOffered: state.storeReviewOffered,
         checkinEnabled: state.checkinEnabled,

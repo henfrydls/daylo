@@ -15,7 +15,7 @@ import { useTodayDate } from '../../lib/today'
 import { useShallow } from 'zustand/react/shallow'
 import { plural } from '../../lib/plural'
 import { monthCompletion } from '../../lib/monthCompletion'
-import { monthStart } from '../../lib/firstDay'
+import { useFirstDay } from '../../hooks/useFirstDay'
 import { FirstDayDoor } from './FirstDayDoor'
 
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
@@ -29,7 +29,7 @@ export const YearView = memo(function YearView({ onImport }: YearViewProps) {
   const selectedYear = useCalendarStore((state) => state.selectedYear)
   const activities = useCalendarStore(useShallow((state) => state.activities))
   const logs = useCalendarStore(useShallow((state) => state.logs))
-  const firstOpenedAt = useCalendarStore((state) => state.firstOpenedAt)
+  const firstDay = useFirstDay()
   const selectedDate = useCalendarStore((state) => state.selectedDate)
   const setSelectedDate = useCalendarStore((state) => state.setSelectedDate)
   // The app's day, not the clock's: see useTodayDate.
@@ -100,11 +100,10 @@ export const YearView = memo(function YearView({ onImport }: YearViewProps) {
    */
   const monthFigures = useMemo(() => {
     const isDone = (date: string) => (logsByDate.get(date) ?? 0) > 0
-    const since = monthStart(firstOpenedAt, logs)
     return Array.from({ length: 12 }, (_, month) =>
-      monthCompletion(selectedYear, month, isDone, today, since)
+      monthCompletion(selectedYear, month, isDone, today, firstDay)
     )
-  }, [logsByDate, selectedYear, today, firstOpenedAt, logs])
+  }, [logsByDate, selectedYear, today, firstDay])
 
   /**
    * The phone's strips end on the week we are in, or on the last week of a year already
@@ -302,6 +301,7 @@ export const YearView = memo(function YearView({ onImport }: YearViewProps) {
             year={selectedYear}
             logsByDate={logsByDate}
             totalActivities={activities.length}
+            firstDay={firstDay}
           />
         </div>
 

@@ -23,7 +23,7 @@ export interface MonthCompletion {
  * because nothing has been missed yet and the caller decides how to say so.
  *
  * The month a person started in is counted from their first day (`firstDay`, from
- * monthStart in lib/firstDay), because the days before it were not missed either: on the
+ * personFirstDay in lib/firstDay), because the days before it were not missed either: on the
  * first day, with everything done, the old rule said "1 of 25". Only that month changes.
  * The months after it count from the 1st as always, and the months before it keep their
  * days too, so a month with nothing in it still reads as one with nothing in it.
