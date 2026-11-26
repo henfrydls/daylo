@@ -182,6 +182,10 @@ export const YearView = memo(function YearView({ onImport }: YearViewProps) {
   // its sheet open on the form.
   const door =
     activities.length === 0 ? <FirstDayDoor onOpenToday={openToday} onImport={onImport} /> : null
+  // The door says Today and goes to today, so in the year that holds today the row's Today
+  // button is hidden rather than said a second time. In any other year it stays: it is the
+  // way back to this one without opening the sheet.
+  const doorIsToday = door !== null && selectedYear === today.getFullYear()
 
   /**
    * Both layouts show the same control, so it is written once. Rendering it twice with
@@ -280,6 +284,7 @@ export const YearView = memo(function YearView({ onImport }: YearViewProps) {
             onClick={handleToday}
             className="min-h-[44px] px-4 text-sm font-medium text-gray-600 hover:bg-gray-100 hover:text-gray-800 rounded-lg transition-colors border border-gray-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 focus-visible:ring-offset-1"
             aria-label="Go to today"
+            hidden={doorIsToday}
           >
             Today
           </button>
@@ -414,6 +419,7 @@ export const YearView = memo(function YearView({ onImport }: YearViewProps) {
               onClick={handleToday}
               className="ml-2 px-4 py-1.5 text-sm font-medium text-gray-600 hover:bg-gray-100 hover:text-gray-800 rounded-lg transition-colors border border-gray-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 focus-visible:ring-offset-1 min-h-[44px] sm:min-h-0"
               aria-label="Go to today"
+              hidden={doorIsToday}
             >
               Today
             </button>

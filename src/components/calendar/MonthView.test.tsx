@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { act, render, screen, fireEvent } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
 import { MonthView } from './MonthView'
 import { useCalendarStore } from '../../store'
 import { formatDate } from '../../lib/dates'
@@ -909,6 +910,245 @@ describe('MonthView', () => {
       expect(row()).toHaveTextContent('Log it to make 4 days in a row')
       expect(row()).toHaveTextContent('30')
       expect(numberIn('2026-11-30').className).toContain('border-gray-500')
+    })
+  })
+
+  // One Today on the screen. The row's Today button is gone in every
+  // month: in the month of today it did nothing, and in another month the way back is the
+  // bar, which stays where it is and turns quiet.
+  describe('the way back to today', () => {
+    const oneHabit = [
+      {
+        id: 'a1',
+        name: 'Exercise',
+        color: '#10B981',
+        createdAt: '2026-01-01',
+        updatedAt: '2026-01-01',
+      },
+    ]
+    const back = () => screen.queryByTestId('back-to-today-bar')
+
+    beforeEach(() => {
+      vi.useFakeTimers({ toFake: ['Date'] })
+      vi.setSystemTime(new Date(2026, 10, 13, 9, 0))
+      useCalendarStore.setState({
+        activities: oneHabit,
+        logs: [],
+        selectedYear: 2026,
+        selectedMonth: 10,
+        selectedDate: null,
+      })
+    })
+
+    afterEach(() => {
+      vi.useRealTimers()
+    })
+
+    it.each([
+      ['the month of today', 10],
+      ['another month', 9],
+    ])('has no Today button in the row, in %s', (_, month) => {
+      useCalendarStore.setState({ selectedMonth: month })
+      render(<MonthView />)
+
+      expect(screen.queryByLabelText('Go to current month')).not.toBeInTheDocument()
+      expect(screen.queryByRole('button', { name: 'Today' })).not.toBeInTheDocument()
+    })
+
+    // The arrows go up beside the title on the phone too; the title has a box of its own,
+    // a column, so a line can go under it.
+    it("keeps the arrows on the title's row, with the title in a column of its own", () => {
+      atWidth(390)
+      render(<MonthView />)
+
+      const nav = screen.getByTestId('month-nav').className.split(' ')
+      expect(nav).toEqual(expect.arrayContaining(['flex', 'flex-row', 'items-center']))
+      expect(nav).not.toContain('flex-col')
+      const box = screen.getByTestId('month-title-box')
+      expect(box).toContainElement(screen.getByTestId('month-title-button'))
+      expect(box.className.split(' ')).toContain('flex-col')
+      expect(box).not.toContainElement(screen.getByLabelText('Previous month'))
+    })
+
+    it('is not there in the month of today, where the green bar is', () => {
+      render(<MonthView />)
+
+      expect(back()).not.toBeInTheDocument()
+      expect(screen.getByTestId('log-today-bar')).toBeInTheDocument()
+    })
+
+    it.each([
+      ['the month before', 2026, 9],
+      ['the month after', 2026, 11],
+      ['another year', 2025, 10],
+    ])('turns the bar quiet in %s', (_, year, month) => {
+      useCalendarStore.setState({ selectedYear: year, selectedMonth: month })
+      render(<MonthView />)
+
+      expect(screen.queryByTestId('log-today-bar')).not.toBeInTheDocument()
+      expect(back()).toBeInTheDocument()
+      expect(back()).toHaveTextContent('Today')
+      expect(back()).toHaveTextContent('Friday, November 13')
+    })
+
+    // The same box as the green bar, so the calendar does not move between months; white
+    // and a grey edge, so it does not read as the bar that logs.
+    it("is the green bar's box, in white with a grey edge", () => {
+      useCalendarStore.setState({ selectedMonth: 9 })
+      render(<MonthView />)
+
+      const classes = back()!.className.split(' ')
+      expect(classes).toEqual(
+        expect.arrayContaining([
+          'w-full',
+          'p-[11px]',
+          'border-2',
+          'rounded-xl',
+          'mb-4',
+          'min-h-[44px]',
+          'bg-white',
+          'border-gray-200',
+          'focus-visible:ring-offset-2',
+        ])
+      )
+      expect(classes).not.toContain('bg-emerald-50')
+      expect(classes).not.toContain('border-emerald-700')
+    })
+
+    it('tells a screen reader where it goes, apart from the bar that logs', () => {
+      useCalendarStore.setState({ selectedMonth: 9 })
+      render(<MonthView />)
+
+      expect(screen.getByRole('button', { name: 'Go to today, Friday, November 13' })).toBe(back())
+    })
+
+    // The door goes to today too, but it opens the sheet. The quiet bar is the way back to
+    // the month alone, on the first day as on any other.
+    it('is there on the first day too, in another month, with the door', () => {
+      useCalendarStore.setState({ activities: [], selectedMonth: 9 })
+      render(<MonthView />)
+
+      expect(back()).toBeInTheDocument()
+      expect(screen.getByTestId('first-day-door')).toBeInTheDocument()
+    })
+
+    it('is not there on the first day in the month of today, where the door is', () => {
+      useCalendarStore.setState({ activities: [] })
+      render(<MonthView />)
+
+      expect(back()).not.toBeInTheDocument()
+      expect(screen.getByTestId('first-day-door')).toBeInTheDocument()
+    })
+
+    it('brings the month back on the first day without opening anything, focus on the door', () => {
+      useCalendarStore.setState({ activities: [], selectedMonth: 9 })
+      render(<MonthView />)
+
+      fireEvent.click(back()!)
+
+      const state = useCalendarStore.getState()
+      expect(state.selectedMonth).toBe(10)
+      expect(state.selectedDate).toBeNull()
+      expect(back()).not.toBeInTheDocument()
+      expect(screen.getByTestId('first-day-door')).toHaveFocus()
+    })
+
+    it('is not there with yesterday still open in another month, and nor is the row', () => {
+      useCalendarStore.setState({
+        logs: ['2026-11-09', '2026-11-10', '2026-11-11'].map((date) => ({
+          id: `l-${date}`,
+          activityId: 'a1',
+          date,
+          completed: true,
+          createdAt: date,
+        })),
+        selectedMonth: 9,
+      })
+      render(<MonthView />)
+
+      expect(back()).toBeInTheDocument()
+      expect(screen.queryByTestId('log-yesterday-row')).not.toBeInTheDocument()
+    })
+
+    it('brings the month of today back when pressed, and opens nothing', () => {
+      useCalendarStore.setState({ selectedMonth: 9 })
+      render(<MonthView />)
+
+      fireEvent.click(back()!)
+
+      const state = useCalendarStore.getState()
+      expect(state.selectedYear).toBe(2026)
+      expect(state.selectedMonth).toBe(10)
+      expect(state.selectedDate).toBeNull()
+      expect(back()).not.toBeInTheDocument()
+      expect(screen.getByTestId('log-today-bar')).toBeInTheDocument()
+    })
+
+    it('brings it back from another year too', () => {
+      useCalendarStore.setState({ selectedYear: 2025, selectedMonth: 2 })
+      render(<MonthView />)
+
+      fireEvent.click(back()!)
+
+      expect(useCalendarStore.getState().selectedYear).toBe(2026)
+      expect(useCalendarStore.getState().selectedMonth).toBe(10)
+    })
+
+    // The bar that was pressed is gone with the arrival, and the focus would fall to the
+    // body. It goes to the green bar instead, in the same place.
+    it('gives the focus to the green bar when pressed', () => {
+      useCalendarStore.setState({ selectedMonth: 9 })
+      render(<MonthView />)
+
+      fireEvent.click(back()!)
+
+      expect(screen.getByTestId('log-today-bar')).toHaveFocus()
+    })
+
+    it('goes back with Enter from the keyboard, and the focus lands on the green bar', async () => {
+      const user = userEvent.setup()
+      useCalendarStore.setState({ selectedMonth: 9 })
+      render(<MonthView />)
+
+      back()!.focus()
+      await user.keyboard('{Enter}')
+
+      expect(useCalendarStore.getState().selectedMonth).toBe(10)
+      expect(useCalendarStore.getState().selectedDate).toBeNull()
+      expect(screen.getByTestId('log-today-bar')).toHaveFocus()
+    })
+
+    // A press that does not arrive must not leave a debt behind: before, the focus was owed
+    // until the month of today next came, and then taken from whatever had it.
+    it('does not take the focus later when a press did not bring the month back', () => {
+      const { setSelectedMonth, setSelectedYear } = useCalendarStore.getState()
+      useCalendarStore.setState({ selectedMonth: 9 })
+      // A press that changes nothing, as if the store had refused it.
+      useCalendarStore.setState({ setSelectedMonth: () => {}, setSelectedYear: () => {} })
+      render(<MonthView />)
+
+      fireEvent.click(back()!)
+      expect(useCalendarStore.getState().selectedMonth).toBe(9)
+
+      act(() => useCalendarStore.setState({ setSelectedMonth, setSelectedYear }))
+      const next = screen.getByLabelText('Next month')
+      next.focus()
+      fireEvent.click(next)
+
+      expect(useCalendarStore.getState().selectedMonth).toBe(10)
+      expect(next).toHaveFocus()
+    })
+
+    it('leaves the focus alone when the month of today comes back by the arrows', () => {
+      useCalendarStore.setState({ selectedMonth: 9 })
+      render(<MonthView />)
+
+      const next = screen.getByLabelText('Next month')
+      next.focus()
+      fireEvent.click(next)
+
+      expect(useCalendarStore.getState().selectedMonth).toBe(10)
+      expect(next).toHaveFocus()
     })
   })
 })

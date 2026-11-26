@@ -8,14 +8,13 @@ export function MonthViewSkeleton() {
   return (
     <div className="p-3 sm:p-4 md:p-6" data-testid="month-view-skeleton">
       {/* Month Navigation skeleton */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 sm:gap-4 mb-4 sm:mb-6">
+      <div className="flex flex-row items-center justify-between gap-3 sm:gap-4 mb-4 sm:mb-6">
         {/* Month year title */}
         <Skeleton className="h-7 sm:h-8 w-40 rounded" />
-        {/* Nav buttons */}
+        {/* Nav arrows, beside the title: Month has no Today button */}
         <div className="flex items-center gap-1">
           <Skeleton className="w-10 h-10 sm:w-8 sm:h-8 rounded-lg" />
           <Skeleton className="w-10 h-10 sm:w-8 sm:h-8 rounded-lg" />
-          <Skeleton className="ml-2 w-16 h-9 sm:h-7 rounded-lg" />
         </div>
       </div>
 

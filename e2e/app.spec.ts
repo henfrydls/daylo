@@ -304,23 +304,29 @@ test.describe('Activity Tracker App', () => {
     expect(nextMonth).not.toBe(prevMonth)
   })
 
+  // There is no Today button in Month: away from the month of today, the Today bar stays
+  // where it is, quiet, and brings that month back without opening the day.
   test('should navigate to today from month view', async ({ page }) => {
+    await createActivity(page, 'Test')
     const monthButton = page.getByRole('button', { name: 'Month', exact: true })
     await monthButton.click()
+    await expect(page.getByRole('button', { name: 'Today', exact: true })).toHaveCount(0)
 
     // Navigate away
     const prevButton = page.getByLabel('Previous month')
     await prevButton.click()
     await prevButton.click()
+    await expect(page.getByTestId('log-today-bar')).toHaveCount(0)
 
-    // Click Today
-    const todayButton = page.getByLabel('Go to current month')
-    await todayButton.click()
+    await page.getByTestId('back-to-today-bar').click()
 
     // Heading should contain current month
     const heading = page.getByTestId('month-title-button')
     const monthName = new Date().toLocaleString('en-US', { month: 'long' })
     await expect(heading).toContainText(monthName)
+    await expect(page.getByTestId('back-to-today-bar')).toHaveCount(0)
+    await expect(page.getByTestId('log-today-bar')).toBeFocused()
+    await expect(page.getByTestId('quicklog-modal')).toHaveCount(0)
   })
 
   test('should open QuickLog from month view day click', async ({ page }) => {
@@ -339,6 +345,8 @@ test.describe('Activity Tracker App', () => {
   // ── Year View Navigation ──────────────────────────────────
 
   test('should navigate years with prev/next buttons', async ({ page }) => {
+    // Year's Today waits for the first activity: before it, the door is the way to today.
+    await createActivity(page, 'Test')
     await openYearView(page)
     const currentYear = new Date().getFullYear()
 
@@ -502,6 +510,7 @@ test.describe('Activity Tracker App', () => {
   })
 
   test('should have proper ARIA labels on navigation buttons', async ({ page }) => {
+    await createActivity(page, 'Test')
     await openYearView(page)
     await expect(page.getByLabel('Previous year')).toBeVisible()
     await expect(page.getByLabel('Next year')).toBeVisible()
