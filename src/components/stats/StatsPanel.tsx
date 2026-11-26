@@ -5,9 +5,10 @@ import { longestStreak } from '../../lib/streaks'
 import { completedDates } from '../../lib/activityYear'
 import { useTodayDate } from '../../lib/today'
 import { monthCompletion } from '../../lib/monthCompletion'
+import { monthStart } from '../../lib/firstDay'
 
 export function StatsPanel() {
-  const { selectedYear, activities, logs } = useCalendarStore()
+  const { selectedYear, activities, logs, firstOpenedAt } = useCalendarStore()
   // The app's day, not the clock's: see useTodayDate.
   const today = useTodayDate()
 
@@ -30,13 +31,14 @@ export function StatsPanel() {
     // The current month of the year on screen, by the rule every month figure follows (see
     // monthCompletion): its days up to today, which in an older year is all of them. In a
     // year still to come the month has not begun and there is no figure, as on the year's
-    // row of months.
+    // row of months. In the month the person started it counts from their first day.
     const completionRate =
       monthCompletion(
         selectedYear,
         today.getMonth(),
         (date) => everyDayWithActivity.has(date),
-        today
+        today,
+        monthStart(firstOpenedAt, logs)
       )?.percentage ?? null
 
     return {
@@ -44,7 +46,7 @@ export function StatsPanel() {
       longestStreak: longestStreak(everyDayWithActivity, today),
       completionRate,
     }
-  }, [selectedYear, logs, today])
+  }, [selectedYear, logs, today, firstOpenedAt])
 
   if (activities.length === 0) {
     return null

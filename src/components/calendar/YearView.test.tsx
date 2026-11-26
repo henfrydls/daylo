@@ -1153,5 +1153,58 @@ describe('YearView', () => {
       expect(cards[11]).toHaveAccessibleName('December 2026: not started yet. Tap to view month.')
       expect(within(cards[11]).getByTestId('month-card-stats')).toHaveTextContent(/^–$/)
     })
+
+    // The month a person started in counts from their first day, as "This Month" does
+    // (lib/monthCompletion). Somebody who began on 19 November with six of seven days done
+    // read 6 of 25, 24%, on 25 November. The month before keeps its 31 days: only the
+    // month of the first day changes.
+    describe('in the month the person started', () => {
+      beforeEach(() => {
+        vi.setSystemTime(new Date(2026, 10, 25, 12))
+        useCalendarStore.setState({
+          firstOpenedAt: '2026-11-19',
+          logs: marked(
+            '2026-11-19',
+            '2026-11-20',
+            '2026-11-21',
+            '2026-11-23',
+            '2026-11-24',
+            '2026-11-25'
+          ),
+        })
+      })
+      afterEach(() => {
+        // In act: this runs before the shared cleanup, with the component still on screen.
+        act(() => useCalendarStore.setState({ firstOpenedAt: null }))
+      })
+
+      it('counts it from the first day in the row of months', () => {
+        render(<YearView />)
+
+        const row = within(screen.getByTestId('month-completion'))
+        expect(row.getByRole('button', { name: 'View Nov 2026, 86% complete' })).toBeInTheDocument()
+        expect(row.getByRole('button', { name: 'View Oct 2026, 0% complete' })).toBeInTheDocument()
+      })
+
+      it('counts it from the first day on the phone month card', () => {
+        window.matchMedia = ((query: string) => ({
+          matches: false,
+          media: query,
+          onchange: null,
+          addListener: vi.fn(),
+          removeListener: vi.fn(),
+          addEventListener: vi.fn(),
+          removeEventListener: vi.fn(),
+          dispatchEvent: vi.fn(),
+        })) as unknown as typeof window.matchMedia
+        render(<YearView />)
+
+        const cards = screen.getAllByTestId('month-card')
+        expect(cards[10]).toHaveAccessibleName(
+          'November 2026: 6 of 7 days active, 86%. Tap to view month.'
+        )
+        expect(within(cards[10]).getByTestId('month-card-stats')).toHaveTextContent('6/7 · 86%')
+      })
+    })
   })
 })

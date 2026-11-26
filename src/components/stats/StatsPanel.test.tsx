@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { render, screen } from '@testing-library/react'
+import { act, render, screen } from '@testing-library/react'
 import { StatsPanel } from './StatsPanel'
 import { useCalendarStore } from '../../store'
 import type { ActivityLog } from '../../types'
@@ -22,8 +22,16 @@ function figure(label: string): string {
   return card.querySelector('div')!.textContent!.trim()
 }
 
+// Somebody who has had Daylo since the activity was made, at the start of 2025. Without
+// it the oldest log here would be their first day, and the month it falls in would count
+// from it (see the last describe): these are about every other month.
 function show(dates: string[], year = 2026) {
-  useCalendarStore.setState({ activities: [ACTIVITY], logs: logsOn(dates), selectedYear: year })
+  useCalendarStore.setState({
+    activities: [ACTIVITY],
+    logs: logsOn(dates),
+    selectedYear: year,
+    firstOpenedAt: '2025-01-01',
+  })
   render(<StatsPanel />)
 }
 
@@ -172,5 +180,55 @@ describe('this month, on the day the views disagreed', () => {
     show(['2026-11-02', '2026-11-05', '2026-11-11', '2026-11-20'])
 
     expect(figure('This Month')).toBe('20%')
+  })
+})
+
+// The month a person started in counts from their first day (lib/monthCompletion), here as
+// on the year's month cards and on the line under Month's title. The first day is the
+// earliest of the day Daylo was first opened and the records it holds (lib/firstDay).
+describe('this month, in the month the person started', () => {
+  afterEach(() => {
+    // In act: this runs before the shared cleanup, with the component still on screen.
+    act(() => useCalendarStore.setState({ firstOpenedAt: null }))
+  })
+
+  const showSince = (firstOpenedAt: string, dates: string[]) => {
+    useCalendarStore.setState({
+      activities: [ACTIVITY],
+      logs: logsOn(dates),
+      selectedYear: 2026,
+      firstOpenedAt,
+    })
+    render(<StatsPanel />)
+  }
+
+  it('is all of it on the first day, with that day done', () => {
+    vi.setSystemTime(new Date(2026, 10, 25, 12))
+    showSince('2026-11-25', ['2026-11-25'])
+
+    // 1 of 1, where the old rule said 1 of 25, 4%.
+    expect(figure('This Month')).toBe('100%')
+  })
+
+  it('is six of seven a week in', () => {
+    vi.setSystemTime(new Date(2026, 10, 25, 12))
+    showSince('2026-11-19', [
+      '2026-11-19',
+      '2026-11-20',
+      '2026-11-21',
+      '2026-11-23',
+      '2026-11-24',
+      '2026-11-25',
+    ])
+
+    // 6 of 7, where the old rule said 6 of 25, 24%.
+    expect(figure('This Month')).toBe('86%')
+  })
+
+  it('is as it was for somebody who started in an earlier month', () => {
+    vi.setSystemTime(new Date(2026, 10, 25, 12))
+    showSince('2026-01-10', ['2026-01-10', '2026-11-19', '2026-11-25'])
+
+    expect(figure('This Month')).toBe('8%')
   })
 })

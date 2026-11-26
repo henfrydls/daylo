@@ -15,6 +15,7 @@ import { useTodayDate } from '../../lib/today'
 import { useShallow } from 'zustand/react/shallow'
 import { plural } from '../../lib/plural'
 import { monthCompletion } from '../../lib/monthCompletion'
+import { monthStart } from '../../lib/firstDay'
 import { FirstDayDoor } from './FirstDayDoor'
 
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
@@ -28,6 +29,7 @@ export const YearView = memo(function YearView({ onImport }: YearViewProps) {
   const selectedYear = useCalendarStore((state) => state.selectedYear)
   const activities = useCalendarStore(useShallow((state) => state.activities))
   const logs = useCalendarStore(useShallow((state) => state.logs))
+  const firstOpenedAt = useCalendarStore((state) => state.firstOpenedAt)
   const selectedDate = useCalendarStore((state) => state.selectedDate)
   const setSelectedDate = useCalendarStore((state) => state.setSelectedDate)
   // The app's day, not the clock's: see useTodayDate.
@@ -93,14 +95,16 @@ export const YearView = memo(function YearView({ onImport }: YearViewProps) {
    * Each month's figure, by the rule every month figure follows: see monthCompletion. The
    * row under the calendar and the phone's month cards both read these, so there is one
    * number per month. A month that has not begun gets null rather than a zero, because
-   * nothing was missed yet and 0% reads as a failure.
+   * nothing was missed yet and 0% reads as a failure. The month the person started in is
+   * counted from their first day.
    */
   const monthFigures = useMemo(() => {
     const isDone = (date: string) => (logsByDate.get(date) ?? 0) > 0
+    const since = monthStart(firstOpenedAt, logs)
     return Array.from({ length: 12 }, (_, month) =>
-      monthCompletion(selectedYear, month, isDone, today)
+      monthCompletion(selectedYear, month, isDone, today, since)
     )
-  }, [logsByDate, selectedYear, today])
+  }, [logsByDate, selectedYear, today, firstOpenedAt, logs])
 
   /**
    * The phone's strips end on the week we are in, or on the last week of a year already

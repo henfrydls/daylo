@@ -1,6 +1,6 @@
 import { differenceInCalendarDays, parseISO } from 'date-fns'
 import { invoke, isTauri } from '@tauri-apps/api/core'
-import { formatDate } from './dates'
+import { firstDay, recordDay } from './firstDay'
 import type { ActivityLog } from '../types'
 
 /**
@@ -38,9 +38,6 @@ export interface FeedbackInviteInput {
   offerThisSession: 'reminder' | null
   reminderOfferPending: boolean
 }
-
-/** The day a record was made, which is a day the person opened the app. */
-const dayOf = (log: ActivityLog) => formatDate(parseISO(log.createdAt))
 
 /**
  * Whether to ask this person, in this session, how it is going.
@@ -83,10 +80,10 @@ export function shouldInviteFeedback(input: FeedbackInviteInput): boolean {
 
   if (input.logs.length === 0) return false
 
-  const days = input.logs.map(dayOf)
-  // Plain string comparison: these are YYYY-MM-DD, which sorts as it reads.
-  const oldestRecord = days.reduce((a, b) => (a < b ? a : b))
-  const start = input.firstOpenedAt < oldestRecord ? input.firstOpenedAt : oldestRecord
+  // The day each record was made, which is a day the person had the app open. The rule
+  // is shared with the month's figure: see firstDay.
+  const start = firstDay(input.firstOpenedAt, input.logs.map(recordDay))
+  if (start === null) return false
 
   return differenceInCalendarDays(parseISO(input.today), parseISO(start)) >= 7
 }

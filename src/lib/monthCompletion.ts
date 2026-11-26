@@ -21,12 +21,19 @@ export interface MonthCompletion {
  * A day after today is never counted as done either, even when an import carries one, or
  * the figure could pass 100%. A month that has not begun has no figure at all: null,
  * because nothing has been missed yet and the caller decides how to say so.
+ *
+ * The month a person started in is counted from their first day (`firstDay`, from
+ * monthStart in lib/firstDay), because the days before it were not missed either: on the
+ * first day, with everything done, the old rule said "1 of 25". Only that month changes.
+ * The months after it count from the 1st as always, and the months before it keep their
+ * days too, so a month with nothing in it still reads as one with nothing in it.
  */
 export function monthCompletion(
   year: number,
   month: number,
   isDone: (date: string) => boolean,
-  today: Date
+  today: Date,
+  firstDay: string | null = null
 ): MonthCompletion | null {
   const limit = formatDate(today)
   const daysInMonth = new Date(year, month + 1, 0).getDate()
@@ -38,6 +45,9 @@ export function monthCompletion(
   for (let day = 1; day <= daysInMonth; day++) {
     const date = prefix + String(day).padStart(2, '0')
     if (date > limit) break
+    // Only bites in the month the first day is in: every day of a later month is after
+    // it, and an earlier month is left whole on purpose (see above).
+    if (firstDay !== null && firstDay.startsWith(prefix) && date < firstDay) continue
     daysCounted += 1
     if (isDone(date)) daysDone += 1
   }
