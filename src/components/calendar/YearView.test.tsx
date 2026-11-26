@@ -879,7 +879,14 @@ describe('YearView', () => {
         completed: true,
         createdAt: date,
       }))
-      useCalendarStore.setState({ activities, logs, selectedYear: 2024 })
+      // Here since the activity was made, on 1 January: without it the first of the
+      // three days would be the person's first day, and the bar would count from it.
+      useCalendarStore.setState({
+        activities,
+        logs,
+        selectedYear: 2024,
+        firstOpenedAt: '2024-01-01',
+      })
       render(<YearView />)
 
       const bar = screen.getByTestId('year-progress-bar')
@@ -1181,6 +1188,7 @@ describe('YearView', () => {
         vi.setSystemTime(new Date(2026, 10, 25, 12))
         useCalendarStore.setState({
           firstOpenedAt: '2026-11-19',
+          firstDayKept: null,
           logs: marked(
             '2026-11-19',
             '2026-11-20',
@@ -1202,6 +1210,26 @@ describe('YearView', () => {
         const row = within(screen.getByTestId('month-completion'))
         expect(row.getByRole('button', { name: 'View Nov 2026, 86% complete' })).toBeInTheDocument()
         expect(row.getByRole('button', { name: 'View Oct 2026, 0% complete' })).toBeInTheDocument()
+      })
+
+      // The year bar too, and only in the year the person started (YearProgressBar). It is
+      // drawn on the phone.
+      it('counts the year bar from the first day', () => {
+        window.matchMedia = ((query: string) => ({
+          matches: false,
+          media: query,
+          onchange: null,
+          addListener: vi.fn(),
+          removeListener: vi.fn(),
+          addEventListener: vi.fn(),
+          removeEventListener: vi.fn(),
+          dispatchEvent: vi.fn(),
+        })) as unknown as typeof window.matchMedia
+        render(<YearView />)
+
+        expect(screen.getByTestId('year-progress-bar')).toHaveTextContent(
+          /^6 of 7 days so far · 86%/
+        )
       })
 
       it('counts it from the first day on the phone month card', () => {
