@@ -335,9 +335,13 @@ function App() {
     if (hasHydrated) markOpened()
   }, [hasHydrated, markOpened])
 
-  const shouldInvite = useMemo(
-    () =>
-      shouldInviteFeedback({
+  // Asked on every render, and App's own render is outside the ErrorBoundary: anything this
+  // throws turns the whole window white, on the tick that opens the gate. It reads what is
+  // stored, which may be whatever an older import let in, so a failure here is a question
+  // not asked, never a blank app.
+  const shouldInvite = useMemo(() => {
+    try {
+      return shouldInviteFeedback({
         today: shownDay,
         firstOpenedAt,
         logs,
@@ -345,17 +349,20 @@ function App() {
         loggedThisSession,
         offerThisSession,
         reminderOfferPending: reminderOfferOwed,
-      }),
-    [
-      shownDay,
-      firstOpenedAt,
-      logs,
-      feedbackInviteSeen,
-      loggedThisSession,
-      offerThisSession,
-      reminderOfferOwed,
-    ]
-  )
+      })
+    } catch (error) {
+      console.error('[Daylo] could not tell whether to ask for feedback', error)
+      return false
+    }
+  }, [
+    shownDay,
+    firstOpenedAt,
+    logs,
+    feedbackInviteSeen,
+    loggedThisSession,
+    offerThisSession,
+    reminderOfferOwed,
+  ])
 
   // Where there is a platform, the question opens itself. Derived and not set from an
   // effect, and the session flag is why it can be: putting the question spends it, so

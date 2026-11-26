@@ -1,4 +1,4 @@
-import { differenceInCalendarDays, parseISO } from 'date-fns'
+import { differenceInCalendarDays, isValid, parseISO } from 'date-fns'
 import { invoke, isTauri } from '@tauri-apps/api/core'
 import { formatDate } from './dates'
 import type { ActivityLog } from '../types'
@@ -39,8 +39,15 @@ export interface FeedbackInviteInput {
   reminderOfferPending: boolean
 }
 
-/** The day a record was made, which is a day the person opened the app. */
-const dayOf = (log: ActivityLog) => formatDate(parseISO(log.createdAt))
+/**
+ * The day a record was made, which is a day the person opened the app, or null when its
+ * createdAt does not read as a date. Such a record does not count towards the week:
+ * formatting it would throw a RangeError, and this runs on every tick.
+ */
+const dayOf = (log: ActivityLog): string | null => {
+  const made = parseISO(log.createdAt)
+  return isValid(made) ? formatDate(made) : null
+}
 
 /**
  * Whether to ask this person, in this session, how it is going.
@@ -83,10 +90,10 @@ export function shouldInviteFeedback(input: FeedbackInviteInput): boolean {
 
   if (input.logs.length === 0) return false
 
-  const days = input.logs.map(dayOf)
-  // Plain string comparison: these are YYYY-MM-DD, which sorts as it reads.
-  const oldestRecord = days.reduce((a, b) => (a < b ? a : b))
-  const start = input.firstOpenedAt < oldestRecord ? input.firstOpenedAt : oldestRecord
+  const days = input.logs.map(dayOf).filter((day) => day !== null)
+  // The earliest of the first day opened and the oldest record that reads. Plain string
+  // comparison: these are YYYY-MM-DD, which sorts as it reads.
+  const start = days.reduce((a, b) => (a < b ? a : b), input.firstOpenedAt)
 
   return differenceInCalendarDays(parseISO(input.today), parseISO(start)) >= 7
 }

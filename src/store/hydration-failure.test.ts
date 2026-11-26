@@ -389,6 +389,46 @@ describe('a stored value that will not open', () => {
     })
 
     /**
+     * A log whose createdAt `new Date` reads and parseISO does not, or reads as another
+     * day. Daylo never wrote one, but every import let it in. Whoever holds one opens as
+     * before, keeps every record, and the value stays on the disk exactly as it was:
+     * nothing here decides what date it was meant to be.
+     */
+    it.each(['2026/11/01', 'Sun Nov 01 2026', '1', '12', '2026-02-30'])(
+      'opens a log created on %j, keeps it, and leaves the value as it was',
+      async (createdAt) => {
+        localStorage.setItem(
+          STORAGE_KEY,
+          JSON.stringify({
+            state: {
+              activities: [whole],
+              logs: [
+                { ...log, createdAt },
+                { ...log, id: 'm', date: '2026-11-02' },
+              ],
+            },
+            version: 0,
+          })
+        )
+
+        await useCalendarStore.persist.rehydrate()
+
+        expect(useRescueStore.getState().failure).toBeNull()
+        expect(useCalendarStore.getState()._hasHydrated).toBe(true)
+        expect(useCalendarStore.getState().logs).toEqual([
+          { ...log, createdAt },
+          { ...log, id: 'm', date: '2026-11-02' },
+        ])
+        await settle()
+        const onDisk = JSON.parse(localStorage.getItem(STORAGE_KEY)!).state.logs
+        expect(onDisk).toEqual([
+          { ...log, createdAt },
+          { ...log, id: 'm', date: '2026-11-02' },
+        ])
+      }
+    )
+
+    /**
      * Every field this build writes is checked, so a field added later cannot be left out
      * of the rule by accident: each one, given a value no field of the store can hold,
      * has to send the state to the rescue screen.

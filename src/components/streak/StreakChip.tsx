@@ -1,4 +1,6 @@
 import { forwardRef, useEffect, useRef, useState } from 'react'
+import { flameLevelFor } from './flameLevels'
+import { StreakFlame } from './StreakFlame'
 
 /** How long one digit waits before the next, when the number walks. */
 const A_DIGIT_AT_A_TIME = 100
@@ -39,6 +41,10 @@ interface StreakChipProps {
  * as a second gear; the pointer, a step darker under it, and a ring for the keyboard are
  * what say it can be pressed.
  *
+ * The flame grows with the run (flameLevels.ts) and takes the colour of its step, from the
+ * house green to fire at 30 days and blue at a year. Only the flame changes: the pill keeps
+ * its soft green and its width at every step, so a long run is never a louder button.
+ *
  * Nothing at all with no run. A chip reading "0 days" tells somebody who has just missed a
  * day that they have nothing, in the one place on the screen they cannot look away from,
  * and it would be the first thing they see every morning until they started again.
@@ -52,6 +58,9 @@ export const StreakChip = forwardRef<HTMLButtonElement, StreakChipProps>(functio
   ref
 ) {
   const shown = useWalkingNumber(streak)
+  // The flame follows the number on screen, not the one it is walking to, so the two change
+  // in the same frame and never disagree during the walk.
+  const level = flameLevelFor(shown)
 
   if (streak === 0) return null
 
@@ -86,7 +95,7 @@ export const StreakChip = forwardRef<HTMLButtonElement, StreakChipProps>(functio
           expanded ? 'bg-emerald-100' : 'bg-emerald-50 group-hover:bg-emerald-100'
         }`}
       >
-        <Flame lit={todayDone} />
+        <StreakFlame level={level} lit={todayDone} />
         <span aria-hidden="true">
           {shown} {shown === 1 ? 'day' : 'days'}
         </span>
@@ -151,46 +160,4 @@ function useWalkingNumber(target: number): number {
  */
 function prefersLessMovement(): boolean {
   return window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ?? false
-}
-
-const FLAME_OUT =
-  'M15.362 5.214A8.252 8.252 0 0 1 12 21 8.25 8.25 0 0 1 6.038 7.047 8.287 8.287 0 0 0 9 9.601a8.983 8.983 0 0 1 3.361-6.867 8.21 8.21 0 0 0 3 2.48Z'
-const FLAME_IN =
-  'M12 18a3.75 3.75 0 0 0 .495-7.468 5.99 5.99 0 0 0-1.925 3.547 5.975 5.975 0 0 1-2.133-1.001A3.75 3.75 0 0 0 12 18Z'
-
-/**
- * The flame: only its outline while today is missing, filled once today is in.
- *
- * Two things tried and dropped in the R-09 round, both looking at the capture at 360px. A
- * dashed outline, the calendar's word for a day that has not happened yet: at 20px the
- * flame stopped being a flame and read as a broken ring. And a filled one without the inner
- * flame, to set it further from the hollow one: it did, and it looked like a leaf.
- *
- * Hollow against filled: a difference of shape, not of colour. emerald-700 on emerald-50 is
- * 5.09:1, and a shape needs 3.
- */
-function Flame({ lit }: { lit: boolean }) {
-  return (
-    <svg
-      data-testid="streak-flame"
-      data-lit={lit}
-      viewBox="0 0 24 24"
-      className="h-5 w-5 shrink-0 text-emerald-700"
-      fill="none"
-      aria-hidden="true"
-    >
-      {lit ? (
-        <path d={`${FLAME_OUT} ${FLAME_IN}`} fill="currentColor" fillRule="evenodd" />
-      ) : (
-        <path
-          d={FLAME_OUT}
-          fill="none"
-          stroke="currentColor"
-          strokeWidth="1.75"
-          strokeLinecap="round"
-          strokeLinejoin="round"
-        />
-      )}
-    </svg>
-  )
 }
