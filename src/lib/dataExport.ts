@@ -1,6 +1,12 @@
 import type { Activity, ActivityLog } from '../types'
 import { LONGEST_NAME } from './limits'
-import { isISOTimestamp, isValidDateFormat, isValidISODate } from './recordShape'
+import {
+  isISOTimestamp,
+  isPlainObject,
+  isValidDateFormat,
+  isValidISODate,
+  withReadableCreatedAt,
+} from './recordShape'
 
 export interface ExportData {
   activities: Activity[]
@@ -139,6 +145,14 @@ export function parseImportFileWithValidation(content: string): ValidationResult
       valid: false,
       errors: [{ field: 'file', message: 'Invalid JSON format. The file could not be parsed.' }],
     }
+  }
+
+  // A log's createdAt that `new Date` reads and parseISO does not is repaired here exactly
+  // as it is when the store opens the disk: a backup exported from 1.6.0 or earlier carries
+  // such a date as it was stored, and the person's own backup has to come back in. What
+  // neither reads is still refused below, on logs[i].createdAt.
+  if (isPlainObject(data) && Array.isArray(data.logs)) {
+    data = { ...data, logs: data.logs.map(withReadableCreatedAt) }
   }
 
   // Validate structure

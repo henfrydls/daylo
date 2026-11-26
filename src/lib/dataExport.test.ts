@@ -800,24 +800,40 @@ describe('dataExport utility functions', () => {
         expect(result.errors.some((e) => e.message.includes('invalid createdAt format'))).toBe(true)
       })
 
-      // new Date reads these and parseISO does not; a log carrying one used to be let in,
-      // and the app threw the first time somebody ticked a day afterwards.
+      // new Date reads these and parseISO does not. A backup exported from 1.6.0 or earlier
+      // may carry one, written as it was on disk; the app opens that disk by repairing the
+      // date, and the import does the same rather than refusing the person's own backup.
+      const backupWith = (createdAt: string) =>
+        JSON.stringify({
+          version: '1.0',
+          exportedAt: '2026-11-20T10:00:00.000Z',
+          activities: [createValidActivity()],
+          logs: [
+            createValidLog({ createdAt }),
+            createValidLog({ id: 'log-2', date: '2024-01-16' }),
+          ],
+        })
+
       it.each(['2026/11/01', 'Sun Nov 01 2026'])(
-        'refuses a backup with a log created on %j',
+        'takes a backup with a log created on %j, with the date written as ISO',
         (createdAt) => {
-          const content = JSON.stringify({
-            version: '1.0',
-            exportedAt: '2026-11-20T10:00:00.000Z',
-            activities: [createValidActivity()],
-            logs: [createValidLog({ createdAt })],
-          })
+          const result = parseImportFileWithValidation(backupWith(createdAt))
 
-          const result = parseImportFileWithValidation(content)
-
-          expect(result.valid).toBe(false)
-          expect(result.errors.some((e) => e.field === 'logs[0].createdAt')).toBe(true)
+          expect(result.errors).toEqual([])
+          expect(result.valid).toBe(true)
+          expect(result.sanitizedData!.logs).toEqual([
+            createValidLog({ createdAt: new Date(createdAt).toISOString() }),
+            createValidLog({ id: 'log-2', date: '2024-01-16' }),
+          ])
         }
       )
+
+      it('still refuses a backup with a log created on something no date reads', () => {
+        const result = parseImportFileWithValidation(backupWith('garbage'))
+
+        expect(result.valid).toBe(false)
+        expect(result.errors.some((e) => e.field === 'logs[0].createdAt')).toBe(true)
+      })
 
       it('takes back a backup the app wrote today', () => {
         const now = new Date().toISOString()

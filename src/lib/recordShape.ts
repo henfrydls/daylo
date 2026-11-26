@@ -59,10 +59,12 @@ export function isISOTimestamp(value: unknown): boolean {
  * written as Daylo writes it: the same moment, through toISOString. Anything else, the
  * same object, untouched.
  *
- * For what is already on a disk. Daylo never wrote such a date, but an import accepted
- * one until 1.6.1, so a copy may hold it. The record is the person's; refusing it would
- * send them to the rescue screen over a field the app only uses to count a week. A date
- * neither reads is left alone, and logFault sends it to the rescue screen as before.
+ * For what is already on a disk, and for a backup made from it. Daylo never wrote such a
+ * date, but an import accepted one until 1.6.1, so a copy may hold it, and Export writes
+ * it out as stored. The record is the person's; refusing it would send them to the rescue
+ * screen, or turn down their own backup, over a field the app only uses to count a week.
+ * The store applies this in merge and the import in parseImportFileWithValidation, both
+ * before validating. A date neither reads is left alone, and is refused as before.
  */
 export function withReadableCreatedAt(value: unknown): unknown {
   if (!isPlainObject(value) || typeof value.createdAt !== 'string') return value
