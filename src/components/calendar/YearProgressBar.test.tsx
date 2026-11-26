@@ -27,7 +27,7 @@ describe('YearProgressBar', () => {
       render(<YearProgressBar {...defaultProps} />)
 
       // 1 January to 15 June 2024, inclusive.
-      expect(screen.getByText(/days so far/).textContent).toBe('0 of 167 days so far')
+      expect(screen.getByText(/days so far/).textContent).toBe('0 of 167 days so far · 0%')
     })
 
     // A year that has ended has no "so far" about it: every day of it has gone by, and
@@ -36,8 +36,44 @@ describe('YearProgressBar', () => {
       render(<YearProgressBar {...defaultProps} year={2023} />)
 
       const line = screen.getByText(/of 365 days/)
-      expect(line.textContent).toBe('0 of 365 days')
+      expect(line.textContent).toBe('0 of 365 days · 0%')
       expect(line.textContent).not.toContain('so far')
+    })
+  })
+
+  // Henfry read "Best: Oct  16%" on his phone and took the 16% for October's, which was
+  // 68%. The percentage is the year's: the active days over the days gone by. It belongs
+  // with those two numbers, and "Best" stands alone with its month.
+  describe('where the year percentage sits', () => {
+    const marchLogs = () => {
+      const logsByDate = new Map<string, number>()
+      for (let d = 1; d <= 20; d++) {
+        logsByDate.set(`2024-03-${String(d).padStart(2, '0')}`, 1)
+      }
+      return logsByDate
+    }
+
+    it('reads with the days it is counted from', () => {
+      render(<YearProgressBar {...defaultProps} logsByDate={marchLogs()} />)
+
+      // 20 of 167 is 12%.
+      const days = screen.getByText(/of 167 days so far/)
+      expect(days.textContent).toBe('20 of 167 days so far · 12%')
+      expect(days).toContainElement(screen.getByText('12%'))
+    })
+
+    it('is not beside the best month', () => {
+      render(<YearProgressBar {...defaultProps} logsByDate={marchLogs()} />)
+
+      const best = screen.getByText(/Best:/)
+      expect(best.textContent).toBe('Best: Mar')
+
+      // Climb from the percentage to the first group that also holds "Best". If they were
+      // neighbours that would be a little group of their own; it has to be the whole row,
+      // the one that also holds the days.
+      let group: HTMLElement | null = screen.getByText('12%')
+      while (group && !group.textContent?.includes('Best')) group = group.parentElement
+      expect(group).toContainElement(screen.getByText(/of 167 days so far/))
     })
   })
 
