@@ -472,6 +472,21 @@ function Sheet({ open, lastDisabled = false }: { open: boolean; lastDisabled?: b
   )
 }
 
+// The Linux app showed no ring anywhere inside a sheet: WebKit gives focus moved by script
+// no ring once the last focus it moved itself came from a click, and the trap moves every
+// Tab itself. jsdom guesses at :focus-visible from the events it saw, so here it is told
+// to answer as that engine does.
+const asWebKitAfterAClick = () => {
+  const matches = Element.prototype.matches
+  const engine = vi.spyOn(Element.prototype, 'matches').mockImplementation(function (
+    this: Element,
+    selector: string
+  ) {
+    return selector !== ':focus-visible' && matches.call(this, selector)
+  })
+  onTestFinished(() => engine.mockRestore())
+}
+
 describe('Tab from outside the sheet', () => {
   // Settings, Modal, BottomSheet and the day sheet leave the focus on the button that
   // opened them, on purpose. From there Tab walked the page behind an aria-modal sheet:
@@ -554,6 +569,32 @@ describe('Tab from outside the sheet', () => {
 
     expect(went).toBe(false)
     expect(document.activeElement).toBe(byId('sheet'))
+  })
+
+  // A ring around the whole panel says nothing about where the keyboard is.
+  it('holds the sheet itself without a ring', () => {
+    asWebKitAfterAClick()
+    function Empty() {
+      const ref = useRef<HTMLDivElement>(null)
+      useFocusTrap(ref, true, { autoFocus: false })
+      return (
+        <>
+          <button data-testid="opener">Opener</button>
+          <div ref={ref} data-testid="sheet">
+            <button disabled>Nothing</button>
+          </div>
+        </>
+      )
+    }
+    render(<Empty />)
+    byId('opener').focus()
+    const focus = vi.spyOn(byId('sheet'), 'focus')
+
+    fireEvent.keyDown(byId('opener'), { key: 'Tab' })
+
+    expect(document.activeElement).toBe(byId('sheet'))
+    expect(focus).not.toHaveBeenCalledWith({ focusVisible: true })
+    expect(byId('sheet')).not.toHaveAttribute('data-focus-keyboard')
   })
 })
 
@@ -664,21 +705,6 @@ describe('every Tab inside the sheet', () => {
     expect(went).toBe(false)
     expect(document.activeElement).toBe(byId(to))
   })
-
-  // The Linux app showed no ring anywhere inside a sheet: WebKit gives focus moved by script
-  // no ring once the last focus it moved itself came from a click, and the trap moves every
-  // Tab itself. jsdom guesses at :focus-visible from the events it saw, so here it is told
-  // to answer as that engine does.
-  const asWebKitAfterAClick = () => {
-    const matches = Element.prototype.matches
-    const engine = vi.spyOn(Element.prototype, 'matches').mockImplementation(function (
-      this: Element,
-      selector: string
-    ) {
-      return selector !== ':focus-visible' && matches.call(this, selector)
-    })
-    onTestFinished(() => engine.mockRestore())
-  }
 
   it.each([
     ['Tab', 'first', 'middle', false],

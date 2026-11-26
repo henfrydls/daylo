@@ -209,11 +209,13 @@
 }
 
 /* Keyboard only: a pointer user clicking the row should not light up a ring. outline
-   rather than a box-shadow ring so nothing can clip it. */
-.app-checkbox:focus-visible:not([data-focus-quiet]),
-.app-checkbox[data-focus-keyboard] {
-  outline: 2px solid var(--color-emerald-600);
-  outline-offset: 2px;
+   rather than a box-shadow ring so nothing can clip it. Through the focus-visible variant,
+   so it follows the same marks as every focus-visible: utility. */
+.app-checkbox {
+  @variant focus-visible {
+    outline: 2px solid var(--color-emerald-600);
+    outline-offset: 2px;
+  }
 }
 
 .checkbox-bounce {

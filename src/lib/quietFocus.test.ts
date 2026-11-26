@@ -161,6 +161,24 @@ describe('focus moved for a key', () => {
     expect(target).not.toHaveAttribute('data-focus-keyboard')
   })
 
+  it('takes the mark off at a press of the pointer, on the element that keeps the focus', () => {
+    noRing()
+    focusFromKeyboard(target)
+    target.dispatchEvent(new Event('pointerdown', { bubbles: true }))
+    expect(target).toHaveFocus()
+    expect(target).not.toHaveAttribute('data-focus-keyboard')
+  })
+
+  it('waits for one blur only, however many keys land on the same element', () => {
+    noRing()
+    const listen = vi.spyOn(target, 'addEventListener')
+    focusFromKeyboard(target)
+    focusFromKeyboard(target)
+    focusFromKeyboard(target)
+    expect(listen.mock.calls.filter(([type]) => type === 'blur')).toHaveLength(1)
+    expect(target).toHaveAttribute('data-focus-keyboard')
+  })
+
   it('takes the mark off when the focus moves on', () => {
     noRing()
     focusFromKeyboard(target)
