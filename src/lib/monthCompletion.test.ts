@@ -128,11 +128,29 @@ describe('the month completion figure, in the month the person started', () => {
     )
   })
 
-  it('leaves a month before the first one with nothing done, as it was', () => {
-    expect(monthCompletion(2026, 9, on(), nov25, '2026-11-19')).toEqual({
+  // Growth's call: in the year the person started, a month wholly before their first day
+  // has no figure, like a month that has not begun. "0%" read as a month failed by
+  // somebody who was not here yet. The years before keep theirs: a whole year of "–"
+  // would say nothing either.
+  it('has no figure for a month wholly before the first day, in the year it falls in', () => {
+    expect(monthCompletion(2026, 9, on(), nov25, '2026-11-19')).toBeNull()
+    expect(monthCompletion(2026, 0, on(), nov25, '2026-11-19')).toBeNull()
+  })
+
+  it('keeps the figure of a month in a year before the first one', () => {
+    expect(monthCompletion(2025, 9, on(), nov25, '2026-11-19')).toEqual({
       daysDone: 0,
       daysCounted: 31,
       percentage: 0,
+    })
+  })
+
+  // The month the first day is in keeps its figure even when the first day is its 1st.
+  it('keeps the figure of the month the first day is in, from its 1st', () => {
+    expect(monthCompletion(2026, 10, on('2026-11-01'), nov25, '2026-11-01')).toEqual({
+      daysDone: 1,
+      daysCounted: 25,
+      percentage: 4,
     })
   })
 

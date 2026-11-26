@@ -1209,7 +1209,10 @@ describe('YearView', () => {
 
         const row = within(screen.getByTestId('month-completion'))
         expect(row.getByRole('button', { name: 'View Nov 2026, 86% complete' })).toBeInTheDocument()
-        expect(row.getByRole('button', { name: 'View Oct 2026, 0% complete' })).toBeInTheDocument()
+        // October is wholly before the first day: no figure, as a month still to come.
+        expect(
+          row.getByRole('button', { name: 'View Oct 2026, not started yet' })
+        ).toBeInTheDocument()
       })
 
       // The year bar too, and only in the year the person started (YearProgressBar). It is
@@ -1250,6 +1253,10 @@ describe('YearView', () => {
           'November 2026: 6 of 7 days active, 86%. Tap to view month.'
         )
         expect(within(cards[10]).getByTestId('month-card-stats')).toHaveTextContent('6/7 · 86%')
+        // October and every month before it in the year: the dash of a month still to come.
+        expect(cards[9]).toHaveAccessibleName('October 2026: not started yet. Tap to view month.')
+        expect(within(cards[9]).getByTestId('month-card-stats')).toHaveTextContent(/^–$/)
+        expect(within(cards[0]).getByTestId('month-card-stats')).toHaveTextContent(/^–$/)
       })
     })
   })

@@ -25,8 +25,12 @@ export interface MonthCompletion {
  * The month a person started in is counted from their first day (`firstDay`, from
  * personFirstDay in lib/firstDay), because the days before it were not missed either: on the
  * first day, with everything done, the old rule said "1 of 25". Only that month changes.
- * The months after it count from the 1st as always, and the months before it keep their
- * days too, so a month with nothing in it still reads as one with nothing in it.
+ * The months after it count from the 1st as always.
+ *
+ * A month wholly before the first day, in the year it falls in, has no figure: null, as a
+ * month that has not begun, so Year draws the same dash and says "not started yet" rather
+ * than "0%" for a month the person was not here for. In the years before that one the
+ * months keep their days, because a year of dashes says nothing either.
  */
 export function monthCompletion(
   year: number,
@@ -39,6 +43,10 @@ export function monthCompletion(
   const daysInMonth = new Date(year, month + 1, 0).getDate()
   // The month's days as the logs spell them, without a Date and a format call for each.
   const prefix = `${year}-${String(month + 1).padStart(2, '0')}-`
+
+  // Before the person was here: a month that, for them, has not begun.
+  const lastDay = prefix + String(daysInMonth).padStart(2, '0')
+  if (firstDay !== null && firstDay.startsWith(`${year}-`) && lastDay < firstDay) return null
 
   let daysCounted = 0
   let daysDone = 0
