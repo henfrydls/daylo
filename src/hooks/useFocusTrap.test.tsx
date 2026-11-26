@@ -498,6 +498,25 @@ describe('Tab from outside the sheet', () => {
     expect(document.activeElement).toBe(byId('last'))
   })
 
+  // WebKitGTK, the engine of the Linux app, names Shift+Tab "Unidentified": the toolkit
+  // turns Shift+Tab into ISO_Left_Tab, and the engine has no name for that. Measured with
+  // real X key events in WebKitGTK 2.52: key "Unidentified", code "Tab", shiftKey true.
+  // Read by its name alone, Shift+Tab walked out of every sheet on Linux.
+  it.each([
+    ['from the opener', 'opener', 'add'],
+    ['from the first control', 'first', 'add'],
+  ])('takes the Shift+Tab WebKitGTK sends %s', (_, from, to) => {
+    const { rerender } = render(<Sheet open={false} />)
+    byId('opener').focus()
+    rerender(<Sheet open />)
+    if (from !== 'opener') act(() => byId(from).focus())
+
+    const went = fireEvent.keyDown(byId(from), { key: 'Unidentified', code: 'Tab', shiftKey: true })
+
+    expect(went).toBe(false)
+    expect(document.activeElement).toBe(byId(to))
+  })
+
   it('lets go of Tab once it is closed', () => {
     const { rerender } = render(<Sheet open />)
     rerender(<Sheet open={false} />)

@@ -39,6 +39,17 @@ function firstReachable(container: HTMLElement): HTMLElement {
   return container
 }
 
+/**
+ * Tab, by its name or, where the engine has none for it, by the key it was pressed on.
+ * WebKitGTK, the engine of the Linux app, names Shift+Tab "Unidentified": the toolkit turns
+ * Shift+Tab into ISO_Left_Tab before the page sees it. Measured with real X key events in
+ * WebKitGTK 2.52: key "Unidentified", code "Tab". Read by its name alone, Shift+Tab never
+ * wrapped on Linux and walked out of every sheet.
+ */
+function isTab(e: KeyboardEvent): boolean {
+  return e.key === 'Tab' || (e.key === 'Unidentified' && e.code === 'Tab')
+}
+
 interface UseFocusTrapOptions {
   /** Callback when Escape key is pressed */
   onEscape?: () => void
@@ -193,7 +204,7 @@ export function useFocusTrap(
     if (!isActive) return
 
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key !== 'Tab') return
+      if (!isTab(e)) return
       // The highest one that is on the page: a trap switched on a render before its
       // container arrives leaves Tab to the one underneath until then, rather than to nobody.
       const front = [...openTraps].reverse().find((trap) => trap.current !== null)
