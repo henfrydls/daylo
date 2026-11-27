@@ -565,35 +565,200 @@ jobs:
     # against, and the days before a tag are the wrong days to change the thing the tests
     # are run in. The bump is its own change, with the suite watched over it.
     runs-on: ubuntu-24.04
-    timeout-minutes: 20
+    # Every step below has its own bound, and this is their sum: 2 + 3 + 5 to check out,
+    # set up Node and npm ci, 1 for the keys, 3 + 3 to restore, 20 for the system
+    # libraries, 2 + 3 to collect and save them, 5 + 3 for the browsers, 10 for the
+    # suite and 3 for the report, which is 63, plus two for the runner's own set up and
+    # clean up. Whichever step runs long fails under its own name, instead of the job
+    # being cancelled from outside in the middle of the suite. A normal run takes about
+    # five minutes.
+    timeout-minutes: 65
     permissions:
       contents: read
 
     steps:
       - name: Checkout repository
+        timeout-minutes: 2
         uses: actions/checkout@v4
 
       - name: Setup Node.js
+        timeout-minutes: 3
         uses: actions/setup-node@v4
         with:
           node-version: 20
           cache: 'npm'
 
       - name: Install Node.js dependencies
+        timeout-minutes: 5
         run: npm ci
 
       # Chromium and WebKit. WebKit is the engine the desktop and mobile apps really run,
       # and the one whose layout differences have cost this project two releases, so it is
-      # worth the extra install time. --with-deps pulls the system libraries it needs,
-      # which is why this cannot be done on a developer machine without root.
-      - name: Install the browsers
-        run: npx playwright install --with-deps chromium webkit
+      # worth the extra install time. The system libraries need root, which is why this
+      # cannot be done on a developer machine as it is done here.
+      #
+      # Both halves are cached, and the browsers are the small half. Measured on the runs
+      # of 2026-11-26: the browsers download from Playwright's CDN in about ten seconds,
+      # and apt-get update takes between one and twenty-three. The other 181 packages
+      # (about 125 MB, mostly fonts) come from azure.archive.ubuntu.com, normally in three
+      # seconds, but that morning at 120 to 240 kB/s, which is 9 to 17 minutes. Seven of
+      # the day's End to end jobs were cancelled at the old 20 minute limit without a
+      # single test failing. So the .deb files are kept as well, and on a hit apt only
+      # checks them against its index and installs.
+      #
+      # Both keys carry the Playwright the lockfile installs, not the range in
+      # package.json: the browser builds belong to an exact version, and a bump must not
+      # restore the old ones. The packages also carry the ISO week. apt-get update reads
+      # the live index, so a library that gets a security update is fetched from the
+      # mirror again on every run until the cache is saved anew, and a cache saved only
+      # on a miss would never be. A new key each week bounds that to seven days, and the
+      # week starts from the previous week's files, so apt fetches only what changed.
+      # Not the runner image: images of two different dates served this repository in
+      # the same hour, and apt already sorts out whatever differs between them.
+      #
+      # Each key is built once, here, so that a restore and its save cannot disagree.
+      - name: Read the cache keys
+        id: keys
+        timeout-minutes: 1
+        run: |
+          playwright=$(node -p "require('./package-lock.json').packages['node_modules/playwright-core']?.version")
+          if ! [[ "$playwright" =~ ^[0-9]+\.[0-9]+\.[0-9]+ ]]; then
+            echo "::error::Could not read the Playwright version from package-lock.json (got '$playwright')."
+            exit 1
+          fi
+          if [ -z "${ImageOS:-}" ] || [ -z "${ImageVersion:-}" ]; then
+            echo "::error::ImageOS or ImageVersion is empty; this is not a GitHub hosted runner as expected."
+            exit 1
+          fi
+          {
+            echo "browsers=playwright-browsers-$ImageOS-$playwright"
+            echo "debs=playwright-debs-$ImageOS-$playwright-$(date -u +%G-%V)"
+            echo "debs-same-version=playwright-debs-$ImageOS-$playwright-"
+            echo "debs-any=playwright-debs-$ImageOS-"
+          } | tee -a "$GITHUB_OUTPUT"
+          echo "Runner image $ImageOS $ImageVersion."
 
+      # A cache download that stalls gives up after two minutes and the job carries on as
+      # on a miss, which is slower but not wrong. The step bound is only for a hang.
+      - name: Restore the browsers
+        id: browsers-cache
+        timeout-minutes: 3
+        uses: actions/cache/restore@v4
+        env:
+          SEGMENT_DOWNLOAD_TIMEOUT_MINS: 2
+        with:
+          path: ~/.cache/ms-playwright
+          key: ${{ steps.keys.outputs.browsers }}
+
+      - name: Restore the system packages
+        id: debs-cache
+        timeout-minutes: 3
+        uses: actions/cache/restore@v4
+        env:
+          SEGMENT_DOWNLOAD_TIMEOUT_MINS: 2
+        with:
+          path: ~/.cache/playwright-debs
+          key: ${{ steps.keys.outputs.debs }}
+          restore-keys: |
+            ${{ steps.keys.outputs.debs-same-version }}
+            ${{ steps.keys.outputs.debs-any }}
+
+      # Its own bound, so that a slow mirror fails here with its name on it and the suite
+      # keeps all of its time. On 2026-11-26 the slow installs that were allowed to finish
+      # took 9m30s, 16m08s, 16m20s and 18m18s; twenty minutes lets all of those through,
+      # which matters on a cache miss, and anything slower is not going to finish.
+      #
+      # Copying the cached files into apt's own archive is safe whatever they contain:
+      # apt uses a file only when its size and hash match the index it just fetched, and
+      # downloads anything else. A "Hash Sum mismatch" is retried once with the archive
+      # emptied, so that a bad file from the cache can cost a slower install but never a
+      # red job; a second mismatch is the mirror's, and is left to fail.
+      - name: Install the system libraries
+        timeout-minutes: 20
+        run: |
+          set -o pipefail
+          shopt -s nullglob
+          debs=( ~/.cache/playwright-debs/*.deb )
+          echo "${#debs[@]} packages restored from the cache."
+          if [ ${#debs[@]} -gt 0 ]; then
+            sudo cp "${debs[@]}" /var/cache/apt/archives/
+          fi
+          log=$RUNNER_TEMP/install-deps.log
+          if npx playwright install-deps chromium webkit 2>&1 | tee "$log"; then
+            exit 0
+          fi
+          if ! grep -q 'Hash Sum mismatch' "$log"; then
+            exit 1
+          fi
+          echo "::warning::apt reported a Hash Sum mismatch; emptying its archive and trying once more."
+          sudo rm -f /var/cache/apt/archives/*.deb
+          npx playwright install-deps chromium webkit
+
+      # Only the files of the versions now installed are kept. A miss starts from the
+      # previous week's files, and without this the cache would carry every version a
+      # library has ever had, and the packages a newer Playwright stopped asking for.
+      - name: Collect the system packages
+        id: debs
+        if: steps.debs-cache.outputs.cache-hit != 'true'
+        timeout-minutes: 2
+        run: |
+          shopt -s nullglob
+          installed=$RUNNER_TEMP/installed.txt
+          dpkg-query -W -f='${Package} ${Version} ${Architecture}\n' | sort -u > "$installed"
+          rm -rf ~/.cache/playwright-debs
+          mkdir -p ~/.cache/playwright-debs
+          kept=0
+          dropped=0
+          for deb in /var/cache/apt/archives/*.deb; do
+            id=$(dpkg-deb -W --showformat='${Package} ${Version} ${Architecture}' "$deb")
+            if grep -qxF "$id" "$installed"; then
+              cp "$deb" ~/.cache/playwright-debs/
+              kept=$((kept + 1))
+            else
+              dropped=$((dropped + 1))
+            fi
+          done
+          echo "count=$kept" >> "$GITHUB_OUTPUT"
+          echo "$kept packages kept, $dropped dropped as not installed, $(du -sh ~/.cache/playwright-debs | cut -f1)."
+          if [ "$kept" -eq 0 ]; then
+            echo "::warning::apt kept no .deb files of what is installed, so there is nothing to cache."
+          fi
+
+      # Saved here, not by a post step, so that a failing suite does not throw the install
+      # away. Only on a miss, because writing over an existing key logs a warning and
+      # wastes the upload.
+      - name: Save the system packages
+        if: steps.debs-cache.outputs.cache-hit != 'true' && steps.debs.outputs.count != '0'
+        timeout-minutes: 3
+        uses: actions/cache/save@v4
+        with:
+          path: ~/.cache/playwright-debs
+          key: ${{ steps.keys.outputs.debs }}
+
+      # On every run, not only on a miss: with the browsers in place it only checks them,
+      # in a second or two, and it puts back whatever a partial restore left out, or a
+      # browser revision that changed without the Playwright version changing.
+      - name: Install the browsers
+        timeout-minutes: 5
+        run: npx playwright install chromium webkit
+
+      - name: Save the browsers
+        if: steps.browsers-cache.outputs.cache-hit != 'true'
+        timeout-minutes: 3
+        uses: actions/cache/save@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: ${{ steps.keys.outputs.browsers }}
+
+      # About four minutes on every run so far; ten is room for a slow runner, not for a
+      # hang.
       - name: Run the suite
+        timeout-minutes: 10
         run: npx playwright test
 
       - name: Keep the report when something fails
         if: failure()
+        timeout-minutes: 3
         uses: actions/upload-artifact@v4
         with:
           name: playwright-report
