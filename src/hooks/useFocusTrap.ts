@@ -3,7 +3,7 @@ import { onAndroidBack } from '../lib/androidBack'
 import { reachable } from '../lib/onScreen'
 import { isTab } from '../lib/keys'
 import { nextTabbable } from '../lib/tabbable'
-import { giveFocusBack } from '../lib/quietFocus'
+import { focusFromKeyboard, giveFocusBack } from '../lib/quietFocus'
 
 /**
  * Everything on screen that answers Escape, oldest first. Only the last one does.
@@ -243,11 +243,15 @@ export function useFocusTrap(
       // <body> after a tap on nothing) it comes in at the end the key is going towards;
       // from something inside that Tab does not stop at, to its neighbour on the page.
       e.preventDefault()
+      // With the ring: a Tab is the keyboard, however the focus got here (see quietFocus).
+      const next = nextTabbable(container, document.activeElement, e.shiftKey)
+      if (next !== null) {
+        focusFromKeyboard(next)
+        return
+      }
       // With nothing inside that can have it, the sheet itself holds it, so it is at least
-      // not behind the sheet.
-      const next =
-        nextTabbable(container, document.activeElement, e.shiftKey) ?? firstReachable(container)
-      next.focus()
+      // not behind the sheet. Without a ring: one around the whole panel says nothing.
+      firstReachable(container).focus()
     }
 
     document.addEventListener('keydown', handleKeyDown)

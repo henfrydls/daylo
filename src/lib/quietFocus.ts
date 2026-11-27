@@ -38,7 +38,14 @@ export function followInputModality(target: Window): () => void {
       quiet.removeAttribute('data-focus-quiet')
     }
   }
-  const onPointer = () => (keyboard = false)
+  const onPointer = () => {
+    keyboard = false
+    // A press means the pointer is in charge, and the ring a key asked for is not owed any
+    // more, even on the element the press lands on and that keeps the focus.
+    for (const lit of target.document.querySelectorAll('[data-focus-keyboard]')) {
+      lit.removeAttribute('data-focus-keyboard')
+    }
+  }
   target.addEventListener('keydown', onKey, true)
   target.addEventListener('pointerdown', onPointer, true)
   return () => {
@@ -57,6 +64,32 @@ export function giveFocusBack(element: HTMLElement): void {
   if (!element.matches(':focus-visible')) return
   element.setAttribute('data-focus-quiet', '')
   element.addEventListener('blur', () => element.removeAttribute('data-focus-quiet'), {
+    once: true,
+  })
+}
+
+/**
+ * Focus moved by script for a key, with the ring the key is owed.
+ *
+ * The focus trap moves every Tab itself, and an engine decides from its own account
+ * whether focus given by script gets a ring. WebKit (WebKitGTK on Linux, Safari, the Mac
+ * app) gives it none whenever the last focus the engine moved itself came from a click,
+ * and since the trap moves every Tab, no Tab ever told it otherwise: after one click
+ * anywhere, nothing inside a sheet ever showed where the keyboard was. Measured in
+ * WebKitGTK 2.52.3 with real X key events.
+ *
+ * So it asks for the ring, and an engine that does not read `focusVisible: true` gets the
+ * element marked `data-focus-keyboard` until it loses the focus or the pointer is pressed:
+ * index.css draws the ring on an element that carries the mark.
+ */
+export function focusFromKeyboard(element: HTMLElement): void {
+  element.focus({ focusVisible: true } as FocusOptions)
+  if (element.ownerDocument.activeElement !== element) return
+  // Already marked, with its blur listener already waiting.
+  if (element.hasAttribute('data-focus-keyboard')) return
+  if (element.matches(':focus-visible')) return
+  element.setAttribute('data-focus-keyboard', '')
+  element.addEventListener('blur', () => element.removeAttribute('data-focus-keyboard'), {
     once: true,
   })
 }

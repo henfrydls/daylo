@@ -1,5 +1,5 @@
 import { describe, it, expect, afterEach, beforeEach, vi } from 'vitest'
-import { followInputModality, giveFocusBack } from './quietFocus'
+import { focusFromKeyboard, followInputModality, giveFocusBack } from './quietFocus'
 
 /**
  * Focus given back by script lights the keyboard ring only when the keyboard was driving.
@@ -120,5 +120,69 @@ describe('giving the focus back', () => {
     giveFocusBack(target)
     target.blur()
     expect(target).not.toHaveAttribute('data-focus-quiet')
+  })
+})
+
+/**
+ * jsdom guesses at :focus-visible from the events it has seen, so each test says what the
+ * engine did: `noRing` for WebKit after a click, which gives focus moved by script no ring,
+ * and `oldEngine` above for one that drew it.
+ */
+const noRing = () =>
+  vi
+    .spyOn(target, 'matches')
+    .mockImplementation(
+      (selector) =>
+        selector !== ':focus-visible' && Element.prototype.matches.call(target, selector)
+    )
+
+describe('focus moved for a key', () => {
+  it('asks for the ring, and marks it for an engine that gave none', () => {
+    noRing()
+    const focus = vi.spyOn(target, 'focus')
+    focusFromKeyboard(target)
+    expect(focus).toHaveBeenCalledWith({ focusVisible: true })
+    expect(target).toHaveFocus()
+    expect(target).toHaveAttribute('data-focus-keyboard')
+  })
+
+  it('leaves no mark where the engine drew the ring itself', () => {
+    oldEngine()
+    focusFromKeyboard(target)
+    expect(target).toHaveFocus()
+    expect(target).not.toHaveAttribute('data-focus-keyboard')
+  })
+
+  it('leaves no mark on something that could not take the focus', () => {
+    noRing()
+    target.disabled = true
+    focusFromKeyboard(target)
+    expect(target).not.toHaveFocus()
+    expect(target).not.toHaveAttribute('data-focus-keyboard')
+  })
+
+  it('takes the mark off at a press of the pointer, on the element that keeps the focus', () => {
+    noRing()
+    focusFromKeyboard(target)
+    target.dispatchEvent(new Event('pointerdown', { bubbles: true }))
+    expect(target).toHaveFocus()
+    expect(target).not.toHaveAttribute('data-focus-keyboard')
+  })
+
+  it('waits for one blur only, however many keys land on the same element', () => {
+    noRing()
+    const listen = vi.spyOn(target, 'addEventListener')
+    focusFromKeyboard(target)
+    focusFromKeyboard(target)
+    focusFromKeyboard(target)
+    expect(listen.mock.calls.filter(([type]) => type === 'blur')).toHaveLength(1)
+    expect(target).toHaveAttribute('data-focus-keyboard')
+  })
+
+  it('takes the mark off when the focus moves on', () => {
+    noRing()
+    focusFromKeyboard(target)
+    target.blur()
+    expect(target).not.toHaveAttribute('data-focus-keyboard')
   })
 })
